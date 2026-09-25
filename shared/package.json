@@ -1,0 +1,6 @@
+{
+  "name": "@cursus/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DTOs y tipos compartidos entre frontend y backend"
+}

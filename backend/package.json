@@ -1,0 +1,9 @@
+{
+  "name": "@cursus/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend de CURSUS (NestJS + TypeScript)",
+  "scripts": {
+    "dev": "echo \"Backend pendiente de inicializar (NestJS + TS)\""
+  }
+}

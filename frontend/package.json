@@ -1,0 +1,9 @@
+{
+  "name": "@cursus/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend de CURSUS (React + Vite + TypeScript)",
+  "scripts": {
+    "dev": "echo \"Frontend pendiente de inicializar (React + Vite + TS)\""
+  }
+}
