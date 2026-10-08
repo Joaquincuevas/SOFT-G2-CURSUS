@@ -4,9 +4,9 @@
   "private": true,
   "description": "CURSUS - Sistema de gestión académica multiuniversidad (ICC 4204, Grupo 2)",
   "workspaces": [
+    "shared",
     "frontend",
-    "backend",
-    "shared"
+    "backend"
   ],
   "scripts": {
     "dev:front": "npm run dev --workspace=frontend",
@@ -16,7 +16,8 @@
     "build": "npm run build --workspaces --if-present",
     "prepare": "husky",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "postinstall": "npm run build --workspace=shared"
   },
   "engines": {
     "node": ">=20"
