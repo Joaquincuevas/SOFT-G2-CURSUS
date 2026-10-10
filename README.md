@@ -6,14 +6,14 @@ Cada universidad opera sobre la misma plataforma con sus datos aislados mediante
 
 ## Stack tecnológico
 
-| Capa | Tecnología |
-|---|---|
-| Frontend | React + Vite + TypeScript |
-| Backend | NestJS + TypeScript + Node.js |
-| Base de datos | PostgreSQL (Row-Level Security por universidad) |
-| Archivos | Amazon S3 |
-| Monorepo | npm workspaces |
-| Calidad | GitHub Actions (lint, test, build), commitlint + husky |
+| Capa          | Tecnología                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| Frontend      | React + Vite + TypeScript                                                                                  |
+| Backend       | NestJS + TypeScript + Node.js                                                                              |
+| Base de datos | PostgreSQL (Row-Level Security por universidad)                                                            |
+| Archivos      | Amazon S3                                                                                                  |
+| Monorepo      | npm workspaces                                                                                             |
+| Calidad       | ESLint, Prettier, Vitest (+ React Testing Library), GitHub Actions (lint, test, build), commitlint + husky |
 
 ## Estructura de carpetas
 
@@ -36,15 +36,15 @@ SOFT-G2-CURSUS/
 
 ## Setup local
 
-Requisitos: **Node.js 20+** y **npm 10+**.
+Requisitos: **Node.js 20.19+** y **npm 10+**.
 
 ```bash
 git clone https://github.com/Joaquincuevas/SOFT-G2-CURSUS.git
 cd SOFT-G2-CURSUS
 git switch develop
-npm install          # instala dependencias de todos los workspaces y activa los hooks de husky
-npm run dev:front    # levanta el frontend
-npm run dev:back     # levanta el backend
+npm install          # instala dependencias, compila shared y activa los hooks de husky
+npm run dev:front    # levanta el frontend en http://localhost:5173
+npm run dev:back     # levanta el backend en http://localhost:3000
 ```
 
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
@@ -55,16 +55,25 @@ npm run test
 npm run build
 ```
 
+Formato con Prettier (configuración única en `.prettierrc.json` para todo el repo):
+
+```bash
+npm run format         # formatea
+npm run format:check   # solo verifica
+```
+
+`shared` se compila automáticamente después de `npm install`. Si cambias algo en `shared/src`, recompílalo con `npm run build --workspace=shared` para que frontend y backend vean los cambios.
+
 ## Flujo de trabajo Git
 
 ### Ramas
 
 - `main`: versión estable/entregable. Solo recibe merges desde `develop` vía PR.
 - `develop`: rama de integración. Todo el trabajo se integra aquí vía PR.
-- Ramas de trabajo, creadas desde `develop`:
-  - `feat/<tarjeta>-descripcion-corta`
-  - `fix/<tarjeta>-descripcion-corta`
-  - `docs/...`, `refactor/...`, `test/...`, `chore/...`, `ci/...`
+- `feature/<épica>-<descripción>`: trabajo de una tarjeta, creada desde `develop` y con PR hacia `develop`. Ejemplos: `feature/infra-frontend-scaffold`, `feature/ui-app-shell`.
+- `hotfix/<descripción>`: corrección urgente sobre `main`, creada desde `main`; luego se integra también en `develop`.
+
+El tipo de cambio (`feat`, `fix`, `docs`, etc.) va en los commits, no en el nombre de la rama.
 
 Ninguna de las dos ramas principales acepta push directo; todo entra por Pull Request.
 
