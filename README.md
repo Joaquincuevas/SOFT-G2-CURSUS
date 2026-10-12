@@ -25,7 +25,9 @@ SOFT-G2-CURSUS/
 ├── infra/               # Docker, migraciones, scripts AWS
 ├── docs/                # Informes, diagramas C4, ADRs
 ├── .github/
-│   ├── workflows/ci.yml # Pipeline: lint + test + build + commitlint
+│   ├── workflows/
+│   │   ├── ci.yml       # Pipeline: lint + test + build + commitlint
+│   │   └── pr-title.yml # Valida el título del PR (Conventional Commits)
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
 ├── .husky/commit-msg    # Valida el mensaje de commit en local
@@ -82,22 +84,50 @@ Ninguna de las dos ramas principales acepta push directo; todo entra por Pull Re
 1. Crea tu rama desde `develop` actualizado.
 2. Haz commits siguiendo Conventional Commits.
 3. Abre un PR hacia `develop` y completa el template (tarjeta Trello, historia de usuario, DoD).
-4. El CI (lint, test, build, commitlint) debe estar en verde.
+4. El CI (lint, test, build, commitlint, pr-title) debe estar en verde.
 5. Pide revisión a un compañero; se hace merge cuando esté aprobado.
 
 ### Conventional Commits
 
-Formato: `tipo(alcance opcional): descripción`
+Formato: `<tipo>(<ámbito>): <descripción>`
+
+- El **ámbito** es opcional (se omite en cambios transversales: `<tipo>: <descripción>`). Si se usa, debe ser una épica del tablero.
+- La **descripción** va en minúsculas y sin punto final.
+
+| Tipo       | Uso                                                 |
+| ---------- | --------------------------------------------------- |
+| `feat`     | Nueva funcionalidad                                 |
+| `fix`      | Corrección de bug                                   |
+| `docs`     | Solo documentación                                  |
+| `refactor` | Cambio de código sin cambiar comportamiento         |
+| `test`     | Agrega o corrige tests                              |
+| `style`    | Formato, espacios, punto y coma (sin cambio lógico) |
+| `chore`    | Mantenimiento, dependencias, configuración          |
+| `ci`       | Pipeline de CI/CD                                   |
+
+Ámbitos válidos (épicas): `infra`, `auth`, `multitenant`, `ui`, `gestion`, `perfil`, `espacio`, `notas`, `materiales`, `anuncios`, `asistencia`, `metricas`, `historial`, `seguridad`, `exportacion`, `observabilidad`.
+
+Ejemplos válidos:
 
 ```
-feat(backend): agregar endpoint de inscripción de ramos
-fix(frontend): corregir validación del formulario de login
-docs: agregar ADR sobre Row-Level Security
-chore(infra): configurar docker-compose con PostgreSQL
+feat(notas): agrega ingreso de notas por evaluación
+fix(auth): corrige expiración del token de sesión
+docs: actualiza guía de contribución
 ```
 
-Tipos permitidos: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
-El hook `commit-msg` (husky + commitlint) rechaza en local los mensajes que no cumplan el formato, y el CI los vuelve a validar en cada PR.
+Ejemplos inválidos:
+
+```
+agrega cosas                    # sin tipo
+feat(backend): agrega endpoint  # "backend" no es una épica
+Feat(notas): Agrega ingreso.    # tipo y descripción con mayúscula, y punto final
+```
+
+La convención se valida en tres puntos, todos con la misma configuración (`commitlint.config.js`):
+
+1. **Local**: el hook `commit-msg` (husky + commitlint) rechaza el commit antes de crearlo.
+2. **CI, job `commitlint`**: valida todos los commits del PR.
+3. **CI, job `pr-title`**: valida el título del PR, porque con squash merge el título es el commit que queda en `develop`.
 
 ## Tablero
 
