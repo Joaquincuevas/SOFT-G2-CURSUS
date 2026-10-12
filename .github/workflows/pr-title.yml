@@ -1,0 +1,56 @@
+name: PR title
+
+# Con squash merge el título del PR se convierte en el commit que llega a
+# develop, así que se valida con la misma convención que commitlint.config.js.
+# Si cambias tipos o ámbitos allí, actualízalos también aquí.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            test
+            style
+            chore
+            ci
+          scopes: |
+            infra
+            auth
+            multitenant
+            ui
+            gestion
+            perfil
+            espacio
+            notas
+            materiales
+            anuncios
+            asistencia
+            metricas
+            historial
+            seguridad
+            exportacion
+            observabilidad
+          requireScope: false
+          # Descripción en minúsculas y sin punto final
+          subjectPattern: ^[^A-ZÁÉÍÓÚÜÑ]*[^A-ZÁÉÍÓÚÜÑ.]$
+          subjectPatternError: |
+            La descripción "{subject}" del título "{title}" debe ir en minúsculas y sin punto final.
+            Formato esperado: <tipo>(<ámbito>): <descripción>
+          validateSingleCommit: false
