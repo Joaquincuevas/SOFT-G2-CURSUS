@@ -1,8 +1,8 @@
 name: PR title
 
 # Con squash merge el título del PR se convierte en el commit que llega a
-# develop, así que se valida con la misma convención que commitlint.config.js.
-# Si cambias tipos o ámbitos allí, actualízalos también aquí.
+# develop, así que se valida con commitlint y commitlint.config.js, la misma
+# configuración del hook local y del job commitlint del CI.
 
 on:
   pull_request:
@@ -10,55 +10,22 @@ on:
     types: [opened, edited, synchronize, reopened]
 
 permissions:
-  pull-requests: read
+  contents: read
 
 jobs:
   pr-title:
     name: pr-title
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: amannn/action-semantic-pull-request@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          types: |
-            feat
-            fix
-            docs
-            refactor
-            test
-            style
-            chore
-            ci
-          scopes: |
-            infra
-            auth
-            multitenant
-            ui
-            gestion
-            perfil
-            espacio
-            notas
-            materiales
-            anuncios
-            asistencia
-            metricas
-            historial
-            seguridad
-            exportacion
-            observabilidad
-          requireScope: false
-          # REVISIÓN: unificar la validación del título con commitlint.config.js.
-          # Este workflow acepta títulos de más de 100 caracteres y mayúsculas
-          # como Ā, que commitlint rechaza; también rechaza notas/ui, que
-          # commitlint acepta. Los checks pueden dar resultados distintos.
-          # Sugerencia: validar el título con commitlint y la misma configuración
-          # del hook y del CI. Acordar si se permite uno o varios ámbitos.
-          # Comprobar casos válidos e inválidos de longitud, mayúsculas, punto
-          # final y ámbitos simples o múltiples antes de aprobar el PR.
-          # Descripción en minúsculas y sin punto final
-          subjectPattern: ^[^A-ZÁÉÍÓÚÜÑ]*[^A-ZÁÉÍÓÚÜÑ.]$
-          subjectPatternError: |
-            La descripción "{subject}" del título "{title}" debe ir en minúsculas y sin punto final.
-            Formato esperado: <tipo>(<ámbito>): <descripción>
-          validateSingleCommit: false
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Validar título del PR con commitlint
+        # El título va por variable de entorno y no interpolado en el script,
+        # para evitar inyección de comandos.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint

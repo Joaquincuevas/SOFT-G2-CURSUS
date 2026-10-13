@@ -14,6 +14,7 @@ export default function formatter(report, options) {
   const help = [
     'Formato esperado: <tipo>(<ámbito>): <descripción>',
     '  - el ámbito es opcional:  <tipo>: <descripción>',
+    '  - un solo ámbito; si el cambio es transversal, se omite',
     '  - descripción en minúsculas y sin punto final',
     '',
     `Tipos válidos:   ${TYPES.join(', ')}`,

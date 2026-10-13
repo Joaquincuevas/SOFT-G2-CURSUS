@@ -120,7 +120,7 @@ Ninguna de las dos ramas principales acepta push directo; todo entra por Pull Re
 
 Formato: `<tipo>(<ámbito>): <descripción>`
 
-- El **ámbito** es opcional (se omite en cambios transversales: `<tipo>: <descripción>`). Si se usa, debe ser una épica del tablero.
+- El **ámbito** es opcional (se omite en cambios transversales: `<tipo>: <descripción>`). Si se usa, debe ser **una sola** épica del tablero: `feat(notas/ui)` o `feat(notas,ui)` no son válidos.
 - La **descripción** va en minúsculas y sin punto final.
 
 | Tipo       | Uso                                                 |
@@ -149,6 +149,7 @@ Ejemplos inválidos:
 ```
 agrega cosas                    # sin tipo
 feat(backend): agrega endpoint  # "backend" no es una épica
+feat(notas/ui): agrega ingreso  # más de un ámbito; si es transversal, omítelo
 Feat(notas): Agrega ingreso.    # tipo y descripción con mayúscula, y punto final
 ```
 
@@ -156,7 +157,7 @@ La convención se valida en tres puntos, todos con la misma configuración (`com
 
 1. **Local**: el hook `commit-msg` (husky + commitlint) rechaza el commit antes de crearlo.
 2. **CI, job `commitlint`**: valida todos los commits del PR.
-3. **CI, job `pr-title`**: valida el título del PR, porque con squash merge el título es el commit que queda en `develop`.
+3. **CI, job `pr-title`**: valida el título del PR con commitlint, porque con squash merge el título es el commit que queda en `develop`.
 
 ## Tablero
 
