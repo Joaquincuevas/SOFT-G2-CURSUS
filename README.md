@@ -42,7 +42,9 @@ Requisitos: **Node.js 20.19+**, **npm 10+** y **Docker** con Compose v2 (`docker
 
 ```bash
 # 1. Clona el repo y entra a develop
-git clone https://github.com/Joaquincuevas/SOFT-G2-CURSUS.git && cd SOFT-G2-CURSUS && git switch develop
+git clone https://github.com/Joaquincuevas/SOFT-G2-CURSUS.git
+cd SOFT-G2-CURSUS
+git switch develop
 # 2. Instala dependencias (compila shared y activa los hooks de husky)
 npm install
 # 3. Crea tu archivo de variables de entorno
@@ -70,6 +72,7 @@ docker compose down                                        # detiene; los datos 
 docker compose down -v                                     # detiene y borra los datos
 ```
 
+- En la consola SQL, `-U cursus -d cursus` son los valores de `.env.example`. Si cambiaste `POSTGRES_USER` o `POSTGRES_DB` en tu `.env`, usa los tuyos.
 - Si el puerto 5432 ya está ocupado, cambia `POSTGRES_PORT` en `.env` y vuelve a ejecutar `docker compose up -d --wait`.
 - Usuario, contraseña y nombre de la base solo se aplican al crear el volumen. Si los cambias en `.env` después, ejecuta `docker compose down -v` y levanta de nuevo.
 
