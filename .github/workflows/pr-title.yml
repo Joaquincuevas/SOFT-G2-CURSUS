@@ -48,6 +48,14 @@ jobs:
             exportacion
             observabilidad
           requireScope: false
+          # REVISIÓN: unificar la validación del título con commitlint.config.js.
+          # Este workflow acepta títulos de más de 100 caracteres y mayúsculas
+          # como Ā, que commitlint rechaza; también rechaza notas/ui, que
+          # commitlint acepta. Los checks pueden dar resultados distintos.
+          # Sugerencia: validar el título con commitlint y la misma configuración
+          # del hook y del CI. Acordar si se permite uno o varios ámbitos.
+          # Comprobar casos válidos e inválidos de longitud, mayúsculas, punto
+          # final y ámbitos simples o múltiples antes de aprobar el PR.
           # Descripción en minúsculas y sin punto final
           subjectPattern: ^[^A-ZÁÉÍÓÚÜÑ]*[^A-ZÁÉÍÓÚÜÑ.]$
           subjectPatternError: |
