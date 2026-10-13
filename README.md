@@ -30,22 +30,51 @@ SOFT-G2-CURSUS/
 │   └── pull_request_template.md
 ├── .husky/commit-msg    # Valida el mensaje de commit en local
 ├── commitlint.config.js
+├── docker-compose.yml   # PostgreSQL para desarrollo local
+├── .env.example         # Variables de entorno de ejemplo
 ├── package.json         # Configuración de workspaces
 └── README.md
 ```
 
 ## Setup local
 
-Requisitos: **Node.js 20.19+** y **npm 10+**.
+Requisitos: **Node.js 20.19+**, **npm 10+** y **Docker** con Compose v2 (`docker compose version`).
 
 ```bash
+# 1. Clona el repo y entra a develop
 git clone https://github.com/Joaquincuevas/SOFT-G2-CURSUS.git
 cd SOFT-G2-CURSUS
 git switch develop
-npm install          # instala dependencias, compila shared y activa los hooks de husky
-npm run dev:front    # levanta el frontend en http://localhost:5173
-npm run dev:back     # levanta el backend en http://localhost:3000
+# 2. Instala dependencias (compila shared y activa los hooks de husky)
+npm install
+# 3. Crea tu archivo de variables de entorno
+cp .env.example .env
+# 4. Levanta PostgreSQL (vuelve cuando la base está lista)
+docker compose up -d --wait
 ```
+
+Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto que definas en `POSTGRES_PORT`). Luego levanta las apps:
+
+```bash
+npm run dev:front    # frontend en http://localhost:5173
+npm run dev:back     # backend en http://localhost:3000
+```
+
+### Base de datos local
+
+Las credenciales y el puerto se leen desde `.env` (no se versiona). `.env.example` trae valores de desarrollo.
+
+```bash
+docker compose ps                                          # estado del contenedor
+docker compose logs -f postgres                            # logs
+docker compose exec postgres psql -U cursus -d cursus      # consola SQL
+docker compose down                                        # detiene; los datos se conservan
+docker compose down -v                                     # detiene y borra los datos
+```
+
+- En la consola SQL, `-U cursus -d cursus` son los valores de `.env.example`. Si cambiaste `POSTGRES_USER` o `POSTGRES_DB` en tu `.env`, usa los tuyos.
+- Si el puerto 5432 ya está ocupado, cambia `POSTGRES_PORT` en `.env` y vuelve a ejecutar `docker compose up -d --wait`.
+- Usuario, contraseña y nombre de la base solo se aplican al crear el volumen. Si los cambias en `.env` después, ejecuta `docker compose down -v` y levanta de nuevo.
 
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
