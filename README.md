@@ -76,6 +76,21 @@ docker compose down -v                                     # detiene y borra los
 - Si el puerto 5432 ya está ocupado, cambia `POSTGRES_PORT` en `.env` y vuelve a ejecutar `docker compose up -d --wait`.
 - Usuario, contraseña y nombre de la base solo se aplican al crear el volumen. Si los cambias en `.env` después, ejecuta `docker compose down -v` y levanta de nuevo.
 
+### Migraciones
+
+El schema se versiona con migraciones de TypeORM en `backend/src/database/migrations/`. Con la base levantada:
+
+```bash
+npm run migration:run --workspace=backend      # aplica las migraciones pendientes
+npm run migration:revert --workspace=backend   # revierte la última migración aplicada
+npm run migration:show --workspace=backend     # lista las migraciones ([X] = aplicada)
+npm run test:db --workspace=backend            # tests del schema contra PostgreSQL
+```
+
+- La conexión usa las variables `POSTGRES_*` de `.env`.
+- `test:db` crea y borra su propia base (`POSTGRES_TEST_DB`, por defecto `cursus_test`), así que no toca tus datos de desarrollo. `npm run test` no incluye estos tests, porque no necesita Docker; el CI corre ambos.
+- Las migraciones que ya están en `develop` no se modifican. Si el schema cambia, crea una migración nueva.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
