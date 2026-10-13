@@ -26,6 +26,29 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    # Misma imagen que docker-compose.yml, para los tests de base de datos.
+    # Credenciales solo para el CI, no son secretos.
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: cursus
+          POSTGRES_PASSWORD: cursus_ci
+          POSTGRES_DB: cursus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cursus -d cursus"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: cursus
+      POSTGRES_PASSWORD: cursus_ci
+      POSTGRES_DB: cursus
+      POSTGRES_TEST_DB: cursus_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +57,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test --workspaces --if-present
+      - name: Tests de base de datos
+        run: npm run test:db --workspace=backend
 
   build:
     name: build
