@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { DataSource, type DataSourceOptions } from 'typeorm'
+import { EsquemaInicial1791923526004 } from './migrations/1791923526004-EsquemaInicial.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -17,7 +18,7 @@ export function opcionesDataSource(database?: string): DataSourceOptions {
     username: process.env.POSTGRES_USER ?? 'cursus',
     password: process.env.POSTGRES_PASSWORD,
     database: database ?? process.env.POSTGRES_DB ?? 'cursus',
-    migrations: [],
+    migrations: [EsquemaInicial1791923526004],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
     synchronize: false,
