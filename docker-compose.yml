@@ -3,7 +3,7 @@ name: cursus
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17.11-alpine
     container_name: cursus-postgres
     restart: unless-stopped
     environment:
