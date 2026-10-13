@@ -175,6 +175,14 @@ describe('migración EsquemaInicial', () => {
       )
     }
   })
+
+  it('indexa la FK compuesta de usuario a facultad', async () => {
+    const [indice] = await bd.query<{ indexdef: string }[]>(
+      `SELECT indexdef FROM pg_indexes
+       WHERE schemaname = 'public' AND indexname = 'ix_usuario_facultad'`,
+    )
+    expect(indice?.indexdef).toContain('(facultad_id, universidad_id)')
+  })
 })
 
 describe('facultad', () => {
@@ -210,11 +218,39 @@ describe('facultad', () => {
 })
 
 describe('carrera', () => {
+  const sqlCarrera =
+    'INSERT INTO carrera (universidad_id, facultad_id, nombre) VALUES ($1, $2, $3)'
+
+  it('rechaza una carrera sin universidad', () =>
+    enTransaccion(async (q) => {
+      const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+      const ing = await crearFacultad(q, ua, 'Ingeniería')
+      await expect(
+        insertar(q, sqlCarrera, [null, ing, 'Civil']),
+      ).rejects.toMatchObject({ code: NOT_NULL, column: 'universidad_id' })
+    }))
+
   it('rechaza una carrera sin facultad', () =>
     enTransaccion(async (q) => {
+      const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
       await expect(
-        q.query("INSERT INTO carrera (nombre) VALUES ('Ingeniería Civil')"),
+        insertar(q, sqlCarrera, [ua, null, 'Civil']),
       ).rejects.toMatchObject({ code: NOT_NULL, column: 'facultad_id' })
+    }))
+
+  it('rechaza una facultad de otra universidad', () =>
+    enTransaccion(async (q) => {
+      const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+      const ub = await crearUniversidad(q, 'Universidad B', 'ub.cl')
+      const ingA = await crearFacultad(q, ua, 'Ingeniería')
+      await insertar(q, sqlCarrera, [ua, ingA, 'Civil'])
+
+      await expect(
+        insertar(q, sqlCarrera, [ub, ingA, 'Comercial']),
+      ).rejects.toMatchObject({
+        code: FOREIGN_KEY,
+        constraint: 'fk_carrera_facultad',
+      })
     }))
 
   it('no repite el nombre dentro de la misma facultad', () =>
@@ -222,11 +258,12 @@ describe('carrera', () => {
       const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
       const ing = await crearFacultad(q, ua, 'Ingeniería')
       const cs = await crearFacultad(q, ua, 'Ciencias')
-      const sql = 'INSERT INTO carrera (facultad_id, nombre) VALUES ($1, $2)'
-      await insertar(q, sql, [ing, 'Civil'])
-      await insertar(q, sql, [cs, 'Civil'])
+      await insertar(q, sqlCarrera, [ua, ing, 'Civil'])
+      await insertar(q, sqlCarrera, [ua, cs, 'Civil'])
 
-      await expect(insertar(q, sql, [ing, 'Civil'])).rejects.toMatchObject({
+      await expect(
+        insertar(q, sqlCarrera, [ua, ing, 'Civil']),
+      ).rejects.toMatchObject({
         code: UNIQUE,
         constraint: 'uq_carrera_facultad_nombre',
       })
@@ -264,6 +301,7 @@ describe('usuario', () => {
   it('acepta cada uno de los cinco roles', () =>
     enTransaccion(async (q) => {
       const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+      const ing = await crearFacultad(q, ua, 'Ingeniería')
       const roles = [
         'DIRECTOR',
         'ADMINISTRATIVO',
@@ -274,10 +312,38 @@ describe('usuario', () => {
       for (const rol of roles) {
         await crearUsuario(q, {
           universidadId: ua,
+          facultadId: rol === 'ADMINISTRATIVO' ? ing : null,
           correo: `${rol}@ua.cl`,
           rol,
         })
       }
+    }))
+
+  it('rechaza un administrativo sin facultad', () =>
+    enTransaccion(async (q) => {
+      const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+      await expect(
+        crearUsuario(q, {
+          universidadId: ua,
+          correo: 'adm@ua.cl',
+          rol: 'ADMINISTRATIVO',
+        }),
+      ).rejects.toMatchObject({
+        code: CHECK,
+        constraint: 'ck_usuario_administrativo_facultad',
+      })
+    }))
+
+  it('permite que otros roles tengan facultad', () =>
+    enTransaccion(async (q) => {
+      const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+      const ing = await crearFacultad(q, ua, 'Ingeniería')
+      await crearUsuario(q, {
+        universidadId: ua,
+        facultadId: ing,
+        correo: 'profe@ua.cl',
+        rol: 'PROFESOR',
+      })
     }))
 
   it('rechaza una facultad de otra universidad', () =>

@@ -25,6 +25,6 @@ El puerto se puede cambiar con la variable de entorno `PORT`.
 
 - La conexión está en `src/database/data-source.ts`. Lee las variables `POSTGRES_*` del `.env` de la raíz del repo, o del entorno si no hay `.env` (por ejemplo, en el CI).
 - Las migraciones viven en `src/database/migrations/` y se registran a mano en la lista `migrations` de `data-source.ts`.
-- Convención de nombres: tablas en singular y en snake_case (`universidad`, `periodo`), columnas en snake_case (`universidad_id`, `created_at`) y restricciones con prefijo `pk_`, `fk_`, `uq_`, `ck_` o `ux_` (índice único).
+- Convención de nombres: tablas en singular y en snake_case (`universidad`, `periodo`), columnas en snake_case (`universidad_id`, `created_at`) y restricciones con prefijo `pk_`, `fk_`, `uq_`, `ck_`, `ux_` (índice único) o `ix_` (índice).
 
 El proyecto es ESM (`"type": "module"`): los imports relativos llevan extensión `.js` (por ejemplo, `import { AppService } from './app.service.js'`).

@@ -40,8 +40,8 @@ export class EsquemaInicial1791923526004 implements MigrationInterface {
       )
     `)
 
-    // uq_facultad_id_universidad permite que usuario referencie (facultad, universidad)
-    // y así asegurar que la facultad de un usuario sea de su misma universidad.
+    // uq_facultad_id_universidad permite que carrera y usuario referencien
+    // (facultad, universidad) y así asegurar que la facultad sea de su misma universidad.
     await queryRunner.query(`
       CREATE TABLE facultad (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -57,16 +57,19 @@ export class EsquemaInicial1791923526004 implements MigrationInterface {
       )
     `)
 
+    // universidad_id se repite en carrera para filtrar por universidad sin pasar
+    // por facultad; la FK compuesta asegura que coincida con la de su facultad.
     await queryRunner.query(`
       CREATE TABLE carrera (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
+        universidad_id uuid NOT NULL,
         facultad_id uuid NOT NULL,
         nombre text NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         CONSTRAINT pk_carrera PRIMARY KEY (id),
-        CONSTRAINT fk_carrera_facultad FOREIGN KEY (facultad_id)
-          REFERENCES facultad (id) ON DELETE RESTRICT,
+        CONSTRAINT fk_carrera_facultad FOREIGN KEY (facultad_id, universidad_id)
+          REFERENCES facultad (id, universidad_id) ON DELETE RESTRICT,
         CONSTRAINT uq_carrera_facultad_nombre UNIQUE (facultad_id, nombre)
       )
     `)
@@ -99,6 +102,8 @@ export class EsquemaInicial1791923526004 implements MigrationInterface {
 
     // password_hash debe tener formato de hash ($<algoritmo>$...), por ejemplo
     // bcrypt ($2b$...) o argon2 ($argon2id$...), para rechazar texto plano.
+    // El administrativo es de facultad, así que debe tener una; los demás roles
+    // pueden tenerla o no.
     await queryRunner.query(`
       CREATE TABLE usuario (
         id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -117,8 +122,17 @@ export class EsquemaInicial1791923526004 implements MigrationInterface {
           REFERENCES facultad (id, universidad_id) ON DELETE RESTRICT,
         CONSTRAINT ck_usuario_password_hash CHECK (
           password_hash ~ '^[$][a-z0-9-]+[$].{20,}$'
+        ),
+        CONSTRAINT ck_usuario_administrativo_facultad CHECK (
+          rol <> 'ADMINISTRATIVO' OR facultad_id IS NOT NULL
         )
       )
+    `)
+
+    // PostgreSQL no indexa el lado que referencia una FK; este índice cubre
+    // fk_usuario_facultad y las búsquedas de usuarios por facultad.
+    await queryRunner.query(`
+      CREATE INDEX ix_usuario_facultad ON usuario (facultad_id, universidad_id)
     `)
 
     // El correo no se repite dentro de una universidad, sin distinguir mayúsculas.
