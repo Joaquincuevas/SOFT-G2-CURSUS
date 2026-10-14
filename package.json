@@ -14,7 +14,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "prepare": "husky",
+    "prepare": "node .husky/install.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "postinstall": "npm run build --workspace=shared"
