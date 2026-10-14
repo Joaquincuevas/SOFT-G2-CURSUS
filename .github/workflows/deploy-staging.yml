@@ -77,9 +77,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: staging
+    # Con llaves no se necesita id-token. Si se vuelve a OIDC (plan de pago),
+    # agregar "id-token: write".
     permissions:
       contents: read
-      id-token: write
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
       TAG: ${{ github.sha }}

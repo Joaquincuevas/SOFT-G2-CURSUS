@@ -48,10 +48,11 @@ imagen_del_servicio() {
 # Imprime "encendido" si el backend tiene tareas deseadas y la base está
 # disponible; "apagado" en cualquier otro caso (incluido si aún no existe).
 estado_staging() {
-  local tareas base
+  local tareas instancia base
   tareas=$(aws ecs describe-services --cluster "$STACK" --services backend \
     --query "services[?status=='ACTIVE'].desiredCount | [0]" --output text 2>/dev/null || true)
-  base=$(aws rds describe-db-instances --db-instance-identifier "$STACK" \
+  instancia=$(salida BaseDeDatos 2>/dev/null || true)
+  base=$(aws rds describe-db-instances --db-instance-identifier "$instancia" \
     --query 'DBInstances[0].DBInstanceStatus' --output text 2>/dev/null || true)
   if [ -n "$tareas" ] && [ "$tareas" != None ] && [ "$tareas" -gt 0 ] && [ "$base" = available ]; then
     echo encendido

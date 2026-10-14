@@ -148,7 +148,7 @@ Cada merge a `develop` se despliega en staging, en AWS (región Ohio, `us-east-2
 - **URL de la API de staging:** https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com (por ejemplo, `/api/health`). Responde solo cuando staging está encendido, y las rutas distintas de `/api/health` piden el header secreto, así que se usan a través del frontend en Vercel.
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de staging y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
-- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging`), privada.
+- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging`), privada y cifrada.
 - **Infraestructura:** un solo stack de CloudFormation ([infra/aws/staging.yml](infra/aws/staging.yml)) que nunca se borra.
 
 ### Cómo funciona el deploy
@@ -159,6 +159,8 @@ El workflow [deploy-staging.yml](.github/workflows/deploy-staging.yml) corre con
 2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
 3. Si staging está apagado, termina en verde con el aviso "Staging apagado". La imagen se despliega al encender.
 4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL pública. Si algo falla, el workflow queda en rojo y staging sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+
+**Las migraciones deben ser compatibles hacia atrás.** Si la versión nueva del backend falla y ECS vuelve a la anterior, la migración ya quedó aplicada: ECS no la revierte. Por eso la versión anterior tiene que seguir funcionando con el schema nuevo. Por ejemplo, para renombrar una columna: primero se agrega la nueva y se copian los datos, y en un deploy posterior se borra la antigua.
 
 ### Encender y apagar
 
@@ -206,7 +208,7 @@ La primera vez crea todo menos el servicio del backend, porque todavía no hay i
 ### Límites conocidos
 
 - API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
-- Staging y producción comparten la instancia de RDS (cada uno con su base), así que apagar staging también detiene la base de producción.
+- **Decisión pendiente de INFRA-07:** si producción usará la misma instancia de RDS que staging (con una base propia) o una instancia aparte. Compartirla ahorra costos, pero apagar staging detendría también la base de producción.
 
 ## Flujo de trabajo Git
 

@@ -144,8 +144,11 @@ Resources:
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      DBInstanceIdentifier: cursus-staging
+      DBInstanceIdentifier: cursus-staging-db
       Engine: postgres
+      # Cifrado con la llave administrada por AWS (aws/rds). Activarlo después
+      # obliga a reemplazar la instancia.
+      StorageEncrypted: true
       # Misma versión que docker-compose.yml en local.
       EngineVersion: '17.11'
       DBInstanceClass: db.t4g.micro
@@ -429,15 +432,26 @@ Resources:
               - ecr:PutImage
               - ecr:UploadLayerPart
             Resource: !GetAtt Repositorio.Arn
+          # Estas dos acciones de ECS no admiten limitarse a un recurso.
+          - Effect: Allow
+            Action:
+              - ecs:DescribeTaskDefinition
+              - ecs:RegisterTaskDefinition
+            Resource: '*'
           - Effect: Allow
             Action:
               - ecs:DescribeServices
-              - ecs:DescribeTaskDefinition
-              - ecs:DescribeTasks
-              - ecs:RegisterTaskDefinition
-              - ecs:RunTask
               - ecs:UpdateService
-            Resource: '*'
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/backend'
+          - Effect: Allow
+            Action: ecs:RunTask
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cursus-staging-backend:*'
+            Condition:
+              ArnEquals:
+                ecs:cluster: !GetAtt Cluster.Arn
+          - Effect: Allow
+            Action: ecs:DescribeTasks
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${Cluster}/*'
           - Effect: Allow
             Action: iam:PassRole
             Resource: !GetAtt RolEjecucion.Arn
