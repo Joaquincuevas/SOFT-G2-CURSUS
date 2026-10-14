@@ -1,34 +1,113 @@
 import { hash } from 'argon2'
 import type { DataSource, EntityManager } from 'typeorm'
 
-// Datos simulados para desarrollo y la primera validación con el cliente.
-// Los dominios usan el TLD reservado .test, así que ningún correo es real.
+// Datos simulados para desarrollo y la primera validación con el cliente. Imitan
+// su escenario: una universidad grande con varias facultades y otra pequeña de
+// ciencias de la salud. Los dominios usan el TLD reservado .test, así que
+// ningún correo es real.
 
-type Rol = 'DIRECTOR' | 'ADMINISTRATIVO' | 'PROFESOR' | 'AYUDANTE' | 'ALUMNO'
+export type Rol =
+  'DIRECTOR' | 'ADMINISTRATIVO' | 'PROFESOR' | 'AYUDANTE' | 'ALUMNO'
+
+interface FacultadSeed {
+  nombre: string
+  carrera: string
+}
+
+interface UsuarioSeed {
+  rol: Rol
+  nombre: string
+  // Parte del correo antes de @; el dominio es el de su universidad.
+  usuario: string
+  // Nombre de una facultad de la misma universidad. El director no tiene.
+  facultad?: string
+}
 
 interface UniversidadSeed {
   nombre: string
   dominio: string
-  facultad: string
-  carrera: string
-  // Se agrega al nombre de cada usuario para distinguirlos entre universidades.
-  sufijo: string
+  facultades: FacultadSeed[]
+  usuarios: UsuarioSeed[]
 }
+
+const INGENIERIA = 'Facultad de Ingeniería'
+const ECONOMIA = 'Facultad de Economía y Negocios'
+const SALUD = 'Facultad de Ciencias de la Salud'
 
 export const UNIVERSIDADES: UniversidadSeed[] = [
   {
     nombre: 'Universidad Demo Norte',
     dominio: 'norte.cursus.test',
-    facultad: 'Facultad de Ingeniería',
-    carrera: 'Ingeniería Civil en Informática',
-    sufijo: 'Norte',
+    facultades: [
+      { nombre: INGENIERIA, carrera: 'Ingeniería Civil en Informática' },
+      { nombre: ECONOMIA, carrera: 'Ingeniería Comercial' },
+    ],
+    // Un administrativo por facultad, para probar el aislamiento entre ellas.
+    usuarios: [
+      { rol: 'DIRECTOR', nombre: 'Director Norte', usuario: 'director' },
+      {
+        rol: 'ADMINISTRATIVO',
+        nombre: 'Administrativo Ingeniería Norte',
+        usuario: 'administrativo.ingenieria',
+        facultad: INGENIERIA,
+      },
+      {
+        rol: 'ADMINISTRATIVO',
+        nombre: 'Administrativo Economía Norte',
+        usuario: 'administrativo.economia',
+        facultad: ECONOMIA,
+      },
+      {
+        rol: 'PROFESOR',
+        nombre: 'Profesor Norte',
+        usuario: 'profesor',
+        facultad: INGENIERIA,
+      },
+      {
+        rol: 'AYUDANTE',
+        nombre: 'Ayudante Norte',
+        usuario: 'ayudante',
+        facultad: INGENIERIA,
+      },
+      {
+        rol: 'ALUMNO',
+        nombre: 'Alumno Norte',
+        usuario: 'alumno',
+        facultad: INGENIERIA,
+      },
+    ],
   },
   {
     nombre: 'Universidad Demo Sur',
     dominio: 'sur.cursus.test',
-    facultad: 'Facultad de Ciencias',
-    carrera: 'Licenciatura en Física',
-    sufijo: 'Sur',
+    facultades: [{ nombre: SALUD, carrera: 'Enfermería' }],
+    usuarios: [
+      { rol: 'DIRECTOR', nombre: 'Director Sur', usuario: 'director' },
+      {
+        rol: 'ADMINISTRATIVO',
+        nombre: 'Administrativo Salud Sur',
+        usuario: 'administrativo',
+        facultad: SALUD,
+      },
+      {
+        rol: 'PROFESOR',
+        nombre: 'Profesor Sur',
+        usuario: 'profesor',
+        facultad: SALUD,
+      },
+      {
+        rol: 'AYUDANTE',
+        nombre: 'Ayudante Sur',
+        usuario: 'ayudante',
+        facultad: SALUD,
+      },
+      {
+        rol: 'ALUMNO',
+        nombre: 'Alumno Sur',
+        usuario: 'alumno',
+        facultad: SALUD,
+      },
+    ],
   },
 ]
 
@@ -39,17 +118,14 @@ export const PERIODO = {
   termino: '2026-12-18',
 }
 
-// El correo de cada usuario es <rol en minúsculas>@<dominio>.
-export const ROLES: { rol: Rol; nombre: string }[] = [
-  { rol: 'DIRECTOR', nombre: 'Director' },
-  { rol: 'ADMINISTRATIVO', nombre: 'Administrativo' },
-  { rol: 'PROFESOR', nombre: 'Profesor' },
-  { rol: 'AYUDANTE', nombre: 'Ayudante' },
-  { rol: 'ALUMNO', nombre: 'Alumno' },
-]
-
-export function correoDe(rol: Rol, dominio: string) {
-  return `${rol.toLowerCase()}@${dominio}`
+// El seed crea usuarios con una contraseña conocida, así que en producción solo
+// corre si se autoriza de forma explícita (por ejemplo, para levantar staging).
+export function verificarEntorno(env: NodeJS.ProcessEnv = process.env) {
+  if (env.NODE_ENV === 'production' && env.SEED_ALLOW !== 'true') {
+    throw new Error(
+      'El seed no corre con NODE_ENV=production. Si es intencional (por ejemplo, en staging), define SEED_ALLOW=true',
+    )
+  }
 }
 
 // Cada INSERT hace upsert sobre una clave única del schema, así que ejecutar
@@ -78,24 +154,33 @@ async function sembrarUniversidad(
     [u.nombre, u.dominio],
   )
 
-  const facultadId = await upsert(
-    m,
-    `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, $2)
-     ON CONFLICT (universidad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre`,
-    [universidadId, u.facultad],
-  )
+  const facultadIds = new Map<string, string>()
+  for (const facultad of u.facultades) {
+    const facultadId = await upsert(
+      m,
+      `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, $2)
+       ON CONFLICT (universidad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre`,
+      [universidadId, facultad.nombre],
+    )
+    facultadIds.set(facultad.nombre, facultadId)
 
-  await upsert(
-    m,
-    `INSERT INTO carrera (universidad_id, facultad_id, nombre) VALUES ($1, $2, $3)
-     ON CONFLICT (facultad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre`,
-    [universidadId, facultadId, u.carrera],
-  )
+    await upsert(
+      m,
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre) VALUES ($1, $2, $3)
+       ON CONFLICT (facultad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre`,
+      [universidadId, facultadId, facultad.carrera],
+    )
+  }
 
+  // Solo puede haber un período activo por universidad: el del seed queda
+  // activo únicamente si la universidad no tiene otro activo.
   await upsert(
     m,
     `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
-     VALUES ($1, $2, $3, $4, $5, true)
+     VALUES ($1, $2, $3, $4, $5, NOT EXISTS (
+       SELECT 1 FROM periodo
+       WHERE universidad_id = $1 AND activo AND (anio, semestre) <> ($2, $3)
+     ))
      ON CONFLICT (universidad_id, anio, semestre) DO UPDATE SET
        fecha_inicio = EXCLUDED.fecha_inicio,
        fecha_termino = EXCLUDED.fecha_termino,
@@ -109,9 +194,16 @@ async function sembrarUniversidad(
     ],
   )
 
-  // El director no se asocia a una facultad; el resto sí (el administrativo
-  // la requiere por schema).
-  for (const { rol, nombre } of ROLES) {
+  for (const usuario of u.usuarios) {
+    const facultadId = usuario.facultad
+      ? facultadIds.get(usuario.facultad)
+      : null
+    if (facultadId === undefined) {
+      throw new Error(
+        `La facultad "${usuario.facultad}" de ${usuario.usuario}@${u.dominio} no existe en el seed`,
+      )
+    }
+
     await upsert(
       m,
       `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol)
@@ -123,11 +215,11 @@ async function sembrarUniversidad(
          rol = EXCLUDED.rol`,
       [
         universidadId,
-        rol === 'DIRECTOR' ? null : facultadId,
-        `${nombre} ${u.sufijo}`,
-        correoDe(rol, u.dominio),
+        facultadId,
+        usuario.nombre,
+        `${usuario.usuario}@${u.dominio}`,
         passwordHash,
-        rol,
+        usuario.rol,
       ],
     )
   }
@@ -135,7 +227,13 @@ async function sembrarUniversidad(
 
 // Todos los usuarios de prueba comparten la contraseña, que viene de la
 // variable SEED_PASSWORD y nunca del código. Se hashea con argon2id.
-export async function ejecutarSeed(bd: DataSource, password: string) {
+export async function ejecutarSeed(
+  bd: DataSource,
+  password: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  verificarEntorno(env)
+
   if (await bd.showMigrations()) {
     throw new Error(
       'Hay migraciones pendientes: ejecuta npm run migration:run --workspace=backend',
