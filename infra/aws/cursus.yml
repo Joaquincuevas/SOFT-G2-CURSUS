@@ -149,9 +149,9 @@ Resources:
       SubnetIds: !Ref SubnetIds
 
   # Snapshot si la base se borra o se reemplaza, en los dos entornos.
-  # production además guarda respaldos de 7 días y tiene protección contra
-  # borrado (que no cubre un reemplazo; para eso está el snapshot). staging guarda
-  # 1 día de respaldos porque sus datos son de prueba.
+  # production además conserva sus respaldos automáticos si se borra la instancia
+  # y tiene protección contra borrado (que no cubre un reemplazo; para eso está
+  # el snapshot).
   BaseDeDatos:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Snapshot
@@ -174,7 +174,9 @@ Resources:
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:password}}'
       DBSubnetGroupName: !Ref SubredesBaseDeDatos
       VPCSecurityGroups: [!Ref GrupoBaseDeDatos]
-      BackupRetentionPeriod: !If [EsStaging, 1, 7]
+      # El plan gratuito de AWS no permite más de 1 día. Con el plan de pago,
+      # production debería guardar 7.
+      BackupRetentionPeriod: 1
       DeleteAutomatedBackups: !If [EsStaging, true, false]
       EnablePerformanceInsights: false
       MonitoringInterval: 0
