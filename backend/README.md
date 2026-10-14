@@ -19,6 +19,7 @@ Desde la raíz del repo (`npm run <script> --workspace=backend`) o dentro de `ba
 | `npm run migration:revert`   | Revierte la última migración aplicada                       |
 | `npm run migration:show`     | Lista las migraciones y cuáles están aplicadas              |
 | `npm run migration:run:prod` | Aplica las migraciones desde `dist/` (imagen Docker)        |
+| `npm run seed`               | Carga los datos simulados (ver README de la raíz)           |
 
 El puerto se puede cambiar con la variable de entorno `PORT`.
 
