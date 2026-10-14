@@ -154,7 +154,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de su entorno (`develop` en Preview y `main` en Production) y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen, así que se usa a través de Vercel; solo `/api/health` responde sin el header.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
-- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. La de producción está protegida contra borrado, guarda respaldos de 7 días y deja un snapshot si se borra o se reemplaza; la de staging guarda 1 día y no deja snapshot.
+- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. Las dos dejan un snapshot si se borran o se reemplazan. La de producción además está protegida contra borrado y guarda respaldos de 7 días; la de staging guarda 1 día.
 - **Infraestructura:** la misma plantilla de CloudFormation ([infra/aws/cursus.yml](infra/aws/cursus.yml)) con el parámetro `Entorno`. Los stacks (`cursus-staging` y `cursus-production`) nunca se borran.
 
 ### Cómo funciona el deploy

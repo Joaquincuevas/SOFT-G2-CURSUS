@@ -56,7 +56,7 @@ if [ "$DRY_RUN" = true ]; then
     --args "${PARAMETERS[@]}" >"$PARAMETERS_FILE"
   CHANGE_SET="revision-$(date +%s)"
   aws cloudformation create-change-set --stack-name "$STACK" --change-set-name "$CHANGE_SET" \
-    --template-body "file://$TEMPLATE" --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+    --template-body "file://$TEMPLATE" --capabilities CAPABILITY_NAMED_IAM \
     --parameters "file://$PARAMETERS_FILE" >/dev/null
   if aws cloudformation wait change-set-create-complete --stack-name "$STACK" \
     --change-set-name "$CHANGE_SET" 2>/dev/null; then
@@ -81,7 +81,7 @@ fi
 aws cloudformation deploy \
   --stack-name "$STACK" \
   --template-file "$TEMPLATE" \
-  --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+  --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset \
   --parameter-overrides "${PARAMETERS[@]}"
 

@@ -1,6 +1,4 @@
 AWSTemplateFormatVersion: '2010-09-09'
-# Permite condicionar DeletionPolicy y UpdateReplacePolicy de la base por entorno.
-Transform: AWS::LanguageExtensions
 Description: >-
   CURSUS, un stack por entorno (staging o production). Backend en ECS Fargate
   expuesto por una HTTP API de API Gateway (VPC link + Cloud Map, sin
@@ -150,14 +148,14 @@ Resources:
       DBSubnetGroupDescription: !Sub 'Subredes de RDS de ${Entorno}'
       SubnetIds: !Ref SubnetIds
 
-  # staging: sin snapshot al borrar ni al reemplazar y respaldos de 1 día, porque
-  # sus datos son de prueba (decisión A9).
-  # production: snapshot al borrar o reemplazar, respaldos de 7 días y protección
-  # contra borrado (que no cubre un reemplazo; para eso está el snapshot).
+  # Snapshot si la base se borra o se reemplaza, en los dos entornos.
+  # production además guarda respaldos de 7 días y tiene protección contra
+  # borrado (que no cubre un reemplazo; para eso está el snapshot). staging guarda
+  # 1 día de respaldos porque sus datos son de prueba.
   BaseDeDatos:
     Type: AWS::RDS::DBInstance
-    DeletionPolicy: !If [EsStaging, Delete, Snapshot]
-    UpdateReplacePolicy: !If [EsStaging, Delete, Snapshot]
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
     Properties:
       DBInstanceIdentifier: !Sub 'cursus-${Entorno}-db'
       Engine: postgres
