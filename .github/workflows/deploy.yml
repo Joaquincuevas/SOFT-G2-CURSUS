@@ -86,6 +86,8 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
       TAG: ${{ github.sha }}
+      # URL del frontend en Vercel (variable del environment de GitHub; opcional).
+      FRONTEND_URL: ${{ vars.FRONTEND_URL }}
       ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
       # Mismo criterio que infra/aws/cursus.yml: staging conserva su nombre original.
       REPOSITORY: ${{ github.ref_name == 'main' && 'cursus-backend-production' || 'cursus-backend' }}
@@ -151,3 +153,19 @@ jobs:
       - name: Desplegar
         if: steps.estado.outputs.estado == 'encendido'
         run: bash infra/aws/deploy.sh "$ENVIRONMENT" "$TAG"
+
+      # Solo avisa, no falla: Vercel despliega en paralelo y puede tardar más que
+      # este workflow. Comprueba que el frontend llegue a la API con el header
+      # secreto (variables API_URL y ORIGIN_SECRET de Vercel).
+      - name: Verificar el frontend en Vercel
+        if: steps.estado.outputs.estado == 'encendido' && env.FRONTEND_URL != ''
+        run: |
+          for _ in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$FRONTEND_URL/api/health/db" || true)
+            if [ "$code" = 200 ]; then
+              echo "El frontend responde en $FRONTEND_URL/api/health/db"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning title=Frontend sin verificar::$FRONTEND_URL/api/health/db respondió $code en vez de 200. Revisa el deploy de Vercel y sus variables API_URL y ORIGIN_SECRET (un 401 indica que el dominio tiene Deployment Protection)."

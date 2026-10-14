@@ -145,16 +145,16 @@ npm run format:check   # solo verifica
 
 Hay dos entornos en AWS (región Ohio, `us-east-2`), cada uno con su propio stack, base de datos y secretos:
 
-| Entorno      | Rama      | Se despliega con       | API                                                    |
-| ------------ | --------- | ---------------------- | ------------------------------------------------------ |
-| `staging`    | `develop` | Cada merge a `develop` | https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com |
-| `production` | `main`    | Cada release a `main`  | https://p24c3u9eek.execute-api.us-east-2.amazonaws.com |
+| Entorno      | Rama      | Se despliega con       | Frontend (Vercel)                 | API                                                    |
+| ------------ | --------- | ---------------------- | --------------------------------- | ------------------------------------------------------ |
+| `staging`    | `develop` | Cada merge a `develop` | https://cursus-staging.vercel.app | https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com |
+| `production` | `main`    | Cada release a `main`  | https://cursus-g2.vercel.app      | https://p24c3u9eek.execute-api.us-east-2.amazonaws.com |
 
 Los dos están **apagados por defecto** para cuidar los créditos: quien necesite uno lo enciende y lo apaga al terminar.
 
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de su entorno (`develop` en Preview y `main` en Production) y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen, así que se usa a través de Vercel; solo `/api/health` responde sin el header.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
-- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. La de producción está protegida contra borrado.
+- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. La de producción está protegida contra borrado, guarda respaldos de 7 días y deja un snapshot si se borra o se reemplaza; la de staging guarda 1 día y no deja snapshot.
 - **Infraestructura:** la misma plantilla de CloudFormation ([infra/aws/cursus.yml](infra/aws/cursus.yml)) con el parámetro `Entorno`. Los stacks (`cursus-staging` y `cursus-production`) nunca se borran.
 
 ### Cómo funciona el deploy
@@ -164,9 +164,22 @@ El workflow [deploy.yml](.github/workflows/deploy.yml) corre con cada push a `de
 1. Espera a que el CI de ese commit (lint, test y build) termine en verde.
 2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
 3. Si el entorno está apagado, termina en verde con un aviso. La imagen se despliega al encender.
-4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL pública. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL de la API. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+5. Si el environment de GitHub tiene la variable `FRONTEND_URL`, verifica también `/api/health/db` a través de Vercel. Si no responde 200, deja una **advertencia** pero no falla, porque Vercel despliega en paralelo y puede tardar más.
 
 **Las migraciones deben ser compatibles hacia atrás.** Si la versión nueva del backend falla y ECS vuelve a la anterior, la migración ya quedó aplicada: ECS no la revierte. Por eso la versión anterior tiene que seguir funcionando con el schema nuevo. Por ejemplo, para renombrar una columna: primero se agrega la nueva y se copian los datos, y en un deploy posterior se borra la antigua.
+
+### Volver a una versión anterior (rollback manual)
+
+Si una versión ya desplegada tiene un problema, se vuelve a la anterior desde CloudShell, con el entorno encendido:
+
+```bash
+bash infra/aws/deploy.sh production <sha-del-commit-anterior>
+```
+
+- El SHA es la etiqueta de la imagen en ECR: el commit de un deploy anterior que funcionaba (se ve en GitHub Actions o con `git log`). ECR guarda las últimas 10 imágenes de cada entorno.
+- **La migración no se revierte:** la versión anterior corre sobre el schema nuevo, por eso las migraciones deben ser compatibles hacia atrás.
+- El arreglo definitivo se hace con un PR nuevo; el siguiente merge vuelve a desplegar la versión corregida.
 
 ### Encender y apagar
 
@@ -193,7 +206,7 @@ Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno
 | GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                              |
 | Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production. |
 
-El environment `staging` de GitHub solo acepta la rama `develop`, y `production` solo `main`.
+El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
 **Llaves de GitHub.** El plan gratuito de AWS bloquea OIDC, así que el workflow entra con las llaves de un usuario de IAM con permisos mínimos (subir imágenes, correr migraciones y actualizar el servicio). La plantilla crea el usuario, pero no la llave, para que no quede guardada en AWS. Para crearla, en CloudShell:
 

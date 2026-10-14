@@ -1,4 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
+# Permite condicionar DeletionPolicy y UpdateReplacePolicy de la base por entorno.
+Transform: AWS::LanguageExtensions
 Description: >-
   CURSUS, un stack por entorno (staging o production). Backend en ECS Fargate
   expuesto por una HTTP API de API Gateway (VPC link + Cloud Map, sin
@@ -148,12 +150,14 @@ Resources:
       DBSubnetGroupDescription: !Sub 'Subredes de RDS de ${Entorno}'
       SubnetIds: !Ref SubnetIds
 
-  # Sin snapshot al borrar: los datos de staging son de prueba (decisión A9).
-  # En production, DeletionProtection impide borrar la base por accidente.
+  # staging: sin snapshot al borrar ni al reemplazar y respaldos de 1 día, porque
+  # sus datos son de prueba (decisión A9).
+  # production: snapshot al borrar o reemplazar, respaldos de 7 días y protección
+  # contra borrado (que no cubre un reemplazo; para eso está el snapshot).
   BaseDeDatos:
     Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
-    UpdateReplacePolicy: Delete
+    DeletionPolicy: !If [EsStaging, Delete, Snapshot]
+    UpdateReplacePolicy: !If [EsStaging, Delete, Snapshot]
     Properties:
       DBInstanceIdentifier: !Sub 'cursus-${Entorno}-db'
       Engine: postgres
@@ -172,8 +176,8 @@ Resources:
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:password}}'
       DBSubnetGroupName: !Ref SubredesBaseDeDatos
       VPCSecurityGroups: [!Ref GrupoBaseDeDatos]
-      BackupRetentionPeriod: 1
-      DeleteAutomatedBackups: true
+      BackupRetentionPeriod: !If [EsStaging, 1, 7]
+      DeleteAutomatedBackups: !If [EsStaging, true, false]
       EnablePerformanceInsights: false
       MonitoringInterval: 0
       AutoMinorVersionUpgrade: true
