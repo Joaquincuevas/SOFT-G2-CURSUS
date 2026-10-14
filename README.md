@@ -148,7 +148,7 @@ Hay dos entornos en AWS (región Ohio, `us-east-2`), cada uno con su propio stac
 | Entorno      | Rama      | Se despliega con       | API                                                    |
 | ------------ | --------- | ---------------------- | ------------------------------------------------------ |
 | `staging`    | `develop` | Cada merge a `develop` | https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com |
-| `production` | `main`    | Cada release a `main`  | _Se agrega al crear el stack de producción._           |
+| `production` | `main`    | Cada release a `main`  | https://p24c3u9eek.execute-api.us-east-2.amazonaws.com |
 
 Los dos están **apagados por defecto** para cuidar los créditos: quien necesite uno lo enciende y lo apaga al terminar.
 
