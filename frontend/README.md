@@ -14,6 +14,13 @@ Desde la raíz del repo (`npm run <script> --workspace=frontend`) o dentro de `f
 | `npm run test`    | Vitest + React Testing Library (jsdom)          |
 | `npm run preview` | Sirve el build de producción                    |
 
+## Llamadas a la API
+
+El frontend llama siempre a rutas relativas `/api/...` (por ejemplo, `fetch('/api/health')`), nunca a la URL de AWS ni a variables `VITE_` con secretos.
+
+- **Local:** el proxy de Vite (`vite.config.ts`) reenvía `/api` al backend en `http://localhost:3000`. Levanta el backend con `npm run dev:back`.
+- **Vercel:** `vercel.json` reenvía `/api/*` a la API de staging y agrega el header secreto `x-origin-secret`, que la API exige. Los valores salen de las variables `API_URL` y `ORIGIN_SECRET` del proyecto en Vercel (entorno Preview, rama `develop`); nunca se escriben en el código. El resto de las rutas sirve `index.html`, para que React Router funcione al recargar.
+
 ## Tests
 
 - Los tests van junto al código como `*.test.tsx`.
