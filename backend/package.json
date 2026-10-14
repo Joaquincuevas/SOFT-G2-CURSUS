@@ -20,6 +20,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "migration:show": "npm run typeorm -- migration:show",
+    "migration:run:prod": "node ../node_modules/typeorm/cli.js -d dist/database/data-source.js migration:run",
     "seed": "tsx src/database/ejecutar-seed.ts"
   },
   "dependencies": {

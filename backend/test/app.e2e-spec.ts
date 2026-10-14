@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { App } from 'supertest/types.js'
 import { AppModule } from './../src/app.module.js'
+import { configurarApp } from './../src/config/configurar-app.js'
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>
@@ -13,12 +14,13 @@ describe('AppController (e2e)', () => {
     }).compile()
 
     app = moduleFixture.createNestApplication()
+    configurarApp(app, { secretoOrigen: '' })
     await app.init()
   })
 
-  it('/ (GET)', () => {
+  it('/api (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api')
       .expect(200)
       .expect('Hello World!')
   })

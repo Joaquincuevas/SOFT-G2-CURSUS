@@ -22,12 +22,13 @@ SOFT-G2-CURSUS/
 ├── frontend/            # React + Vite + TypeScript
 ├── backend/             # NestJS + TypeScript
 ├── shared/              # DTOs y tipos compartidos (@cursus/shared)
-├── infra/               # Docker, migraciones, scripts AWS
+├── infra/               # Dockerfile del backend e infraestructura de staging (AWS)
 ├── docs/                # Informes, diagramas C4, ADRs
 ├── .github/
 │   ├── workflows/
-│   │   ├── ci.yml       # Pipeline: lint + test + build + commitlint
-│   │   └── pr-title.yml # Valida el título del PR (Conventional Commits)
+│   │   ├── ci.yml             # Pipeline: lint + test + build + commitlint
+│   │   ├── pr-title.yml       # Valida el título del PR (Conventional Commits)
+│   │   └── deploy-staging.yml # Deploy de develop a staging en AWS
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
 ├── .husky/commit-msg    # Valida el mensaje de commit en local
@@ -59,7 +60,7 @@ Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto qu
 
 ```bash
 npm run dev:front    # frontend en http://localhost:5173
-npm run dev:back     # backend en http://localhost:3000
+npm run dev:back     # backend en http://localhost:3000/api
 ```
 
 ### Base de datos local
@@ -139,6 +140,75 @@ npm run format:check   # solo verifica
 ```
 
 `shared` se compila automáticamente después de `npm install`. Si cambias algo en `shared/src`, recompílalo con `npm run build --workspace=shared` para que frontend y backend vean los cambios.
+
+## Staging (AWS)
+
+Cada merge a `develop` se despliega en staging, en AWS (región Ohio, `us-east-2`). Staging está **apagado por defecto** para cuidar los créditos: quien lo necesite lo enciende y lo apaga al terminar.
+
+- **URL de la API de staging:** https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com (por ejemplo, `/api/health`). Responde solo cuando staging está encendido, y las rutas distintas de `/api/health` piden el header secreto, así que se usan a través del frontend en Vercel.
+- **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de staging y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen.
+- **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
+- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging`), privada y cifrada.
+- **Infraestructura:** un solo stack de CloudFormation ([infra/aws/staging.yml](infra/aws/staging.yml)) que nunca se borra.
+
+### Cómo funciona el deploy
+
+El workflow [deploy-staging.yml](.github/workflows/deploy-staging.yml) corre con cada push a `develop`:
+
+1. Espera a que el CI de ese commit (lint, test y build) termine en verde.
+2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
+3. Si staging está apagado, termina en verde con el aviso "Staging apagado". La imagen se despliega al encender.
+4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL pública. Si algo falla, el workflow queda en rojo y staging sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+
+**Las migraciones deben ser compatibles hacia atrás.** Si la versión nueva del backend falla y ECS vuelve a la anterior, la migración ya quedó aplicada: ECS no la revierte. Por eso la versión anterior tiene que seguir funcionando con el schema nuevo. Por ejemplo, para renombrar una columna: primero se agrega la nueva y se copian los datos, y en un deploy posterior se borra la antigua.
+
+### Encender y apagar
+
+Desde [AWS CloudShell](https://console.aws.amazon.com/cloudshell) en la región Ohio, con el repo clonado (`git clone` y `git switch develop`):
+
+```bash
+bash infra/aws/staging-encender.sh   # inicia la base y despliega la última imagen (5 a 20 min)
+bash infra/aws/staging-apagar.sh     # backend a 0 tareas y base detenida
+bash infra/aws/staging-estado.sh     # imprime "encendido" o "apagado"
+```
+
+- **Quien enciende, apaga.** Antes de una revisión o entrega, enciende con al menos 20 minutos de anticipación.
+- Todas las noches a las 3:00 (hora de Chile) staging se apaga solo, por si alguien lo olvida. AWS enciende la base sola cada 7 días, y ese apagado nocturno la vuelve a detener.
+- Costo aproximado: ~4 USD/mes apagado, ~10 USD/mes encendido 2 días por semana y ~27 USD/mes encendido todo el mes.
+
+### Secretos y variables
+
+Ningún secreto está en el repositorio.
+
+| Dónde                                    | Qué                                                                                                                              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                      | `cursus-staging/base-de-datos` (usuario y contraseña de RDS) y `cursus-staging/origin-secret` (header secreto). Los genera AWS.  |
+| GitHub, environment `staging` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-staging-github`, que solo puede desplegar (ver abajo). |
+| GitHub, environment `staging` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                |
+| Vercel                                   | La URL de la API (salida `ApiUrl` del stack) y `ORIGIN_SECRET`, con el valor del secreto `cursus-staging/origin-secret`.         |
+
+**Llaves de GitHub.** El plan gratuito de AWS bloquea OIDC, así que el workflow entra con las llaves de un usuario de IAM con permisos mínimos (subir imágenes, correr migraciones y actualizar el servicio). La plantilla crea el usuario, pero no la llave, para que no quede guardada en AWS. Para crearla, en CloudShell:
+
+```bash
+aws iam create-access-key --user-name cursus-staging-github --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text
+```
+
+Pega los dos valores en los secretos del environment `staging` y no los guardes en ningún otro lado. Para rotarla: crea una nueva, actualiza GitHub y borra la anterior con `aws iam delete-access-key --user-name cursus-staging-github --access-key-id <id-anterior>`. Si la cuenta pasa al plan de pago, se puede volver a OIDC (sin llaves) con el parámetro `AccesoGitHub=oidc` de la plantilla y el secreto `AWS_ROLE_ARN`.
+
+### Crear o actualizar la infraestructura
+
+Lo hace el dueño de la cuenta de AWS desde CloudShell:
+
+```bash
+bash infra/aws/staging-infra.sh
+```
+
+La primera vez crea todo menos el servicio del backend, porque todavía no hay imágenes (unos 15 minutos). Después del primer deploy del workflow, correrlo de nuevo crea el servicio. Para cambios posteriores en [staging.yml](infra/aws/staging.yml) se corre el mismo comando.
+
+### Límites conocidos
+
+- API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
+- **Decisión pendiente de INFRA-07:** si producción usará la misma instancia de RDS que staging (con una base propia) o una instancia aparte. Compartirla ahorra costos, pero apagar staging detendría también la base de producción.
 
 ## Flujo de trabajo Git
 

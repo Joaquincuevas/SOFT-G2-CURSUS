@@ -1,0 +1,148 @@
+name: Deploy staging
+
+# Cada push a develop (cada merge) publica la imagen del backend en ECR y, si
+# staging está encendido, la despliega: migraciones, actualización del servicio
+# y verificación de /api/health/db. Con staging apagado termina en verde con un
+# aviso; al encender se usa la última imagen. Ver infra/aws/.
+
+on:
+  push:
+    branches: [develop]
+  # El botón manual aparece cuando este archivo llega a la rama por defecto.
+  workflow_dispatch:
+
+# Un deploy a la vez: el siguiente espera, no cancela al que está en curso.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Espera a que el CI (ci.yml) del mismo commit termine. Solo se despliega lo
+  # que pasó lint, test y build.
+  esperar-ci:
+    name: esperar-ci
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      checks: read
+    outputs:
+      ci: ${{ steps.ci.outputs.resultado }}
+    steps:
+      - name: Esperar lint, test y build
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          # $c es una variable de jq, no de bash.
+          # shellcheck disable=SC2016
+          for _ in $(seq 1 60); do
+            resultado=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --jq '
+              [.check_runs[] | select(.name == "lint" or .name == "test" or .name == "build")] as $c
+              | if ($c | length) < 3 or any($c[]; .status != "completed") then "pendiente"
+                elif any($c[]; .conclusion == "cancelled") then "cancelado"
+                elif all($c[]; .conclusion == "success") then "ok"
+                else "fallo" end')
+            echo "CI: $resultado"
+            if [ "$resultado" != pendiente ]; then
+              echo "resultado=$resultado" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep 30
+          done
+          case "$resultado" in
+            ok) ;;
+            cancelado)
+              echo "::notice title=Deploy omitido::El CI de este commit se canceló porque llegó un push más nuevo; ese push hará el deploy."
+              ;;
+            fallo)
+              echo "::error title=CI en rojo::No se despliega un commit que no pasó el CI."
+              exit 1
+              ;;
+            *)
+              echo "::error title=CI sin terminar::El CI no terminó en 30 minutos."
+              exit 1
+              ;;
+          esac
+
+  deploy:
+    name: deploy
+    needs: esperar-ci
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.esperar-ci.outputs.ci == 'ok') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: staging
+    # Con llaves no se necesita id-token. Si se vuelve a OIDC (plan de pago),
+    # agregar "id-token: write".
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+      TAG: ${{ github.sha }}
+      # Los secretos no se pueden usar directo en un if: se resume en un valor
+      # que no es secreto.
+      USA_LLAVES: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Plan gratuito de AWS (bloquea OIDC): llaves del usuario cursus-staging-github.
+      - name: Entrar a AWS con llaves de acceso
+        if: env.USA_LLAVES == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Plan de pago: sin llaves, GitHub asume el rol de AWS con OIDC.
+      - name: Entrar a AWS con OIDC
+        if: env.USA_LLAVES != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      # Las etiquetas de ECR no se pueden sobrescribir: al reintentar un commit
+      # ya publicado se reutiliza su imagen.
+      - name: Revisar si la imagen ya existe
+        id: imagen
+        run: |
+          if aws ecr describe-images --repository-name cursus-backend --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.imagen.outputs.existe != 'true'
+
+      - name: Construir y publicar la imagen
+        if: steps.imagen.outputs.existe != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/backend.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/cursus-backend:${{ env.TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Revisar si staging está encendido
+        id: estado
+        run: echo "estado=$(bash infra/aws/staging-estado.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Staging apagado
+        if: steps.estado.outputs.estado != 'encendido'
+        run: |
+          echo "::notice title=Staging apagado::Imagen $TAG publicada en ECR. Se desplegará al encender staging (infra/aws/staging-encender.sh)."
+
+      - name: Desplegar en staging
+        if: steps.estado.outputs.estado == 'encendido'
+        run: bash infra/aws/desplegar.sh "$TAG"

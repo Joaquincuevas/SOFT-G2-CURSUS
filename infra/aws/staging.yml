@@ -1,0 +1,544 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  CURSUS staging (INFRA-06). Backend en ECS Fargate expuesto por una HTTP API de
+  API Gateway (VPC link + Cloud Map, sin balanceador) y RDS PostgreSQL 17. Se
+  crea y actualiza con infra/aws/staging-infra.sh; nunca se borra.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC por defecto de la cuenta.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Al menos dos subredes públicas de la VPC por defecto, en zonas distintas.
+  ImageTag:
+    Type: String
+    Default: ''
+    Description: >-
+      Etiqueta de la imagen del backend en ECR. Vacía en la primera creación: el
+      servicio de ECS se crea cuando ya existe una imagen.
+  Arquitectura:
+    Type: String
+    Default: X86_64
+    AllowedValues: [X86_64, ARM64]
+    Description: Arquitectura de la imagen y de las tareas de Fargate.
+  AccesoGitHub:
+    Type: String
+    Default: usuario
+    AllowedValues: [usuario, oidc]
+    Description: >-
+      Cómo entra GitHub Actions a AWS. usuario: un usuario de IAM cuyas llaves se
+      guardan en GitHub Secrets (el plan gratuito de AWS bloquea OIDC). oidc: rol
+      sin llaves, para una cuenta con el plan de pago.
+  GitHubRepo:
+    Type: String
+    Default: Joaquincuevas/SOFT-G2-CURSUS
+    Description: Repositorio (dueño/nombre) que puede desplegar con OIDC.
+  CrearProveedorOidc:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Solo con AccesoGitHub=oidc. false si la cuenta ya tiene el proveedor OIDC de GitHub.
+  HorarioApagado:
+    Type: String
+    Default: cron(0 3 * * ? *)
+    Description: Apagado automático diario (hora de Chile).
+
+Conditions:
+  HayImagen: !Not [!Equals [!Ref ImageTag, '']]
+  UsarUsuario: !Equals [!Ref AccesoGitHub, usuario]
+  UsarOidc: !Equals [!Ref AccesoGitHub, oidc]
+  CrearOidc:
+    !And [!Condition UsarOidc, !Equals [!Ref CrearProveedorOidc, 'true']]
+
+Resources:
+  # --- Imágenes ---------------------------------------------------------------
+
+  Repositorio:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: cursus-backend
+      ImageTagMutability: IMMUTABLE
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Conservar solo las últimas 10 imágenes",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+  # --- Secretos (generados por AWS, nunca en el repositorio) -------------------
+
+  SecretoBaseDeDatos:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cursus-staging/base-de-datos
+      Description: Usuario y contraseña de RDS de staging.
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "cursus_admin"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  SecretoOrigen:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: cursus-staging/origin-secret
+      Description: Header secreto que agrega Vercel (x-origin-secret).
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  # --- Red ----------------------------------------------------------------------
+
+  GrupoVpcLink:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: VPC link de API Gateway hacia las tareas
+      VpcId: !Ref VpcId
+
+  GrupoTareas:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      # Sin tildes: AWS no las acepta en las descripciones de los grupos.
+      GroupDescription: Tareas del backend; solo aceptan trafico del VPC link
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref GrupoVpcLink
+
+  GrupoBaseDeDatos:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS de staging; solo acepta conexiones de las tareas
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref GrupoTareas
+
+  # --- Base de datos ------------------------------------------------------------
+
+  SubredesBaseDeDatos:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subredes de RDS de staging
+      SubnetIds: !Ref SubnetIds
+
+  # Sin snapshot al borrar: los datos de staging son de prueba (decisión A9).
+  BaseDeDatos:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: cursus-staging-db
+      Engine: postgres
+      # Cifrado con la llave administrada por AWS (aws/rds). Activarlo después
+      # obliga a reemplazar la instancia.
+      StorageEncrypted: true
+      # Misma versión que docker-compose.yml en local.
+      EngineVersion: '17.11'
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: '20'
+      StorageType: gp3
+      MultiAZ: false
+      PubliclyAccessible: false
+      DBName: cursus_staging
+      MasterUsername: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:password}}'
+      DBSubnetGroupName: !Ref SubredesBaseDeDatos
+      VPCSecurityGroups: [!Ref GrupoBaseDeDatos]
+      BackupRetentionPeriod: 1
+      DeleteAutomatedBackups: true
+      EnablePerformanceInsights: false
+      MonitoringInterval: 0
+      AutoMinorVersionUpgrade: true
+
+  # --- Descubrimiento de servicios (Cloud Map) ----------------------------------
+
+  Namespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: cursus-staging.local
+      Vpc: !Ref VpcId
+
+  ServicioDescubrimiento:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: backend
+      NamespaceId: !Ref Namespace
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - Type: SRV
+            TTL: 10
+      # La salud la informa ECS a partir del health check del contenedor.
+      # FailureThreshold está obsoleto (AWS siempre usa 1), pero CloudFormation
+      # falla con un error interno si se omite.
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  # --- ECS ------------------------------------------------------------------------
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: cursus-staging
+
+  Logs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /ecs/cursus-staging
+      RetentionInDays: 7
+
+  RolEjecucion:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cursus-staging-ecs-ejecucion
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: leer-secretos
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: [!Ref SecretoBaseDeDatos, !Ref SecretoOrigen]
+
+  # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
+  # registra revisiones nuevas de la misma familia con otras imágenes.
+  DefinicionTarea:
+    Type: AWS::ECS::TaskDefinition
+    Condition: HayImagen
+    Properties:
+      Family: cursus-staging-backend
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: '256'
+      Memory: '512'
+      RuntimePlatform:
+        OperatingSystemFamily: LINUX
+        CpuArchitecture: !Ref Arquitectura
+      ExecutionRoleArn: !GetAtt RolEjecucion.Arn
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Sub '${Repositorio.RepositoryUri}:${ImageTag}'
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          Environment:
+            - { Name: PORT, Value: '3000' }
+            - {
+                Name: POSTGRES_HOST,
+                Value: !GetAtt BaseDeDatos.Endpoint.Address,
+              }
+            - { Name: POSTGRES_PORT, Value: !GetAtt BaseDeDatos.Endpoint.Port }
+            - { Name: POSTGRES_DB, Value: cursus_staging }
+            - { Name: POSTGRES_SSL, Value: 'true' }
+          Secrets:
+            - Name: POSTGRES_USER
+              ValueFrom: !Sub '${SecretoBaseDeDatos}:username::'
+            - Name: POSTGRES_PASSWORD
+              ValueFrom: !Sub '${SecretoBaseDeDatos}:password::'
+            - Name: ORIGIN_SECRET
+              ValueFrom: !Ref SecretoOrigen
+          # La imagen no trae curl: el chequeo se hace con Node.
+          HealthCheck:
+            Command:
+              - CMD
+              - node
+              - -e
+              - require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+            Interval: 15
+            Timeout: 5
+            Retries: 3
+            StartPeriod: 30
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: backend
+
+  # Sin DesiredCount: se crea con 1 tarea y una actualización del stack no
+  # cambia la cantidad que dejaron los scripts de encender y apagar.
+  Servicio:
+    Type: AWS::ECS::Service
+    Condition: HayImagen
+    Properties:
+      ServiceName: backend
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      TaskDefinition: !Ref DefinicionTarea
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          # IP pública para descargar la imagen sin NAT Gateway; el grupo de
+          # seguridad solo acepta tráfico del VPC link.
+          AssignPublicIp: ENABLED
+          Subnets: !Ref SubnetIds
+          SecurityGroups: [!Ref GrupoTareas]
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ServicioDescubrimiento.Arn
+          Port: 3000
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+
+  # --- API pública ------------------------------------------------------------
+
+  VpcLink:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: cursus-staging
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds: [!Ref GrupoVpcLink]
+
+  Api:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: cursus-staging
+      ProtocolType: HTTP
+
+  Integracion:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      ConnectionType: VPC_LINK
+      ConnectionId: !Ref VpcLink
+      IntegrationUri: !GetAtt ServicioDescubrimiento.Arn
+      PayloadFormatVersion: '1.0'
+
+  Ruta:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: ANY /{proxy+}
+      Target: !Sub 'integrations/${Integracion}'
+
+  # Stage $default: la ruta llega al backend sin prefijo de stage (/api/...).
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref Api
+      StageName: $default
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 50
+        ThrottlingRateLimit: 20
+
+  # --- Apagado automático (por si alguien olvida apagar) ------------------------
+
+  RolScheduler:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cursus-staging-scheduler
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: apagar-staging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: rds:StopDBInstance
+                Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:${BaseDeDatos}'
+              - Effect: Allow
+                Action: ecs:UpdateService
+                Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/backend'
+
+  # También vuelve a detener RDS cuando AWS la enciende sola a los 7 días.
+  ApagarBaseDeDatos:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: cursus-staging-apagar-rds
+      ScheduleExpression: !Ref HorarioApagado
+      ScheduleExpressionTimezone: America/Santiago
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Target:
+        Arn: arn:aws:scheduler:::aws-sdk:rds:stopDBInstance
+        RoleArn: !GetAtt RolScheduler.Arn
+        Input: !Sub '{"DbInstanceIdentifier": "${BaseDeDatos}"}'
+        RetryPolicy:
+          MaximumRetryAttempts: 0
+
+  ApagarBackend:
+    Type: AWS::Scheduler::Schedule
+    Condition: HayImagen
+    Properties:
+      Name: cursus-staging-apagar-backend
+      ScheduleExpression: !Ref HorarioApagado
+      ScheduleExpressionTimezone: America/Santiago
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Target:
+        Arn: arn:aws:scheduler:::aws-sdk:ecs:updateService
+        RoleArn: !GetAtt RolScheduler.Arn
+        Input: !Sub '{"Cluster": "${Cluster}", "Service": "${Servicio.Name}", "DesiredCount": 0}'
+        RetryPolicy:
+          MaximumRetryAttempts: 0
+
+  # --- Acceso de GitHub Actions ------------------------------------------------
+
+  # Permisos mínimos del workflow de deploy: subir imágenes, correr migraciones
+  # y actualizar el servicio. No puede crear ni borrar infraestructura.
+  PoliticaDespliegue:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: cursus-staging-despliegue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:BatchGetImage
+              - ecr:CompleteLayerUpload
+              - ecr:DescribeImages
+              - ecr:InitiateLayerUpload
+              - ecr:PutImage
+              - ecr:UploadLayerPart
+            Resource: !GetAtt Repositorio.Arn
+          # Estas dos acciones de ECS no admiten limitarse a un recurso.
+          - Effect: Allow
+            Action:
+              - ecs:DescribeTaskDefinition
+              - ecs:RegisterTaskDefinition
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ecs:DescribeServices
+              - ecs:UpdateService
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/backend'
+          - Effect: Allow
+            Action: ecs:RunTask
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cursus-staging-backend:*'
+            Condition:
+              ArnEquals:
+                ecs:cluster: !GetAtt Cluster.Arn
+          - Effect: Allow
+            Action: ecs:DescribeTasks
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${Cluster}/*'
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt RolEjecucion.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+          - Effect: Allow
+            Action: rds:DescribeDBInstances
+            Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:${BaseDeDatos}'
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SecretoOrigen
+          - Effect: Allow
+            Action: cloudformation:DescribeStacks
+            Resource: !Ref AWS::StackId
+          - Effect: Allow
+            Action: logs:GetLogEvents
+            Resource: !GetAtt Logs.Arn
+
+  # Plan gratuito: un usuario sin acceso a la consola. Sus llaves se crean a
+  # mano (ver README) y se guardan solo en GitHub Secrets, nunca en AWS.
+  UsuarioGitHub:
+    Type: AWS::IAM::User
+    Condition: UsarUsuario
+    Properties:
+      UserName: cursus-staging-github
+      ManagedPolicyArns: [!Ref PoliticaDespliegue]
+
+  ProveedorOidc:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CrearOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  # Plan de pago: rol sin llaves que solo el environment "staging" del
+  # repositorio puede asumir con OIDC.
+  RolGitHub:
+    Type: AWS::IAM::Role
+    Condition: UsarOidc
+    Properties:
+      RoleName: cursus-staging-github
+      ManagedPolicyArns: [!Ref PoliticaDespliegue]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:environment:staging'
+
+Outputs:
+  ApiUrl:
+    Description: URL pública de la API (destino del rewrite de Vercel).
+    Value: !GetAtt Api.ApiEndpoint
+  RepositorioUri:
+    Value: !GetAtt Repositorio.RepositoryUri
+  Cluster:
+    Value: !Ref Cluster
+  Servicio:
+    Condition: HayImagen
+    Value: !GetAtt Servicio.Name
+  FamiliaTarea:
+    Value: cursus-staging-backend
+  BaseDeDatos:
+    Value: !Ref BaseDeDatos
+  Subredes:
+    Value: !Join [',', !Ref SubnetIds]
+  GrupoTareas:
+    Value: !Ref GrupoTareas
+  GrupoLogs:
+    Value: !Ref Logs
+  SecretoOrigenArn:
+    Value: !Ref SecretoOrigen
+  UsuarioGitHub:
+    Condition: UsarUsuario
+    Description: Usuario cuyas llaves van en el environment staging de GitHub.
+    Value: !Ref UsuarioGitHub
+  RolGitHubArn:
+    Condition: UsarOidc
+    Description: Valor de AWS_ROLE_ARN en el environment staging de GitHub.
+    Value: !GetAtt RolGitHub.Arn
+  ImageTag:
+    Condition: HayImagen
+    Description: Imagen con la que CloudFormation creó la definición de tarea.
+    Value: !Ref ImageTag
