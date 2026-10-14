@@ -93,6 +93,36 @@ npm run test:db --workspace=backend            # tests del schema contra Postgre
 - `test:db` crea y borra su propia base (`POSTGRES_TEST_DB`, por defecto `cursus_test`), así que no toca tus datos de desarrollo. `npm run test` no incluye estos tests, porque no necesita Docker; el CI corre ambos.
 - Las migraciones que ya están en `develop` no se modifican. Si el schema cambia, crea una migración nueva.
 
+### Datos simulados (seed)
+
+Con las migraciones aplicadas, carga dos universidades de prueba que imitan el escenario del cliente: una grande con varias facultades y otra pequeña de ciencias de la salud.
+
+```bash
+npm run seed --workspace=backend
+```
+
+> **Solo para desarrollo y pruebas.** Estas credenciales son públicas: no las uses en producción. Con `NODE_ENV=production` el seed se niega a correr, salvo que se defina `SEED_ALLOW=true` (por ejemplo, para levantar staging).
+
+- Se puede ejecutar las veces que quieras: actualiza los datos existentes en vez de duplicarlos.
+- La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
+- Los dominios usan `.test`, un TLD reservado, así que ningún correo es real.
+- El período 2026-2 queda activo solo si la universidad no tiene ya otro período activo.
+
+| Universidad            | Facultades y carreras                                                                                            | Período |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- |
+| Universidad Demo Norte | Facultad de Ingeniería (Ingeniería Civil en Informática), Facultad de Economía y Negocios (Ingeniería Comercial) | 2026-2  |
+| Universidad Demo Sur   | Facultad de Ciencias de la Salud (Enfermería)                                                                    | 2026-2  |
+
+| Rol            | Universidad Demo Norte                                                                                                        | Universidad Demo Sur             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Director       | `director@norte.cursus.test`                                                                                                  | `director@sur.cursus.test`       |
+| Administrativo | `administrativo.ingenieria@norte.cursus.test` (Ingeniería), `administrativo.economia@norte.cursus.test` (Economía y Negocios) | `administrativo@sur.cursus.test` |
+| Profesor       | `profesor@norte.cursus.test`                                                                                                  | `profesor@sur.cursus.test`       |
+| Ayudante       | `ayudante@norte.cursus.test`                                                                                                  | `ayudante@sur.cursus.test`       |
+| Alumno         | `alumno@norte.cursus.test`                                                                                                    | `alumno@sur.cursus.test`         |
+
+El Director no tiene facultad asociada. En Norte, cada administrativo pertenece a su facultad, para probar el aislamiento entre facultades; profesor, ayudante y alumno pertenecen a Ingeniería. En Sur, todos pertenecen a Ciencias de la Salud.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
