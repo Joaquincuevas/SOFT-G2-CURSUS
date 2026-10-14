@@ -183,7 +183,10 @@ Resources:
           - Type: SRV
             TTL: 10
       # La salud la informa ECS a partir del health check del contenedor.
-      HealthCheckCustomConfig: {}
+      # FailureThreshold está obsoleto (AWS siempre usa 1), pero CloudFormation
+      # falla con un error interno si se omite.
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
 
   # --- ECS ------------------------------------------------------------------------
 
