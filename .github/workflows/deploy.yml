@@ -1,19 +1,20 @@
-name: Deploy staging
+name: Deploy
 
-# Cada push a develop (cada merge) publica la imagen del backend en ECR y, si
-# staging está encendido, la despliega: migraciones, actualización del servicio
-# y verificación de /api/health/db. Con staging apagado termina en verde con un
-# aviso; al encender se usa la última imagen. Ver infra/aws/.
+# Cada push (cada merge) publica la imagen del backend en ECR y, si el entorno
+# está encendido, la despliega: migraciones, actualización del servicio y
+# verificación de /api/health/db. develop se despliega en staging y main en
+# production. Con el entorno apagado termina en verde con un aviso; al encender
+# se usa la última imagen. Ver infra/aws/.
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   # El botón manual aparece cuando este archivo llega a la rama por defecto.
   workflow_dispatch:
 
-# Un deploy a la vez: el siguiente espera, no cancela al que está en curso.
+# Un deploy a la vez por entorno: el siguiente espera, no cancela al que está en curso.
 concurrency:
-  group: deploy-staging
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -73,10 +74,11 @@ jobs:
   deploy:
     name: deploy
     needs: esperar-ci
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || needs.esperar-ci.outputs.ci == 'ok') }}
+    # Solo develop y main tienen entorno; el disparo manual en otra rama no despliega.
+    if: ${{ !cancelled() && (github.ref_name == 'develop' || github.ref_name == 'main') && (github.event_name == 'workflow_dispatch' || needs.esperar-ci.outputs.ci == 'ok') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    environment: staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     # Con llaves no se necesita id-token. Si se vuelve a OIDC (plan de pago),
     # agregar "id-token: write".
     permissions:
@@ -84,13 +86,18 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
       TAG: ${{ github.sha }}
+      # URL del frontend en Vercel (variable del environment de GitHub; opcional).
+      FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+      ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      # Mismo criterio que infra/aws/cursus.yml: staging conserva su nombre original.
+      REPOSITORY: ${{ github.ref_name == 'main' && 'cursus-backend-production' || 'cursus-backend' }}
       # Los secretos no se pueden usar directo en un if: se resume en un valor
       # que no es secreto.
       USA_LLAVES: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/checkout@v5
 
-      # Plan gratuito de AWS (bloquea OIDC): llaves del usuario cursus-staging-github.
+      # Plan gratuito de AWS (bloquea OIDC): llaves del usuario cursus-<entorno>-github.
       - name: Entrar a AWS con llaves de acceso
         if: env.USA_LLAVES == 'true'
         uses: aws-actions/configure-aws-credentials@v4
@@ -115,7 +122,7 @@ jobs:
       - name: Revisar si la imagen ya existe
         id: imagen
         run: |
-          if aws ecr describe-images --repository-name cursus-backend --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
+          if aws ecr describe-images --repository-name "$REPOSITORY" --image-ids "imageTag=$TAG" >/dev/null 2>&1; then
             echo "existe=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -130,19 +137,35 @@ jobs:
           file: infra/docker/backend.Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.ecr.outputs.registry }}/cursus-backend:${{ env.TAG }}
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.REPOSITORY }}:${{ env.TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Revisar si staging está encendido
+      - name: Revisar si el entorno está encendido
         id: estado
-        run: echo "estado=$(bash infra/aws/staging-estado.sh)" >> "$GITHUB_OUTPUT"
+        run: echo "estado=$(bash infra/aws/status.sh "$ENVIRONMENT")" >> "$GITHUB_OUTPUT"
 
-      - name: Staging apagado
+      - name: Entorno apagado
         if: steps.estado.outputs.estado != 'encendido'
         run: |
-          echo "::notice title=Staging apagado::Imagen $TAG publicada en ECR. Se desplegará al encender staging (infra/aws/staging-encender.sh)."
+          echo "::notice title=$ENVIRONMENT apagado::Imagen $TAG publicada en ECR. Se desplegará al encender el entorno (infra/aws/start.sh $ENVIRONMENT)."
 
-      - name: Desplegar en staging
+      - name: Desplegar
         if: steps.estado.outputs.estado == 'encendido'
-        run: bash infra/aws/desplegar.sh "$TAG"
+        run: bash infra/aws/deploy.sh "$ENVIRONMENT" "$TAG"
+
+      # Solo avisa, no falla: Vercel despliega en paralelo y puede tardar más que
+      # este workflow. Comprueba que el frontend llegue a la API con el header
+      # secreto (variables API_URL y ORIGIN_SECRET de Vercel).
+      - name: Verificar el frontend en Vercel
+        if: steps.estado.outputs.estado == 'encendido' && env.FRONTEND_URL != ''
+        run: |
+          for _ in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$FRONTEND_URL/api/health/db" || true)
+            if [ "$code" = 200 ]; then
+              echo "El frontend responde en $FRONTEND_URL/api/health/db"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning title=Frontend sin verificar::$FRONTEND_URL/api/health/db respondió $code en vez de 200. Revisa el deploy de Vercel y sus variables API_URL y ORIGIN_SECRET (un 401 indica que el dominio tiene Deployment Protection)."

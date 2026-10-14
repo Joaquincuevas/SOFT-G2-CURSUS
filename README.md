@@ -28,7 +28,7 @@ SOFT-G2-CURSUS/
 │   ├── workflows/
 │   │   ├── ci.yml             # Pipeline: lint + test + build + commitlint
 │   │   ├── pr-title.yml       # Valida el título del PR (Conventional Commits)
-│   │   └── deploy-staging.yml # Deploy de develop a staging en AWS
+│   │   └── deploy.yml         # Deploy de develop a staging y de main a producción
 │   ├── CODEOWNERS
 │   └── pull_request_template.md
 ├── .husky/commit-msg    # Valida el mensaje de commit en local
@@ -141,74 +141,97 @@ npm run format:check   # solo verifica
 
 `shared` se compila automáticamente después de `npm install`. Si cambias algo en `shared/src`, recompílalo con `npm run build --workspace=shared` para que frontend y backend vean los cambios.
 
-## Staging (AWS)
+## Entornos en AWS
 
-Cada merge a `develop` se despliega en staging, en AWS (región Ohio, `us-east-2`). Staging está **apagado por defecto** para cuidar los créditos: quien lo necesite lo enciende y lo apaga al terminar.
+Hay dos entornos en AWS (región Ohio, `us-east-2`), cada uno con su propio stack, base de datos y secretos:
 
-- **URL de la API de staging:** https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com (por ejemplo, `/api/health`). Responde solo cuando staging está encendido, y las rutas distintas de `/api/health` piden el header secreto, así que se usan a través del frontend en Vercel.
-- **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de staging y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen.
+| Entorno      | Rama      | Se despliega con       | Frontend (Vercel)                 | API                                                    |
+| ------------ | --------- | ---------------------- | --------------------------------- | ------------------------------------------------------ |
+| `staging`    | `develop` | Cada merge a `develop` | https://cursus-staging.vercel.app | https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com |
+| `production` | `main`    | Cada release a `main`  | https://cursus-g2.vercel.app      | https://p24c3u9eek.execute-api.us-east-2.amazonaws.com |
+
+Los dos están **apagados por defecto** para cuidar los créditos: quien necesite uno lo enciende y lo apaga al terminar.
+
+- **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de su entorno (`develop` en Preview y `main` en Production) y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen, así que se usa a través de Vercel; solo `/api/health` responde sin el header.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
-- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging`), privada y cifrada.
-- **Infraestructura:** un solo stack de CloudFormation ([infra/aws/staging.yml](infra/aws/staging.yml)) que nunca se borra.
+- **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. Las dos dejan un snapshot si se borran o se reemplazan y guardan respaldos de 1 día (el máximo del plan gratuito de AWS; con el plan de pago, producción debería guardar 7). La de producción además está protegida contra borrado y conserva sus respaldos si se borra la instancia.
+- **Infraestructura:** la misma plantilla de CloudFormation ([infra/aws/cursus.yml](infra/aws/cursus.yml)) con el parámetro `Entorno`. Los stacks (`cursus-staging` y `cursus-production`) nunca se borran.
 
 ### Cómo funciona el deploy
 
-El workflow [deploy-staging.yml](.github/workflows/deploy-staging.yml) corre con cada push a `develop`:
+El workflow [deploy.yml](.github/workflows/deploy.yml) corre con cada push a `develop` (staging) o a `main` (production):
 
 1. Espera a que el CI de ese commit (lint, test y build) termine en verde.
 2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
-3. Si staging está apagado, termina en verde con el aviso "Staging apagado". La imagen se despliega al encender.
-4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL pública. Si algo falla, el workflow queda en rojo y staging sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+3. Si el entorno está apagado, termina en verde con un aviso. La imagen se despliega al encender.
+4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL de la API. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
+5. Si el environment de GitHub tiene la variable `FRONTEND_URL`, verifica también `/api/health/db` a través de Vercel. Si no responde 200, deja una **advertencia** pero no falla, porque Vercel despliega en paralelo y puede tardar más.
 
 **Las migraciones deben ser compatibles hacia atrás.** Si la versión nueva del backend falla y ECS vuelve a la anterior, la migración ya quedó aplicada: ECS no la revierte. Por eso la versión anterior tiene que seguir funcionando con el schema nuevo. Por ejemplo, para renombrar una columna: primero se agrega la nueva y se copian los datos, y en un deploy posterior se borra la antigua.
 
-### Encender y apagar
+### Volver a una versión anterior (rollback manual)
 
-Desde [AWS CloudShell](https://console.aws.amazon.com/cloudshell) en la región Ohio, con el repo clonado (`git clone` y `git switch develop`):
+Si una versión ya desplegada tiene un problema, se vuelve a la anterior desde CloudShell, con el entorno encendido:
 
 ```bash
-bash infra/aws/staging-encender.sh   # inicia la base y despliega la última imagen (5 a 20 min)
-bash infra/aws/staging-apagar.sh     # backend a 0 tareas y base detenida
-bash infra/aws/staging-estado.sh     # imprime "encendido" o "apagado"
+bash infra/aws/deploy.sh production <sha-del-commit-anterior>
+```
+
+- El SHA es la etiqueta de la imagen en ECR: el commit de un deploy anterior que funcionaba (se ve en GitHub Actions o con `git log`). ECR guarda las últimas 10 imágenes de cada entorno.
+- **La migración no se revierte:** la versión anterior corre sobre el schema nuevo, por eso las migraciones deben ser compatibles hacia atrás.
+- El arreglo definitivo se hace con un PR nuevo; el siguiente merge vuelve a desplegar la versión corregida.
+
+### Encender y apagar
+
+Desde [AWS CloudShell](https://console.aws.amazon.com/cloudshell) en la región Ohio, con el repo clonado (`git clone` y `git switch develop`). Cada script recibe el entorno: `staging` o `production`.
+
+```bash
+bash infra/aws/start.sh staging    # inicia la base y despliega la última imagen (5 a 20 min)
+bash infra/aws/stop.sh staging     # backend a 0 tareas y base detenida
+bash infra/aws/status.sh staging   # imprime "encendido" o "apagado"
 ```
 
 - **Quien enciende, apaga.** Antes de una revisión o entrega, enciende con al menos 20 minutos de anticipación.
-- Todas las noches a las 3:00 (hora de Chile) staging se apaga solo, por si alguien lo olvida. AWS enciende la base sola cada 7 días, y ese apagado nocturno la vuelve a detener.
-- Costo aproximado: ~4 USD/mes apagado, ~10 USD/mes encendido 2 días por semana y ~27 USD/mes encendido todo el mes.
+- Todas las noches a las 3:00 (hora de Chile) cada entorno se apaga solo, por si alguien lo olvida. AWS enciende la base sola cada 7 días, y ese apagado nocturno la vuelve a detener.
+- Costo aproximado por entorno: ~4 USD/mes apagado, ~10 USD/mes encendido 2 días por semana y ~27 USD/mes encendido todo el mes.
 
 ### Secretos y variables
 
-Ningún secreto está en el repositorio.
+Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno>` es `staging` o `production`).
 
-| Dónde                                    | Qué                                                                                                                              |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                      | `cursus-staging/base-de-datos` (usuario y contraseña de RDS) y `cursus-staging/origin-secret` (header secreto). Los genera AWS.  |
-| GitHub, environment `staging` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-staging-github`, que solo puede desplegar (ver abajo). |
-| GitHub, environment `staging` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                |
-| Vercel                                   | La URL de la API (salida `ApiUrl` del stack) y `ORIGIN_SECRET`, con el valor del secreto `cursus-staging/origin-secret`.         |
+| Dónde                                      | Qué                                                                                                                                                                                            |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Los genera AWS.                                                            |
+| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                             |
+| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                              |
+| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production. |
+
+El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
 **Llaves de GitHub.** El plan gratuito de AWS bloquea OIDC, así que el workflow entra con las llaves de un usuario de IAM con permisos mínimos (subir imágenes, correr migraciones y actualizar el servicio). La plantilla crea el usuario, pero no la llave, para que no quede guardada en AWS. Para crearla, en CloudShell:
 
 ```bash
-aws iam create-access-key --user-name cursus-staging-github --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text
+aws iam create-access-key --user-name cursus-<entorno>-github --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text
 ```
 
-Pega los dos valores en los secretos del environment `staging` y no los guardes en ningún otro lado. Para rotarla: crea una nueva, actualiza GitHub y borra la anterior con `aws iam delete-access-key --user-name cursus-staging-github --access-key-id <id-anterior>`. Si la cuenta pasa al plan de pago, se puede volver a OIDC (sin llaves) con el parámetro `AccesoGitHub=oidc` de la plantilla y el secreto `AWS_ROLE_ARN`.
+Pega los dos valores en los secretos del environment de GitHub de ese entorno y no los guardes en ningún otro lado. Para rotarla: crea una nueva, actualiza GitHub y borra la anterior con `aws iam delete-access-key --user-name cursus-<entorno>-github --access-key-id <id-anterior>`. Si la cuenta pasa al plan de pago, se puede volver a OIDC (sin llaves) con el parámetro `AccesoGitHub=oidc` de la plantilla y el secreto `AWS_ROLE_ARN`.
 
 ### Crear o actualizar la infraestructura
 
 Lo hace el dueño de la cuenta de AWS desde CloudShell:
 
 ```bash
-bash infra/aws/staging-infra.sh
+bash infra/aws/stack.sh staging --dry-run   # muestra qué cambiaría, sin aplicar nada
+bash infra/aws/stack.sh staging             # crea o actualiza el stack
 ```
 
-La primera vez crea todo menos el servicio del backend, porque todavía no hay imágenes (unos 15 minutos). Después del primer deploy del workflow, correrlo de nuevo crea el servicio. Para cambios posteriores en [staging.yml](infra/aws/staging.yml) se corre el mismo comando.
+- La primera vez crea todo menos el servicio del backend, porque todavía no hay imágenes (unos 15 minutos). Después del primer deploy del workflow, correrlo de nuevo crea el servicio.
+- Antes de aplicar un cambio en [cursus.yml](infra/aws/cursus.yml), revisa el `--dry-run`: si alguna fila dice `Replacement = True` en la base de datos, un secreto o el usuario de GitHub, AWS los borraría y crearía de nuevo. Una revisión nueva de la definición de tarea (`DefinicionTarea`) sí es normal.
+- Los nombres de los recursos de staging no se cambian: AWS los recrearía con pérdida de datos, secretos o llaves.
 
 ### Límites conocidos
 
 - API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
-- **Decisión pendiente de INFRA-07:** si producción usará la misma instancia de RDS que staging (con una base propia) o una instancia aparte. Compartirla ahorra costos, pero apagar staging detendría también la base de producción.
 
 ## Flujo de trabajo Git
 
@@ -272,7 +295,7 @@ La convención se valida en tres puntos, todos con la misma configuración (`com
 
 1. **Local**: el hook `commit-msg` (husky + commitlint) rechaza el commit antes de crearlo.
 2. **CI, job `commitlint`**: valida todos los commits del PR.
-3. **CI, job `pr-title`**: valida el título del PR con commitlint, porque con squash merge el título es el commit que queda en `develop`.
+3. **CI, job `pr-title`**: valida el título del PR con commitlint. Los PR se mergean con **merge commit** (no squash), y el título del PR queda en la descripción de ese commit.
 
 ## Tablero
 
