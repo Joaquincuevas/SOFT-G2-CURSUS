@@ -136,13 +136,13 @@ jobs:
 
       - name: Revisar si staging está encendido
         id: estado
-        run: echo "estado=$(bash infra/aws/staging-estado.sh)" >> "$GITHUB_OUTPUT"
+        run: echo "estado=$(bash infra/aws/status.sh staging)" >> "$GITHUB_OUTPUT"
 
       - name: Staging apagado
         if: steps.estado.outputs.estado != 'encendido'
         run: |
-          echo "::notice title=Staging apagado::Imagen $TAG publicada en ECR. Se desplegará al encender staging (infra/aws/staging-encender.sh)."
+          echo "::notice title=Staging apagado::Imagen $TAG publicada en ECR. Se desplegará al encender staging (infra/aws/start.sh staging)."
 
       - name: Desplegar en staging
         if: steps.estado.outputs.estado == 'encendido'
-        run: bash infra/aws/desplegar.sh "$TAG"
+        run: bash infra/aws/deploy.sh staging "$TAG"

@@ -1,10 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  CURSUS staging (INFRA-06). Backend en ECS Fargate expuesto por una HTTP API de
-  API Gateway (VPC link + Cloud Map, sin balanceador) y RDS PostgreSQL 17. Se
-  crea y actualiza con infra/aws/staging-infra.sh; nunca se borra.
+  CURSUS, un stack por entorno (staging o production). Backend en ECS Fargate
+  expuesto por una HTTP API de API Gateway (VPC link + Cloud Map, sin
+  balanceador) y RDS PostgreSQL 17. Se crea y actualiza con infra/aws/stack.sh;
+  nunca se borra.
 
+# Los nombres de los recursos salen del parámetro Entorno. Para staging resuelven
+# a los mismos nombres de antes de existir producción: no cambiarlos, porque AWS
+# borraría y crearía de nuevo los recursos (base de datos, secretos, llaves).
 Parameters:
+  Entorno:
+    Type: String
+    AllowedValues: [staging, production]
+    Description: Entorno del stack. staging se despliega desde develop y production desde main.
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: VPC por defecto de la cuenta.
@@ -45,6 +53,7 @@ Parameters:
     Description: Apagado automático diario (hora de Chile).
 
 Conditions:
+  EsStaging: !Equals [!Ref Entorno, staging]
   HayImagen: !Not [!Equals [!Ref ImageTag, '']]
   UsarUsuario: !Equals [!Ref AccesoGitHub, usuario]
   UsarOidc: !Equals [!Ref AccesoGitHub, oidc]
@@ -57,7 +66,8 @@ Resources:
   Repositorio:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: cursus-backend
+      RepositoryName:
+        !If [EsStaging, cursus-backend, !Sub 'cursus-backend-${Entorno}']
       ImageTagMutability: IMMUTABLE
       EmptyOnDelete: true
       LifecyclePolicy:
@@ -82,8 +92,8 @@ Resources:
   SecretoBaseDeDatos:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: cursus-staging/base-de-datos
-      Description: Usuario y contraseña de RDS de staging.
+      Name: !Sub 'cursus-${Entorno}/base-de-datos'
+      Description: !Sub 'Usuario y contraseña de RDS de ${Entorno}.'
       GenerateSecretString:
         SecretStringTemplate: '{"username": "cursus_admin"}'
         GenerateStringKey: password
@@ -93,7 +103,7 @@ Resources:
   SecretoOrigen:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: cursus-staging/origin-secret
+      Name: !Sub 'cursus-${Entorno}/origin-secret'
       Description: Header secreto que agrega Vercel (x-origin-secret).
       GenerateSecretString:
         PasswordLength: 64
@@ -122,7 +132,7 @@ Resources:
   GrupoBaseDeDatos:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: RDS de staging; solo acepta conexiones de las tareas
+      GroupDescription: !Sub 'RDS de ${Entorno}; solo acepta conexiones de las tareas'
       VpcId: !Ref VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -135,16 +145,17 @@ Resources:
   SubredesBaseDeDatos:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: Subredes de RDS de staging
+      DBSubnetGroupDescription: !Sub 'Subredes de RDS de ${Entorno}'
       SubnetIds: !Ref SubnetIds
 
   # Sin snapshot al borrar: los datos de staging son de prueba (decisión A9).
+  # En production, DeletionProtection impide borrar la base por accidente.
   BaseDeDatos:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      DBInstanceIdentifier: cursus-staging-db
+      DBInstanceIdentifier: !Sub 'cursus-${Entorno}-db'
       Engine: postgres
       # Cifrado con la llave administrada por AWS (aws/rds). Activarlo después
       # obliga a reemplazar la instancia.
@@ -156,7 +167,7 @@ Resources:
       StorageType: gp3
       MultiAZ: false
       PubliclyAccessible: false
-      DBName: cursus_staging
+      DBName: !Sub 'cursus_${Entorno}'
       MasterUsername: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${SecretoBaseDeDatos}:SecretString:password}}'
       DBSubnetGroupName: !Ref SubredesBaseDeDatos
@@ -166,13 +177,14 @@ Resources:
       EnablePerformanceInsights: false
       MonitoringInterval: 0
       AutoMinorVersionUpgrade: true
+      DeletionProtection: !If [EsStaging, !Ref AWS::NoValue, true]
 
   # --- Descubrimiento de servicios (Cloud Map) ----------------------------------
 
   Namespace:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
-      Name: cursus-staging.local
+      Name: !Sub 'cursus-${Entorno}.local'
       Vpc: !Ref VpcId
 
   ServicioDescubrimiento:
@@ -196,20 +208,20 @@ Resources:
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: cursus-staging
+      ClusterName: !Sub 'cursus-${Entorno}'
 
   Logs:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
-      LogGroupName: /ecs/cursus-staging
+      LogGroupName: !Sub '/ecs/cursus-${Entorno}'
       RetentionInDays: 7
 
   RolEjecucion:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: cursus-staging-ecs-ejecucion
+      RoleName: !Sub 'cursus-${Entorno}-ecs-ejecucion'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -233,7 +245,7 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Condition: HayImagen
     Properties:
-      Family: cursus-staging-backend
+      Family: !Sub 'cursus-${Entorno}-backend'
       RequiresCompatibilities: [FARGATE]
       NetworkMode: awsvpc
       Cpu: '256'
@@ -256,7 +268,7 @@ Resources:
                 Value: !GetAtt BaseDeDatos.Endpoint.Address,
               }
             - { Name: POSTGRES_PORT, Value: !GetAtt BaseDeDatos.Endpoint.Port }
-            - { Name: POSTGRES_DB, Value: cursus_staging }
+            - { Name: POSTGRES_DB, Value: !Sub 'cursus_${Entorno}' }
             - { Name: POSTGRES_SSL, Value: 'true' }
           Secrets:
             - Name: POSTGRES_USER
@@ -315,14 +327,14 @@ Resources:
   VpcLink:
     Type: AWS::ApiGatewayV2::VpcLink
     Properties:
-      Name: cursus-staging
+      Name: !Sub 'cursus-${Entorno}'
       SubnetIds: !Ref SubnetIds
       SecurityGroupIds: [!Ref GrupoVpcLink]
 
   Api:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: cursus-staging
+      Name: !Sub 'cursus-${Entorno}'
       ProtocolType: HTTP
 
   Integracion:
@@ -359,7 +371,7 @@ Resources:
   RolScheduler:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: cursus-staging-scheduler
+      RoleName: !Sub 'cursus-${Entorno}-scheduler'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -367,7 +379,7 @@ Resources:
             Principal: { Service: scheduler.amazonaws.com }
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: apagar-staging
+        - PolicyName: !Sub 'apagar-${Entorno}'
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -382,7 +394,7 @@ Resources:
   ApagarBaseDeDatos:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: cursus-staging-apagar-rds
+      Name: !Sub 'cursus-${Entorno}-apagar-rds'
       ScheduleExpression: !Ref HorarioApagado
       ScheduleExpressionTimezone: America/Santiago
       FlexibleTimeWindow: { Mode: 'OFF' }
@@ -397,7 +409,7 @@ Resources:
     Type: AWS::Scheduler::Schedule
     Condition: HayImagen
     Properties:
-      Name: cursus-staging-apagar-backend
+      Name: !Sub 'cursus-${Entorno}-apagar-backend'
       ScheduleExpression: !Ref HorarioApagado
       ScheduleExpressionTimezone: America/Santiago
       FlexibleTimeWindow: { Mode: 'OFF' }
@@ -415,7 +427,7 @@ Resources:
   PoliticaDespliegue:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: cursus-staging-despliegue
+      ManagedPolicyName: !Sub 'cursus-${Entorno}-despliegue'
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -445,7 +457,7 @@ Resources:
             Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:service/${Cluster}/backend'
           - Effect: Allow
             Action: ecs:RunTask
-            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cursus-staging-backend:*'
+            Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/cursus-${Entorno}-backend:*'
             Condition:
               ArnEquals:
                 ecs:cluster: !GetAtt Cluster.Arn
@@ -477,7 +489,7 @@ Resources:
     Type: AWS::IAM::User
     Condition: UsarUsuario
     Properties:
-      UserName: cursus-staging-github
+      UserName: !Sub 'cursus-${Entorno}-github'
       ManagedPolicyArns: [!Ref PoliticaDespliegue]
 
   ProveedorOidc:
@@ -487,13 +499,13 @@ Resources:
       Url: https://token.actions.githubusercontent.com
       ClientIdList: [sts.amazonaws.com]
 
-  # Plan de pago: rol sin llaves que solo el environment "staging" del
-  # repositorio puede asumir con OIDC.
+  # Plan de pago: rol sin llaves que solo el environment de GitHub de este
+  # entorno (staging o production) puede asumir con OIDC.
   RolGitHub:
     Type: AWS::IAM::Role
     Condition: UsarOidc
     Properties:
-      RoleName: cursus-staging-github
+      RoleName: !Sub 'cursus-${Entorno}-github'
       ManagedPolicyArns: [!Ref PoliticaDespliegue]
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -505,7 +517,7 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:environment:staging'
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:environment:${Entorno}'
 
 Outputs:
   ApiUrl:
@@ -519,7 +531,7 @@ Outputs:
     Condition: HayImagen
     Value: !GetAtt Servicio.Name
   FamiliaTarea:
-    Value: cursus-staging-backend
+    Value: !Sub 'cursus-${Entorno}-backend'
   BaseDeDatos:
     Value: !Ref BaseDeDatos
   Subredes:
@@ -532,11 +544,11 @@ Outputs:
     Value: !Ref SecretoOrigen
   UsuarioGitHub:
     Condition: UsarUsuario
-    Description: Usuario cuyas llaves van en el environment staging de GitHub.
+    Description: Usuario cuyas llaves van en el environment de GitHub de este entorno.
     Value: !Ref UsuarioGitHub
   RolGitHubArn:
     Condition: UsarOidc
-    Description: Valor de AWS_ROLE_ARN en el environment staging de GitHub.
+    Description: Valor de AWS_ROLE_ARN en el environment de GitHub de este entorno.
     Value: !GetAtt RolGitHub.Arn
   ImageTag:
     Condition: HayImagen
