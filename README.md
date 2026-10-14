@@ -115,7 +115,7 @@ npm run format:check   # solo verifica
 
 Cada merge a `develop` se despliega en staging, en AWS (región Ohio, `us-east-2`). Staging está **apagado por defecto** para cuidar los créditos: quien lo necesite lo enciende y lo apaga al terminar.
 
-- **URL de staging:** _se agrega después del primer deploy_.
+- **URL de la API de staging:** https://pvkd45c0ya.execute-api.us-east-2.amazonaws.com (por ejemplo, `/api/health`). Responde solo cuando staging está encendido, y las rutas distintas de `/api/health` piden el header secreto, así que se usan a través del frontend en Vercel.
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de staging y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
 - **Base de datos:** RDS PostgreSQL 17 (`cursus_staging`), privada.
