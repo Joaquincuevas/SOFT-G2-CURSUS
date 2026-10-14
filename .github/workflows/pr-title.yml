@@ -1,8 +1,9 @@
 name: PR title
 
-# Con squash merge el título del PR se convierte en el commit que llega a
-# develop, así que se valida con commitlint y commitlint.config.js, la misma
-# configuración del hook local y del job commitlint del CI.
+# Los PR se mergean con merge commit (no squash) y el título del PR queda en la
+# descripción de ese commit, así que se valida con commitlint y
+# commitlint.config.js, la misma configuración del hook local y del job
+# commitlint del CI.
 
 on:
   pull_request:
