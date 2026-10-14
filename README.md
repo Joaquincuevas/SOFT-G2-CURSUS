@@ -93,6 +93,33 @@ npm run test:db --workspace=backend            # tests del schema contra Postgre
 - `test:db` crea y borra su propia base (`POSTGRES_TEST_DB`, por defecto `cursus_test`), así que no toca tus datos de desarrollo. `npm run test` no incluye estos tests, porque no necesita Docker; el CI corre ambos.
 - Las migraciones que ya están en `develop` no se modifican. Si el schema cambia, crea una migración nueva.
 
+### Datos simulados (seed)
+
+Con las migraciones aplicadas, carga dos universidades de prueba con un usuario por rol en cada una:
+
+```bash
+npm run seed --workspace=backend
+```
+
+- Se puede ejecutar las veces que quieras: actualiza los datos existentes en vez de duplicarlos.
+- La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
+- Los dominios usan `.test`, un TLD reservado, así que ningún correo es real.
+
+| Universidad            | Facultad / carrera                                       | Período         |
+| ---------------------- | -------------------------------------------------------- | --------------- |
+| Universidad Demo Norte | Facultad de Ingeniería / Ingeniería Civil en Informática | 2026-2 (activo) |
+| Universidad Demo Sur   | Facultad de Ciencias / Licenciatura en Física            | 2026-2 (activo) |
+
+| Rol            | Universidad Demo Norte             | Universidad Demo Sur             |
+| -------------- | ---------------------------------- | -------------------------------- |
+| Director       | `director@norte.cursus.test`       | `director@sur.cursus.test`       |
+| Administrativo | `administrativo@norte.cursus.test` | `administrativo@sur.cursus.test` |
+| Profesor       | `profesor@norte.cursus.test`       | `profesor@sur.cursus.test`       |
+| Ayudante       | `ayudante@norte.cursus.test`       | `ayudante@sur.cursus.test`       |
+| Alumno         | `alumno@norte.cursus.test`         | `alumno@sur.cursus.test`         |
+
+El Director no tiene facultad asociada; los demás usuarios pertenecen a la facultad de su universidad.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
