@@ -148,12 +148,20 @@ bash infra/aws/staging-estado.sh     # imprime "encendido" o "apagado"
 
 Ningún secreto está en el repositorio.
 
-| Dónde                                    | Qué                                                                                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                      | `cursus-staging/base-de-datos` (usuario y contraseña de RDS) y `cursus-staging/origin-secret` (header secreto). Los genera AWS. |
-| GitHub, environment `staging` (secreto)  | `AWS_ROLE_ARN`: rol que asume el workflow con OIDC, sin llaves de acceso. Es la salida `RolGitHubArn` del stack.                |
-| GitHub, environment `staging` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                               |
-| Vercel                                   | La URL de la API (salida `ApiUrl` del stack) y `ORIGIN_SECRET`, con el valor del secreto `cursus-staging/origin-secret`.        |
+| Dónde                                    | Qué                                                                                                                              |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                      | `cursus-staging/base-de-datos` (usuario y contraseña de RDS) y `cursus-staging/origin-secret` (header secreto). Los genera AWS.  |
+| GitHub, environment `staging` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-staging-github`, que solo puede desplegar (ver abajo). |
+| GitHub, environment `staging` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                |
+| Vercel                                   | La URL de la API (salida `ApiUrl` del stack) y `ORIGIN_SECRET`, con el valor del secreto `cursus-staging/origin-secret`.         |
+
+**Llaves de GitHub.** El plan gratuito de AWS bloquea OIDC, así que el workflow entra con las llaves de un usuario de IAM con permisos mínimos (subir imágenes, correr migraciones y actualizar el servicio). La plantilla crea el usuario, pero no la llave, para que no quede guardada en AWS. Para crearla, en CloudShell:
+
+```bash
+aws iam create-access-key --user-name cursus-staging-github --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text
+```
+
+Pega los dos valores en los secretos del environment `staging` y no los guardes en ningún otro lado. Para rotarla: crea una nueva, actualiza GitHub y borra la anterior con `aws iam delete-access-key --user-name cursus-staging-github --access-key-id <id-anterior>`. Si la cuenta pasa al plan de pago, se puede volver a OIDC (sin llaves) con el parámetro `AccesoGitHub=oidc` de la plantilla y el secreto `AWS_ROLE_ARN`.
 
 ### Crear o actualizar la infraestructura
 

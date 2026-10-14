@@ -22,6 +22,14 @@ Parameters:
     Default: X86_64
     AllowedValues: [X86_64, ARM64]
     Description: Arquitectura de la imagen y de las tareas de Fargate.
+  AccesoGitHub:
+    Type: String
+    Default: usuario
+    AllowedValues: [usuario, oidc]
+    Description: >-
+      Cómo entra GitHub Actions a AWS. usuario: un usuario de IAM cuyas llaves se
+      guardan en GitHub Secrets (el plan gratuito de AWS bloquea OIDC). oidc: rol
+      sin llaves, para una cuenta con el plan de pago.
   GitHubRepo:
     Type: String
     Default: Joaquincuevas/SOFT-G2-CURSUS
@@ -30,7 +38,7 @@ Parameters:
     Type: String
     Default: 'true'
     AllowedValues: ['true', 'false']
-    Description: false si la cuenta ya tiene el proveedor OIDC de GitHub.
+    Description: Solo con AccesoGitHub=oidc. false si la cuenta ya tiene el proveedor OIDC de GitHub.
   HorarioApagado:
     Type: String
     Default: cron(0 3 * * ? *)
@@ -38,7 +46,10 @@ Parameters:
 
 Conditions:
   HayImagen: !Not [!Equals [!Ref ImageTag, '']]
-  CrearOidc: !Equals [!Ref CrearProveedorOidc, 'true']
+  UsarUsuario: !Equals [!Ref AccesoGitHub, usuario]
+  UsarOidc: !Equals [!Ref AccesoGitHub, oidc]
+  CrearOidc:
+    !And [!Condition UsarOidc, !Equals [!Ref CrearProveedorOidc, 'true']]
 
 Resources:
   # --- Imágenes ---------------------------------------------------------------
@@ -391,7 +402,66 @@ Resources:
         RetryPolicy:
           MaximumRetryAttempts: 0
 
-  # --- Acceso de GitHub Actions (OIDC, sin llaves de acceso) --------------------
+  # --- Acceso de GitHub Actions ------------------------------------------------
+
+  # Permisos mínimos del workflow de deploy: subir imágenes, correr migraciones
+  # y actualizar el servicio. No puede crear ni borrar infraestructura.
+  PoliticaDespliegue:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: cursus-staging-despliegue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:BatchGetImage
+              - ecr:CompleteLayerUpload
+              - ecr:DescribeImages
+              - ecr:InitiateLayerUpload
+              - ecr:PutImage
+              - ecr:UploadLayerPart
+            Resource: !GetAtt Repositorio.Arn
+          - Effect: Allow
+            Action:
+              - ecs:DescribeServices
+              - ecs:DescribeTaskDefinition
+              - ecs:DescribeTasks
+              - ecs:RegisterTaskDefinition
+              - ecs:RunTask
+              - ecs:UpdateService
+            Resource: '*'
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt RolEjecucion.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: ecs-tasks.amazonaws.com
+          - Effect: Allow
+            Action: rds:DescribeDBInstances
+            Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:${BaseDeDatos}'
+          - Effect: Allow
+            Action: secretsmanager:GetSecretValue
+            Resource: !Ref SecretoOrigen
+          - Effect: Allow
+            Action: cloudformation:DescribeStacks
+            Resource: !Ref AWS::StackId
+          - Effect: Allow
+            Action: logs:GetLogEvents
+            Resource: !GetAtt Logs.Arn
+
+  # Plan gratuito: un usuario sin acceso a la consola. Sus llaves se crean a
+  # mano (ver README) y se guardan solo en GitHub Secrets, nunca en AWS.
+  UsuarioGitHub:
+    Type: AWS::IAM::User
+    Condition: UsarUsuario
+    Properties:
+      UserName: cursus-staging-github
+      ManagedPolicyArns: [!Ref PoliticaDespliegue]
 
   ProveedorOidc:
     Type: AWS::IAM::OIDCProvider
@@ -400,13 +470,14 @@ Resources:
       Url: https://token.actions.githubusercontent.com
       ClientIdList: [sts.amazonaws.com]
 
-  # Solo el environment "staging" del repositorio puede asumirlo. Puede subir
-  # imágenes, correr migraciones y actualizar el servicio, pero no crear ni
-  # borrar infraestructura.
+  # Plan de pago: rol sin llaves que solo el environment "staging" del
+  # repositorio puede asumir con OIDC.
   RolGitHub:
     Type: AWS::IAM::Role
+    Condition: UsarOidc
     Properties:
       RoleName: cursus-staging-github
+      ManagedPolicyArns: [!Ref PoliticaDespliegue]
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -418,51 +489,6 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
                 token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepo}:environment:staging'
-      Policies:
-        - PolicyName: desplegar-staging
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: ecr:GetAuthorizationToken
-                Resource: '*'
-              - Effect: Allow
-                Action:
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:BatchGetImage
-                  - ecr:CompleteLayerUpload
-                  - ecr:DescribeImages
-                  - ecr:InitiateLayerUpload
-                  - ecr:PutImage
-                  - ecr:UploadLayerPart
-                Resource: !GetAtt Repositorio.Arn
-              - Effect: Allow
-                Action:
-                  - ecs:DescribeServices
-                  - ecs:DescribeTaskDefinition
-                  - ecs:DescribeTasks
-                  - ecs:RegisterTaskDefinition
-                  - ecs:RunTask
-                  - ecs:UpdateService
-                Resource: '*'
-              - Effect: Allow
-                Action: iam:PassRole
-                Resource: !GetAtt RolEjecucion.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService: ecs-tasks.amazonaws.com
-              - Effect: Allow
-                Action: rds:DescribeDBInstances
-                Resource: !Sub 'arn:${AWS::Partition}:rds:${AWS::Region}:${AWS::AccountId}:db:${BaseDeDatos}'
-              - Effect: Allow
-                Action: secretsmanager:GetSecretValue
-                Resource: !Ref SecretoOrigen
-              - Effect: Allow
-                Action: cloudformation:DescribeStacks
-                Resource: !Ref AWS::StackId
-              - Effect: Allow
-                Action: logs:GetLogEvents
-                Resource: !GetAtt Logs.Arn
 
 Outputs:
   ApiUrl:
@@ -487,7 +513,12 @@ Outputs:
     Value: !Ref Logs
   SecretoOrigenArn:
     Value: !Ref SecretoOrigen
+  UsuarioGitHub:
+    Condition: UsarUsuario
+    Description: Usuario cuyas llaves van en el environment staging de GitHub.
+    Value: !Ref UsuarioGitHub
   RolGitHubArn:
+    Condition: UsarOidc
     Description: Valor de AWS_ROLE_ARN en el environment staging de GitHub.
     Value: !GetAtt RolGitHub.Arn
   ImageTag:

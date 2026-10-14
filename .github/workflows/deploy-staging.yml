@@ -83,11 +83,25 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
       TAG: ${{ github.sha }}
+      # Los secretos no se pueden usar directo en un if: se resume en un valor
+      # que no es secreto.
+      USA_LLAVES: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/checkout@v5
 
-      # Sin llaves de acceso: GitHub asume el rol de AWS con OIDC.
-      - uses: aws-actions/configure-aws-credentials@v4
+      # Plan gratuito de AWS (bloquea OIDC): llaves del usuario cursus-staging-github.
+      - name: Entrar a AWS con llaves de acceso
+        if: env.USA_LLAVES == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Plan de pago: sin llaves, GitHub asume el rol de AWS con OIDC.
+      - name: Entrar a AWS con OIDC
+        if: env.USA_LLAVES != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}

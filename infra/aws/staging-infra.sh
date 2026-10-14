@@ -29,11 +29,6 @@ if aws cloudformation describe-stacks --stack-name "$STACK" >/dev/null 2>&1; the
   fi
   info "Actualizando el stack $STACK (imagen: ${TAG:-ninguna})"
 else
-  # El proveedor OIDC de GitHub solo puede existir una vez por cuenta.
-  if aws iam list-open-id-connect-providers --output text |
-    grep -q token.actions.githubusercontent.com; then
-    PARAMETROS+=("CrearProveedorOidc=false")
-  fi
   info "Creando el stack $STACK (tarda unos 15 minutos por la base de datos)"
 fi
 
