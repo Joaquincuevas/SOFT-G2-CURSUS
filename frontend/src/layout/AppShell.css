@@ -1,0 +1,7 @@
+/* Área de contenido del Figma (frame Main): fondo surface, margen de 32 px. */
+.app-shell__content {
+  min-height: 100vh;
+  margin-left: var(--sidebar-width);
+  padding: var(--space-8);
+  background: var(--color-surface);
+}

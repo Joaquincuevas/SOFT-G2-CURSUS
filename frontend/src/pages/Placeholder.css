@@ -1,0 +1,4 @@
+.placeholder__title {
+  font: var(--font-h1);
+  color: var(--color-text-primary);
+}
