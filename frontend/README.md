@@ -1,6 +1,6 @@
 # frontend
 
-Aplicación web de CURSUS: **React + Vite + TypeScript**.
+Aplicación web de CURSUS: **React + Vite + TypeScript**, con **React Router v7** (`react-router`, modo declarativo) para la navegación.
 
 ## Scripts
 
