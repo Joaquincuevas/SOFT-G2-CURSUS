@@ -9,7 +9,7 @@ export default function App() {
     <Routes>
       <Route element={<AppShell />}>
         {NAV_ITEMS.map((item) => (
-          <Route key={item.to} path={item.to} />
+          <Route key={item.to} path={item.to} element={null} />
         ))}
       </Route>
     </Routes>
