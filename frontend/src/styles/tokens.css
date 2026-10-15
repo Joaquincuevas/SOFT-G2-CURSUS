@@ -17,6 +17,8 @@
   --color-border: #e0e0e0;
   --color-success: #2e7d32;
   --color-warning: #f57c00;
+  /* No está en el Figma: fondo detrás del menú abierto en pantallas angostas. */
+  --color-backdrop: rgb(13 43 69 / 40%);
 
   /* Tipografía (Inter) */
   --font-family: 'Inter', system-ui, sans-serif;
