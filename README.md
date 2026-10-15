@@ -6,14 +6,14 @@ Cada universidad opera sobre la misma plataforma con sus datos aislados mediante
 
 ## Stack tecnológico
 
-| Capa          | Tecnología                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| Frontend      | React + Vite + TypeScript                                                                                  |
-| Backend       | NestJS + TypeScript + Node.js                                                                              |
-| Base de datos | PostgreSQL (Row-Level Security por universidad)                                                            |
-| Archivos      | Amazon S3                                                                                                  |
-| Monorepo      | npm workspaces                                                                                             |
-| Calidad       | ESLint, Prettier, Vitest (+ React Testing Library), GitHub Actions (lint, test, build), commitlint + husky |
+| Capa          | Tecnología                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Frontend      | React + Vite + TypeScript                                                                                         |
+| Backend       | NestJS + TypeScript + Node.js                                                                                     |
+| Base de datos | PostgreSQL (Row-Level Security por universidad)                                                                   |
+| Archivos      | Amazon S3                                                                                                         |
+| Monorepo      | npm workspaces                                                                                                    |
+| Calidad       | ESLint, Prettier, Vitest (+ React Testing Library), GitHub Actions (lint, test, build, image), commitlint + husky |
 
 ## Estructura de carpetas
 
@@ -161,7 +161,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 El workflow [deploy.yml](.github/workflows/deploy.yml) corre con cada push a `develop` (staging) o a `main` (production):
 
-1. Espera a que el CI de ese commit (lint, test y build) termine en verde.
+1. Espera a que el CI de ese commit (lint, test, build e image) termine en verde. El job `image` construye la imagen del backend (Node 22) y comprueba que la API arranca.
 2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
 3. Si el entorno está apagado, termina en verde con un aviso. La imagen se despliega al encender.
 4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL de la API. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
@@ -247,6 +247,9 @@ bash infra/aws/seed.sh staging
 
   Compártela con el equipo por privado.
 
+- La contraseña llega a la tarea como `SEED_PASSWORD`, así que también queda como variable en el servicio de staging (el backend no la usa). Es inevitable: la tarea del seed usa la misma definición que el servicio.
+- Si se rota `cursus-staging/seed-password`, hay que volver a correr `seed.sh staging` para que los usuarios tomen la contraseña nueva.
+
 ### Límites conocidos
 
 - API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
@@ -269,7 +272,7 @@ Ninguna de las dos ramas principales acepta push directo; todo entra por Pull Re
 1. Crea tu rama desde `develop` actualizado.
 2. Haz commits siguiendo Conventional Commits.
 3. Abre un PR hacia `develop` y completa el template (tarjeta Trello, historia de usuario, DoD).
-4. El CI (lint, test, build, commitlint, pr-title) debe estar en verde.
+4. El CI (lint, test, build, image, commitlint, pr-title) debe estar en verde.
 5. Pide revisión a un compañero; se hace merge cuando esté aprobado.
 
 ### Conventional Commits
