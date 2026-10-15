@@ -8,5 +8,6 @@ Infraestructura del proyecto:
   - `stack.sh`: crea o actualiza el stack de un entorno; con `--dry-run` solo muestra qué cambiaría.
   - `start.sh`, `stop.sh` y `status.sh`: encienden, apagan y consultan un entorno.
   - `deploy.sh`: despliega una imagen (migraciones, actualización y verificación). Lo usan el workflow de deploy y `start.sh`.
+  - `seed.sh`: carga los datos simulados del seed en staging (nunca en production).
   - `common.sh`: funciones compartidas por los scripts.
 - Migraciones de base de datos: viven en `backend/src/database/migrations/` (TypeORM), para que se tipen, se revisen con lint y se compilen con el backend. Ver "Migraciones" en el README principal.

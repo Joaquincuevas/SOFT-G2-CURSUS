@@ -102,7 +102,7 @@ Con las migraciones aplicadas, carga dos universidades de prueba que imitan el e
 npm run seed --workspace=backend
 ```
 
-> **Solo para desarrollo y pruebas.** Estas credenciales son públicas: no las uses en producción. Con `NODE_ENV=production` el seed se niega a correr, salvo que se defina `SEED_ALLOW=true` (por ejemplo, para levantar staging).
+> **Solo para desarrollo y pruebas.** Estas credenciales son públicas: no las uses en producción. Con `NODE_ENV=production` el seed se niega a correr, salvo que se defina `SEED_ALLOW=true`. Para cargarlo en staging, ver "Datos simulados en staging" en "Entornos en AWS".
 
 - Se puede ejecutar las veces que quieras: actualiza los datos existentes en vez de duplicarlos.
 - La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
@@ -199,12 +199,12 @@ bash infra/aws/status.sh staging   # imprime "encendido" o "apagado"
 
 Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno>` es `staging` o `production`).
 
-| Dónde                                      | Qué                                                                                                                                                                                            |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Los genera AWS.                                                            |
-| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                             |
-| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                              |
-| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production. |
+| Dónde                                      | Qué                                                                                                                                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
+| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                         |
+| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                          |
+| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                             |
 
 El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
@@ -228,6 +228,24 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 - La primera vez crea todo menos el servicio del backend, porque todavía no hay imágenes (unos 15 minutos). Después del primer deploy del workflow, correrlo de nuevo crea el servicio.
 - Antes de aplicar un cambio en [cursus.yml](infra/aws/cursus.yml), revisa el `--dry-run`: si alguna fila dice `Replacement = True` en la base de datos, un secreto o el usuario de GitHub, AWS los borraría y crearía de nuevo. Una revisión nueva de la definición de tarea (`DefinicionTarea`) sí es normal.
 - Los nombres de los recursos de staging no se cambian: AWS los recrearía con pérdida de datos, secretos o llaves.
+
+### Datos simulados en staging
+
+Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol) en la base de staging:
+
+```bash
+bash infra/aws/seed.sh staging
+```
+
+- Se puede repetir: actualiza los datos existentes en vez de duplicarlos.
+- Solo funciona en staging: con `production` el script se niega, y producción no tiene la contraseña del seed.
+- Los correos de los usuarios son los del seed local (ver "Datos simulados (seed)"), pero la contraseña **no** es la del README: es un secreto propio de staging. Para obtenerla, en CloudShell:
+
+  ```bash
+  aws secretsmanager get-secret-value --secret-id cursus-staging/seed-password --query SecretString --output text
+  ```
+
+  Compártela con el equipo por privado.
 
 ### Límites conocidos
 
