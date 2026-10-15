@@ -4,8 +4,12 @@
 #   docker build -f infra/docker/backend.Dockerfile -t cursus-backend .
 #
 # Imágenes de ECR Public: son las oficiales de Docker, sin el límite de
-# descargas anónimas de Docker Hub.
-ARG NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+# descargas anónimas de Docker Hub. Node 22 y no 20: con Node 20, argon2 0.45
+# (hash de contraseñas) no se instala ni carga en los contenedores que probamos
+# (node:20-alpine, node:20-slim y node:20-trixie-slim); con Node 22 sí. El CI
+# corre en Node 20 sobre Ubuntu, por eso el job "image" de ci.yml prueba esta
+# imagen.
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:22-alpine
 
 # 1. Compila shared y backend con todas las dependencias.
 FROM ${NODE_IMAGE} AS build
@@ -36,7 +40,10 @@ FROM ${NODE_IMAGE}
 ENV NODE_ENV=production \
     PORT=3000 \
     NODE_EXTRA_CA_CERTS=/etc/ssl/certs/rds-global-bundle.pem
-# Certificados de RDS para validar la conexión SSL (POSTGRES_SSL=true).
+# Certificados de RDS para validar la conexión SSL (POSTGRES_SSL=true). La
+# carpeta se crea antes porque, si no existe en la imagen base, ADD --chmod
+# también aplicaría 644 a las carpetas que crea y no se podrían recorrer.
+RUN mkdir -p /etc/ssl/certs
 ADD --chmod=644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

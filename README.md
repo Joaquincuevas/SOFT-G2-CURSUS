@@ -6,14 +6,14 @@ Cada universidad opera sobre la misma plataforma con sus datos aislados mediante
 
 ## Stack tecnológico
 
-| Capa          | Tecnología                                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| Frontend      | React + Vite + TypeScript                                                                                  |
-| Backend       | NestJS + TypeScript + Node.js                                                                              |
-| Base de datos | PostgreSQL (Row-Level Security por universidad)                                                            |
-| Archivos      | Amazon S3                                                                                                  |
-| Monorepo      | npm workspaces                                                                                             |
-| Calidad       | ESLint, Prettier, Vitest (+ React Testing Library), GitHub Actions (lint, test, build), commitlint + husky |
+| Capa          | Tecnología                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Frontend      | React + Vite + TypeScript                                                                                         |
+| Backend       | NestJS + TypeScript + Node.js                                                                                     |
+| Base de datos | PostgreSQL (Row-Level Security por universidad)                                                                   |
+| Archivos      | Amazon S3                                                                                                         |
+| Monorepo      | npm workspaces                                                                                                    |
+| Calidad       | ESLint, Prettier, Vitest (+ React Testing Library), GitHub Actions (lint, test, build, image), commitlint + husky |
 
 ## Estructura de carpetas
 
@@ -102,7 +102,7 @@ Con las migraciones aplicadas, carga dos universidades de prueba que imitan el e
 npm run seed --workspace=backend
 ```
 
-> **Solo para desarrollo y pruebas.** Estas credenciales son públicas: no las uses en producción. Con `NODE_ENV=production` el seed se niega a correr, salvo que se defina `SEED_ALLOW=true` (por ejemplo, para levantar staging).
+> **Solo para desarrollo y pruebas.** Estas credenciales son públicas: no las uses en producción. Con `NODE_ENV=production` el seed se niega a correr, salvo que se defina `SEED_ALLOW=true`. Para cargarlo en staging, ver "Datos simulados en staging" en "Entornos en AWS".
 
 - Se puede ejecutar las veces que quieras: actualiza los datos existentes en vez de duplicarlos.
 - La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
@@ -161,7 +161,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 El workflow [deploy.yml](.github/workflows/deploy.yml) corre con cada push a `develop` (staging) o a `main` (production):
 
-1. Espera a que el CI de ese commit (lint, test y build) termine en verde.
+1. Espera a que el CI de ese commit (lint, test, build e image) termine en verde. El job `image` construye la imagen del backend (Node 22) y comprueba que la API arranca.
 2. Construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
 3. Si el entorno está apagado, termina en verde con un aviso. La imagen se despliega al encender.
 4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL de la API. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
@@ -199,12 +199,12 @@ bash infra/aws/status.sh staging   # imprime "encendido" o "apagado"
 
 Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno>` es `staging` o `production`).
 
-| Dónde                                      | Qué                                                                                                                                                                                            |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Los genera AWS.                                                            |
-| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                             |
-| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                              |
-| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production. |
+| Dónde                                      | Qué                                                                                                                                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
+| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                         |
+| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                          |
+| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                             |
 
 El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
@@ -229,6 +229,27 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 - Antes de aplicar un cambio en [cursus.yml](infra/aws/cursus.yml), revisa el `--dry-run`: si alguna fila dice `Replacement = True` en la base de datos, un secreto o el usuario de GitHub, AWS los borraría y crearía de nuevo. Una revisión nueva de la definición de tarea (`DefinicionTarea`) sí es normal.
 - Los nombres de los recursos de staging no se cambian: AWS los recrearía con pérdida de datos, secretos o llaves.
 
+### Datos simulados en staging
+
+Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol) en la base de staging:
+
+```bash
+bash infra/aws/seed.sh staging
+```
+
+- Se puede repetir: actualiza los datos existentes en vez de duplicarlos.
+- Solo funciona en staging: con `production` el script se niega, y producción no tiene la contraseña del seed.
+- Los correos de los usuarios son los del seed local (ver "Datos simulados (seed)"), pero la contraseña **no** es la del README: es un secreto propio de staging. Para obtenerla, en CloudShell:
+
+  ```bash
+  aws secretsmanager get-secret-value --secret-id cursus-staging/seed-password --query SecretString --output text
+  ```
+
+  Compártela con el equipo por privado.
+
+- La contraseña llega a la tarea como `SEED_PASSWORD`, así que también queda como variable en el servicio de staging (el backend no la usa). Es inevitable: la tarea del seed usa la misma definición que el servicio.
+- Si se rota `cursus-staging/seed-password`, hay que volver a correr `seed.sh staging` para que los usuarios tomen la contraseña nueva.
+
 ### Límites conocidos
 
 - API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
@@ -251,7 +272,7 @@ Ninguna de las dos ramas principales acepta push directo; todo entra por Pull Re
 1. Crea tu rama desde `develop` actualizado.
 2. Haz commits siguiendo Conventional Commits.
 3. Abre un PR hacia `develop` y completa el template (tarjeta Trello, historia de usuario, DoD).
-4. El CI (lint, test, build, commitlint, pr-title) debe estar en verde.
+4. El CI (lint, test, build, image, commitlint, pr-title) debe estar en verde.
 5. Pide revisión a un compañero; se hace merge cuando esté aprobado.
 
 ### Conventional Commits

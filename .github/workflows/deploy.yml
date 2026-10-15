@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   # Espera a que el CI (ci.yml) del mismo commit termine. Solo se despliega lo
-  # que pasó lint, test y build.
+  # que pasó lint, test, build e image.
   esperar-ci:
     name: esperar-ci
     if: github.event_name == 'push'
@@ -33,7 +33,7 @@ jobs:
     outputs:
       ci: ${{ steps.ci.outputs.resultado }}
     steps:
-      - name: Esperar lint, test y build
+      - name: Esperar lint, test, build e image
         id: ci
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,8 +44,8 @@ jobs:
           # shellcheck disable=SC2016
           for _ in $(seq 1 60); do
             resultado=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --jq '
-              [.check_runs[] | select(.name == "lint" or .name == "test" or .name == "build")] as $c
-              | if ($c | length) < 3 or any($c[]; .status != "completed") then "pendiente"
+              [.check_runs[] | select(.name == "lint" or .name == "test" or .name == "build" or .name == "image")] as $c
+              | if ($c | length) < 4 or any($c[]; .status != "completed") then "pendiente"
                 elif any($c[]; .conclusion == "cancelled") then "cancelado"
                 elif all($c[]; .conclusion == "success") then "ok"
                 else "fallo" end')

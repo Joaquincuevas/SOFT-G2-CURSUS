@@ -109,6 +109,18 @@ Resources:
         PasswordLength: 64
         ExcludePunctuation: true
 
+  # Contraseña de los usuarios del seed (INFRA-08). Solo staging: el seed nunca
+  # corre en production. Se consulta en Secrets Manager y se comparte por privado.
+  SecretoSeed:
+    Type: AWS::SecretsManager::Secret
+    Condition: EsStaging
+    Properties:
+      Name: !Sub 'cursus-${Entorno}/seed-password'
+      Description: Contraseña de los usuarios de prueba del seed.
+      GenerateSecretString:
+        PasswordLength: 24
+        ExcludePunctuation: true
+
   # --- Red ----------------------------------------------------------------------
 
   GrupoVpcLink:
@@ -241,7 +253,10 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: [!Ref SecretoBaseDeDatos, !Ref SecretoOrigen]
+                Resource:
+                  - !Ref SecretoBaseDeDatos
+                  - !Ref SecretoOrigen
+                  - !If [EsStaging, !Ref SecretoSeed, !Ref AWS::NoValue]
 
   # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
   # registra revisiones nuevas de la misma familia con otras imágenes.
@@ -281,6 +296,12 @@ Resources:
               ValueFrom: !Sub '${SecretoBaseDeDatos}:password::'
             - Name: ORIGIN_SECRET
               ValueFrom: !Ref SecretoOrigen
+            # Solo staging: la usa la tarea del seed (infra/aws/seed.sh).
+            - !If
+              - EsStaging
+              - Name: SEED_PASSWORD
+                ValueFrom: !Ref SecretoSeed
+              - !Ref AWS::NoValue
           # La imagen no trae curl: el chequeo se hace con Node.
           HealthCheck:
             Command:
@@ -546,6 +567,10 @@ Outputs:
     Value: !Ref Logs
   SecretoOrigenArn:
     Value: !Ref SecretoOrigen
+  SecretoSeedArn:
+    Condition: EsStaging
+    Description: Contraseña de los usuarios del seed en staging.
+    Value: !Ref SecretoSeed
   UsuarioGitHub:
     Condition: UsarUsuario
     Description: Usuario cuyas llaves van en el environment de GitHub de este entorno.

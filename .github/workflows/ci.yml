@@ -72,6 +72,34 @@ jobs:
       - run: npm ci
       - run: npm run build --workspaces --if-present
 
+  # Construye la imagen que corre en AWS (Node 22, distinta del Node 20 de los
+  # otros jobs) y comprueba que argon2 carga y que la API arranca.
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Construir la imagen del backend
+        run: docker build -f infra/docker/backend.Dockerfile -t cursus-backend:ci .
+      - name: Cargar argon2 en la imagen
+        run: docker run --rm cursus-backend:ci node -e "require('argon2').hash('ci').then(() => console.log('argon2 OK'))"
+      - name: Arrancar la API y revisar /api/health
+        # Valores falsos: /api/health no usa la base, pero la API exige las
+        # variables para arrancar en producción.
+        run: |
+          docker run -d --name api -p 3000:3000 \
+            -e POSTGRES_HOST=localhost -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_DB=ci -e ORIGIN_SECRET=ci cursus-backend:ci
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs api
+          exit 1
+
   commitlint:
     name: commitlint
     if: github.event_name == 'pull_request'
