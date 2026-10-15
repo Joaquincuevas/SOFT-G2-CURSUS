@@ -1,0 +1,5 @@
+# Normalizar finales de línea (evita problemas CRLF en hooks y CI)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary

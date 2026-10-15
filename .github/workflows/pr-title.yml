@@ -1,0 +1,32 @@
+name: PR title
+
+# Los PR se mergean con merge commit (no squash) y el título del PR queda en la
+# descripción de ese commit, así que se valida con commitlint y
+# commitlint.config.js, la misma configuración del hook local y del job
+# commitlint del CI.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Validar título del PR con commitlint
+        # El título va por variable de entorno y no interpolado en el script,
+        # para evitar inyección de comandos.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE" | npx commitlint

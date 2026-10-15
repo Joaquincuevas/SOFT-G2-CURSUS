@@ -1,0 +1,24 @@
+# Contexto de build de infra/docker/backend.Dockerfile (raíz del monorepo).
+# Solo entra lo necesario para compilar el backend.
+**/node_modules
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/*.log
+.git
+.github
+.husky
+.vscode
+.idea
+docs
+infra
+.env
+.env.*
+
+# Del frontend solo se necesita su package.json (npm ci de los workspaces).
+frontend/*
+!frontend/package.json
+
+# Tests del backend: no forman parte de la imagen.
+backend/test
+backend/**/*.spec.ts

@@ -1,0 +1,31 @@
+{
+  "name": "cursus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CURSUS - Sistema de gestión académica multiuniversidad (ICC 4204, Grupo 2)",
+  "workspaces": [
+    "shared",
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:front": "npm run dev --workspace=frontend",
+    "dev:back": "npm run dev --workspace=backend",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "prepare": "node .husky/install.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "postinstall": "npm run build --workspace=shared"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "husky": "^9.1.7",
+    "prettier": "^3.9.9"
+  }
+}

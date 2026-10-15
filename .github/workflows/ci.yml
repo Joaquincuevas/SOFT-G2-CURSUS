@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint --workspaces --if-present
+
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    # Misma imagen que docker-compose.yml, para los tests de base de datos.
+    # Credenciales solo para el CI, no son secretos.
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: cursus
+          POSTGRES_PASSWORD: cursus_ci
+          POSTGRES_DB: cursus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cursus -d cursus"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: cursus
+      POSTGRES_PASSWORD: cursus_ci
+      POSTGRES_DB: cursus
+      POSTGRES_TEST_DB: cursus_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test --workspaces --if-present
+      - name: Tests de base de datos
+        run: npm run test:db --workspace=backend
+
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspaces --if-present
+
+  # Construye la imagen que corre en AWS (Node 22, distinta del Node 20 de los
+  # otros jobs) y comprueba que argon2 carga y que la API arranca.
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Construir la imagen del backend
+        run: docker build -f infra/docker/backend.Dockerfile -t cursus-backend:ci .
+      - name: Cargar argon2 en la imagen
+        run: docker run --rm cursus-backend:ci node -e "require('argon2').hash('ci').then(() => console.log('argon2 OK'))"
+      - name: Arrancar la API y revisar /api/health
+        # Valores falsos: /api/health no usa la base, pero la API exige las
+        # variables para arrancar en producción.
+        run: |
+          docker run -d --name api -p 3000:3000 \
+            -e POSTGRES_HOST=localhost -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci \
+            -e POSTGRES_DB=ci -e ORIGIN_SECRET=ci cursus-backend:ci
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs api
+          exit 1
+
+  commitlint:
+    name: commitlint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Validar commits del PR (Conventional Commits)
+        run: >
+          npx commitlint
+          --from ${{ github.event.pull_request.base.sha }}
+          --to ${{ github.event.pull_request.head.sha }}
+          --verbose
