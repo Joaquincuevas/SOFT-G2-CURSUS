@@ -14,7 +14,7 @@ export function SessionProvider({ children, initialRol = DEFAULT_ROL }: Props) {
     () => ({
       user: mockUser(rol),
       setRol,
-      // ponytail: solo resetea el mock; el cierre de sesión real es de AUTH-03
+      // Nota: solo resetea el mock; el cierre de sesión real es de AUTH-03
       logout: () => setRol(DEFAULT_ROL),
     }),
     [rol],
