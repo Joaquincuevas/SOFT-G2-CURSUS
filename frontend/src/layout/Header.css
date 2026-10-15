@@ -1,0 +1,73 @@
+/* Header del Figma (nodo 97:626): 64 px, fondo blanco, borde, padding 32. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  height: var(--header-height);
+  padding: 0 var(--space-8);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+}
+
+.header__context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.header__title,
+.header__subtitle,
+.header__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.header__title {
+  font: var(--font-h3);
+  color: var(--color-text-primary);
+}
+
+.header__subtitle,
+.header__role {
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.header__user {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2-5);
+}
+
+.header__avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: var(--radius-full);
+  font: var(--font-avatar);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.header__name {
+  font: var(--font-button);
+  color: var(--color-text-primary);
+}
+
+/* Bajo 1024 px (ver tokens.css): deja espacio al botón ☰ y oculta el subtítulo. */
+@media (max-width: 1023px) {
+  .header {
+    padding: 0 var(--space-4) 0
+      calc(var(--space-4) + var(--control-size) + var(--space-3));
+  }
+
+  .header__subtitle {
+    display: none;
+  }
+}
