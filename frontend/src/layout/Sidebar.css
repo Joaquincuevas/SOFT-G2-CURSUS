@@ -1,0 +1,69 @@
+/* Sidebar del Figma (nodo 96:33): 260 px, fondo primary-dark, padding 24/16. */
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: var(--sidebar-width);
+  padding: var(--space-6) var(--space-4);
+  overflow-y: auto;
+  background: var(--color-primary-dark);
+}
+
+/* En el Figma, entre el logo y el primer ítem hay un espaciador de 20 px. */
+.sidebar__logo {
+  margin-bottom: calc(var(--space-5) + var(--space-1));
+  font: var(--font-logo);
+  letter-spacing: var(--letter-spacing-logo);
+  color: var(--color-background);
+}
+
+.sidebar__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2-5) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--font-button);
+  color: var(--color-primary-light);
+  text-align: left;
+  text-decoration: none;
+  background: none;
+  cursor: pointer;
+}
+
+.sidebar__item svg {
+  flex: none;
+  color: var(--color-background);
+}
+
+.sidebar__item:hover {
+  background: var(--color-primary-hover);
+}
+
+.sidebar__item[aria-current='page'] {
+  color: var(--color-background);
+  background: var(--color-primary);
+}
+
+.sidebar__item:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+.sidebar__logout {
+  margin-top: auto;
+}
