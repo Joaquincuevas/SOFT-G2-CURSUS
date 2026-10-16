@@ -3,14 +3,17 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import App from '../App'
+import { AuthProvider } from '../auth/AuthProvider'
 import { SessionProvider } from '../session/SessionProvider'
 
 function renderApp(rol: Rol, path = '/') {
   render(
     <MemoryRouter initialEntries={[path]}>
-      <SessionProvider initialRol={rol}>
-        <App />
-      </SessionProvider>
+      <AuthProvider initialToken="token-de-prueba">
+        <SessionProvider initialRol={rol}>
+          <App />
+        </SessionProvider>
+      </AuthProvider>
     </MemoryRouter>,
   )
   return screen.getByRole('navigation', { name: 'Navegación principal' })

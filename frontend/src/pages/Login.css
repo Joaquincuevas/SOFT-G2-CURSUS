@@ -1,0 +1,177 @@
+/* Login del Figma (nodo 66:2): panel de marca de 560 px y área del formulario. */
+.login {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-surface);
+}
+
+/* Panel de marca */
+.login__brand {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: var(--login-brand-width);
+  padding: var(--space-12) var(--space-14);
+  background: var(--color-primary-dark);
+}
+
+.login__brand-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.login__logo {
+  font: var(--font-logo-lg);
+  letter-spacing: var(--letter-spacing-logo);
+  color: var(--color-background);
+}
+
+.login__accent {
+  width: var(--login-accent-width);
+  height: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+}
+
+.login__brand-message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3-5);
+  width: var(--login-brand-message-width);
+}
+
+.login__brand-title {
+  font: var(--font-h1);
+  color: var(--color-background);
+}
+
+.login__brand-text {
+  max-width: var(--login-brand-text-width);
+  font: var(--font-body);
+  color: var(--color-primary-light);
+}
+
+/* Área del formulario */
+.login__area {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.login__wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6-5);
+  width: var(--login-form-width);
+}
+
+.login__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.login__title {
+  font: var(--font-h1);
+  color: var(--color-text-primary);
+}
+
+.login__subtitle {
+  font: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
+.login__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-7);
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  box-shadow: var(--shadow-card);
+}
+
+.login__caption {
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.login__caption--brand {
+  color: var(--color-primary-light);
+}
+
+.login__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-75);
+  font: var(--font-button);
+  color: var(--color-text-primary);
+}
+
+.login__input {
+  height: var(--input-height);
+  padding: 0 var(--space-3-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+  color: var(--color-text-primary);
+  background: var(--color-background);
+}
+
+.login__input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.login__button {
+  height: var(--button-height);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--font-button);
+  color: var(--color-background);
+  background: var(--color-primary);
+  cursor: pointer;
+}
+
+.login__button:disabled {
+  cursor: progress;
+}
+
+.login__input:focus-visible,
+.login__button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.login__note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.login__dot {
+  flex: none;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+}
+
+/* Bajo 1024 px (ver tokens.css): el Figma no define móvil; se oculta el panel
+   de marca y el formulario ocupa el ancho disponible. */
+@media (max-width: 1023px) {
+  .login__brand {
+    display: none;
+  }
+
+  .login__area {
+    padding: var(--space-4);
+  }
+
+  .login__wrapper {
+    width: 100%;
+    max-width: var(--login-form-width);
+  }
+}
