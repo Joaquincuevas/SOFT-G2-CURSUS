@@ -41,7 +41,7 @@ SOFT-G2-CURSUS/
 
 ## Setup local
 
-Requisitos: **Node.js 20.19+**, **npm 10+** y **Docker** con Compose v2 (`docker compose version`).
+Requisitos: **Node.js 24.15+**, **npm 10+** y **Docker** con Compose v2 (`docker compose version`).
 
 ```bash
 # 1. Clona el repo y entra a develop
@@ -161,7 +161,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 El workflow [deploy.yml](.github/workflows/deploy.yml) corre con cada push a `develop` (staging) o a `main` (production):
 
-1. Espera a que el CI de ese commit (lint, test, build e image) termine en verde. El job `image` construye la imagen del backend (Node 22) y comprueba que la API arranca. La imagen base de Node la descarga desde `mirror.gcr.io`, porque el CI no tiene credenciales de AWS.
+1. Espera a que el CI de ese commit (lint, test, build e image) termine en verde. El job `image` construye la imagen del backend (Node 24 sobre Alpine) y comprueba que la API arranca. La imagen base de Node la descarga desde `mirror.gcr.io`, porque el CI no tiene credenciales de AWS.
 2. Inicia sesión en ECR Public (de donde viene la imagen base de Node; sin sesión, las descargas tienen un límite por IP que comparten los runners de GitHub), construye la imagen del backend y la publica en ECR, con el SHA del commit como etiqueta.
 3. Si el entorno está apagado, termina en verde con un aviso. La imagen se despliega al encender.
 4. Si está encendido: corre las migraciones como una tarea aparte, actualiza el backend y verifica `/api/health/db` en la URL de la API. Si algo falla, el workflow queda en rojo y el entorno sigue con la versión anterior (ECS vuelve sola a ella si la nueva no arranca).
