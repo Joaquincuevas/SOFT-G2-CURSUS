@@ -40,6 +40,7 @@
   flex-direction: column;
   gap: var(--space-3-5);
   width: var(--login-brand-message-width);
+  height: var(--login-brand-message-height);
 }
 
 .login__brand-title {

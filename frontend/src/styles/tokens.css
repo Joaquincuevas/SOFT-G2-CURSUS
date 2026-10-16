@@ -73,6 +73,7 @@
   /* Login (nodo 66:2 del Figma) */
   --login-brand-width: 560px;
   --login-brand-message-width: 420px;
+  --login-brand-message-height: 160px;
   --login-brand-text-width: 390px;
   --login-accent-width: 42px;
   --login-form-width: 480px;
