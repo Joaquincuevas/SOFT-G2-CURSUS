@@ -100,7 +100,7 @@ jobs:
       # Plan gratuito de AWS (bloquea OIDC): llaves del usuario cursus-<entorno>-github.
       - name: Entrar a AWS con llaves de acceso
         if: env.USA_LLAVES == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -109,7 +109,7 @@ jobs:
       # Plan de pago: sin llaves, GitHub asume el rol de AWS con OIDC.
       - name: Entrar a AWS con OIDC
         if: env.USA_LLAVES != 'true'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -138,12 +138,12 @@ jobs:
         with:
           registry-type: public
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
         if: steps.imagen.outputs.existe != 'true'
 
       - name: Construir y publicar la imagen
         if: steps.imagen.outputs.existe != 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: infra/docker/backend.Dockerfile
