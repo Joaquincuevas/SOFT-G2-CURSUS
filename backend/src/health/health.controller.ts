@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common'
+import { Public } from '../auth/publico.decorator.js'
 import { HealthService } from './health.service.js'
 
 export interface EstadoProceso {
@@ -10,6 +11,8 @@ export interface EstadoBaseDeDatos {
   database: 'ok' | 'error'
 }
 
+// Sin sesión: lo consultan el contenedor, ECS y el workflow de deploy.
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly healthService: HealthService) {}
