@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router'
 import { DevRoleSelector } from '../session/DevRoleSelector'
+import { Header } from './Header'
 import { MenuIcon } from './icons'
 import { Sidebar } from './Sidebar'
 import './AppShell.css'
@@ -39,8 +40,11 @@ export function AppShell() {
         />
       )}
       <Sidebar id="sidebar" open={menuOpen} onNavigate={closeMenu} />
-      <main className="app-shell__content">
-        <Outlet />
+      <main className="app-shell__main">
+        <Header />
+        <div className="app-shell__content">
+          <Outlet />
+        </div>
       </main>
       {import.meta.env.DEV && <DevRoleSelector />}
     </div>

@@ -1,9 +1,12 @@
-/* Área de contenido del Figma (frame Main): fondo surface, margen de 32 px. */
-.app-shell__content {
+/* Frame Main del Figma: encabezado arriba y contenido en surface, margen de 32 px. */
+.app-shell__main {
   min-height: 100vh;
   margin-left: var(--sidebar-width);
-  padding: var(--space-8);
   background: var(--color-surface);
+}
+
+.app-shell__content {
+  padding: var(--space-8);
 }
 
 .app-shell__menu-button,
@@ -13,14 +16,14 @@
 
 /* Bajo 1024 px (ver tokens.css) el Sidebar pasa a ser un drawer. */
 @media (max-width: 1023px) {
-  .app-shell__content {
+  .app-shell__main {
     margin-left: 0;
-    padding-top: calc(var(--space-4) + var(--control-size) + var(--space-6));
   }
 
+  /* Centrado verticalmente en el encabezado. */
   .app-shell__menu-button {
     position: fixed;
-    top: var(--space-4);
+    top: calc((var(--header-height) - var(--control-size)) / 2);
     left: var(--space-4);
     z-index: 10;
     display: flex;

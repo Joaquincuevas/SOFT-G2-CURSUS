@@ -9,6 +9,10 @@ export interface SessionUser {
   nombre: string
   rol: Rol
   universidadId: string
+  universidadNombre: string
+  // Solo el administrativo pertenece a una facultad en esta vista.
+  facultadNombre?: string
+  periodo: string
 }
 
 export interface SessionValue {
@@ -19,12 +23,40 @@ export interface SessionValue {
 
 export const DEFAULT_ROL: Rol = 'ALUMNO'
 
+// Nombres de la Universidad Demo Norte del seed (backend/src/database/seed.ts).
+// El director ve todas las universidades: el Figma lo muestra como "Directorio".
+const MOCK_USERS: Record<
+  Rol,
+  Pick<SessionUser, 'nombre' | 'universidadNombre' | 'facultadNombre'>
+> = {
+  DIRECTOR: { nombre: 'Director Norte', universidadNombre: 'Directorio' },
+  ADMINISTRATIVO: {
+    nombre: 'Administrativo Ingeniería Norte',
+    universidadNombre: 'Universidad Demo Norte',
+    facultadNombre: 'Facultad de Ingeniería',
+  },
+  PROFESOR: {
+    nombre: 'Profesor Norte',
+    universidadNombre: 'Universidad Demo Norte',
+  },
+  AYUDANTE: {
+    nombre: 'Ayudante Norte',
+    universidadNombre: 'Universidad Demo Norte',
+  },
+  ALUMNO: {
+    nombre: 'Alumno Norte',
+    universidadNombre: 'Universidad Demo Norte',
+  },
+}
+
 export function mockUser(rol: Rol): SessionUser {
   return {
     id: `mock-${rol.toLowerCase()}`,
-    nombre: 'Usuario de prueba',
     rol,
     universidadId: 'mock-universidad',
+    // PERIODO del seed: año 2026, semestre 2.
+    periodo: '2026-2',
+    ...MOCK_USERS[rol],
   }
 }
 
