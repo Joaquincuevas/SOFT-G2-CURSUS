@@ -1,0 +1,32 @@
+import { Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
+import { type JwtSignOptions, JwtModule } from '@nestjs/jwt'
+import { duracionJwt, secretoJwt } from '../config/entorno.js'
+import { BaseDeDatos } from '../database/base-de-datos.service.js'
+import { AuthController } from './auth.controller.js'
+import { AuthService } from './auth.service.js'
+import { JwtAuthGuard } from './jwt-auth.guard.js'
+
+@Module({
+  imports: [
+    // Se configura al arrancar, cuando el .env ya está cargado.
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: secretoJwt(),
+        signOptions: {
+          algorithm: 'HS256',
+          expiresIn: duracionJwt() as JwtSignOptions['expiresIn'],
+        },
+        verifyOptions: { algorithms: ['HS256'] },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    BaseDeDatos,
+    // Todas las rutas exigen sesión, salvo las marcadas con @Public().
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+  ],
+})
+export class AuthModule {}
