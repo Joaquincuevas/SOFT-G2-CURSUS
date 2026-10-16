@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
 import type { App } from 'supertest/types.js'
@@ -6,6 +7,11 @@ import { AppModule } from '../app.module.js'
 import { HEADER_SECRETO, configurarApp } from './configurar-app.js'
 
 const SECRETO = 'secreto-de-prueba'
+// GET /api exige sesión (JwtAuthGuard): estos tests prueban el header secreto,
+// así que las peticiones que deben pasar llevan un JWT válido.
+const SESION = `Bearer ${new JwtService({
+  secret: process.env.JWT_SECRET,
+}).sign({ sub: 'usuario', rol: 'ALUMNO', universidad_id: 'universidad' })}`
 
 async function crearApp(secretoOrigen: string): Promise<INestApplication<App>> {
   const modulo = await Test.createTestingModule({
@@ -35,6 +41,7 @@ describe('configurarApp', () => {
       await request(app.getHttpServer())
         .get('/api')
         .set(HEADER_SECRETO, SECRETO)
+        .set('Authorization', SESION)
         .expect(200, 'Hello World!')
       await request(app.getHttpServer())
         .get('/health')
@@ -69,6 +76,7 @@ describe('configurarApp', () => {
       const respuesta = await request(app.getHttpServer())
         .get('/api')
         .set(HEADER_SECRETO, SECRETO)
+        .set('Authorization', SESION)
       expect(respuesta.headers['cache-control']).toBe('no-store')
 
       const rechazo = await request(app.getHttpServer()).get('/api')
@@ -79,7 +87,10 @@ describe('configurarApp', () => {
   it('no exige el header secreto si ORIGIN_SECRET no está definido', async () => {
     const app = await crearApp('')
     try {
-      await request(app.getHttpServer()).get('/api').expect(200)
+      await request(app.getHttpServer())
+        .get('/api')
+        .set('Authorization', SESION)
+        .expect(200)
     } finally {
       await app.close()
     }
