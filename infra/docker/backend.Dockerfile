@@ -6,12 +6,11 @@
 # Imagen base: la oficial de Node desde ECR Public. Las descargas anónimas
 # tienen un límite por IP, así que el deploy inicia sesión en ECR Public y el
 # job "image" del CI la descarga desde mirror.gcr.io (la misma imagen oficial)
-# con --build-arg NODE_IMAGE. Node 22 y no 20: con Node 20, argon2 0.45
-# (hash de contraseñas) no se instala ni carga en los contenedores que probamos
-# (node:20-alpine, node:20-slim y node:20-trixie-slim); con Node 22 sí. El CI
-# corre en Node 20 sobre Ubuntu, por eso el job "image" de ci.yml prueba esta
-# imagen.
-ARG NODE_IMAGE=public.ecr.aws/docker/library/node:22-alpine
+# con --build-arg NODE_IMAGE. Misma versión de Node que el CI y el entorno
+# local. Con Node 20, argon2 0.45 (hash de contraseñas) no se instalaba ni
+# cargaba en los contenedores; el job "image" de ci.yml comprueba que carga en
+# esta imagen.
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:24-alpine
 
 # 1. Compila shared y backend con todas las dependencias.
 FROM ${NODE_IMAGE} AS build
