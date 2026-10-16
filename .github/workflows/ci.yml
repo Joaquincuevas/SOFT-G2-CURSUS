@@ -79,8 +79,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      # La imagen base se descarga del espejo de Google (misma imagen oficial de
+      # Node): este job no tiene credenciales de AWS, y las descargas anónimas de
+      # ECR Public tienen un límite por IP que los runners de GitHub comparten.
       - name: Construir la imagen del backend
-        run: docker build -f infra/docker/backend.Dockerfile -t cursus-backend:ci .
+        run: >
+          docker build -f infra/docker/backend.Dockerfile
+          --build-arg NODE_IMAGE=mirror.gcr.io/library/node:22-alpine
+          -t cursus-backend:ci .
       - name: Cargar argon2 en la imagen
         run: docker run --rm cursus-backend:ci node -e "require('argon2').hash('ci').then(() => console.log('argon2 OK'))"
       - name: Arrancar la API y revisar /api/health

@@ -472,6 +472,13 @@ Resources:
           - Effect: Allow
             Action: ecr:GetAuthorizationToken
             Resource: '*'
+          # Login a ECR Public para descargar la imagen base con sesión y no
+          # depender del límite anónimo por IP.
+          - Effect: Allow
+            Action:
+              - ecr-public:GetAuthorizationToken
+              - sts:GetServiceBearerToken
+            Resource: '*'
           - Effect: Allow
             Action:
               - ecr:BatchCheckLayerAvailability
