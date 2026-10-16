@@ -109,6 +109,16 @@ Resources:
         PasswordLength: 64
         ExcludePunctuation: true
 
+  # Secreto con el que el backend firma y verifica los JWT de sesión (AUTH-01).
+  SecretoJwt:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'cursus-${Entorno}/jwt-secret'
+      Description: Secreto para firmar los JWT de sesión del backend.
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
   # Contraseña de los usuarios del seed (INFRA-08). Solo staging: el seed nunca
   # corre en production. Se consulta en Secrets Manager y se comparte por privado.
   SecretoSeed:
@@ -256,6 +266,7 @@ Resources:
                 Resource:
                   - !Ref SecretoBaseDeDatos
                   - !Ref SecretoOrigen
+                  - !Ref SecretoJwt
                   - !If [EsStaging, !Ref SecretoSeed, !Ref AWS::NoValue]
 
   # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
@@ -296,6 +307,8 @@ Resources:
               ValueFrom: !Sub '${SecretoBaseDeDatos}:password::'
             - Name: ORIGIN_SECRET
               ValueFrom: !Ref SecretoOrigen
+            - Name: JWT_SECRET
+              ValueFrom: !Ref SecretoJwt
             # Solo staging: la usa la tarea del seed (infra/aws/seed.sh).
             - !If
               - EsStaging
