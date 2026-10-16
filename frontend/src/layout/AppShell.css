@@ -1,0 +1,73 @@
+/* Frame Main del Figma: encabezado arriba y contenido en surface, margen de 32 px. */
+.app-shell__main {
+  min-height: 100vh;
+  margin-left: var(--sidebar-width);
+  background: var(--color-surface);
+}
+
+.app-shell__content {
+  padding: var(--space-8);
+}
+
+.app-shell__menu-button,
+.app-shell__backdrop {
+  display: none;
+}
+
+/* Bajo 1024 px (ver tokens.css) el Sidebar pasa a ser un drawer. */
+@media (max-width: 1023px) {
+  .app-shell__main {
+    margin-left: 0;
+  }
+
+  /* Centrado verticalmente en el encabezado. */
+  .app-shell__menu-button {
+    position: fixed;
+    top: calc((var(--header-height) - var(--control-size)) / 2);
+    left: var(--space-4);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--control-size);
+    height: var(--control-size);
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-md);
+    color: var(--color-background);
+    background: var(--color-primary-dark);
+    cursor: pointer;
+  }
+
+  .app-shell__menu-button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .app-shell__backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    display: block;
+    background: var(--color-backdrop);
+  }
+
+  .sidebar {
+    visibility: hidden;
+    transform: translateX(-100%);
+    transition:
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+
+  .sidebar[data-open='true'] {
+    visibility: visible;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
