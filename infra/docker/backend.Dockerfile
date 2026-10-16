@@ -3,8 +3,10 @@
 # monorepo:
 #   docker build -f infra/docker/backend.Dockerfile -t cursus-backend .
 #
-# Imágenes de ECR Public: son las oficiales de Docker, sin el límite de
-# descargas anónimas de Docker Hub. Node 22 y no 20: con Node 20, argon2 0.45
+# Imagen base: la oficial de Node desde ECR Public. Las descargas anónimas
+# tienen un límite por IP, así que el deploy inicia sesión en ECR Public y el
+# job "image" del CI la descarga desde mirror.gcr.io (la misma imagen oficial)
+# con --build-arg NODE_IMAGE. Node 22 y no 20: con Node 20, argon2 0.45
 # (hash de contraseñas) no se instala ni carga en los contenedores que probamos
 # (node:20-alpine, node:20-slim y node:20-trixie-slim); con Node 22 sí. El CI
 # corre en Node 20 sobre Ubuntu, por eso el job "image" de ci.yml prueba esta
