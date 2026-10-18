@@ -11,3 +11,5 @@ export const ROLES = [
 ] as const
 
 export type Rol = (typeof ROLES)[number]
+
+export * from './permisos.js'

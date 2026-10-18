@@ -31,6 +31,25 @@ El puerto se puede cambiar con la variable de entorno `PORT`.
 - Si `ORIGIN_SECRET` está definido, toda petición sin el header `x-origin-secret` correcto recibe `403` (salvo `/api/health`). En local va vacío y la validación se desactiva.
 - Todas las respuestas llevan `Cache-Control: no-store`.
 
+## Permisos por endpoint
+
+Cada ruta debe declarar quién puede usarla. Los guards globales corren en este orden: `JwtAuthGuard` (sin sesión → `401`) y después `PermisosGuard` (sin permiso → `403`).
+
+| Decorador                     | Quién puede usar la ruta                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `@Public()`                   | Cualquiera, sin sesión                                                                |
+| `@SoloSesion()`               | Cualquier usuario con sesión, sin importar su rol                                     |
+| `@Puede('create', 'Carrera')` | Los roles cuya ability permite esa acción sobre ese sujeto (ver `@cursus/shared`)     |
+| _(ninguno)_                   | Nadie: responde `403`, para que olvidar el decorador cierre la ruta en vez de abrirla |
+
+```ts
+@Puede('read', 'Universidad')
+@Get()
+listar() { ... }
+```
+
+Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y las usa también el frontend.
+
 ## Variables de entorno
 
 Con `NODE_ENV=production` (la imagen Docker), la API no arranca si falta `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` u `ORIGIN_SECRET`, y las migraciones no corren si falta alguna de las `POSTGRES_*`. En local se usan los valores por defecto. `POSTGRES_SSL=true` activa SSL hacia la base (RDS). Ver `.env.example`.

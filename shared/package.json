@@ -17,5 +17,8 @@
   },
   "devDependencies": {
     "typescript": "~6.0.2"
+  },
+  "dependencies": {
+    "@casl/ability": "^7.0.2"
   }
 }

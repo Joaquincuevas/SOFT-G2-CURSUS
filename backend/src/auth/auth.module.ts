@@ -6,6 +6,7 @@ import { BaseDeDatos } from '../database/base-de-datos.service.js'
 import { AuthController } from './auth.controller.js'
 import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
+import { PermisosGuard } from './permisos.guard.js'
 
 @Module({
   imports: [
@@ -27,6 +28,8 @@ import { JwtAuthGuard } from './jwt-auth.guard.js'
     BaseDeDatos,
     // Todas las rutas exigen sesión, salvo las marcadas con @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Corre después del JWT: cada ruta debe declarar quién puede usarla.
+    { provide: APP_GUARD, useClass: PermisosGuard },
   ],
 })
 export class AuthModule {}
