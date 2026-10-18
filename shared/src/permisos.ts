@@ -6,13 +6,26 @@ import {
 import type { Rol } from './index.js'
 
 // Permisos por rol con CASL. Los usan el backend (PermisosGuard) y el frontend
-// (AUTH-06), así que son la única fuente de qué puede hacer cada rol.
+// (menú, rutas y botones), así que son la única fuente de qué puede hacer cada
+// rol.
 
 export type Accion = 'manage' | 'create' | 'read' | 'update' | 'delete'
 
-// Un sujeto por cada tabla que existe hoy. 'all' es el comodín de CASL.
-export type Sujeto =
-  'Universidad' | 'Facultad' | 'Carrera' | 'Periodo' | 'Usuario' | 'all'
+// Sujetos de tabla: uno por cada tabla del schema. 'Curso' se adelanta a la
+// tabla de cursos (GES-*). Deciden qué acciones ve cada rol dentro de una
+// página (crear, editar...) y qué endpoints puede usar.
+export type SujetoTabla =
+  'Universidad' | 'Facultad' | 'Carrera' | 'Periodo' | 'Usuario' | 'Curso'
+
+// Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
+// Existen porque las secciones dependen del rol y no de los permisos sobre
+// tablas (por ejemplo, el Director y el Administrativo leen las mismas
+// tablas, pero ven secciones distintas). Solo se usan con 'read', y así el
+// menú no cambia cuando se agregan permisos sobre tablas.
+export type SujetoSeccion = 'PanelDirectorio' | 'GestionAcademica' | 'MisCursos'
+
+// 'all' es el comodín de CASL.
+export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
 
@@ -24,18 +37,30 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   switch (usuario.rol) {
     case 'DIRECTOR':
       // Solo lectura, como en la RLS (MT-02): nunca manage (ADR 0001).
-      can('read', ['Universidad', 'Facultad', 'Carrera', 'Periodo', 'Usuario'])
+      can('read', [
+        'Universidad',
+        'Facultad',
+        'Carrera',
+        'Periodo',
+        'Usuario',
+        'Curso',
+      ])
+      // Ve Gestión académica en solo lectura (vista consolidada).
+      can('read', ['PanelDirectorio', 'GestionAcademica'])
       break
     case 'ADMINISTRATIVO':
       can('read', ['Universidad', 'Facultad'])
-      can('manage', ['Carrera', 'Periodo'])
+      can('manage', ['Carrera', 'Periodo', 'Curso'])
       // Sin delete: los usuarios se archivan con archived_at.
       can(['create', 'read', 'update'], 'Usuario')
+      can('read', 'GestionAcademica')
       break
     case 'PROFESOR':
     case 'AYUDANTE':
     case 'ALUMNO':
+      // Sin permisos sobre Curso por ahora: sus cursos llegan con las secciones.
       can('read', ['Universidad', 'Facultad', 'Carrera', 'Periodo'])
+      can('read', 'MisCursos')
       break
     // Un rol desconocido no recibe ningún permiso.
   }

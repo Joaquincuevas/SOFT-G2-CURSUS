@@ -3,25 +3,31 @@ import {
   definirAbilityPara,
   type Rol,
   ROLES,
-  type Sujeto,
+  type SujetoSeccion,
+  type SujetoTabla,
 } from '@cursus/shared'
 
 type AccionConcreta = Exclude<Accion, 'manage'>
-type SujetoConcreto = Exclude<Sujeto, 'all'>
 
 const ACCIONES: AccionConcreta[] = ['create', 'read', 'update', 'delete']
-const SUJETOS: SujetoConcreto[] = [
+const SUJETOS: SujetoTabla[] = [
   'Universidad',
   'Facultad',
   'Carrera',
   'Periodo',
   'Usuario',
+  'Curso',
+]
+const SECCIONES: SujetoSeccion[] = [
+  'PanelDirectorio',
+  'GestionAcademica',
+  'MisCursos',
 ]
 const TODO: AccionConcreta[] = ACCIONES
 const LECTURA: AccionConcreta[] = ['read']
 
 // Matriz rol × permiso esperada. Lo que no aparece está denegado.
-const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
+const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
   // Solo lectura, coherente con la RLS de MT-02 (ADR 0001).
   DIRECTOR: {
     Universidad: LECTURA,
@@ -29,6 +35,7 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
     Carrera: LECTURA,
     Periodo: LECTURA,
     Usuario: LECTURA,
+    Curso: LECTURA,
   },
   ADMINISTRATIVO: {
     Universidad: LECTURA,
@@ -37,6 +44,7 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
     Periodo: TODO,
     // Sin delete: los usuarios se archivan.
     Usuario: ['create', 'read', 'update'],
+    Curso: TODO,
   },
   PROFESOR: {
     Universidad: LECTURA,
@@ -58,6 +66,15 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
   },
 }
 
+// Secciones del menú que ve cada rol (solo con read).
+const MENU: Record<Rol, SujetoSeccion[]> = {
+  DIRECTOR: ['PanelDirectorio', 'GestionAcademica'],
+  ADMINISTRATIVO: ['GestionAcademica'],
+  PROFESOR: ['MisCursos'],
+  AYUDANTE: ['MisCursos'],
+  ALUMNO: ['MisCursos'],
+}
+
 describe('definirAbilityPara', () => {
   const casos = ROLES.flatMap((rol) =>
     SUJETOS.flatMap((sujeto) =>
@@ -74,6 +91,26 @@ describe('definirAbilityPara', () => {
     '$rol: $accion $sujeto → $permitido',
     ({ rol, accion, sujeto, permitido }) => {
       expect(definirAbilityPara({ rol }).can(accion, sujeto)).toBe(permitido)
+    },
+  )
+
+  const casosSeccion = ROLES.flatMap((rol) =>
+    SECCIONES.map((seccion) => ({
+      rol,
+      seccion,
+      permitido: MENU[rol].includes(seccion),
+    })),
+  )
+
+  it.each(casosSeccion)(
+    '$rol: read sección $seccion → $permitido',
+    ({ rol, seccion, permitido }) => {
+      const ability = definirAbilityPara({ rol })
+      expect(ability.can('read', seccion)).toBe(permitido)
+      // Las secciones solo se leen.
+      for (const accion of ACCIONES.filter((a) => a !== 'read')) {
+        expect(ability.can(accion, seccion)).toBe(false)
+      }
     },
   )
 
