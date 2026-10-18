@@ -1,21 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, test, vi } from 'vitest'
-import App from '../App'
-import { SessionProvider } from '../session/SessionProvider'
-import { AuthProvider } from './AuthProvider'
-
-function renderApp(path: string) {
-  render(
-    <MemoryRouter initialEntries={[path]}>
-      <AuthProvider>
-        <SessionProvider initialRol="PROFESOR">
-          <App />
-        </SessionProvider>
-      </AuthProvider>
-    </MemoryRouter>,
-  )
-}
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { describe, expect, test, vi } from 'vitest'
+import { renderApp, simularBackend } from '../test/sesion'
 
 function enviarLogin(correo: string, password: string) {
   fireEvent.change(screen.getByLabelText('Correo institucional'), {
@@ -29,10 +14,6 @@ function enviarLogin(correo: string, password: string) {
 
 const pantallaLogin = () =>
   screen.getByRole('heading', { level: 1, name: 'Bienvenido a CURSUS' })
-
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
 
 describe('rutas protegidas', () => {
   test.each(['/', '/mis-cursos'])(
@@ -49,12 +30,7 @@ describe('rutas protegidas', () => {
 
 describe('inicio de sesión', () => {
   test('con credenciales válidas entra a la ruta que se pidió', async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ accessToken: 'jwt-de-prueba' }), {
-        status: 200,
-      }),
-    )
-    vi.stubGlobal('fetch', fetch)
+    const fetch = simularBackend('PROFESOR')
     renderApp('/mis-cursos')
 
     enviarLogin('profesor@norte.cursus.test', 'cursus_demo')
@@ -72,6 +48,24 @@ describe('inicio de sesión', () => {
         }),
       }),
     )
+    // Con el token arma la sesión real.
+    expect(fetch).toHaveBeenCalledWith('/api/auth/yo', {
+      headers: { Authorization: 'Bearer jwt-de-prueba' },
+    })
+  })
+
+  test('si /api/auth/yo rechaza el token, vuelve a /login', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
+    vi.stubGlobal('fetch', fetch)
+    renderApp('/', 'jwt-vencido')
+
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido a CURSUS',
+      }),
+    ).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/auth/yo', expect.anything())
   })
 
   test('con credenciales inválidas se queda en /login', async () => {

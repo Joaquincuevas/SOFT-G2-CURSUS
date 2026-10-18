@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router'
-import { DevRoleSelector } from '../session/DevRoleSelector'
 import { Header } from './Header'
 import { MenuIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -46,7 +45,6 @@ export function AppShell() {
           <Outlet />
         </div>
       </main>
-      {import.meta.env.DEV && <DevRoleSelector />}
     </div>
   )
 }

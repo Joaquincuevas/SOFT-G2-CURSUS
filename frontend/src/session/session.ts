@@ -1,70 +1,42 @@
-import type { Rol } from '@cursus/shared'
+import type { Accion, AppAbility, Sujeto, UsuarioSesion } from '@cursus/shared'
 import { createContext, useContext } from 'react'
 
-// Sesión simulada hasta que AUTH-06 conecte la real. Vive solo en memoria:
-// sin localStorage ni tokens.
+// Sesión del usuario: sus datos de GET /api/auth/yo y su ability de CASL.
 
-export interface SessionUser {
-  id: string
-  nombre: string
-  rol: Rol
-  universidadId: string
-  universidadNombre: string
-  // Solo el administrativo pertenece a una facultad en esta vista.
-  facultadNombre?: string
-  periodo: string
-}
+export type SessionUser = UsuarioSesion
 
 export interface SessionValue {
   user: SessionUser
-  setRol: (rol: Rol) => void
-  logout: () => void
+  ability: AppAbility
 }
 
-export const DEFAULT_ROL: Rol = 'ALUMNO'
-
-// Nombres de la Universidad Demo Norte del seed (backend/src/database/seed.ts).
-// El director ve todas las universidades: el Figma lo muestra como "Directorio".
-const MOCK_USERS: Record<
-  Rol,
-  Pick<SessionUser, 'nombre' | 'universidadNombre' | 'facultadNombre'>
-> = {
-  DIRECTOR: { nombre: 'Director Norte', universidadNombre: 'Directorio' },
-  ADMINISTRATIVO: {
-    nombre: 'Administrativo Ingeniería Norte',
-    universidadNombre: 'Universidad Demo Norte',
-    facultadNombre: 'Facultad de Ingeniería',
-  },
-  PROFESOR: {
-    nombre: 'Profesor Norte',
-    universidadNombre: 'Universidad Demo Norte',
-  },
-  AYUDANTE: {
-    nombre: 'Ayudante Norte',
-    universidadNombre: 'Universidad Demo Norte',
-  },
-  ALUMNO: {
-    nombre: 'Alumno Norte',
-    universidadNombre: 'Universidad Demo Norte',
-  },
-}
-
-export function mockUser(rol: Rol): SessionUser {
-  return {
-    id: `mock-${rol.toLowerCase()}`,
-    rol,
-    universidadId: 'mock-universidad',
-    // PERIODO del seed: año 2026, semestre 2.
-    periodo: '2026-2',
-    ...MOCK_USERS[rol],
-  }
-}
-
+// null mientras no hay sesión o todavía no llega /api/auth/yo.
 export const SessionContext = createContext<SessionValue | null>(null)
 
+// Solo dentro de las rutas protegidas (RequireAuth), donde la sesión ya cargó.
 export function useSession(): SessionValue {
   const session = useContext(SessionContext)
   if (!session)
-    throw new Error('useSession debe usarse dentro de SessionProvider')
+    throw new Error('useSession debe usarse dentro de una ruta con sesión')
   return session
+}
+
+// Para mostrar u ocultar acciones dentro de una página según los permisos
+// sobre tablas, por ejemplo usePuede('create', 'Curso').
+export function usePuede(accion: Accion, sujeto: Sujeto): boolean {
+  return useSession().ability.can(accion, sujeto)
+}
+
+// GET /api/auth/yo. Devuelve null si el token no es válido o el backend no
+// responde.
+export async function pedirUsuario(token: string): Promise<SessionUser | null> {
+  try {
+    const respuesta = await fetch('/api/auth/yo', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!respuesta.ok) return null
+    return (await respuesta.json()) as SessionUser
+  } catch {
+    return null
+  }
 }
