@@ -1,12 +1,17 @@
+import type { UsuarioSesion } from '@cursus/shared'
 import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
+  Req,
   UnauthorizedException,
 } from '@nestjs/common'
 import { AuthService } from './auth.service.js'
+import type { RequestConUsuario } from './jwt-auth.guard.js'
+import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
 
 // Argon2 procesa la contraseña completa: se limita su largo para que una
@@ -43,5 +48,17 @@ export class AuthController {
       throw new UnauthorizedException('Credenciales inválidas')
     }
     return { accessToken }
+  }
+
+  // Usuario de la sesión. 401 si el usuario del token ya no existe.
+  @SoloSesion()
+  @Get('yo')
+  async yo(@Req() req: RequestConUsuario): Promise<UsuarioSesion> {
+    const usuario =
+      req.usuario && (await this.auth.obtenerUsuario(req.usuario.sub))
+    if (!usuario) {
+      throw new UnauthorizedException()
+    }
+    return usuario
   }
 }

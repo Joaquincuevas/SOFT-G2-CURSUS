@@ -1,3 +1,4 @@
+import type { UsuarioSesion } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
@@ -9,7 +10,11 @@ import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
 import type { PayloadJwt } from '../../src/auth/auth.service.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
-import { ejecutarSeed, UNIVERSIDADES } from '../../src/database/seed.js'
+import {
+  ejecutarSeed,
+  PERIODO,
+  UNIVERSIDADES,
+} from '../../src/database/seed.js'
 
 // Base propia con el seed cargado, que se crea y se borra en cada ejecución.
 const BD_TEST = `${process.env.POSTGRES_TEST_DB ?? 'cursus_test'}_auth`
@@ -133,5 +138,112 @@ describe('POST /api/auth/login', () => {
       .get('/api')
       .set('Authorization', `Bearer ${token}`)
       .expect(200)
+  })
+})
+
+describe('GET /api/auth/yo', () => {
+  const yo = (token?: string) => {
+    const peticion = request(app.getHttpServer()).get('/api/auth/yo')
+    return token ? peticion.set('Authorization', `Bearer ${token}`) : peticion
+  }
+
+  // Un usuario de cada rol, y el de Salud Sur para cubrir la otra universidad.
+  const casos: (Omit<
+    UsuarioSesion,
+    'id' | 'universidadId' | 'periodoActivo'
+  > & {
+    correo: string
+  })[] = [
+    {
+      correo: 'director@norte.cursus.test',
+      nombre: 'Director Norte',
+      rol: 'DIRECTOR',
+      universidadNombre: 'Directorio',
+      facultadNombre: null,
+    },
+    {
+      correo: 'administrativo.ingenieria@norte.cursus.test',
+      nombre: 'Administrativo Ingeniería Norte',
+      rol: 'ADMINISTRATIVO',
+      universidadNombre: 'Universidad Demo Norte',
+      facultadNombre: 'Facultad de Ingeniería',
+    },
+    {
+      correo: 'profesor@norte.cursus.test',
+      nombre: 'Profesor Norte',
+      rol: 'PROFESOR',
+      universidadNombre: 'Universidad Demo Norte',
+      facultadNombre: 'Facultad de Ingeniería',
+    },
+    {
+      correo: 'ayudante@norte.cursus.test',
+      nombre: 'Ayudante Norte',
+      rol: 'AYUDANTE',
+      universidadNombre: 'Universidad Demo Norte',
+      facultadNombre: 'Facultad de Ingeniería',
+    },
+    {
+      correo: 'alumno@sur.cursus.test',
+      nombre: 'Alumno Sur',
+      rol: 'ALUMNO',
+      universidadNombre: 'Universidad Demo Sur',
+      facultadNombre: 'Facultad de Ciencias de la Salud',
+    },
+  ]
+
+  it.each(casos)(
+    '$correo ($rol) recibe sus datos y el período activo',
+    async ({ correo, ...esperado }) => {
+      const [usuario] = await bd.query<
+        { id: string; universidad_id: string }[]
+      >('SELECT id, universidad_id FROM usuario WHERE correo = $1', [correo])
+      const [periodo] = await bd.query<{ id: string }[]>(
+        'SELECT id FROM periodo WHERE universidad_id = $1 AND activo',
+        [usuario.universidad_id],
+      )
+
+      const respuesta = await yo(await tokenDe(correo)).expect(200)
+
+      expect(respuesta.body).toEqual({
+        id: usuario.id,
+        universidadId: usuario.universidad_id,
+        ...esperado,
+        periodoActivo: {
+          id: periodo.id,
+          anio: PERIODO.anio,
+          semestre: PERIODO.semestre,
+        },
+      } satisfies UsuarioSesion)
+    },
+  )
+
+  it('periodoActivo es null si la universidad no tiene uno activo', async () => {
+    const marcarActivo = (activo: boolean) =>
+      bd.query(
+        `UPDATE periodo SET activo = $1 WHERE universidad_id =
+           (SELECT id FROM universidad WHERE dominio_correo = 'sur.cursus.test')`,
+        [activo],
+      )
+    const token = await tokenDe('profesor@sur.cursus.test')
+    await marcarActivo(false)
+    try {
+      const respuesta = await yo(token).expect(200)
+      expect((respuesta.body as UsuarioSesion).periodoActivo).toBeNull()
+    } finally {
+      await marcarActivo(true)
+    }
+  })
+
+  it('responde 401 sin token', async () => {
+    await yo().expect(401)
+  })
+
+  it('responde 401 si el usuario del token ya no existe', async () => {
+    const token = new JwtService({ secret: process.env.JWT_SECRET }).sign({
+      sub: '00000000-0000-0000-0000-000000000000',
+      rol: 'ALUMNO',
+      universidad_id: '00000000-0000-0000-0000-000000000000',
+    } satisfies PayloadJwt)
+    await yo(token).expect(401)
   })
 })
