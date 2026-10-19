@@ -104,6 +104,14 @@
   color: var(--color-primary-light);
 }
 
+.login__error {
+  padding: var(--space-3);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+  color: var(--color-error);
+}
+
 .login__field {
   display: flex;
   flex-direction: column;
