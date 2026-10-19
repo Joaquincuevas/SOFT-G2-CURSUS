@@ -11,6 +11,7 @@ import { AmpliarLimiteLoginIp1792440000000 } from './migrations/1792440000000-Am
 import { AgregarArchivado1792441000000 } from './migrations/1792441000000-AgregarArchivado.js'
 import { ActivarRls1792441100000 } from './migrations/1792441100000-ActivarRls.js'
 import { PermitirLecturaDirector1792442000000 } from './migrations/1792442000000-PermitirLecturaDirector.js'
+import { CrearCurso1792443000000 } from './migrations/1792443000000-CrearCurso.js'
 import { NombreCarreraUnicoNormalizado1792450000000 } from './migrations/1792450000000-NombreCarreraUnicoNormalizado.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
@@ -44,6 +45,7 @@ export function opcionesDataSource(
       AgregarArchivado1792441000000,
       ActivarRls1792441100000,
       PermitirLecturaDirector1792442000000,
+      CrearCurso1792443000000,
       NombreCarreraUnicoNormalizado1792450000000,
     ],
     migrationsTableName: 'migraciones',

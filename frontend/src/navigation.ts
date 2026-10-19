@@ -1,5 +1,6 @@
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
+import { Cursos } from './pages/Cursos'
 import { Dashboard } from './pages/Dashboard'
 import { Carreras } from './pages/Carreras'
 import type { SessionUser } from './session/session'
@@ -61,6 +62,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
       user.rol === 'DIRECTOR' ? 'Gestión académica' : 'Mis Cursos',
     icon: 'book',
     permiso: { accion: 'read', sujeto: 'GestionAcademica' },
+    page: Cursos,
     title: () => 'Gestión académica',
     subtitle: (user) =>
       conSemestre(user.facultadNombre ?? user.universidadNombre, user),

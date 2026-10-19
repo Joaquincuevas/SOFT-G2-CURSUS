@@ -12,6 +12,8 @@ La sección GES-01 está destinada al administrativo. Los demás roles reciben 4
 
 ## API
 
+`CarrerasController` es el único responsable de `/api/carreras`. El formulario de crear cursos (GES-05) consume ese mismo listado con el tipo compartido `Carrera`; `GestionController` conserva períodos y creación de cursos. Se registran ambos módulos y las migraciones se ejecutan por timestamp: `CrearCurso1792443000000` antes de `NombreCarreraUnicoNormalizado1792450000000`.
+
 | Método | Ruta                | Cuerpo                               | Resultado                                       |
 | ------ | ------------------- | ------------------------------------ | ----------------------------------------------- |
 | GET    | `/api/carreras`     | Ninguno                              | 200, arreglo de `{ id, nombre }` de su facultad |
@@ -70,6 +72,7 @@ npm run dev:front
 8. En POST/PATCH agregar `facultad_id` o `universidad_id` al cuerpo. Esperado: 400. Agregar esos parámetros a GET no cambia el ámbito: sigue listando únicamente lo autorizado.
 9. Entrar con un profesor, alumno o Director e intentar `/carreras`: vuelve a su Dashboard y no aparece el enlace. Las tres operaciones de API deben rechazarse con 403 para esos roles; sin sesión, 401.
 10. Probar nombre vacío, solo espacios y más de 150 caracteres. Comprobar el error o la limitación del formulario; la API debe rechazar valores inválidos. Sin conexión, actualizar debe mostrar un error con Reintentar, y guardar no debe informar éxito ni borrar el formulario.
+11. Con el administrativo de Ingeniería, crear una carrera y editar su nombre. Abrir Cursos: la lista debe ofrecer el nombre actualizado y excluir carreras de otras facultades/universidades. Crear un curso con esa carrera y un período del listado; debe responder 201 y confirmar la carrera seleccionada. Verificar en Network que la lista se obtiene de `GET /api/carreras`.
 
 Los 400, 403, 404 y 409 de las pruebas negativas son esperados. No publicar tokens ni credenciales privadas en el PR. Las capturas muestran datos de validación local; no se agregan carreras de prueba al seed ni a las migraciones.
 
