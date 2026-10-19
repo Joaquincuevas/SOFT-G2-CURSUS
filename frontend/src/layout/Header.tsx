@@ -30,7 +30,10 @@ export function Header() {
   return (
     <header className="header">
       <div className="header__context">
-        <h1 className="header__title">{item?.title(user)}</h1>
+        {/* Sin ítem del menú, la ruta no existe y se muestra la 404. */}
+        <h1 className="header__title">
+          {item ? item.title(user) : 'Página no encontrada'}
+        </h1>
         <p className="header__subtitle">{item?.subtitle(user)}</p>
       </div>
       <div className="header__user">
