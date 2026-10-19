@@ -26,3 +26,4 @@ export interface UsuarioSesion {
 }
 
 export * from './permisos.js'
+export * from './cursos.js'
