@@ -8,6 +8,10 @@ import type { Rol } from './index.js'
 // Permisos por rol con CASL. Los usan el backend (PermisosGuard) y el frontend
 // (menú, rutas y botones), así que son la única fuente de qué puede hacer cada
 // rol.
+//
+// Regla del cliente: nada se elimina, solo se archiva (archived_at). Por eso
+// ningún rol recibe 'delete' ni 'manage' (que en CASL incluye 'delete') sobre
+// ningún sujeto.
 
 export type Accion = 'manage' | 'create' | 'read' | 'update' | 'delete'
 
@@ -50,9 +54,10 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       break
     case 'ADMINISTRATIVO':
       can('read', ['Universidad', 'Facultad'])
-      can('manage', ['Carrera', 'Periodo', 'Curso'])
-      // Sin delete: los usuarios se archivan con archived_at.
-      can(['create', 'read', 'update'], 'Usuario')
+      can(
+        ['create', 'read', 'update'],
+        ['Carrera', 'Periodo', 'Curso', 'Usuario'],
+      )
       can('read', 'GestionAcademica')
       break
     case 'PROFESOR':

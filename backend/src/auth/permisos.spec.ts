@@ -23,7 +23,8 @@ const SECCIONES: SujetoSeccion[] = [
   'GestionAcademica',
   'MisCursos',
 ]
-const TODO: AccionConcreta[] = ACCIONES
+// Nada se elimina, solo se archiva: nadie tiene delete.
+const SIN_DELETE: AccionConcreta[] = ['create', 'read', 'update']
 const LECTURA: AccionConcreta[] = ['read']
 
 // Matriz rol × permiso esperada. Lo que no aparece está denegado.
@@ -40,11 +41,10 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
   ADMINISTRATIVO: {
     Universidad: LECTURA,
     Facultad: LECTURA,
-    Carrera: TODO,
-    Periodo: TODO,
-    // Sin delete: los usuarios se archivan.
-    Usuario: ['create', 'read', 'update'],
-    Curso: TODO,
+    Carrera: SIN_DELETE,
+    Periodo: SIN_DELETE,
+    Usuario: SIN_DELETE,
+    Curso: SIN_DELETE,
   },
   PROFESOR: {
     Universidad: LECTURA,
@@ -117,6 +117,16 @@ describe('definirAbilityPara', () => {
   it('ningún rol tiene manage sobre all', () => {
     for (const rol of ROLES) {
       expect(definirAbilityPara({ rol }).can('manage', 'all')).toBe(false)
+    }
+  })
+
+  it('ningún rol tiene manage ni delete sobre ningún sujeto', () => {
+    for (const rol of ROLES) {
+      const ability = definirAbilityPara({ rol })
+      for (const sujeto of [...SUJETOS, ...SECCIONES]) {
+        expect(ability.can('manage', sujeto)).toBe(false)
+        expect(ability.can('delete', sujeto)).toBe(false)
+      }
     }
   })
 
