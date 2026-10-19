@@ -97,7 +97,17 @@ Excepciones, que usan `BaseDeDatos.query`:
 - El límite de login usa `limite_login` por cuenta o IP antes de tener una universidad de sesión. Sus bloqueos, autenticación y emisión de tokens se ejecutan con `BaseDeDatos.enTransaccion` en una misma conexión; ver [AUTH-07](../docs/auth-07-rate-limiting-login.md).
 - `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
 
-Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03.
+Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03 (ver [ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+
+### Row-Level Security
+
+Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-Level Security (migración `ActivarRls`), así que un filtro olvidado no expone datos de otra universidad.
+
+- `consultarEnUniversidad` ejecuta cada consulta en una transacción con el rol `cursus_app` (`SET LOCAL ROLE`) y la universidad fijada en `app.universidad_id` (`set_config(..., true)`). Los dos duran solo esa transacción, así que no pasan a otra consulta que reciba la misma conexión del pool.
+- `universidad`, `facultad`, `carrera`, `periodo` y `usuario` tienen la política `pol_<tabla>_universidad`: con `cursus_app` solo se leen, crean o modifican filas de la universidad fijada. Sin universidad fijada, una consulta no devuelve filas.
+- `cursus_app` tiene `SELECT`, `INSERT` y `UPDATE`, pero no `DELETE`: nada institucional se borra, se archiva con `archived_at`. Un usuario archivado no puede iniciar sesión, renovar su sesión ni seguir usando su JWT.
+- El dueño de las tablas (el usuario de `POSTGRES_USER`) no pasa por RLS: lo usan las migraciones, el seed y las excepciones de arriba.
+- Una tabla nueva con `universidad_id` necesita sus permisos para `cursus_app`, `ENABLE ROW LEVEL SECURITY` y su política. Si falta, el test de contrato de `test/multitenant/rls.db-spec.ts` falla.
 
 ## Sesión
 

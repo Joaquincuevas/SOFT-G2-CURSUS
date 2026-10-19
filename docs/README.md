@@ -9,3 +9,4 @@ Documentación del proyecto:
 - `informes/`: entregas e informes del curso
 - `c4/`: diagramas C4 (contexto, contenedores, componentes)
 - `adr/`: Architecture Decision Records (`NNNN-titulo.md`)
+  - [0001: acceso del Director entre universidades](adr/0001-acceso-del-director-entre-universidades.md)

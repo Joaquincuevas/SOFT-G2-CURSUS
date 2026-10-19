@@ -44,6 +44,18 @@ class FacultadesPruebaController {
     )
   }
 
+  // Usa $1 pero no filtra por universidad: pasa el chequeo de la consulta y
+  // solo RLS (MT-02) la aísla.
+  @Puede('read', 'Facultad')
+  @Get('facultades-sin-filtro')
+  listarSinFiltro(@UniversidadActual() universidadId: string) {
+    return this.bd.consultarEnUniversidad<Facultad>(
+      universidadId,
+      `SELECT id, nombre, universidad_id FROM facultad
+        WHERE $1::uuid IS NOT NULL ORDER BY nombre`,
+    )
+  }
+
   @Puede('read', 'Facultad')
   @Get('facultades/:id')
   obtener(
@@ -142,6 +154,14 @@ describe('aislamiento entre universidades', () => {
 
     it('lista solo las facultades de su universidad', async () => {
       const respuesta = await pedir('/api/prueba/facultades', token).expect(200)
+      expect(respuesta.body).toEqual(await facultadesDe(dominio))
+    })
+
+    it('con una consulta que olvida el filtro, RLS igual devuelve solo su universidad', async () => {
+      const respuesta = await pedir(
+        '/api/prueba/facultades-sin-filtro',
+        token,
+      ).expect(200)
       expect(respuesta.body).toEqual(await facultadesDe(dominio))
     })
 
