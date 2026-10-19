@@ -5,10 +5,12 @@ import request from 'supertest'
 import { App } from 'supertest/types.js'
 import { AppModule } from './../src/app.module.js'
 import { configurarApp } from './../src/config/configurar-app.js'
+import { AuthService } from './../src/auth/auth.service.js'
 
 // Tokens firmados como los del backend (mismo secreto que vitest.config.e2e.ts).
 const jwt = new JwtService({ secret: process.env.JWT_SECRET })
 const payload = {
+  sid: '00000000-0000-0000-0000-000000000003',
   sub: '00000000-0000-0000-0000-000000000001',
   rol: 'ALUMNO',
   universidad_id: '00000000-0000-0000-0000-000000000002',
@@ -20,7 +22,10 @@ describe('rutas protegidas (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile()
+    })
+      .overrideProvider(AuthService)
+      .useValue({ sesionActiva: () => Promise.resolve(true) })
+      .compile()
 
     app = moduleFixture.createNestApplication()
     configurarApp(app, { secretoOrigen: '' })
@@ -39,6 +44,15 @@ describe('rutas protegidas (e2e)', () => {
 
   it('responde 401 con un token mal formado', () => {
     return getApi().set('Authorization', 'Bearer no-es-un-jwt').expect(401)
+  })
+
+  it('responde 401 con un JWT anterior sin identificador de sesión', () => {
+    const anterior = jwt.sign({
+      sub: payload.sub,
+      rol: payload.rol,
+      universidad_id: payload.universidad_id,
+    })
+    return getApi().set('Authorization', `Bearer ${anterior}`).expect(401)
   })
 
   it('responde 401 con un token firmado con otro secreto', () => {

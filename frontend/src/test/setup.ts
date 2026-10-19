@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+
+beforeEach(() => localStorage.clear())
 
 // Sin `globals: true`, RTL no registra su cleanup automático
 afterEach(cleanup)
