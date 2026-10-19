@@ -1,6 +1,5 @@
 import type { UsuarioSesion } from '@cursus/shared'
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,14 +11,11 @@ import {
 } from '@nestjs/common'
 import type { CookieOptions, Request, Response } from 'express'
 import { AuthService, type TokensSesion } from './auth.service.js'
+import { LoginDto } from './login.dto.js'
 import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
 import { UniversidadActual } from './universidad-actual.decorator.js'
-
-// Argon2 procesa la contraseña completa: se limita su largo para que una
-// petición no pueda consumir CPU con textos enormes.
-const LARGO_MAXIMO = 256
 
 export interface RespuestaLogin {
   accessToken: string
@@ -54,21 +50,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   async login(
-    @Body() body: unknown,
+    // El ValidationPipe global valida el body con LoginDto (400 si no calza).
+    @Body() { correo, password }: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaLogin> {
-    const { correo, password } = (body ?? {}) as Record<string, unknown>
-    if (
-      typeof correo !== 'string' ||
-      typeof password !== 'string' ||
-      !correo ||
-      !password ||
-      correo.length > LARGO_MAXIMO ||
-      password.length > LARGO_MAXIMO
-    ) {
-      throw new BadRequestException('Correo y contraseña son obligatorios')
-    }
-
     const tokens = await this.auth.iniciarSesion(correo, password)
     // Mismo mensaje si el correo no existe o la contraseña no calza.
     if (!tokens) {

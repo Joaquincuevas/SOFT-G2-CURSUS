@@ -124,3 +124,21 @@ test('sin período activo, el subtítulo muestra solo la universidad', async () 
   const header = within(await screen.findByRole('banner'))
   expect(header.getByText('Universidad Demo Norte')).toBeInTheDocument()
 })
+
+test('un nombre con HTML se muestra como texto y no crea un <script>', async () => {
+  const nombre = '<script>alert(1)</script>'
+  const fetch = simularBackend('ALUMNO')
+  fetch.mockImplementation(() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ ...usuarioDePrueba('ALUMNO'), nombre })),
+    ),
+  )
+  renderSinEsperar('/', 'jwt-de-prueba')
+
+  const banner = await screen.findByRole('banner')
+  expect(within(banner).getByRole('heading', { level: 1 })).toHaveTextContent(
+    `Bienvenido/a, ${nombre}`,
+  )
+  expect(within(banner).getByText(nombre)).toBeInTheDocument()
+  expect(document.querySelector('script')).toBeNull()
+})

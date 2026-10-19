@@ -52,9 +52,12 @@ describe('inicio de sesión', () => {
       }),
     )
     // Con el token arma la sesión real.
-    expect(fetch).toHaveBeenCalledWith('/api/auth/yo', {
-      headers: { Authorization: 'Bearer jwt-de-prueba' },
-    })
+    const [, init] = fetch.mock.calls.find(
+      ([url]) => url === '/api/auth/yo',
+    ) as unknown as [string, RequestInit]
+    expect(new Headers(init.headers).get('Authorization')).toBe(
+      'Bearer jwt-de-prueba',
+    )
   })
 
   test('si /api/auth/yo rechaza el token, vuelve a /login', async () => {
