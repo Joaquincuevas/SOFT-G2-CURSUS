@@ -13,7 +13,16 @@ const CHECK = '23514'
 const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
-const TABLAS = ['carrera', 'facultad', 'periodo', 'universidad', 'usuario']
+const TABLAS = [
+  'carrera',
+  'facultad',
+  'limite_login',
+  'periodo',
+  'refresh_token',
+  'sesion_auth',
+  'universidad',
+  'usuario',
+]
 
 let admin: DataSource
 let bd: DataSource
@@ -139,15 +148,52 @@ afterAll(async () => {
   }
 })
 
-describe('migración EsquemaInicial', () => {
-  it('se aplica y se revierte', async () => {
+describe('migraciones', () => {
+  it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
+    // ActivarRls y AgregarArchivado no crean tablas.
+    await bd.undoLastMigration()
+    await bd.undoLastMigration()
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    await bd.query(
+      `INSERT INTO limite_login (clave, fallos) VALUES (repeat('a', 64), ARRAY(SELECT clock_timestamp() FROM generate_series(1, 20)))`,
+    )
+    await bd.undoLastMigration()
+    const [{ cantidad }] = await bd.query<{ cantidad: number }[]>(
+      'SELECT cardinality(fallos) AS cantidad FROM limite_login',
+    )
+    expect(cantidad).toBe(5)
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter((tabla) => tabla !== 'limite_login'),
+    )
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter(
+        (tabla) => tabla !== 'sesion_auth' && tabla !== 'limite_login',
+      ),
+    )
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter(
+        (tabla) =>
+          tabla !== 'refresh_token' &&
+          tabla !== 'sesion_auth' &&
+          tabla !== 'limite_login',
+      ),
+    )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual([])
     const [{ restos }] = await bd.query<{ restos: string }[]>(
       `SELECT (SELECT count(*) FROM pg_type WHERE typname = 'rol_usuario')
             + (SELECT count(*) FROM pg_proc WHERE proname = 'actualizar_updated_at')
+            + (SELECT count(*) FROM pg_proc WHERE proname = 'universidad_actual')
+            + (SELECT count(*) FROM pg_proc WHERE proname = 'rol_actual')
               AS restos`,
     )
     expect(Number(restos)).toBe(0)
@@ -164,7 +210,12 @@ describe('migración EsquemaInicial', () => {
        WHERE table_schema = 'public' AND column_name IN ('id', 'created_at', 'updated_at')`,
     )
 
-    for (const tabla of TABLAS) {
+    // refresh_token usa creado_en y no tiene updated_at: sus filas no cambian
+    // salvo revocado_en.
+    for (const tabla of TABLAS.filter(
+      (t) =>
+        t !== 'refresh_token' && t !== 'sesion_auth' && t !== 'limite_login',
+    )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
         expect.arrayContaining([
@@ -174,6 +225,23 @@ describe('migración EsquemaInicial', () => {
         ]),
       )
     }
+  })
+
+  it('agrega archived_at opcional a las tablas que se archivan', async () => {
+    const filas = await bd.query<
+      { table_name: string; data_type: string; is_nullable: string }[]
+    >(
+      `SELECT table_name, data_type, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND column_name = 'archived_at'
+       ORDER BY table_name`,
+    )
+    expect(filas).toEqual(
+      ['carrera', 'facultad', 'universidad', 'usuario'].map((tabla) => ({
+        table_name: tabla,
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+      })),
+    )
   })
 
   it('indexa la FK compuesta de usuario a facultad', async () => {
@@ -529,6 +597,27 @@ describe('periodo', () => {
       ).rejects.toMatchObject({
         code: UNIQUE,
         constraint: 'uq_periodo_universidad_anio_semestre',
+      })
+    }))
+})
+
+describe('refresh_token', () => {
+  it('rechaza un hash que no es sha256 en hex', () =>
+    enTransaccion(async (q) => {
+      const universidadId = await crearUniversidad(q, 'U', 'u.cl')
+      const usuarioId = await crearUsuario(q, {
+        universidadId,
+        correo: 'a@u.cl',
+      })
+      await expect(
+        q.query(
+          `INSERT INTO refresh_token (usuario_id, hash, expira_en)
+           VALUES ($1, 'token-en-texto-plano', now())`,
+          [usuarioId],
+        ),
+      ).rejects.toMatchObject({
+        code: CHECK,
+        constraint: 'ck_refresh_token_hash',
       })
     }))
 })

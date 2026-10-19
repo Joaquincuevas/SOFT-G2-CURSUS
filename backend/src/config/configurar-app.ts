@@ -1,6 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import type { INestApplication } from '@nestjs/common'
+import { type INestApplication, ValidationPipe } from '@nestjs/common'
 import type { NextFunction, Request, Response } from 'express'
+import { ORIGEN_VERIFICADO, type RequestLogin } from '../auth/ip-login.js'
+import helmet from 'helmet'
 
 export const PREFIJO_API = 'api'
 export const HEADER_SECRETO = 'x-origin-secret'
@@ -19,6 +21,24 @@ export function configurarApp(
   { secretoOrigen = process.env.ORIGIN_SECRET }: OpcionesApp = {},
 ): void {
   app.setGlobalPrefix(PREFIJO_API)
+  // La API solo devuelve JSON: la CSP no permite cargar ni embeber nada. El
+  // resto de las cabeceras son los defaults de helmet (nosniff, HSTS, etc.).
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+      },
+    }),
+  )
+  // Todo body se valida con su DTO; un campo no declarado responde 400.
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  )
   app.use(sinCache)
   if (secretoOrigen) {
     app.use(exigirSecretoOrigen(secretoOrigen))
@@ -35,7 +55,7 @@ function sinCache(_req: Request, res: Response, next: NextFunction) {
 // directo a API Gateway sin él se rechazan.
 function exigirSecretoOrigen(secreto: string) {
   const esperado = resumen(secreto)
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: RequestLogin, res: Response, next: NextFunction) => {
     if (RUTAS_SIN_SECRETO.has(req.path)) {
       return next()
     }
@@ -47,6 +67,7 @@ function exigirSecretoOrigen(secreto: string) {
       res.status(403).json({ statusCode: 403, message: 'Forbidden' })
       return
     }
+    req[ORIGEN_VERIFICADO] = true
     next()
   }
 }

@@ -31,6 +31,105 @@ El puerto se puede cambiar con la variable de entorno `PORT`.
 - Si `ORIGIN_SECRET` está definido, toda petición sin el header `x-origin-secret` correcto recibe `403` (salvo `/api/health`). En local va vacío y la validación se desactiva.
 - Todas las respuestas llevan `Cache-Control: no-store`.
 
+## Permisos por endpoint
+
+Cada ruta debe declarar quién puede usarla. Los guards globales corren en este orden: `JwtAuthGuard` (sin sesión → `401`) y después `PermisosGuard` (sin permiso → `403`).
+
+| Decorador                     | Quién puede usar la ruta                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `@Public()`                   | Cualquiera, sin sesión                                                                |
+| `@SoloSesion()`               | Cualquier usuario con sesión, sin importar su rol                                     |
+| `@Puede('create', 'Carrera')` | Los roles cuya ability permite esa acción sobre ese sujeto (ver `@cursus/shared`)     |
+| _(ninguno)_                   | Nadie: responde `403`, para que olvidar el decorador cierre la ruta en vez de abrirla |
+
+```ts
+@Puede('read', 'Universidad')
+@Get()
+listar() { ... }
+```
+
+Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y las usa también el frontend.
+
+Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
+
+## Validación de entradas
+
+Un `ValidationPipe` global (en `src/config/configurar-app.ts`) valida cada body con su DTO. Un campo no declarado o un valor inválido responde `400`.
+
+- Cada `@Body()` nuevo debe tiparse con una **clase** DTO con decoradores de `class-validator`, en un archivo `<nombre>.dto.ts` (por ejemplo, `src/auth/login.dto.ts`).
+- Un body tipado como `unknown`, como interfaz o como tipo **no se valida**: el pipe solo valida clases.
+
+```ts
+export class LoginDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(256)
+  correo!: string
+}
+
+@Post('login')
+login(@Body() { correo }: LoginDto) { ... }
+```
+
+## Aislamiento por universidad
+
+Toda consulta a una tabla con datos institucionales se filtra por la universidad del usuario de la sesión. Un usuario nunca ve datos de otra universidad, y pedir un recurso de otra universidad responde `404`, igual que si no existiera.
+
+- `@UniversidadActual()` entrega la universidad y el rol del JWT (`ContextoUniversidad`). Es el único punto del backend donde se leen.
+- `BaseDeDatos.consultarEnUniversidad(contexto, sql, parametros)` ejecuta la consulta con la universidad como `$1`; los demás parámetros siguen desde `$2`. Falla si la consulta no usa `$1`.
+- `BaseDeDatos.obtenerEnUniversidad(...)` hace lo mismo para un solo recurso y responde `404` si no lo encuentra.
+
+```ts
+@Puede('read', 'Facultad')
+@Get(':id')
+obtener(@UniversidadActual() contexto: ContextoUniversidad, @Param('id', ParseUUIDPipe) id: string) {
+  return this.bd.obtenerEnUniversidad<Facultad>(
+    contexto,
+    'SELECT id, nombre FROM facultad WHERE universidad_id = $1 AND id = $2',
+    [id],
+  )
+}
+```
+
+Excepciones, que usan `BaseDeDatos.query`:
+
+- `POST /api/auth/login` busca al usuario por el dominio de su correo, porque antes del login no hay universidad de sesión.
+- El límite de login usa `limite_login` por cuenta o IP antes de tener una universidad de sesión. Sus bloqueos, autenticación y emisión de tokens se ejecutan con `BaseDeDatos.enTransaccion` en una misma conexión; ver [AUTH-07](../docs/auth-07-rate-limiting-login.md).
+- `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
+
+Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades.
+
+### Director
+
+El Director lee los datos de todas las universidades, pero no modifica ninguno, ni los de su universidad de origen ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+
+- Para la vista consolidada se usa `BaseDeDatos.consultarEnTodasLasUniversidades(contexto, sql, parametros)`. Responde `403` a cualquier otro rol, no exige `$1` y corre en una transacción `READ ONLY`, así que la base rechaza cualquier escritura.
+- Para lo que es solo de su universidad (por ejemplo, `/api/auth/yo`), usa `consultarEnUniversidad` como los demás roles.
+- En la API, sus permisos son de solo lectura (`definirAbilityPara`). En la base, RLS tampoco le deja crear ni modificar (ver abajo).
+
+Los tests están en `test/multitenant/director.db-spec.ts`.
+
+### Row-Level Security
+
+Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-Level Security (migración `ActivarRls`), así que un filtro olvidado no expone datos de otra universidad.
+
+- `consultarEnUniversidad` ejecuta cada consulta en una transacción con el rol `cursus_app` (`SET LOCAL ROLE`), y con la universidad y el rol de la sesión fijados en `app.universidad_id` y `app.rol` (`set_config(..., true)`). Duran solo esa transacción, así que no pasan a otra consulta que reciba la misma conexión del pool.
+- `universidad`, `facultad`, `carrera`, `periodo` y `usuario` tienen tres políticas para `cursus_app` (migración `PermitirLecturaDirector`):
+  - `pol_<tabla>_lectura` (`SELECT`): filas de la universidad fijada, o de todas si el rol es `DIRECTOR`.
+  - `pol_<tabla>_insercion` y `pol_<tabla>_modificacion` (`INSERT` y `UPDATE`): solo filas de la universidad fijada, con un rol fijado que no sea `DIRECTOR`.
+- Sin universidad fijada, una consulta no devuelve filas (salvo para el Director).
+- `cursus_app` tiene `SELECT`, `INSERT` y `UPDATE`, pero no `DELETE`: nada institucional se borra, se archiva con `archived_at`. Un usuario archivado no puede iniciar sesión, renovar su sesión ni seguir usando su JWT.
+- El dueño de las tablas (el usuario de `POSTGRES_USER`) no pasa por RLS: lo usan las migraciones, el seed y las excepciones de arriba.
+- Una tabla nueva con `universidad_id` necesita sus permisos para `cursus_app`, `ENABLE ROW LEVEL SECURITY` y sus tres políticas. Si falta algo, el test de contrato de `test/multitenant/rls.db-spec.ts` falla.
+
+## Sesión
+
+- `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
+- Login responde `429` desde el quinto fallo por cuenta o el vigésimo por IP dentro de una ventana móvil de 15 minutos, con `Retry-After` en segundos. Un éxito anterior al bloqueo reinicia ambos contadores. Con `ORIGIN_SECRET`, se usa la IP única de `x-vercel-forwarded-for`; si falta, se aplica solo el límite de cuenta y se registra un aviso sin datos del cliente. Una cabecera inválida responde 400. En local se usa el socket. Se conservan `LoginDto`, `ValidationPipe` y helmet.
+- `POST /api/auth/refresh` cambia la cookie por un JWT nuevo y rota el refresh token. Responde `401` y borra la cookie si el token no existe, expiró o fue revocado. Reusar un token ya rotado revoca todas las sesiones del usuario.
+- `POST /api/auth/logout` revoca el refresh token de la cookie y la borra. Siempre responde `204`.
+- El refresh token es opaco (32 bytes aleatorios) y en la tabla `refresh_token` solo se guarda su sha256. Dura `JWT_REFRESH_EXPIRES_IN` (7 días por defecto) desde su último uso.
+
 ## Variables de entorno
 
 Con `NODE_ENV=production` (la imagen Docker), la API no arranca si falta `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` u `ORIGIN_SECRET`, y las migraciones no corren si falta alguna de las `POSTGRES_*`. En local se usan los valores por defecto. `POSTGRES_SSL=true` activa SSL hacia la base (RDS). Ver `.env.example`.

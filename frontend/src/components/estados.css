@@ -1,0 +1,90 @@
+/* Estados comunes (UI-03). El Figma no tiene pantallas de carga, error ni 404:
+   se usan los tokens y la misma card que el resto de la app. */
+.estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: var(--estado-max-width);
+  padding: var(--space-7);
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  box-shadow: var(--shadow-card);
+}
+
+/* Variante de página completa: centrada en la ventana, sobre surface. */
+.estado-pagina {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.estado__titulo {
+  margin: 0;
+  font: var(--font-h3);
+  color: var(--color-text-primary);
+}
+
+.estado__texto {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
+.estado__titulo--error {
+  color: var(--color-error);
+}
+
+.estado__boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--button-height);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-radius: var(--radius-md);
+  font: var(--font-button);
+  color: var(--color-background);
+  background: var(--color-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.estado__boton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Cargando: spinner y texto en una línea, sin card. */
+.cargando {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
+.cargando__spinner {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  border: 2px solid var(--color-primary-light);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: cargando-giro 0.8s linear infinite;
+}
+
+@keyframes cargando-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cargando__spinner {
+    animation: none;
+  }
+}

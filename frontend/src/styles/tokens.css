@@ -17,6 +17,8 @@
   --color-border: #e0e0e0;
   --color-success: #2e7d32;
   --color-warning: #f57c00;
+  /* No está en el Figma: mensajes de error del formulario de acceso. */
+  --color-error: #b3261e;
   /* No está en el Figma: fondo detrás del menú abierto en pantallas angostas. */
   --color-backdrop: rgb(13 43 69 / 40%);
 
@@ -28,23 +30,37 @@
   --font-button: 500 14px/20px var(--font-family);
   --font-caption: 400 12px/18px var(--font-family);
   --font-logo: 700 22px/27px var(--font-family);
+  --font-logo-lg: 700 24px / normal var(--font-family);
   --font-avatar: 600 13px / normal var(--font-family);
   --letter-spacing-logo: 2px;
 
   /* Espaciado */
   --space-0-5: 2px;
   --space-1: 4px;
+  --space-1-5: 6px;
+  --space-1-75: 7px;
+  --space-2: 8px;
   --space-2-5: 10px;
   --space-3: 12px;
+  --space-3-5: 14px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-6-5: 26px;
+  --space-7: 28px;
   --space-8: 32px;
+  --space-12: 48px;
+  --space-14: 56px;
 
   /* Radios */
   --radius-icon: 1.5px;
+  --radius-sm: 2px;
   --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-full: 9999px;
+
+  /* Sombras */
+  --shadow-card: 0 2px 4px rgb(0 0 0 / 8%);
 
   /* Medidas del layout */
   --sidebar-width: 260px;
@@ -52,6 +68,20 @@
   --avatar-size: 36px;
   --icon-size: 20px;
   --control-size: 40px;
+  --input-height: 46px;
+  --button-height: 42px;
+  --dot-size: 8px;
+
+  /* Login (nodo 66:2 del Figma) */
+  --login-brand-width: 560px;
+  --login-brand-message-width: 420px;
+  --login-brand-message-height: 160px;
+  --login-brand-text-width: 390px;
+  --login-accent-width: 42px;
+  --login-form-width: 480px;
+
+  /* Estados de carga, error y 404 (UI-03): no están en el Figma. */
+  --estado-max-width: 480px;
   /* Breakpoint del menú lateral: 1024px. El Figma no define uno; las media
      queries no aceptan variables, así que se repite en los .css que lo usan. */
 }
