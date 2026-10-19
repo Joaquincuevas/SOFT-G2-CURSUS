@@ -13,6 +13,7 @@ import {
   pedirLogout,
   pedirToken,
   renovarToken,
+  SESION_CERRADA,
 } from './auth'
 
 interface Props {
@@ -27,9 +28,12 @@ export function AuthProvider({ children, initialToken = null }: Props) {
   const [aviso, setAviso] = useState<string | null>(null)
   // JWT vigente, que cambia al renovar sin volver a renderizar.
   const vigente = useRef(initialToken)
+  const generacion = useRef(0)
+  const cierreEnCurso = useRef<Promise<void> | null>(null)
   const navigate = useNavigate()
 
   const empezar = useCallback((nuevo: string) => {
+    localStorage.removeItem(SESION_CERRADA)
     vigente.current = nuevo
     setAviso(null)
     setToken(nuevo)
@@ -39,8 +43,9 @@ export function AuthProvider({ children, initialToken = null }: Props) {
   useEffect(() => {
     if (initialToken) return
     let montado = true
+    const version = generacion.current
     void renovarToken().then((nuevo) => {
-      if (!montado) return
+      if (!montado || version !== generacion.current) return
       if (nuevo) empezar(nuevo)
       setRestaurando(false)
     })
@@ -54,17 +59,38 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       // Ya cerrada: por ejemplo, SessionProvider no debe borrar el aviso que
       // dejó fetchConSesion al fallar la renovación.
       if (!vigente.current) return
-      await pedirLogout()
+      generacion.current += 1
+      localStorage.setItem(SESION_CERRADA, '1')
       vigente.current = null
       setAviso(motivo ?? null)
       setToken(null)
+      setRestaurando(false)
       navigate('/login', { replace: true })
+      cierreEnCurso.current = pedirLogout()
+      await cierreEnCurso.current
     },
     [navigate],
   )
 
+  useEffect(() => {
+    const alCerrarEnOtraPestana = (event: StorageEvent) => {
+      if (event.key !== SESION_CERRADA || !event.newValue) return
+      generacion.current += 1
+      vigente.current = null
+      setToken(null)
+      setRestaurando(false)
+      setAviso(null)
+      navigate('/login', { replace: true })
+    }
+    window.addEventListener('storage', alCerrarEnOtraPestana)
+    return () => window.removeEventListener('storage', alCerrarEnOtraPestana)
+  }, [navigate])
+
   const fetchConSesion = useCallback(
     async (ruta: string, init: RequestInit = {}) => {
+      const version = generacion.current
+      const cerrada = () => version !== generacion.current || !vigente.current
+      if (cerrada()) return new Response(null, { status: 401 })
       // new Headers acepta cualquier forma de init.headers (objeto, arreglo o
       // Headers); un spread de un Headers perdería sus valores.
       const pedir = (jwt: string | null) => {
@@ -73,12 +99,15 @@ export function AuthProvider({ children, initialToken = null }: Props) {
         return fetch(ruta, { ...init, headers })
       }
       const respuesta = await pedir(vigente.current)
+      if (cerrada()) return new Response(null, { status: 401 })
       if (respuesta.status !== 401) return respuesta
 
       const nuevo = await renovarToken()
+      if (cerrada()) return new Response(null, { status: 401 })
       if (nuevo) {
         vigente.current = nuevo
         const reintento = await pedir(nuevo)
+        if (cerrada()) return new Response(null, { status: 401 })
         if (reintento.status !== 401) return reintento
       }
       await cerrarSesion(AVISO_SESION_EXPIRADA)
@@ -93,7 +122,10 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       restaurando,
       aviso,
       iniciarSesion: async (correo: string, password: string) => {
+        await cierreEnCurso.current
+        const version = ++generacion.current
         const nuevo = await pedirToken(correo, password)
+        if (version !== generacion.current) return false
         if (nuevo) empezar(nuevo)
         return nuevo !== null
       },

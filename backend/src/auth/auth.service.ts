@@ -8,6 +8,7 @@ import { BaseDeDatos } from '../database/base-de-datos.service.js'
 
 // Contenido del JWT de sesión.
 export interface PayloadJwt {
+  sid?: string
   sub: string
   rol: Rol
   universidad_id: string
@@ -92,17 +93,27 @@ export class AuthService {
     // afectadas] para un UPDATE suelto.
     // Pendiente para MT-02: usuario aún no tiene archived_at; cuando exista,
     // un usuario archivado no debe poder renovar su sesión.
-    const [usuario] = await this.bd.query<Omit<Credenciales, 'password_hash'>>(
+    const [usuario] = await this.bd.query<
+      Omit<Credenciales, 'password_hash'> & { sesion_id: string }
+    >(
       `WITH rotado AS (
          UPDATE refresh_token SET revocado_en = now()
           WHERE hash = $1 AND revocado_en IS NULL AND expira_en > now()
-          RETURNING usuario_id
+            AND sesion_id IN (SELECT id FROM sesion_auth WHERE revocado_en IS NULL)
+          RETURNING usuario_id, sesion_id
        )
-       SELECT u.id, u.rol, u.universidad_id
+       SELECT u.id, u.rol, u.universidad_id, rotado.sesion_id
          FROM rotado JOIN usuario u ON u.id = rotado.usuario_id`,
       [hashToken],
     )
     if (!usuario) {
+      await this.bd.query(
+        `UPDATE sesion_auth SET revocado_en = now()
+          WHERE usuario_id = (SELECT usuario_id FROM refresh_token
+            WHERE hash = $1 AND revocado_en IS NOT NULL)
+            AND revocado_en IS NULL`,
+        [hashToken],
+      )
       await this.bd.query(
         `UPDATE refresh_token SET revocado_en = now()
           WHERE revocado_en IS NULL
@@ -114,33 +125,60 @@ export class AuthService {
       )
       return null
     }
-    return this.emitirTokens(usuario)
+    return this.emitirTokens(usuario, usuario.sesion_id)
   }
 
   // Revoca el refresh token, si sigue activo. No avisa si no existía.
   async cerrarSesion(refreshToken: string): Promise<void> {
+    // También cubre un token que acaba de rotarse en otra petición: todos los
+    // descendientes pertenecen a la misma sesión y quedan inutilizables.
+    await this.bd.query(
+      `UPDATE sesion_auth SET revocado_en = now()
+        WHERE id = (SELECT sesion_id FROM refresh_token WHERE hash = $1)
+          AND revocado_en IS NULL`,
+      [hashDe(refreshToken)],
+    )
     await this.bd.query(
       `UPDATE refresh_token SET revocado_en = now()
-        WHERE hash = $1 AND revocado_en IS NULL`,
+        WHERE sesion_id = (SELECT sesion_id FROM refresh_token WHERE hash = $1)
+          AND revocado_en IS NULL`,
       [hashDe(refreshToken)],
     )
   }
 
   private async emitirTokens(
     usuario: Omit<Credenciales, 'password_hash'>,
+    sesionId?: string,
   ): Promise<TokensSesion> {
+    if (!sesionId) {
+      const [sesion] = await this.bd.query<{ id: string }>(
+        `INSERT INTO sesion_auth (usuario_id) VALUES ($1) RETURNING id`,
+        [usuario.id],
+      )
+      sesionId = sesion.id
+    }
     const refreshToken = randomBytes(32).toString('base64url')
     await this.bd.query(
-      `INSERT INTO refresh_token (usuario_id, hash, expira_en)
-       VALUES ($1, $2, now() + make_interval(secs => $3))`,
-      [usuario.id, hashDe(refreshToken), this.segundosRefresh],
+      `INSERT INTO refresh_token (usuario_id, hash, expira_en, sesion_id)
+       VALUES ($1, $2, now() + make_interval(secs => $3), $4)`,
+      [usuario.id, hashDe(refreshToken), this.segundosRefresh, sesionId],
     )
     const accessToken = await this.jwt.signAsync({
+      sid: sesionId,
       sub: usuario.id,
       rol: usuario.rol,
       universidad_id: usuario.universidad_id,
     } satisfies PayloadJwt)
     return { accessToken, refreshToken }
+  }
+
+  async sesionActiva(sid: string, usuarioId: string): Promise<boolean> {
+    const [sesion] = await this.bd.query<{ id: string }>(
+      `SELECT id FROM sesion_auth WHERE id::text = $1 AND usuario_id::text = $2
+        AND revocado_en IS NULL`,
+      [sid, usuarioId],
+    )
+    return !!sesion
   }
 
   // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe.

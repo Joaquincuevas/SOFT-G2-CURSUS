@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
-import type { PayloadJwt } from './auth.service.js'
+import { AuthService, type PayloadJwt } from './auth.service.js'
 import { ES_PUBLICO } from './publico.decorator.js'
 
 export type RequestConUsuario = Request & { usuario?: PayloadJwt }
@@ -19,6 +19,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
+    private readonly auth: AuthService,
   ) {}
 
   async canActivate(contexto: ExecutionContext): Promise<boolean> {
@@ -38,6 +39,14 @@ export class JwtAuthGuard implements CanActivate {
     try {
       req.usuario = await this.jwt.verifyAsync<PayloadJwt>(token)
     } catch {
+      throw new UnauthorizedException()
+    }
+    const { sid, sub } = req.usuario
+    if (
+      typeof sid !== 'string' ||
+      typeof sub !== 'string' ||
+      !(await this.auth.sesionActiva(sid, sub))
+    ) {
       throw new UnauthorizedException()
     }
     return true
