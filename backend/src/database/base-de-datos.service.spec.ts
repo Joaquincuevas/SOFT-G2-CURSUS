@@ -1,7 +1,16 @@
-import { NotFoundException } from '@nestjs/common'
-import { BaseDeDatos, ROL_APP } from './base-de-datos.service.js'
+import type { Rol } from '@cursus/shared'
+import { ForbiddenException, NotFoundException } from '@nestjs/common'
+import {
+  BaseDeDatos,
+  type ContextoUniversidad,
+  ROL_APP,
+} from './base-de-datos.service.js'
 
 const UNIVERSIDAD = '00000000-0000-0000-0000-000000000001'
+const contexto = (rol: Rol = 'PROFESOR'): ContextoUniversidad => ({
+  universidadId: UNIVERSIDAD,
+  rol,
+})
 
 // Sin base real: la transacción entrega una conexión falsa para revisar qué
 // llega a la base y en qué orden. La última consulta devuelve `filas`.
@@ -25,19 +34,19 @@ describe('BaseDeDatos.consultarEnUniversidad', () => {
   it('agrega la universidad como $1, antes de los demás parámetros', async () => {
     const { bd, consultas } = crearBaseDeDatos()
 
-    await bd.consultarEnUniversidad(UNIVERSIDAD, sql, ['facultad'])
+    await bd.consultarEnUniversidad(contexto(), sql, ['facultad'])
 
     expect(consultas).toHaveBeenLastCalledWith(sql, [UNIVERSIDAD, 'facultad'])
   })
 
-  it('fija el rol de la API y la universidad antes de la consulta (RLS)', async () => {
+  it('fija el rol de la API, la universidad y el rol de la sesión antes de la consulta (RLS)', async () => {
     const { bd, consultas, query } = crearBaseDeDatos()
 
-    await bd.consultarEnUniversidad(UNIVERSIDAD, sql, ['facultad'])
+    await bd.consultarEnUniversidad(contexto('ALUMNO'), sql, ['facultad'])
 
     expect(consultas.mock.calls).toEqual([
       [`SET LOCAL ROLE ${ROL_APP}`],
-      [`SELECT set_config('app.universidad_id', $1, true)`, [UNIVERSIDAD]],
+      [expect.stringContaining('set_config'), [UNIVERSIDAD, 'ALUMNO']],
       [sql, [UNIVERSIDAD, 'facultad']],
     ])
     // Nada pasa por la conexión sin transacción.
@@ -51,7 +60,7 @@ describe('BaseDeDatos.consultarEnUniversidad', () => {
     const { bd, consultas } = crearBaseDeDatos()
 
     await expect(
-      bd.consultarEnUniversidad(UNIVERSIDAD, sinFiltro),
+      bd.consultarEnUniversidad(contexto(), sinFiltro),
     ).rejects.toThrow('La consulta no filtra por universidad ($1)')
     expect(consultas).not.toHaveBeenCalled()
   })
@@ -60,10 +69,45 @@ describe('BaseDeDatos.consultarEnUniversidad', () => {
     const { bd, consultas } = crearBaseDeDatos()
 
     await expect(
-      bd.consultarEnUniversidad('', 'SELECT 1 WHERE $1 IS NOT NULL'),
+      bd.consultarEnUniversidad(
+        { universidadId: '', rol: 'ALUMNO' },
+        'SELECT 1 WHERE $1 IS NOT NULL',
+      ),
     ).rejects.toThrow('Falta la universidad de la sesión')
     expect(consultas).not.toHaveBeenCalled()
   })
+})
+
+describe('BaseDeDatos.consultarEnTodasLasUniversidades', () => {
+  const sql = 'SELECT * FROM facultad'
+
+  it('corre en una transacción de solo lectura con el rol de Director', async () => {
+    const { bd, consultas, query } = crearBaseDeDatos([{ id: 'facultad' }])
+
+    await expect(
+      bd.consultarEnTodasLasUniversidades(contexto('DIRECTOR'), sql),
+    ).resolves.toEqual([{ id: 'facultad' }])
+
+    expect(consultas.mock.calls).toEqual([
+      ['SET TRANSACTION READ ONLY'],
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [expect.stringContaining("set_config('app.rol'"), ['DIRECTOR']],
+      [sql, []],
+    ])
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it.each(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as const)(
+    'responde 403 al rol %s',
+    async (rol) => {
+      const { bd, consultas } = crearBaseDeDatos()
+
+      await expect(
+        bd.consultarEnTodasLasUniversidades(contexto(rol), sql),
+      ).rejects.toThrow(ForbiddenException)
+      expect(consultas).not.toHaveBeenCalled()
+    },
+  )
 })
 
 describe('BaseDeDatos.obtenerEnUniversidad', () => {
@@ -73,7 +117,7 @@ describe('BaseDeDatos.obtenerEnUniversidad', () => {
     const { bd } = crearBaseDeDatos([{ id: 'facultad' }])
 
     await expect(
-      bd.obtenerEnUniversidad(UNIVERSIDAD, sql, ['facultad']),
+      bd.obtenerEnUniversidad(contexto(), sql, ['facultad']),
     ).resolves.toEqual({ id: 'facultad' })
   })
 
@@ -81,7 +125,7 @@ describe('BaseDeDatos.obtenerEnUniversidad', () => {
     const { bd } = crearBaseDeDatos([])
 
     await expect(
-      bd.obtenerEnUniversidad(UNIVERSIDAD, sql, ['facultad']),
+      bd.obtenerEnUniversidad(contexto(), sql, ['facultad']),
     ).rejects.toThrow(NotFoundException)
   })
 })

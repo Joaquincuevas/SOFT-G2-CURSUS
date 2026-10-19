@@ -18,6 +18,7 @@ import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
 import { UniversidadActual } from './universidad-actual.decorator.js'
+import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
 import { LimiteLogin } from './limite-login.service.js'
 import { ipLogin } from './ip-login.js'
 
@@ -135,11 +136,10 @@ export class AuthController {
   @Get('yo')
   async yo(
     @Req() req: RequestConUsuario,
-    @UniversidadActual() universidadId: string,
+    @UniversidadActual() contexto: ContextoUniversidad,
   ): Promise<UsuarioSesion> {
     const usuario =
-      req.usuario &&
-      (await this.auth.obtenerUsuario(req.usuario.sub, universidadId))
+      req.usuario && (await this.auth.obtenerUsuario(req.usuario.sub, contexto))
     if (!usuario) {
       throw new UnauthorizedException()
     }

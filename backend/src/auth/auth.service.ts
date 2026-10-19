@@ -4,7 +4,10 @@ import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { hash, verify } from 'argon2'
 import { duracionRefresh } from '../config/entorno.js'
-import { BaseDeDatos } from '../database/base-de-datos.service.js'
+import {
+  BaseDeDatos,
+  type ContextoUniversidad,
+} from '../database/base-de-datos.service.js'
 
 // Contenido del JWT de sesión.
 export interface PayloadJwt {
@@ -197,10 +200,10 @@ export class AuthService {
   // universidad del token.
   async obtenerUsuario(
     id: string,
-    universidadId: string,
+    contexto: ContextoUniversidad,
   ): Promise<UsuarioSesion | null> {
     const [fila] = await this.bd.consultarEnUniversidad<FilaUsuario>(
-      universidadId,
+      contexto,
       `SELECT u.id, u.nombre, u.rol, u.universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre
          FROM usuario u
@@ -220,19 +223,19 @@ export class AuthService {
       universidadNombre:
         fila.rol === 'DIRECTOR' ? NOMBRE_DIRECTORIO : fila.universidad_nombre,
       facultadNombre: fila.facultad_nombre,
-      periodoActivo: await this.periodoActivo(fila.universidad_id),
+      periodoActivo: await this.periodoActivo(contexto),
     }
   }
 
   // Separada de obtenerUsuario porque GES-02 puede cambiar cómo se marca el
   // período activo.
   async periodoActivo(
-    universidadId: string,
+    contexto: ContextoUniversidad,
   ): Promise<UsuarioSesion['periodoActivo']> {
     const [periodo] = await this.bd.consultarEnUniversidad<
       NonNullable<UsuarioSesion['periodoActivo']>
     >(
-      universidadId,
+      contexto,
       `SELECT id, anio, semestre FROM periodo
         WHERE universidad_id = $1 AND activo`,
     )
