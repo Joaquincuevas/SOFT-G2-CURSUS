@@ -75,7 +75,7 @@ obtener(@UniversidadActual() universidadId: string, @Param('id', ParseUUIDPipe) 
 Excepciones, que usan `BaseDeDatos.query`:
 
 - `POST /api/auth/login` busca al usuario por el dominio de su correo, porque antes del login no hay universidad de sesión.
-- `refresh` y `logout` usan `refresh_token`, que no es una tabla institucional.
+- `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
 
 Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03.
 
