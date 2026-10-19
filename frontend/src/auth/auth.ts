@@ -5,6 +5,8 @@ import { createContext, useContext } from 'react'
 // no puede leer; con ella se renueva el JWT y se restaura la sesión al recargar.
 
 export const AVISO_SESION_EXPIRADA = 'Tu sesión expiró, vuelve a iniciar sesión'
+// Solo una marca de cierre; nunca se guardan credenciales en localStorage.
+export const SESION_CERRADA = 'cursus-sesion-cerrada'
 
 export interface AuthValue {
   // Token con el que empezó la sesión (login o restauración). Los JWT que
@@ -52,10 +54,12 @@ export function pedirToken(
   correo: string,
   password: string,
 ): Promise<string | null> {
-  return pedirAccessToken('/api/auth/login', {
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ correo, password }),
-  })
+  return conCandado(() =>
+    pedirAccessToken('/api/auth/login', {
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo, password }),
+    }),
+  )
 }
 
 // Refresh en curso, compartido: si varios pedidos reciben 401 a la vez, todos
@@ -66,8 +70,11 @@ let renovacionEnCurso: Promise<string | null> | null = null
 
 // POST /api/auth/refresh. Devuelve un JWT nuevo, o null si la cookie no sirve.
 export function renovarToken(): Promise<string | null> {
+  if (localStorage.getItem(SESION_CERRADA)) return Promise.resolve(null)
   renovacionEnCurso ??= conCandado(() =>
-    pedirAccessToken('/api/auth/refresh'),
+    localStorage.getItem(SESION_CERRADA)
+      ? Promise.resolve(null)
+      : pedirAccessToken('/api/auth/refresh'),
   ).finally(() => {
     renovacionEnCurso = null
   })
@@ -86,8 +93,11 @@ function conCandado<T>(tarea: () => Promise<T>): Promise<T> {
 // Si falla se ignora: la sesión se cierra igual en el navegador.
 export async function pedirLogout(): Promise<void> {
   try {
-    await fetch('/api/auth/logout', { method: 'POST' })
+    // La cookie rotada por una renovación pendiente debe llegar antes del
+    // logout. Web Locks también serializa estas operaciones entre pestañas.
+    await renovacionEnCurso
+    await conCandado(() => fetch('/api/auth/logout', { method: 'POST' }))
   } catch {
-    // Sin conexión, el refresh token expira solo.
+    // La marca de cierre impide restaurar la cookie incluso sin conexión.
   }
 }

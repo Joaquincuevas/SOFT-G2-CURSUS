@@ -198,6 +198,34 @@ describe('POST /api/auth/refresh', () => {
 })
 
 describe('POST /api/auth/logout', () => {
+  it('invalida todos los JWT de la sesión, incluidos los anteriores a renovar', async () => {
+    const original = await login()
+    const primera = await refresh(original).expect(200)
+    const segunda = await refresh(tokenDe(primera)).expect(200)
+    const acceso = (respuesta: request.Response) =>
+      request(app.getHttpServer())
+        .get('/api/auth/yo')
+        .set(
+          'Authorization',
+          `Bearer ${(respuesta.body as RespuestaLogin).accessToken}`,
+        )
+
+    await acceso(primera).expect(200)
+    await acceso(segunda).expect(200)
+    // Incluso si logout lleva la cookie anterior a una rotación concurrente.
+    await logout(tokenDe(primera)).expect(204)
+    await acceso(primera).expect(401)
+    await acceso(segunda).expect(401)
+    await refresh(tokenDe(segunda)).expect(401)
+  })
+
+  it('cerrar una sesión no cierra otro navegador del mismo usuario', async () => {
+    const primera = await login()
+    const otra = await login()
+    await logout(primera).expect(204)
+    await logout(primera).expect(204)
+    await refresh(otra).expect(200)
+  })
   it('revoca el token, borra la cookie y responde 204', async () => {
     const token = await login()
     const respuesta = await logout(token).expect(204)

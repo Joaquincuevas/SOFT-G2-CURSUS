@@ -14,6 +14,7 @@ import type { App } from 'supertest/types.js'
 import { AppModule } from '../../src/app.module.js'
 import { Puede } from '../../src/auth/permisos.decorator.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
+import { AuthService } from '../../src/auth/auth.service.js'
 
 // Rutas que solo existen en este test, para probar PermisosGuard con los
 // guards globales reales de AppModule.
@@ -56,6 +57,7 @@ class PruebaController {
 const jwt = new JwtService({ secret: process.env.JWT_SECRET })
 const sesionDe = (rol: string) =>
   `Bearer ${jwt.sign({
+    sid: '00000000-0000-0000-0000-000000000003',
     sub: '00000000-0000-0000-0000-000000000001',
     rol,
     universidad_id: '00000000-0000-0000-0000-000000000002',
@@ -105,7 +107,10 @@ describe('permisos por rol (e2e)', () => {
     const modulo = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [PruebaController],
-    }).compile()
+    })
+      .overrideProvider(AuthService)
+      .useValue({ sesionActiva: () => Promise.resolve(true) })
+      .compile()
     app = modulo.createNestApplication<INestApplication<App>>({
       logger: false,
     })
