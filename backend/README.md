@@ -52,21 +52,23 @@ Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y la
 
 Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
 
-### Validación de bodies
+## Validación de entradas
 
-Un `ValidationPipe` global (`configurarApp`) valida cada body contra su clase y responde `400` si un campo no cumple o si llega un campo no declarado. Por eso cada `@Body()` nuevo debe usar una clase con decoradores de `class-validator`, en un archivo `.dto.ts` (por ejemplo, `auth/login.dto.ts`). Un `@Body()` tipado como `unknown`, como una interfaz o como un `type` pasa **sin validar**, porque esos tipos no existen en tiempo de ejecución.
+Un `ValidationPipe` global (en `src/config/configurar-app.ts`) valida cada body con su DTO. Un campo no declarado o un valor inválido responde `400`.
+
+- Cada `@Body()` nuevo debe tiparse con una **clase** DTO con decoradores de `class-validator`, en un archivo `<nombre>.dto.ts` (por ejemplo, `src/auth/login.dto.ts`).
+- Un body tipado como `unknown`, como interfaz o como tipo **no se valida**: el pipe solo valida clases.
 
 ```ts
-export class CrearCarreraDto {
+export class LoginDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
-  nombre!: string
+  @MaxLength(256)
+  correo!: string
 }
 
-@Puede('create', 'Carrera')
-@Post()
-crear(@Body() datos: CrearCarreraDto) { ... }
+@Post('login')
+login(@Body() { correo }: LoginDto) { ... }
 ```
 
 ## Aislamiento por universidad
