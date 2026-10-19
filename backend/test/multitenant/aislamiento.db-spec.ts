@@ -175,22 +175,40 @@ describe('aislamiento entre universidades', () => {
 })
 
 describe('GET /api/auth/yo con la universidad del token', () => {
+  const jwt = new JwtService({ secret: process.env.JWT_SECRET })
+
+  // Token de una sesión real (con su sid activo), firmado de nuevo con otra
+  // universidad: así lo rechaza el filtro por universidad y no JwtAuthGuard.
+  async function tokenConUniversidad(correo: string, universidadId: string) {
+    const real = jwt.decode<PayloadJwt>(await tokenDe(correo))
+    return jwt.sign({
+      sid: real.sid,
+      sub: real.sub,
+      rol: real.rol,
+      universidad_id: universidadId,
+    } satisfies PayloadJwt)
+  }
+
+  it('responde 200 con la universidad del usuario', async () => {
+    const [norte] = UNIVERSIDADES
+    const correo = `alumno@${norte.dominio}`
+    const real = jwt.decode<PayloadJwt>(await tokenDe(correo))
+
+    const token = await tokenConUniversidad(correo, real.universidad_id)
+    await pedir('/api/auth/yo', token).expect(200)
+  })
+
   it('responde 401 si el token trae una universidad que no es la del usuario', async () => {
     const [norte, sur] = UNIVERSIDADES
-    const [usuario] = await bd.query<{ id: string }[]>(
-      'SELECT id FROM usuario WHERE correo = $1',
-      [`alumno@${norte.dominio}`],
-    )
     const [universidadSur] = await bd.query<{ id: string }[]>(
       'SELECT id FROM universidad WHERE dominio_correo = $1',
       [sur.dominio],
     )
-    const token = new JwtService({ secret: process.env.JWT_SECRET }).sign({
-      sub: usuario.id,
-      rol: 'ALUMNO',
-      universidad_id: universidadSur.id,
-    } satisfies PayloadJwt)
 
+    const token = await tokenConUniversidad(
+      `alumno@${norte.dominio}`,
+      universidadSur.id,
+    )
     await pedir('/api/auth/yo', token).expect(401)
   })
 })
