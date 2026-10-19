@@ -1,5 +1,6 @@
 import { useContext } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router'
+import { Cargando } from '../components/Cargando'
 import { SessionContext } from '../session/session'
 import { useAuth } from './auth'
 
@@ -12,13 +13,13 @@ export function RequireAuth() {
   const { pathname } = useLocation()
 
   if (restaurando) {
-    return <p role="status">Cargando…</p>
+    return <Cargando pantallaCompleta />
   }
   if (!token) {
     return <Navigate to="/login" replace state={{ from: pathname }} />
   }
   if (!sesion) {
-    return <p role="status">Cargando…</p>
+    return <Cargando pantallaCompleta />
   }
   return <Outlet />
 }

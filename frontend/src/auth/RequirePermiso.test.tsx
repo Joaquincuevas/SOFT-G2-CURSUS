@@ -1,5 +1,5 @@
 import { definirAbilityPara, type Rol } from '@cursus/shared'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { SessionContext, usePuede } from '../session/session'
 import { renderConSesion, usuarioDePrueba } from '../test/sesion'
@@ -42,11 +42,35 @@ describe('una ruta de otro rol redirige al Dashboard', () => {
       within(nav).getByRole('link', { name: 'Dashboard' }),
     ).toHaveAttribute('aria-current', 'page')
   })
+})
 
-  test('una ruta que no existe también vuelve al Dashboard', async () => {
-    await renderConSesion('PROFESOR', '/no-existe')
-    await screen.findByRole('region', { name: 'Dashboard' })
-    expect(titulo()).toHaveTextContent('Bienvenido/a, Profesor Norte')
+describe('una ruta que no existe muestra la 404', () => {
+  test.each<[Rol, string]>([
+    ['PROFESOR', '/no-existe'],
+    ['DIRECTOR', '/universidades-viejas/1'],
+  ])('%s en %s', async (rol, path) => {
+    await renderConSesion(rol, path)
+    const pagina = await screen.findByRole('region', {
+      name: 'Página no encontrada',
+    })
+    expect(titulo()).toHaveTextContent('Página no encontrada')
+    expect(
+      within(pagina).getByRole('link', { name: 'Volver al inicio' }),
+    ).toHaveAttribute('href', '/')
+    // Sigue dentro del App Shell, con el menú del rol.
+    expect(
+      screen.getByRole('navigation', { name: 'Navegación principal' }),
+    ).toBeInTheDocument()
+  })
+
+  test('Volver al inicio lleva al Dashboard', async () => {
+    await renderConSesion('ALUMNO', '/no-existe')
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Volver al inicio' }),
+    )
+    expect(
+      await screen.findByRole('region', { name: 'Dashboard' }),
+    ).toBeInTheDocument()
   })
 })
 
