@@ -109,20 +109,36 @@ describe('POST /api/auth/login', () => {
     expect(await tokenDe('DIRECTOR@Norte.Cursus.Test')).toBeTruthy()
   })
 
-  it('responde 401 con una contraseña incorrecta', async () => {
-    await login('alumno@norte.cursus.test', 'otra-contraseña').expect(401)
-  })
-
-  it('responde 401 con un correo que no existe', async () => {
-    await login('nadie@norte.cursus.test', PASSWORD).expect(401)
-  })
-
-  it('responde 401 si el dominio no es el de la universidad del usuario', async () => {
+  it.each([
+    ['contraseña incorrecta', 'alumno@norte.cursus.test', 'otra-contraseña'],
+    ['correo inexistente', 'nadie@norte.cursus.test', PASSWORD],
     // administrativo.ingenieria solo existe en la Universidad Demo Norte.
-    await login('administrativo.ingenieria@sur.cursus.test', PASSWORD).expect(
-      401,
-    )
-  })
+    [
+      'dominio incorrecto',
+      'administrativo.ingenieria@sur.cursus.test',
+      PASSWORD,
+    ],
+  ])(
+    '%s: responde el mismo error sin emitir tokens ni crear una sesión',
+    async (_caso, correo, password) => {
+      const contarSesiones = () =>
+        bd.query<{ sesiones: number; refreshTokens: number }[]>(
+          `SELECT (SELECT count(*)::int FROM sesion_auth) AS sesiones,
+                  (SELECT count(*)::int FROM refresh_token) AS "refreshTokens"`,
+        )
+      const antes = await contarSesiones()
+
+      const respuesta = await login(correo, password).expect(401)
+
+      expect(respuesta.body).toEqual({
+        statusCode: 401,
+        message: 'Credenciales inválidas',
+        error: 'Unauthorized',
+      })
+      expect(respuesta.headers['set-cookie']).toBeUndefined()
+      expect(await contarSesiones()).toEqual(antes)
+    },
+  )
 
   it('responde 400 si falta el correo o la contraseña', async () => {
     await login('', PASSWORD).expect(400)
