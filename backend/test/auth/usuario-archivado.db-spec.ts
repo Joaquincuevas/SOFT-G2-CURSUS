@@ -112,4 +112,49 @@ describe('usuario archivado', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(401)
   })
+
+  it('un intento de renovar mientras está archivado revoca todas sus sesiones', async () => {
+    const correo = 'alumno@sur.cursus.test'
+    // Tres sesiones abiertas a la vez (por ejemplo, tres navegadores).
+    const sesiones = await Promise.all(
+      [1, 2, 3].map(async () => {
+        const respuesta = await login(correo).expect(200)
+        return {
+          accessToken: (respuesta.body as RespuestaLogin).accessToken,
+          cookie: cookieRefresh(respuesta),
+        }
+      }),
+    )
+
+    await archivar(correo, true)
+    try {
+      // Solo la primera sesión intenta renovar.
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .set('Cookie', sesiones[0].cookie)
+        .expect(401)
+    } finally {
+      await archivar(correo, false)
+    }
+
+    // Aunque ya no está archivado, ninguna de las tres sesiones sirve: ni su
+    // JWT ni su refresh token.
+    for (const { accessToken, cookie } of sesiones) {
+      await request(app.getHttpServer())
+        .get('/api/auth/yo')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(401)
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .set('Cookie', cookie)
+        .expect(401)
+    }
+    const [{ activas }] = await bd.query<{ activas: number }[]>(
+      `SELECT count(*)::int AS activas FROM sesion_auth s
+         JOIN usuario u ON u.id = s.usuario_id
+        WHERE u.correo = $1 AND s.revocado_en IS NULL`,
+      [correo],
+    )
+    expect(activas).toBe(0)
+  })
 })
