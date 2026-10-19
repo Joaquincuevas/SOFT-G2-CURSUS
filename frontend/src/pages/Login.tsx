@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/auth'
 import './Login.css'
@@ -8,6 +8,8 @@ export function Login() {
   const { token, aviso, iniciarSesion } = useAuth()
   const location = useLocation()
   const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   // Al iniciar sesión vuelve a la ruta que pidió RequireAuth, o al Dashboard.
   if (token) {
@@ -19,12 +21,22 @@ export function Login() {
     event.preventDefault()
     const datos = new FormData(event.currentTarget)
     setEnviando(true)
-    // Si las credenciales no son válidas no se muestra mensaje: es de AUTH-02.
+    setError(null)
     const ok = await iniciarSesion(
       String(datos.get('correo')),
       String(datos.get('password')),
     )
-    if (!ok) setEnviando(false)
+    if (!ok) {
+      setError(
+        'No pudimos iniciar sesión. Revisa tus credenciales e inténtalo nuevamente.',
+      )
+      setEnviando(false)
+      // Conserva el correo para reintentar, pero descarta la contraseña.
+      if (passwordRef.current) {
+        passwordRef.current.value = ''
+        passwordRef.current.focus()
+      }
+    }
   }
 
   return (
@@ -59,16 +71,15 @@ export function Login() {
             </p>
           </div>
 
-          {aviso && (
-            <p className="login__aviso" role="alert">
-              {aviso}
-            </p>
-          )}
-
           <form className="login__card" onSubmit={handleSubmit}>
             <p className="login__caption">
               Usa el correo institucional asociado a tu universidad.
             </p>
+            {(aviso || error) && (
+              <p className="login__error" id="login-error" role="alert">
+                {aviso || error}
+              </p>
+            )}
             <label className="login__field">
               Correo institucional
               <input
@@ -77,17 +88,20 @@ export function Login() {
                 type="email"
                 autoComplete="username"
                 placeholder="pedro.soto@universidad.cl"
+                aria-describedby={aviso || error ? 'login-error' : undefined}
                 required
               />
             </label>
             <label className="login__field">
               Contraseña
               <input
+                ref={passwordRef}
                 className="login__input"
                 name="password"
                 type="password"
                 autoComplete="current-password"
-                placeholder="••••••••••••"
+                placeholder="Ingresa tu contraseña"
+                aria-describedby={aviso || error ? 'login-error' : undefined}
                 required
               />
             </label>

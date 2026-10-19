@@ -8,6 +8,7 @@ Tarjeta: [F1 AUTH-07 Rate limiting en el login](https://trello.com/c/CmvFtXbi/80
 - Los umbrales son **5 fallos por cuenta** y **20 fallos por IP**. El intento fallido que alcanza cualquiera de ellos responde 429; los siguientes también, incluso con contraseña correcta, mientras el límite siga activo. Cambiar de cuenta en una red compartida no bloquea esa red hasta alcanzar el umbral de IP.
 - La ventana es móvil: cada fallo deja de contar al cumplir 15 minutos. El bloqueo termina cuando la cuenta queda por debajo de cinco y, si hay IP confiable, la IP queda por debajo de veinte. Los reintentos bloqueados no agregan fallos ni prolongan la espera.
 - 429 incluye `Retry-After` en segundos y `{ statusCode: 429, message, retryAfter }`. No emite tokens ni cookie. La interfaz muestra la espera redondeada hacia arriba en minutos, con un aviso accesible `role="alert"`.
+- La alerta se integra con AUTH-02: el aviso específico de 429 tiene prioridad sobre el mensaje genérico de credenciales inválidas. Se conserva el correo, se limpia la contraseña y se mantiene su foco para reintentar.
 - Un login exitoso, cuando no hay bloqueo activo, limpia los contadores de esa cuenta y de esa IP. Los errores de formato (400) no cuentan como fallos de credenciales. Tampoco los errores internos del servidor.
 - No se revela si el correo existe: cuentas inexistentes y contraseñas incorrectas siguen el mismo límite y mensaje.
 

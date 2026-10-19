@@ -104,6 +104,14 @@
   color: var(--color-primary-light);
 }
 
+.login__error {
+  padding: var(--space-3);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+  color: var(--color-error);
+}
+
 .login__field {
   display: flex;
   flex-direction: column;
@@ -138,15 +146,6 @@
 
 .login__button:disabled {
   cursor: progress;
-}
-
-.login__aviso {
-  padding: var(--space-3-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  background: var(--color-background);
-  font: var(--font-body);
 }
 
 .login__input:focus-visible,

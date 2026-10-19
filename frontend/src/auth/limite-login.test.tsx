@@ -67,6 +67,9 @@ test('un login exitoso posterior elimina el aviso y permite entrar', async () =>
       ),
     ),
   )
+  fireEvent.change(screen.getByLabelText('Contraseña'), {
+    target: { value: 'correcta' },
+  })
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
   expect(
     await screen.findByRole('navigation', { name: 'Navegación principal' }),
@@ -79,5 +82,7 @@ test('un fallo de red libera el formulario sin promesas rechazadas', async () =>
   renderApp('/login')
   await screen.findByRole('heading', { name: 'Bienvenido a CURSUS' })
   await enviar()
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'No pudimos iniciar sesión',
+  )
 })
