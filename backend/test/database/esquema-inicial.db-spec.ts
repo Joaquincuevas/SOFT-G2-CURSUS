@@ -18,6 +18,7 @@ const TABLAS = [
   'facultad',
   'periodo',
   'refresh_token',
+  'sesion_auth',
   'universidad',
   'usuario',
 ]
@@ -150,10 +151,16 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearRefreshToken y después EsquemaInicial.
+    // CrearSesionAuth, CrearRefreshToken y después EsquemaInicial.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter((tabla) => tabla !== 'refresh_token'),
+      TABLAS.filter((tabla) => tabla !== 'sesion_auth'),
+    )
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter(
+        (tabla) => tabla !== 'refresh_token' && tabla !== 'sesion_auth',
+      ),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual([])
@@ -178,7 +185,9 @@ describe('migraciones', () => {
 
     // refresh_token usa creado_en y no tiene updated_at: sus filas no cambian
     // salvo revocado_en.
-    for (const tabla of TABLAS.filter((t) => t !== 'refresh_token')) {
+    for (const tabla of TABLAS.filter(
+      (t) => t !== 'refresh_token' && t !== 'sesion_auth',
+    )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
         expect.arrayContaining([
