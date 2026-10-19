@@ -63,7 +63,8 @@ export class AuthService {
     password: string,
   ): Promise<TokensSesion | null> {
     // El correo es único por universidad, no global: la universidad se
-    // identifica por el dominio del correo.
+    // identifica por el dominio del correo. Por eso no usa
+    // consultarEnUniversidad: antes del login no hay universidad de sesión.
     const [usuario] = await this.bd.query<Credenciales>(
       `SELECT u.id, u.rol, u.universidad_id, u.password_hash
          FROM usuario u
@@ -85,7 +86,9 @@ export class AuthService {
   // Rota el refresh token: lo revoca y emite uno nuevo junto a un JWT de
   // acceso. Devuelve null si el token no existe, expiró o ya estaba revocado.
   // Reusar un token ya revocado (por ejemplo, uno robado que ya se rotó)
-  // revoca todas las sesiones de su usuario.
+  // revoca todas las sesiones de su usuario. Como cerrarSesion, emitirTokens y
+  // sesionActiva, no usa consultarEnUniversidad: refresh_token y sesion_auth
+  // no son tablas institucionales.
   async renovarSesion(refreshToken: string): Promise<TokensSesion | null> {
     const hashToken = hashDe(refreshToken)
     // El UPDATE es atómico: dos renovaciones simultáneas del mismo token no
@@ -181,15 +184,20 @@ export class AuthService {
     return !!sesion
   }
 
-  // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe.
-  async obtenerUsuario(id: string): Promise<UsuarioSesion | null> {
-    const [fila] = await this.bd.query<FilaUsuario>(
+  // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe en la
+  // universidad del token.
+  async obtenerUsuario(
+    id: string,
+    universidadId: string,
+  ): Promise<UsuarioSesion | null> {
+    const [fila] = await this.bd.consultarEnUniversidad<FilaUsuario>(
+      universidadId,
       `SELECT u.id, u.nombre, u.rol, u.universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
          LEFT JOIN facultad f ON f.id = u.facultad_id
-        WHERE u.id = $1`,
+        WHERE u.universidad_id = $1 AND u.id = $2`,
       [id],
     )
     if (!fila) {
@@ -212,12 +220,12 @@ export class AuthService {
   async periodoActivo(
     universidadId: string,
   ): Promise<UsuarioSesion['periodoActivo']> {
-    const [periodo] = await this.bd.query<
+    const [periodo] = await this.bd.consultarEnUniversidad<
       NonNullable<UsuarioSesion['periodoActivo']>
     >(
+      universidadId,
       `SELECT id, anio, semestre FROM periodo
         WHERE universidad_id = $1 AND activo`,
-      [universidadId],
     )
     return periodo ?? null
   }
