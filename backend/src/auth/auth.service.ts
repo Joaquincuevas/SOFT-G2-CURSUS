@@ -61,11 +61,12 @@ export class AuthService {
   async iniciarSesion(
     correo: string,
     password: string,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
   ): Promise<TokensSesion | null> {
     // El correo es único por universidad, no global: la universidad se
     // identifica por el dominio del correo. Por eso no usa
     // consultarEnUniversidad: antes del login no hay universidad de sesión.
-    const [usuario] = await this.bd.query<Credenciales>(
+    const [usuario] = await bd.query<Credenciales>(
       `SELECT u.id, u.rol, u.universidad_id, u.password_hash
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
@@ -80,7 +81,7 @@ export class AuthService {
     if (!usuario || !passwordValida) {
       return null
     }
-    return this.emitirTokens(usuario)
+    return this.emitirTokens(usuario, undefined, bd)
   }
 
   // Rota el refresh token: lo revoca y emite uno nuevo junto a un JWT de
@@ -152,16 +153,17 @@ export class AuthService {
   private async emitirTokens(
     usuario: Omit<Credenciales, 'password_hash'>,
     sesionId?: string,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
   ): Promise<TokensSesion> {
     if (!sesionId) {
-      const [sesion] = await this.bd.query<{ id: string }>(
+      const [sesion] = await bd.query<{ id: string }>(
         `INSERT INTO sesion_auth (usuario_id) VALUES ($1) RETURNING id`,
         [usuario.id],
       )
       sesionId = sesion.id
     }
     const refreshToken = randomBytes(32).toString('base64url')
-    await this.bd.query(
+    await bd.query(
       `INSERT INTO refresh_token (usuario_id, hash, expira_en, sesion_id)
        VALUES ($1, $2, now() + make_interval(secs => $3), $4)`,
       [usuario.id, hashDe(refreshToken), this.segundosRefresh, sesionId],

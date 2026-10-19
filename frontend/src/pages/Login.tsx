@@ -75,9 +75,9 @@ export function Login() {
             <p className="login__caption">
               Usa el correo institucional asociado a tu universidad.
             </p>
-            {(error || aviso) && (
+            {(aviso || error) && (
               <p className="login__error" id="login-error" role="alert">
-                {error || aviso}
+                {aviso || error}
               </p>
             )}
             <label className="login__field">
@@ -88,7 +88,7 @@ export function Login() {
                 type="email"
                 autoComplete="username"
                 placeholder="pedro.soto@universidad.cl"
-                aria-describedby={error ? 'login-error' : undefined}
+                aria-describedby={aviso || error ? 'login-error' : undefined}
                 required
               />
             </label>
@@ -101,7 +101,7 @@ export function Login() {
                 type="password"
                 autoComplete="current-password"
                 placeholder="Ingresa tu contraseña"
-                aria-describedby={error ? 'login-error' : undefined}
+                aria-describedby={aviso || error ? 'login-error' : undefined}
                 required
               />
             </label>

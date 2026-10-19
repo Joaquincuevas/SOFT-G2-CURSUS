@@ -94,6 +94,7 @@ obtener(@UniversidadActual() universidadId: string, @Param('id', ParseUUIDPipe) 
 Excepciones, que usan `BaseDeDatos.query`:
 
 - `POST /api/auth/login` busca al usuario por el dominio de su correo, porque antes del login no hay universidad de sesión.
+- El límite de login usa `limite_login` por cuenta o IP antes de tener una universidad de sesión. Sus bloqueos, autenticación y emisión de tokens se ejecutan con `BaseDeDatos.enTransaccion` en una misma conexión; ver [AUTH-07](../docs/auth-07-rate-limiting-login.md).
 - `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
 
 Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03.
@@ -101,6 +102,7 @@ Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los us
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
+- Login responde `429` desde el quinto fallo por cuenta o el vigésimo por IP dentro de una ventana móvil de 15 minutos, con `Retry-After` en segundos. Un éxito anterior al bloqueo reinicia ambos contadores. Con `ORIGIN_SECRET`, se usa la IP única de `x-vercel-forwarded-for`; si falta, se aplica solo el límite de cuenta y se registra un aviso sin datos del cliente. Una cabecera inválida responde 400. En local se usa el socket. Se conservan `LoginDto`, `ValidationPipe` y helmet.
 - `POST /api/auth/refresh` cambia la cookie por un JWT nuevo y rota el refresh token. Responde `401` y borra la cookie si el token no existe, expiró o fue revocado. Reusar un token ya rotado revoca todas las sesiones del usuario.
 - `POST /api/auth/logout` revoca el refresh token de la cookie y la borra. Siempre responde `204`.
 - El refresh token es opaco (32 bytes aleatorios) y en la tabla `refresh_token` solo se guarda su sha256. Dura `JWT_REFRESH_EXPIRES_IN` (7 días por defecto) desde su último uso.

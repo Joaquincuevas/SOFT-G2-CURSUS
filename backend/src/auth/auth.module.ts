@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller.js'
 import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
 import { PermisosGuard } from './permisos.guard.js'
+import { LimiteLogin } from './limite-login.service.js'
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PermisosGuard } from './permisos.guard.js'
   controllers: [AuthController],
   providers: [
     AuthService,
+    LimiteLogin,
     // Todas las rutas exigen sesión, salvo las marcadas con @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Corre después del JWT: cada ruta debe declarar quién puede usarla.

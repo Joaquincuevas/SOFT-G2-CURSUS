@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { type INestApplication, ValidationPipe } from '@nestjs/common'
 import type { NextFunction, Request, Response } from 'express'
+import { ORIGEN_VERIFICADO, type RequestLogin } from '../auth/ip-login.js'
 import helmet from 'helmet'
 
 export const PREFIJO_API = 'api'
@@ -54,7 +55,7 @@ function sinCache(_req: Request, res: Response, next: NextFunction) {
 // directo a API Gateway sin él se rechazan.
 function exigirSecretoOrigen(secreto: string) {
   const esperado = resumen(secreto)
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req: RequestLogin, res: Response, next: NextFunction) => {
     if (RUTAS_SIN_SECRETO.has(req.path)) {
       return next()
     }
@@ -66,6 +67,7 @@ function exigirSecretoOrigen(secreto: string) {
       res.status(403).json({ statusCode: 403, message: 'Forbidden' })
       return
     }
+    req[ORIGEN_VERIFICADO] = true
     next()
   }
 }

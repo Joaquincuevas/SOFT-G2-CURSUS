@@ -4,6 +4,8 @@ import {
   Controller,
   Get,
   HttpCode,
+  HttpException,
+  HttpStatus,
   Post,
   Req,
   Res,
@@ -16,6 +18,8 @@ import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
 import { UniversidadActual } from './universidad-actual.decorator.js'
+import { LimiteLogin } from './limite-login.service.js'
+import { ipLogin } from './ip-login.js'
 
 export interface RespuestaLogin {
   accessToken: string
@@ -44,17 +48,38 @@ export function leerCookie(req: Request, nombre: string): string | undefined {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly limiteLogin: LimiteLogin,
+  ) {}
 
   @Public()
   @Post('login')
   @HttpCode(200)
   async login(
-    // El ValidationPipe global valida el body con LoginDto (400 si no calza).
+    // El ValidationPipe global valida el body con LoginDto.
     @Body() { correo, password }: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaLogin> {
-    const tokens = await this.auth.iniciarSesion(correo, password)
+    const { tokens, retryAfter } = await this.limiteLogin.intentar(
+      correo,
+      ipLogin(req),
+      (bd) => this.auth.iniciarSesion(correo, password, bd),
+    )
+    if (retryAfter) {
+      res.setHeader('Retry-After', retryAfter.toString())
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message:
+            'Demasiados intentos fallidos. Espera antes de volver a intentar.',
+          retryAfter,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
+
     // Mismo mensaje si el correo no existe o la contraseña no calza.
     if (!tokens) {
       throw new UnauthorizedException('Credenciales inválidas')
