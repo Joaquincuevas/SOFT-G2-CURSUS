@@ -154,6 +154,7 @@ describe('migraciones', () => {
 
     // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
     // ActivarRls y AgregarArchivado no crean tablas.
+    await bd.undoLastMigration() // Índice único de nombres de carrera.
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()

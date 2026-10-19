@@ -26,3 +26,11 @@ export interface UsuarioSesion {
 }
 
 export * from './permisos.js'
+
+// GES-01: los identificadores de facultad/universidad se resuelven en la API.
+export interface Carrera {
+  id: string
+  nombre: string
+}
+
+export const LARGO_NOMBRE_CARRERA = 150

@@ -20,6 +20,7 @@ describe('navegación por rol', () => {
       [
         ['Dashboard', '/'],
         ['Mis Cursos', '/cursos'],
+        ['Carreras', '/carreras'],
       ],
     ],
     [
