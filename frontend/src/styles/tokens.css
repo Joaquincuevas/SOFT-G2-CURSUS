@@ -79,6 +79,9 @@
   --login-brand-text-width: 390px;
   --login-accent-width: 42px;
   --login-form-width: 480px;
+
+  /* Estados de carga, error y 404 (UI-03): no están en el Figma. */
+  --estado-max-width: 480px;
   /* Breakpoint del menú lateral: 1024px. El Figma no define uno; las media
      queries no aceptan variables, así que se repite en los .css que lo usan. */
 }
