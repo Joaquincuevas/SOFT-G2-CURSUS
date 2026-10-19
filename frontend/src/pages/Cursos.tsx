@@ -2,6 +2,7 @@ import type {
   CrearCurso,
   CursoCreado,
   Carrera,
+  CursoListado,
   OpcionPeriodo,
 } from '@cursus/shared'
 import { useEffect, useState, type FormEvent } from 'react'
@@ -19,8 +20,8 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import './Cursos.css'
 
-// Gestión de cursos. GES-05 agrega la creación (Figma, nodo 97:202); el
-// listado de /cursos llega con GES-03.
+// Gestión de cursos del Figma: listado (nodo 97:102, GES-03) y creación (nodo
+// 97:202, GES-05).
 export function Cursos() {
   return (
     <Routes>
@@ -80,9 +81,70 @@ function Encabezado({ titulo }: { titulo: string }) {
   )
 }
 
+function BotonCrear() {
+  return (
+    <Link className="cursos__boton" to="/cursos/nuevo">
+      Crear curso
+    </Link>
+  )
+}
+
 function InicioCursos() {
   const puedeCrear = usePuede('create', 'Curso')
   const creado = (useLocation().state as EstadoCreado | null)?.creado
+  const [cursos, recargar] = useDatos<CursoListado[]>('/api/cursos')
+  // La API solo manda la universidad al Director, que ve todas.
+  const conUniversidad = !!cursos?.some((curso) => curso.universidadNombre)
+
+  let contenido
+  if (cursos === undefined) {
+    contenido = <Cargando texto="Cargando cursos…" />
+  } else if (cursos === null) {
+    contenido = (
+      <ErrorEstado
+        mensaje="No se pudieron cargar los cursos."
+        onReintentar={recargar}
+      />
+    )
+  } else if (cursos.length === 0) {
+    contenido = (
+      <div className="cursos__tarjeta cursos__vacio">
+        <p className="cursos__mensaje">Aún no hay cursos en tu facultad.</p>
+        {puedeCrear && <BotonCrear />}
+      </div>
+    )
+  } else {
+    contenido = (
+      <div className="cursos__tarjeta cursos__tabla-contenedor">
+        <table className="cursos__tabla">
+          <thead>
+            <tr>
+              {conUniversidad && <th scope="col">Universidad</th>}
+              <th scope="col">Código</th>
+              <th scope="col">Curso</th>
+              <th scope="col">Carrera</th>
+              <th scope="col">Período</th>
+              <th scope="col">Secciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cursos.map((curso) => (
+              <tr key={curso.id}>
+                {conUniversidad && <td>{curso.universidadNombre}</td>}
+                <td>{curso.codigo}</td>
+                <td>{curso.nombre}</td>
+                <td>{curso.carreraNombre}</td>
+                <td>
+                  {curso.periodo.anio}-{curso.periodo.semestre}
+                </td>
+                <td>{curso.secciones}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   return (
     <section className="cursos" aria-label="Gestión de cursos">
@@ -92,13 +154,13 @@ function InicioCursos() {
           Curso {creado} creado.
         </p>
       )}
-      {puedeCrear && (
+      {/* Con la lista vacía, el botón va solo en el estado vacío. */}
+      {puedeCrear && !!cursos?.length && (
         <div>
-          <Link className="cursos__boton" to="/cursos/nuevo">
-            Crear curso
-          </Link>
+          <BotonCrear />
         </div>
       )}
+      {contenido}
     </section>
   )
 }

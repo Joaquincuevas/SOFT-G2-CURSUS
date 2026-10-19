@@ -25,7 +25,14 @@ let admin: DataSource
 let bd: DataSource
 
 async function conteos() {
-  const tablas = ['universidad', 'facultad', 'carrera', 'periodo', 'usuario']
+  const tablas = [
+    'universidad',
+    'facultad',
+    'carrera',
+    'periodo',
+    'usuario',
+    'curso',
+  ]
   const filas = await Promise.all(
     tablas.map(async (tabla) => {
       const [{ total }] = await bd.query<{ total: string }[]>(
@@ -109,6 +116,31 @@ describe('seed de datos simulados', () => {
     expect(UNIVERSIDADES[0].facultades.length).toBeGreaterThanOrEqual(2)
   })
 
+  it('crea los cursos de cada carrera en el período activo', async () => {
+    for (const u of UNIVERSIDADES) {
+      const cursos = await bd.query<{ codigo: string; carrera: string }[]>(
+        `SELECT c.codigo, ca.nombre AS carrera FROM curso c
+           JOIN carrera ca ON ca.id = c.carrera_id
+           JOIN periodo p ON p.id = c.periodo_id
+           JOIN universidad un ON un.id = c.universidad_id
+          WHERE un.dominio_correo = $1 AND p.activo
+          ORDER BY c.codigo`,
+        [u.dominio],
+      )
+      expect(cursos).toEqual(
+        u.facultades
+          .flatMap((f) =>
+            f.cursos.map((c) => ({ codigo: c.codigo, carrera: f.carrera })),
+          )
+          .sort((a, b) => a.codigo.localeCompare(b.codigo)),
+      )
+      // Al menos dos cursos por facultad, para la demo.
+      for (const f of u.facultades) {
+        expect(f.cursos.length).toBeGreaterThanOrEqual(2)
+      }
+    }
+  })
+
   it('crea al menos un usuario de cada rol en cada universidad', async () => {
     for (const u of UNIVERSIDADES) {
       const usuarios = await usuariosDe(u.dominio)
@@ -148,6 +180,19 @@ describe('seed de datos simulados', () => {
     const antes = await conteos()
     await ejecutarSeed(bd, PASSWORD)
     expect(await conteos()).toEqual(antes)
+  })
+
+  it('no pisa un curso editado ni lo desarchiva al ejecutarse de nuevo', async () => {
+    await bd.query(
+      `UPDATE curso SET nombre = 'Nombre editado', archived_at = now()
+        WHERE codigo = 'ICC101'`,
+    )
+    await ejecutarSeed(bd, PASSWORD)
+    const [curso] = await bd.query<{ nombre: string; archivado: boolean }[]>(
+      `SELECT nombre, archived_at IS NOT NULL AS archivado FROM curso
+        WHERE codigo = 'ICC101'`,
+    )
+    expect(curso).toEqual({ nombre: 'Nombre editado', archivado: true })
   })
 
   it('no activa su período si la universidad ya tiene otro activo', async () => {

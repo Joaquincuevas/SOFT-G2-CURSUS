@@ -48,6 +48,42 @@
   box-shadow: var(--shadow-card);
 }
 
+/* Listado: cabecera en surface y filas sin bordes, como en el Figma. En
+   pantallas angostas la tabla se desplaza dentro de la card. */
+.cursos__tabla-contenedor {
+  overflow-x: auto;
+}
+
+.cursos__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
+
+.cursos__tabla th {
+  padding: var(--space-3);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--color-surface);
+}
+
+.cursos__tabla td {
+  padding: var(--space-5) var(--space-3);
+}
+
+.cursos__vacio {
+  align-items: flex-start;
+}
+
+.cursos__mensaje {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
 /* Dos columnas de campos, como en el Figma. */
 .cursos__campos {
   display: grid;
