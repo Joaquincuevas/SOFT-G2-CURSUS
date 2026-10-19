@@ -53,14 +53,19 @@ export function usuarioDePrueba(rol: Rol): UsuarioSesion {
 const json = (cuerpo: unknown) =>
   new Response(JSON.stringify(cuerpo), { status: 200 })
 
-// Simula el backend: /api/auth/login entrega un token y /api/auth/yo devuelve
+// Simula el backend: /api/auth/login entrega un token, /api/auth/refresh
+// responde 401 (no hay cookie), /api/auth/logout 204 y /api/auth/yo devuelve
 // el usuario del rol. Restaurar con vi.unstubAllGlobals().
 export function simularBackend(rol: Rol) {
   const fetch = vi.fn((url: string) =>
     Promise.resolve(
       url === '/api/auth/login'
         ? json({ accessToken: 'jwt-de-prueba' })
-        : json(usuarioDePrueba(rol)),
+        : url === '/api/auth/refresh'
+          ? new Response(null, { status: 401 })
+          : url === '/api/auth/logout'
+            ? new Response(null, { status: 204 })
+            : json(usuarioDePrueba(rol)),
     ),
   )
   vi.stubGlobal('fetch', fetch)

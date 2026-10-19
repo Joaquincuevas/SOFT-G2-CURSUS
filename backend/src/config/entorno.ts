@@ -52,3 +52,21 @@ export function secretoJwt(entorno: NodeJS.ProcessEnv = process.env): string {
 export function duracionJwt(entorno: NodeJS.ProcessEnv = process.env): string {
   return entorno.JWT_EXPIRES_IN || '15m'
 }
+
+const SEGUNDOS_POR_UNIDAD = { s: 1, m: 60, h: 3600, d: 86400 }
+
+// Duración del refresh token en segundos. JWT_REFRESH_EXPIRES_IN acepta un
+// número y una unidad (30m, 12h, 7d); por defecto, 7 días.
+export function duracionRefresh(
+  entorno: NodeJS.ProcessEnv = process.env,
+): number {
+  const valor = entorno.JWT_REFRESH_EXPIRES_IN || '7d'
+  const partes = /^([1-9]\d*)([smhd])$/.exec(valor)
+  if (!partes) {
+    throw new Error(
+      'JWT_REFRESH_EXPIRES_IN debe ser un número y una unidad (s, m, h o d), por ejemplo 7d',
+    )
+  }
+  const unidad = partes[2] as keyof typeof SEGUNDOS_POR_UNIDAD
+  return Number(partes[1]) * SEGUNDOS_POR_UNIDAD[unidad]
+}

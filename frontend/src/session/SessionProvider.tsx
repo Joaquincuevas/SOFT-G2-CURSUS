@@ -9,22 +9,23 @@ import {
 import { useAuth } from '../auth/auth'
 import { pedirUsuario, SessionContext, type SessionUser } from './session'
 
-// Arma la sesión real cada vez que cambia el token: pide /api/auth/yo y, si
-// falla, cierra la sesión.
+// Arma la sesión real cada vez que empieza una (login o restauración): pide
+// /api/auth/yo y, si falla, cierra la sesión. Renovar el JWT no la recarga.
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const { token, cerrarSesion } = useAuth()
+  const { token, cerrarSesion, fetchConSesion } = useAuth()
   // Se guarda junto al token que la pidió, para no mostrar el usuario de un
   // token anterior.
   const [cargada, setCargada] = useState<{
     token: string
     user: SessionUser
   } | null>(null)
-  const alFallar = useEffectEvent(cerrarSesion)
+  const alFallar = useEffectEvent(() => cerrarSesion())
+  const pedir = useEffectEvent(() => pedirUsuario(fetchConSesion))
 
   useEffect(() => {
     if (!token) return
     let vigente = true
-    void pedirUsuario(token).then((user) => {
+    void pedir().then((user) => {
       if (!vigente) return
       if (user) setCargada({ token, user })
       else alFallar()

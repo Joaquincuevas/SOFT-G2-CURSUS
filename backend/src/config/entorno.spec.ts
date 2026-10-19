@@ -1,5 +1,6 @@
 import {
   duracionJwt,
+  duracionRefresh,
   secretoJwt,
   VARIABLES_API,
   validarEntorno,
@@ -86,5 +87,25 @@ describe('duracionJwt', () => {
   it('usa 15 minutos por defecto', () => {
     expect(duracionJwt({})).toBe('15m')
     expect(duracionJwt({ JWT_EXPIRES_IN: '5m' })).toBe('5m')
+  })
+})
+
+describe('JWT_REFRESH_EXPIRES_IN', () => {
+  it('dura 7 días por defecto', () => {
+    expect(duracionRefresh({})).toBe(7 * 24 * 60 * 60)
+  })
+
+  it.each([
+    ['30m', 30 * 60],
+    ['12h', 12 * 60 * 60],
+    ['45s', 45],
+  ])('acepta %s', (valor, segundos) => {
+    expect(duracionRefresh({ JWT_REFRESH_EXPIRES_IN: valor })).toBe(segundos)
+  })
+
+  it.each(['7', '0d', '7 días', '1w'])('rechaza %s', (valor) => {
+    expect(() => duracionRefresh({ JWT_REFRESH_EXPIRES_IN: valor })).toThrow(
+      'JWT_REFRESH_EXPIRES_IN',
+    )
   })
 })
