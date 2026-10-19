@@ -3,7 +3,8 @@ import { Injectable } from '@nestjs/common'
 import { BaseDeDatos } from '../database/base-de-datos.service.js'
 import type { TokensSesion } from './auth.service.js'
 
-export const MAX_FALLOS_LOGIN = 5
+export const MAX_FALLOS_CUENTA = 5
+export const MAX_FALLOS_IP = 20
 export const VENTANA_LOGIN_MS = 15 * 60 * 1000
 
 export const claveIntentos = (tipo: 'cuenta' | 'ip', valor: string) =>
@@ -15,15 +16,16 @@ export class LimiteLogin {
 
   async intentar(
     correo: string,
-    ip: string,
+    ip: string | null,
     autenticar: (
       bd: Pick<BaseDeDatos, 'query'>,
     ) => Promise<TokensSesion | null>,
   ): Promise<{ tokens: TokensSesion | null; retryAfter: number }> {
-    const claves = [
-      claveIntentos('cuenta', correo.trim().toLowerCase()),
-      claveIntentos('ip', ip),
-    ].sort()
+    const limites = new Map([
+      [claveIntentos('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
+    ])
+    if (ip !== null) limites.set(claveIntentos('ip', ip), MAX_FALLOS_IP)
+    const claves = [...limites.keys()].sort()
     // Los dos bloqueos se toman siempre en el mismo orden. Autenticación y
     // contadores usan la misma conexión para no agotar el pool al esperar.
     return this.bd.enTransaccion(async (bd) => {
@@ -55,8 +57,8 @@ export class LimiteLogin {
       const espera = () =>
         Math.max(
           0,
-          ...vigentes.map(({ fallos }) =>
-            fallos.length >= MAX_FALLOS_LOGIN
+          ...vigentes.map(({ clave, fallos }) =>
+            fallos.length >= limites.get(clave)!
               ? Math.max(
                   1,
                   Math.ceil(

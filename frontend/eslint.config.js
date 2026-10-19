@@ -20,5 +20,32 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // AUTH-08: el texto se muestra siempre con JSX, que lo escapa. Insertar
+      // HTML a mano abre la puerta a XSS. Equivale a react/no-danger, que no
+      // es compatible con ESLint 10.
+      'no-restricted-syntax': [
+        'error',
+        // Cada selector cubre el acceso con punto (property.name) y con una
+        // cadena literal (property.value), por ejemplo el['innerHTML'].
+        // Lo prueba eslint.config.test.ts.
+        {
+          selector:
+            "JSXAttribute[name.name='dangerouslySetInnerHTML'], Property:matches([key.name='dangerouslySetInnerHTML'], [key.value='dangerouslySetInnerHTML'])",
+          message:
+            'No uses dangerouslySetInnerHTML: muestra el texto con JSX, que lo escapa.',
+        },
+        {
+          selector:
+            'AssignmentExpression > MemberExpression.left:matches([property.name=/^(innerHTML|outerHTML)$/], [property.value=/^(innerHTML|outerHTML)$/])',
+          message: 'No asignes innerHTML ni outerHTML: usa textContent o JSX.',
+        },
+        {
+          selector:
+            "CallExpression > MemberExpression.callee:matches([property.name='insertAdjacentHTML'], [property.value='insertAdjacentHTML'])",
+          message: 'No uses insertAdjacentHTML: usa JSX o textContent.',
+        },
+      ],
+    },
   },
 ])

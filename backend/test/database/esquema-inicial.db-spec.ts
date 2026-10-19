@@ -153,6 +153,15 @@ describe('migraciones', () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
     // Se revierten en orden inverso a su aplicación.
+    await bd.query(
+      `INSERT INTO limite_login (clave, fallos) VALUES (repeat('a', 64), ARRAY(SELECT clock_timestamp() FROM generate_series(1, 20)))`,
+    )
+    await bd.undoLastMigration()
+    const [{ cantidad }] = await bd.query<{ cantidad: number }[]>(
+      'SELECT cardinality(fallos) AS cantidad FROM limite_login',
+    )
+    expect(cantidad).toBe(5)
+    expect(await tablasExistentes()).toEqual(TABLAS)
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
       TABLAS.filter((tabla) => tabla !== 'limite_login'),

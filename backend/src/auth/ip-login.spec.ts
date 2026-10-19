@@ -1,7 +1,38 @@
 import type { Request } from 'express'
-import { ipLogin, normalizarIp } from './ip-login.js'
+import { Logger } from '@nestjs/common'
+import { vi } from 'vitest'
+import {
+  ipLogin,
+  normalizarIp,
+  ORIGEN_VERIFICADO,
+  type RequestLogin,
+} from './ip-login.js'
 
 describe('IP de login', () => {
+  it.each([undefined, '', '  '])(
+    'sin cabecera confiable (%s), registra aviso sin datos del cliente y omite la IP',
+    (cabecera) => {
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {})
+      try {
+        const req = {
+          [ORIGEN_VERIFICADO]: true,
+          headers: {
+            'x-vercel-forwarded-for': cabecera,
+            'x-forwarded-for': '192.0.2.200',
+          },
+          socket: { remoteAddress: '10.0.0.1' },
+        } as unknown as RequestLogin
+        expect(ipLogin(req)).toBeNull()
+        expect(warn).toHaveBeenCalledWith(
+          'Login sin x-vercel-forwarded-for: se aplica solo el límite por cuenta',
+        )
+      } finally {
+        warn.mockRestore()
+      }
+    },
+  )
   it.each([
     ['127.0.0.1', '127.0.0.1'],
     ['::ffff:127.0.0.1', '127.0.0.1'],

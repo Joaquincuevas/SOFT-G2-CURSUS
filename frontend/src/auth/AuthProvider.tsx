@@ -92,11 +92,13 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       const version = generacion.current
       const cerrada = () => version !== generacion.current || !vigente.current
       if (cerrada()) return new Response(null, { status: 401 })
-      const pedir = (jwt: string | null) =>
-        fetch(ruta, {
-          ...init,
-          headers: { ...init.headers, Authorization: `Bearer ${jwt}` },
-        })
+      // new Headers acepta cualquier forma de init.headers (objeto, arreglo o
+      // Headers); un spread de un Headers perdería sus valores.
+      const pedir = (jwt: string | null) => {
+        const headers = new Headers(init.headers)
+        headers.set('Authorization', `Bearer ${jwt}`)
+        return fetch(ruta, { ...init, headers })
+      }
       const respuesta = await pedir(vigente.current)
       if (cerrada()) return new Response(null, { status: 401 })
       if (respuesta.status !== 401) return respuesta
