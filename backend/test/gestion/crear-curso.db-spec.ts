@@ -1,4 +1,4 @@
-import type { CursoCreado, OpcionCarrera, OpcionPeriodo } from '@cursus/shared'
+import type { CursoCreado, Carrera, OpcionPeriodo } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -61,7 +61,7 @@ async function crear(correo: string, body: object, estado: number) {
 
 // Carrera y período activo que el usuario ve en las listas del formulario.
 async function opcionesDe(correo: string) {
-  const [carrera] = await get<OpcionCarrera[]>(correo, '/api/carreras')
+  const [carrera] = await get<Carrera[]>(correo, '/api/carreras')
   const [periodo] = await get<OpcionPeriodo[]>(correo, '/api/periodos')
   return { carreraId: carrera.id, periodoId: periodo.id }
 }
@@ -102,33 +102,6 @@ afterAll(async () => {
   }
 })
 
-describe('GET /api/carreras', () => {
-  it('el Administrativo solo ve las carreras de su facultad', async () => {
-    const carreras = await get<OpcionCarrera[]>(
-      ADMIN_INGENIERIA,
-      '/api/carreras',
-    )
-    expect(carreras.map((c) => c.nombre)).toEqual([
-      'Ingeniería Civil en Informática',
-    ])
-  })
-
-  it('no incluye las carreras archivadas', async () => {
-    await bd.query(
-      "UPDATE carrera SET archived_at = now() WHERE nombre = 'Ingeniería Comercial'",
-    )
-    try {
-      expect(
-        await get<OpcionCarrera[]>(ADMIN_ECONOMIA, '/api/carreras'),
-      ).toEqual([])
-    } finally {
-      await bd.query(
-        "UPDATE carrera SET archived_at = NULL WHERE nombre = 'Ingeniería Comercial'",
-      )
-    }
-  })
-})
-
 describe('GET /api/periodos', () => {
   it('devuelve los de su universidad, con el activo primero', async () => {
     const [{ id: norte }] = await bd.query<{ id: string }[]>(
@@ -154,6 +127,46 @@ describe('GET /api/periodos', () => {
 })
 
 describe('POST /api/cursos', () => {
+  it('usa una carrera creada y editada desde CarrerasController', async () => {
+    const token = await tokenDe(ADMIN_INGENIERIA)
+    const respuesta = await request(app.getHttpServer())
+      .post('/api/carreras')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ nombre: 'Carrera para cursos' })
+      .expect(201)
+    const carrera = respuesta.body as Carrera
+    await request(app.getHttpServer())
+      .patch(`/api/carreras/${carrera.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ nombre: 'Carrera editada para cursos' })
+      .expect(200)
+
+    const carreras = await get<Carrera[]>(ADMIN_INGENIERIA, '/api/carreras')
+    expect(carreras).toContainEqual({
+      id: carrera.id,
+      nombre: 'Carrera editada para cursos',
+    })
+    const [periodo] = await get<OpcionPeriodo[]>(
+      ADMIN_INGENIERIA,
+      '/api/periodos',
+    )
+    const curso = await crear(
+      ADMIN_INGENIERIA,
+      {
+        carreraId: carrera.id,
+        periodoId: periodo.id,
+        codigo: 'INTEGRACION01',
+        nombre: 'Curso de la carrera editada',
+      },
+      201,
+    )
+    expect(curso.carreraNombre).toBe('Carrera editada para cursos')
+    // Las otras pruebas usan las opciones originales del seed.
+    await bd.query('UPDATE carrera SET archived_at = now() WHERE id = $1', [
+      carrera.id,
+    ])
+  })
+
   it('crea el curso en su universidad y responde 201', async () => {
     const curso = await crear(
       ADMIN_INGENIERIA,

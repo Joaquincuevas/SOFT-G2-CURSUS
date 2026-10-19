@@ -2,6 +2,7 @@ import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { Dashboard } from './pages/Dashboard'
+import { Carreras } from './pages/Carreras'
 import type { SessionUser } from './session/session'
 
 // Única fuente de la navegación: el Sidebar, las rutas, su guard y el
@@ -63,6 +64,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permiso: { accion: 'read', sujeto: 'GestionAcademica' },
     page: Cursos,
     title: () => 'Gestión académica',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
+    to: '/carreras',
+    label: 'Carreras',
+    icon: 'book',
+    // GES-01 gestiona carreras de facultad; solo el administrativo las crea.
+    permiso: { accion: 'create', sujeto: 'Carrera' },
+    page: Carreras,
+    title: () => 'Carreras',
     subtitle: (user) =>
       conSemestre(user.facultadNombre ?? user.universidadNombre, user),
   },

@@ -1,8 +1,8 @@
 import type {
   CrearCurso,
   CursoCreado,
+  Carrera,
   CursoListado,
-  OpcionCarrera,
   OpcionPeriodo,
 } from '@cursus/shared'
 import { useEffect, useState, type FormEvent } from 'react'
@@ -169,8 +169,7 @@ function NuevoCurso() {
   const puedeCrear = usePuede('create', 'Curso')
   const { fetchConSesion } = useAuth()
   const navigate = useNavigate()
-  const [carreras, recargarCarreras] =
-    useDatos<OpcionCarrera[]>('/api/carreras')
+  const [carreras, recargarCarreras] = useDatos<Carrera[]>('/api/carreras')
   const [periodos, recargarPeriodos] =
     useDatos<OpcionPeriodo[]>('/api/periodos')
   const [error, setError] = useState<string | null>(null)

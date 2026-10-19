@@ -153,7 +153,9 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearCurso es la última.
+    await bd.undoLastMigration() // NombreCarreraUnicoNormalizado.
+
+    // CrearCurso es ahora la última.
     await bd.undoLastMigration()
     const SIN_CURSO = TABLAS.filter((tabla) => tabla !== 'curso')
     expect(await tablasExistentes()).toEqual(SIN_CURSO)

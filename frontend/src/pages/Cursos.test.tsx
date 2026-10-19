@@ -1,7 +1,7 @@
 import type {
+  Carrera,
   CursoCreado,
   CursoListado,
-  OpcionCarrera,
   OpcionPeriodo,
 } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
@@ -10,7 +10,7 @@ import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
 const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
 
-const CARRERAS: OpcionCarrera[] = [
+const CARRERAS: Carrera[] = [
   { id: 'carrera-1', nombre: 'Ingeniería Civil en Informática' },
 ]
 // La API devuelve el período activo primero.
