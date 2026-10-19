@@ -5,7 +5,7 @@ import './Login.css'
 
 // Pantalla de login del Figma (nodo 66:2).
 export function Login() {
-  const { token, iniciarSesion } = useAuth()
+  const { token, aviso, iniciarSesion } = useAuth()
   const location = useLocation()
   const [enviando, setEnviando] = useState(false)
 
@@ -58,6 +58,8 @@ export function Login() {
               Ingresa con tus credenciales institucionales.
             </p>
           </div>
+
+          {aviso && <p role="alert">{aviso}</p>}
 
           <form className="login__card" onSubmit={handleSubmit}>
             <p className="login__caption">

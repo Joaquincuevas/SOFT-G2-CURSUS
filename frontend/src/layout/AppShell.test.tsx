@@ -78,7 +78,10 @@ test('Cerrar Sesión olvida el token y vuelve a /login', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Cerrar Sesión' }))
 
   expect(
-    screen.getByRole('heading', { level: 1, name: 'Bienvenido a CURSUS' }),
+    await screen.findByRole('heading', {
+      level: 1,
+      name: 'Bienvenido a CURSUS',
+    }),
   ).toBeInTheDocument()
   expect(
     screen.queryByRole('navigation', { name: 'Navegación principal' }),

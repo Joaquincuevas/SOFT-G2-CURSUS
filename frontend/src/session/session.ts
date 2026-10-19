@@ -27,13 +27,13 @@ export function usePuede(accion: Accion, sujeto: Sujeto): boolean {
   return useSession().ability.can(accion, sujeto)
 }
 
-// GET /api/auth/yo. Devuelve null si el token no es válido o el backend no
-// responde.
-export async function pedirUsuario(token: string): Promise<SessionUser | null> {
+// GET /api/auth/yo con el fetch de la sesión (AuthValue.fetchConSesion).
+// Devuelve null si el backend lo rechaza o no responde.
+export async function pedirUsuario(
+  fetchConSesion: (ruta: string) => Promise<Response>,
+): Promise<SessionUser | null> {
   try {
-    const respuesta = await fetch('/api/auth/yo', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    const respuesta = await fetchConSesion('/api/auth/yo')
     if (!respuesta.ok) return null
     return (await respuesta.json()) as SessionUser
   } catch {

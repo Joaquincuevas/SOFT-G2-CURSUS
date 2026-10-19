@@ -12,15 +12,17 @@ function enviarLogin(correo: string, password: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 }
 
+// Sin token, la app primero intenta restaurar la sesión con la cookie.
 const pantallaLogin = () =>
-  screen.getByRole('heading', { level: 1, name: 'Bienvenido a CURSUS' })
+  screen.findByRole('heading', { level: 1, name: 'Bienvenido a CURSUS' })
 
 describe('rutas protegidas', () => {
   test.each(['/', '/mis-cursos'])(
     'sin sesión, %s redirige a /login',
-    (path) => {
+    async (path) => {
+      simularBackend('ALUMNO')
       renderApp(path)
-      expect(pantallaLogin()).toBeInTheDocument()
+      expect(await pantallaLogin()).toBeInTheDocument()
       expect(
         screen.queryByRole('navigation', { name: 'Navegación principal' }),
       ).not.toBeInTheDocument()
@@ -32,6 +34,7 @@ describe('inicio de sesión', () => {
   test('con credenciales válidas entra a la ruta que se pidió', async () => {
     const fetch = simularBackend('PROFESOR')
     renderApp('/mis-cursos')
+    await pantallaLogin()
 
     enviarLogin('profesor@norte.cursus.test', 'cursus_demo')
 
@@ -72,14 +75,17 @@ describe('inicio de sesión', () => {
     const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 401 }))
     vi.stubGlobal('fetch', fetch)
     renderApp('/')
+    await pantallaLogin()
 
     enviarLogin('profesor@norte.cursus.test', 'otra')
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledOnce())
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith('/api/auth/login', expect.anything()),
+    )
     // El botón vuelve a habilitarse cuando termina el intento.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Ingresar' })).toBeEnabled(),
     )
-    expect(pantallaLogin()).toBeInTheDocument()
+    expect(await pantallaLogin()).toBeInTheDocument()
   })
 })
