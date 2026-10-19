@@ -52,6 +52,33 @@ Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y la
 
 Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
 
+## Aislamiento por universidad
+
+Toda consulta a una tabla con datos institucionales se filtra por la universidad del usuario de la sesión. Un usuario nunca ve datos de otra universidad, y pedir un recurso de otra universidad responde `404`, igual que si no existiera.
+
+- `@UniversidadActual()` entrega la universidad del JWT. Es el único punto del backend donde se lee.
+- `BaseDeDatos.consultarEnUniversidad(universidadId, sql, parametros)` ejecuta la consulta con la universidad como `$1`; los demás parámetros siguen desde `$2`. Falla si la consulta no usa `$1`.
+- `BaseDeDatos.obtenerEnUniversidad(...)` hace lo mismo para un solo recurso y responde `404` si no lo encuentra.
+
+```ts
+@Puede('read', 'Facultad')
+@Get(':id')
+obtener(@UniversidadActual() universidadId: string, @Param('id', ParseUUIDPipe) id: string) {
+  return this.bd.obtenerEnUniversidad<Facultad>(
+    universidadId,
+    'SELECT id, nombre FROM facultad WHERE universidad_id = $1 AND id = $2',
+    [id],
+  )
+}
+```
+
+Excepciones, que usan `BaseDeDatos.query`:
+
+- `POST /api/auth/login` busca al usuario por el dominio de su correo, porque antes del login no hay universidad de sesión.
+- `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
+
+Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03.
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.

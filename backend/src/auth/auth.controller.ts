@@ -15,6 +15,7 @@ import { AuthService, type TokensSesion } from './auth.service.js'
 import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
+import { UniversidadActual } from './universidad-actual.decorator.js'
 
 // Argon2 procesa la contraseña completa: se limita su largo para que una
 // petición no pueda consumir CPU con textos enormes.
@@ -118,12 +119,17 @@ export class AuthController {
     return { accessToken: tokens.accessToken }
   }
 
-  // Usuario de la sesión. 401 si el usuario del token ya no existe.
+  // Usuario de la sesión. 401 si el usuario del token ya no existe en la
+  // universidad del token.
   @SoloSesion()
   @Get('yo')
-  async yo(@Req() req: RequestConUsuario): Promise<UsuarioSesion> {
+  async yo(
+    @Req() req: RequestConUsuario,
+    @UniversidadActual() universidadId: string,
+  ): Promise<UsuarioSesion> {
     const usuario =
-      req.usuario && (await this.auth.obtenerUsuario(req.usuario.sub))
+      req.usuario &&
+      (await this.auth.obtenerUsuario(req.usuario.sub, universidadId))
     if (!usuario) {
       throw new UnauthorizedException()
     }
