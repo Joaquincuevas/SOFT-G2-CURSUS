@@ -1,4 +1,4 @@
-import type { CursoCreado, OpcionCarrera, OpcionPeriodo } from '@cursus/shared'
+import type { CursoCreado, OpcionPeriodo } from '@cursus/shared'
 import {
   ConflictException,
   Injectable,
@@ -34,22 +34,6 @@ interface FilaCurso {
 @Injectable()
 export class GestionService {
   constructor(private readonly bd: BaseDeDatos) {}
-
-  // El Administrativo solo ve las carreras de su facultad; el resto de los
-  // roles, las de su universidad. Sin las archivadas.
-  listarCarreras(
-    contexto: ContextoUniversidad,
-    usuarioId: string,
-  ): Promise<OpcionCarrera[]> {
-    return this.bd.consultarEnUniversidad<OpcionCarrera>(
-      contexto,
-      `SELECT id, nombre FROM carrera
-        WHERE universidad_id = $1 AND archived_at IS NULL
-          AND (NOT $2 OR facultad_id = ${facultadDe('$3')})
-        ORDER BY nombre`,
-      [contexto.rol === 'ADMINISTRATIVO', usuarioId],
-    )
-  }
 
   // El período activo primero y después los más recientes.
   listarPeriodos(contexto: ContextoUniversidad): Promise<OpcionPeriodo[]> {

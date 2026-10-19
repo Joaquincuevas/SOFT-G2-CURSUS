@@ -23,12 +23,7 @@ export interface CursoCreado {
   periodo: PeriodoResumen
 }
 
-// Opciones de las listas del formulario (GET /api/carreras y /api/periodos).
-export interface OpcionCarrera {
-  id: string
-  nombre: string
-}
-
+// Opciones de GET /api/periodos; GET /api/carreras usa el tipo Carrera.
 export interface OpcionPeriodo extends PeriodoResumen {
   activo: boolean
 }

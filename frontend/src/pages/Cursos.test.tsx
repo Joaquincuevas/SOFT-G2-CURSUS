@@ -1,11 +1,11 @@
-import type { CursoCreado, OpcionCarrera, OpcionPeriodo } from '@cursus/shared'
+import type { CursoCreado, Carrera, OpcionPeriodo } from '@cursus/shared'
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
 const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
 
-const CARRERAS: OpcionCarrera[] = [
+const CARRERAS: Carrera[] = [
   { id: 'carrera-1', nombre: 'Ingeniería Civil en Informática' },
 ]
 // La API devuelve el período activo primero.

@@ -1,4 +1,4 @@
-import type { CursoCreado, OpcionCarrera, OpcionPeriodo } from '@cursus/shared'
+import type { CursoCreado, OpcionPeriodo } from '@cursus/shared'
 import { Body, Controller, Get, Post, Req } from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
@@ -13,17 +13,6 @@ const usuarioDe = (req: RequestConUsuario) => req.usuario?.sub as string
 @Controller()
 export class GestionController {
   constructor(private readonly gestion: GestionService) {}
-
-  // Solo lectura, para las listas del formulario. Crear y editar carreras y
-  // períodos llegan con GES-01 y GES-02.
-  @Puede('read', 'Carrera')
-  @Get('carreras')
-  listarCarreras(
-    @UniversidadActual() contexto: ContextoUniversidad,
-    @Req() req: RequestConUsuario,
-  ): Promise<OpcionCarrera[]> {
-    return this.gestion.listarCarreras(contexto, usuarioDe(req))
-  }
 
   @Puede('read', 'Periodo')
   @Get('periodos')
