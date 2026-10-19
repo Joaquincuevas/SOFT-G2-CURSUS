@@ -1,5 +1,6 @@
-import { NavLink, useNavigate } from 'react-router'
-import { navItemsFor } from '../navigation'
+import { NavLink } from 'react-router'
+import { useAuth } from '../auth/auth'
+import { etiquetaDe, navItemsFor } from '../navigation'
 import { useSession } from '../session/session'
 import { NavIcon, PowerIcon } from './icons'
 import './Sidebar.css'
@@ -11,13 +12,12 @@ interface Props {
 }
 
 export function Sidebar({ id, open, onNavigate }: Props) {
-  const { user, logout } = useSession()
-  const navigate = useNavigate()
+  const { user, ability } = useSession()
+  const { cerrarSesion } = useAuth()
 
   function handleLogout() {
-    logout()
     onNavigate()
-    navigate('/')
+    cerrarSesion()
   }
 
   return (
@@ -25,7 +25,7 @@ export function Sidebar({ id, open, onNavigate }: Props) {
       <p className="sidebar__logo">CURSUS</p>
       <nav aria-label="Navegación principal">
         <ul className="sidebar__list">
-          {navItemsFor(user.rol).map((item) => (
+          {navItemsFor(ability).map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
@@ -34,7 +34,7 @@ export function Sidebar({ id, open, onNavigate }: Props) {
                 onClick={onNavigate}
               >
                 <NavIcon name={item.icon} />
-                {item.label}
+                {etiquetaDe(item, user)}
               </NavLink>
             </li>
           ))}

@@ -1,21 +1,15 @@
 import type { Rol } from '@cursus/shared'
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import App from '../App'
-import { AuthProvider } from '../auth/AuthProvider'
-import { SessionProvider } from '../session/SessionProvider'
+import {
+  renderApp as renderSinEsperar,
+  renderConSesion,
+  simularBackend,
+  usuarioDePrueba,
+} from '../test/sesion'
 
-function renderApp(rol: Rol, path = '/') {
-  render(
-    <MemoryRouter initialEntries={[path]}>
-      <AuthProvider initialToken="token-de-prueba">
-        <SessionProvider initialRol={rol}>
-          <App />
-        </SessionProvider>
-      </AuthProvider>
-    </MemoryRouter>,
-  )
+async function renderApp(rol: Rol, path = '/') {
+  await renderConSesion(rol, path)
   return screen.getByRole('banner')
 }
 
@@ -58,8 +52,8 @@ describe('encabezado por rol', () => {
     ],
   ])(
     '%s ve su nombre, rol y universidad',
-    (rol, nombre, rolLabel, titulo, subtitulo) => {
-      const header = within(renderApp(rol))
+    async (rol, nombre, rolLabel, titulo, subtitulo) => {
+      const header = within(await renderApp(rol))
 
       expect(header.getByRole('heading', { level: 1 })).toHaveTextContent(
         titulo,
@@ -70,20 +64,20 @@ describe('encabezado por rol', () => {
     },
   )
 
-  test('muestra las iniciales del usuario en el avatar', () => {
-    const header = within(renderApp('DIRECTOR'))
+  test('muestra las iniciales del usuario en el avatar', async () => {
+    const header = within(await renderApp('DIRECTOR'))
     expect(header.getByText('DN')).toBeInTheDocument()
   })
 
-  test('no duplica Cerrar Sesión, que está en el Sidebar', () => {
-    const header = within(renderApp('ALUMNO'))
+  test('no duplica Cerrar Sesión, que está en el Sidebar', async () => {
+    const header = within(await renderApp('ALUMNO'))
     expect(header.queryByRole('button')).not.toBeInTheDocument()
   })
 })
 
 describe('título por ruta', () => {
-  test('cambia al navegar entre rutas', () => {
-    renderApp('PROFESOR')
+  test('cambia al navegar entre rutas', async () => {
+    await renderApp('PROFESOR')
     const titulo = () => screen.getByRole('heading', { level: 1 })
 
     expect(titulo()).toHaveTextContent('Bienvenido/a, Profesor Norte')
@@ -95,8 +89,8 @@ describe('título por ruta', () => {
     expect(titulo()).toHaveTextContent('Bienvenido/a, Profesor Norte')
   })
 
-  test('el Administrativo ve su facultad en Gestión académica', () => {
-    const header = within(renderApp('ADMINISTRATIVO', '/cursos'))
+  test('el Administrativo ve su facultad en Gestión académica', async () => {
+    const header = within(await renderApp('ADMINISTRATIVO', '/cursos'))
 
     expect(header.getByRole('heading', { level: 1 })).toHaveTextContent(
       'Gestión académica',
@@ -106,12 +100,27 @@ describe('título por ruta', () => {
     ).toBeInTheDocument()
   })
 
-  test('el Director ve Universidades en Mis Cursos', () => {
-    const header = within(renderApp('DIRECTOR', '/universidades'))
+  test('el Director ve Universidades', async () => {
+    const header = within(await renderApp('DIRECTOR', '/universidades'))
 
     expect(header.getByRole('heading', { level: 1 })).toHaveTextContent(
       'Universidades',
     )
     expect(header.getByText('Directorio · Semestre 2026-2')).toBeInTheDocument()
   })
+})
+
+test('sin período activo, el subtítulo muestra solo la universidad', async () => {
+  const fetch = simularBackend('ALUMNO')
+  fetch.mockImplementation(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({ ...usuarioDePrueba('ALUMNO'), periodoActivo: null }),
+      ),
+    ),
+  )
+  renderSinEsperar('/', 'jwt-de-prueba')
+
+  const header = within(await screen.findByRole('banner'))
+  expect(header.getByText('Universidad Demo Norte')).toBeInTheDocument()
 })

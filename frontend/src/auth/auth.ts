@@ -7,6 +7,8 @@ export interface AuthValue {
   token: string | null
   // Devuelve true si el backend aceptó las credenciales.
   iniciarSesion: (correo: string, password: string) => Promise<boolean>
+  // Único punto de cierre de sesión: todo logout pasa por aquí.
+  cerrarSesion: () => void
 }
 
 export const AuthContext = createContext<AuthValue | null>(null)

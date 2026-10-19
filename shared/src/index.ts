@@ -12,4 +12,17 @@ export const ROLES = [
 
 export type Rol = (typeof ROLES)[number]
 
+// Respuesta de GET /api/auth/yo: el usuario de la sesión.
+export interface UsuarioSesion {
+  id: string
+  nombre: string
+  rol: Rol
+  universidadId: string
+  // "Directorio" para el Director, que ve todas las universidades.
+  universidadNombre: string
+  facultadNombre: string | null
+  // Período activo de su universidad, o null si no hay uno activo.
+  periodoActivo: { id: string; anio: number; semestre: number } | null
+}
+
 export * from './permisos.js'

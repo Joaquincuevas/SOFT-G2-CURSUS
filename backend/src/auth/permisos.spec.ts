@@ -3,25 +3,32 @@ import {
   definirAbilityPara,
   type Rol,
   ROLES,
-  type Sujeto,
+  type SujetoSeccion,
+  type SujetoTabla,
 } from '@cursus/shared'
 
 type AccionConcreta = Exclude<Accion, 'manage'>
-type SujetoConcreto = Exclude<Sujeto, 'all'>
 
 const ACCIONES: AccionConcreta[] = ['create', 'read', 'update', 'delete']
-const SUJETOS: SujetoConcreto[] = [
+const SUJETOS: SujetoTabla[] = [
   'Universidad',
   'Facultad',
   'Carrera',
   'Periodo',
   'Usuario',
+  'Curso',
 ]
-const TODO: AccionConcreta[] = ACCIONES
+const SECCIONES: SujetoSeccion[] = [
+  'PanelDirectorio',
+  'GestionAcademica',
+  'MisCursos',
+]
+// Nada se elimina, solo se archiva: nadie tiene delete.
+const SIN_DELETE: AccionConcreta[] = ['create', 'read', 'update']
 const LECTURA: AccionConcreta[] = ['read']
 
 // Matriz rol × permiso esperada. Lo que no aparece está denegado.
-const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
+const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
   // Solo lectura, coherente con la RLS de MT-02 (ADR 0001).
   DIRECTOR: {
     Universidad: LECTURA,
@@ -29,14 +36,15 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
     Carrera: LECTURA,
     Periodo: LECTURA,
     Usuario: LECTURA,
+    Curso: LECTURA,
   },
   ADMINISTRATIVO: {
     Universidad: LECTURA,
     Facultad: LECTURA,
-    Carrera: TODO,
-    Periodo: TODO,
-    // Sin delete: los usuarios se archivan.
-    Usuario: ['create', 'read', 'update'],
+    Carrera: SIN_DELETE,
+    Periodo: SIN_DELETE,
+    Usuario: SIN_DELETE,
+    Curso: SIN_DELETE,
   },
   PROFESOR: {
     Universidad: LECTURA,
@@ -58,6 +66,15 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoConcreto, AccionConcreta[]>>> = {
   },
 }
 
+// Secciones del menú que ve cada rol (solo con read).
+const MENU: Record<Rol, SujetoSeccion[]> = {
+  DIRECTOR: ['PanelDirectorio', 'GestionAcademica'],
+  ADMINISTRATIVO: ['GestionAcademica'],
+  PROFESOR: ['MisCursos'],
+  AYUDANTE: ['MisCursos'],
+  ALUMNO: ['MisCursos'],
+}
+
 describe('definirAbilityPara', () => {
   const casos = ROLES.flatMap((rol) =>
     SUJETOS.flatMap((sujeto) =>
@@ -77,9 +94,39 @@ describe('definirAbilityPara', () => {
     },
   )
 
+  const casosSeccion = ROLES.flatMap((rol) =>
+    SECCIONES.map((seccion) => ({
+      rol,
+      seccion,
+      permitido: MENU[rol].includes(seccion),
+    })),
+  )
+
+  it.each(casosSeccion)(
+    '$rol: read sección $seccion → $permitido',
+    ({ rol, seccion, permitido }) => {
+      const ability = definirAbilityPara({ rol })
+      expect(ability.can('read', seccion)).toBe(permitido)
+      // Las secciones solo se leen.
+      for (const accion of ACCIONES.filter((a) => a !== 'read')) {
+        expect(ability.can(accion, seccion)).toBe(false)
+      }
+    },
+  )
+
   it('ningún rol tiene manage sobre all', () => {
     for (const rol of ROLES) {
       expect(definirAbilityPara({ rol }).can('manage', 'all')).toBe(false)
+    }
+  })
+
+  it('ningún rol tiene manage ni delete sobre ningún sujeto', () => {
+    for (const rol of ROLES) {
+      const ability = definirAbilityPara({ rol })
+      for (const sujeto of [...SUJETOS, ...SECCIONES]) {
+        expect(ability.can('manage', sujeto)).toBe(false)
+        expect(ability.can('delete', sujeto)).toBe(false)
+      }
     }
   })
 

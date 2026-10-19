@@ -1,46 +1,63 @@
 import type { Rol } from '@cursus/shared'
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import App from '../App'
-import { AuthProvider } from '../auth/AuthProvider'
-import { SessionProvider } from '../session/SessionProvider'
+import { renderConSesion } from '../test/sesion'
 
-function renderApp(rol: Rol, path = '/') {
-  render(
-    <MemoryRouter initialEntries={[path]}>
-      <AuthProvider initialToken="token-de-prueba">
-        <SessionProvider initialRol={rol}>
-          <App />
-        </SessionProvider>
-      </AuthProvider>
-    </MemoryRouter>,
-  )
-  return screen.getByRole('navigation', { name: 'Navegación principal' })
-}
+const renderApp = renderConSesion
 
 describe('navegación por rol', () => {
-  test.each<[Rol, string]>([
-    ['DIRECTOR', '/universidades'],
-    ['ADMINISTRATIVO', '/cursos'],
-    ['PROFESOR', '/mis-cursos'],
-    ['AYUDANTE', '/mis-cursos'],
-    ['ALUMNO', '/mis-cursos'],
-  ])('%s ve Dashboard y Mis Cursos → %s', (rol, misCursos) => {
-    const nav = renderApp(rol)
+  test.each<[Rol, [string, string][]]>([
+    [
+      'DIRECTOR',
+      [
+        ['Dashboard', '/'],
+        ['Universidades', '/universidades'],
+        ['Gestión académica', '/cursos'],
+      ],
+    ],
+    [
+      'ADMINISTRATIVO',
+      [
+        ['Dashboard', '/'],
+        ['Mis Cursos', '/cursos'],
+      ],
+    ],
+    [
+      'PROFESOR',
+      [
+        ['Dashboard', '/'],
+        ['Mis Cursos', '/mis-cursos'],
+      ],
+    ],
+    [
+      'AYUDANTE',
+      [
+        ['Dashboard', '/'],
+        ['Mis Cursos', '/mis-cursos'],
+      ],
+    ],
+    [
+      'ALUMNO',
+      [
+        ['Dashboard', '/'],
+        ['Mis Cursos', '/mis-cursos'],
+      ],
+    ],
+  ])('%s ve solo sus secciones', async (rol, esperados) => {
+    const nav = await renderApp(rol)
     const links = within(nav).getAllByRole('link')
 
-    expect(links.map((l) => l.textContent)).toEqual(['Dashboard', 'Mis Cursos'])
-    expect(links[0]).toHaveAttribute('href', '/')
-    expect(links[1]).toHaveAttribute('href', misCursos)
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual(
+      esperados,
+    )
     expect(
       screen.getByRole('button', { name: 'Cerrar Sesión' }),
     ).toBeInTheDocument()
   })
 })
 
-test('el ítem activo cambia al navegar', () => {
-  const nav = renderApp('PROFESOR')
+test('el ítem activo cambia al navegar', async () => {
+  const nav = await renderApp('PROFESOR')
   const dashboard = within(nav).getByRole('link', { name: 'Dashboard' })
   const misCursos = within(nav).getByRole('link', { name: 'Mis Cursos' })
 
@@ -56,26 +73,24 @@ test('el ítem activo cambia al navegar', () => {
   ).toBeInTheDocument()
 })
 
-test('Cerrar Sesión vuelve al rol por defecto y a /', () => {
-  renderApp('DIRECTOR', '/universidades')
+test('Cerrar Sesión olvida el token y vuelve a /login', async () => {
+  await renderApp('DIRECTOR', '/universidades')
   fireEvent.click(screen.getByRole('button', { name: 'Cerrar Sesión' }))
 
-  expect(screen.getByRole('link', { name: 'Mis Cursos' })).toHaveAttribute(
-    'href',
-    '/mis-cursos',
-  )
-  expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  )
+  expect(
+    screen.getByRole('heading', { level: 1, name: 'Bienvenido a CURSUS' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('navigation', { name: 'Navegación principal' }),
+  ).not.toBeInTheDocument()
 })
 
 describe('menú en pantalla angosta', () => {
   const menuButton = () => screen.getByRole('button', { name: 'Menú' })
   const sidebar = () => document.getElementById('sidebar')
 
-  test('el botón abre y cierra el menú', () => {
-    renderApp('ALUMNO')
+  test('el botón abre y cierra el menú', async () => {
+    await renderApp('ALUMNO')
     expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
     expect(sidebar()).toHaveAttribute('data-open', 'false')
 
@@ -87,8 +102,8 @@ describe('menú en pantalla angosta', () => {
     expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('se cierra al navegar, con clic fuera y con Escape', () => {
-    renderApp('ALUMNO')
+  test('se cierra al navegar, con clic fuera y con Escape', async () => {
+    await renderApp('ALUMNO')
 
     fireEvent.click(menuButton())
     fireEvent.click(screen.getByRole('link', { name: 'Mis Cursos' }))
