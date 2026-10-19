@@ -254,6 +254,16 @@ bash infra/aws/seed.sh staging
 
 - API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
 
+## Convención de idioma
+
+- **Español para el dominio.** Los conceptos del negocio usan los mismos nombres que las tablas de la base y el Trello: `curso`, `carrera`, `periodo`, `universidad`, `permisos`, `sesion`. Las funciones y variables del dominio también, incluido el verbo y sin mezclas: `crearCurso`, `periodoActivo`, `iniciarSesion` (no `getCurso`).
+- **Inglés para lo técnico y el framework.** Los nombres que impone o espera el framework (`App`, `Header`, `Sidebar`, `Login`, `health`, los sufijos de Nest `.module`, `.controller`, `.service`, `.dto`, `.guard` y los hooks `use*`) y los términos técnicos estándar sin un equivalente claro en español (`token`, `hash`, `query`, `fetch`).
+- **En español:** comentarios en el código, mensajes de error y de log, commits, PR y documentación.
+
+Ejemplos: `@UniversidadActual()` en `universidad-actual.decorator.ts`, `consultarEnUniversidad()`, `login.dto.ts`.
+
+Lo que ya existe no se renombra de paso en otra tarjeta: si hace falta, se hace en un PR `refactor` aparte.
+
 ## Flujo de trabajo Git
 
 ### Ramas
