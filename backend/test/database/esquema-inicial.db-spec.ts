@@ -13,7 +13,14 @@ const CHECK = '23514'
 const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
-const TABLAS = ['carrera', 'facultad', 'periodo', 'universidad', 'usuario']
+const TABLAS = [
+  'carrera',
+  'facultad',
+  'periodo',
+  'refresh_token',
+  'universidad',
+  'usuario',
+]
 
 let admin: DataSource
 let bd: DataSource
@@ -139,10 +146,15 @@ afterAll(async () => {
   }
 })
 
-describe('migración EsquemaInicial', () => {
-  it('se aplica y se revierte', async () => {
+describe('migraciones', () => {
+  it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearRefreshToken y después EsquemaInicial.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter((tabla) => tabla !== 'refresh_token'),
+    )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual([])
     const [{ restos }] = await bd.query<{ restos: string }[]>(
@@ -164,7 +176,9 @@ describe('migración EsquemaInicial', () => {
        WHERE table_schema = 'public' AND column_name IN ('id', 'created_at', 'updated_at')`,
     )
 
-    for (const tabla of TABLAS) {
+    // refresh_token usa creado_en y no tiene updated_at: sus filas no cambian
+    // salvo revocado_en.
+    for (const tabla of TABLAS.filter((t) => t !== 'refresh_token')) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
         expect.arrayContaining([
@@ -529,6 +543,27 @@ describe('periodo', () => {
       ).rejects.toMatchObject({
         code: UNIQUE,
         constraint: 'uq_periodo_universidad_anio_semestre',
+      })
+    }))
+})
+
+describe('refresh_token', () => {
+  it('rechaza un hash que no es sha256 en hex', () =>
+    enTransaccion(async (q) => {
+      const universidadId = await crearUniversidad(q, 'U', 'u.cl')
+      const usuarioId = await crearUsuario(q, {
+        universidadId,
+        correo: 'a@u.cl',
+      })
+      await expect(
+        q.query(
+          `INSERT INTO refresh_token (usuario_id, hash, expira_en)
+           VALUES ($1, 'token-en-texto-plano', now())`,
+          [usuarioId],
+        ),
+      ).rejects.toMatchObject({
+        code: CHECK,
+        constraint: 'ck_refresh_token_hash',
       })
     }))
 })

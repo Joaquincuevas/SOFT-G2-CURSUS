@@ -52,6 +52,13 @@ Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y la
 
 Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
 
+## Sesión
+
+- `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
+- `POST /api/auth/refresh` cambia la cookie por un JWT nuevo y rota el refresh token. Responde `401` y borra la cookie si el token no existe, expiró o fue revocado. Reusar un token ya rotado revoca todas las sesiones del usuario.
+- `POST /api/auth/logout` revoca el refresh token de la cookie y la borra. Siempre responde `204`.
+- El refresh token es opaco (32 bytes aleatorios) y en la tabla `refresh_token` solo se guarda su sha256. Dura `JWT_REFRESH_EXPIRES_IN` (7 días por defecto) desde su último uso.
+
 ## Variables de entorno
 
 Con `NODE_ENV=production` (la imagen Docker), la API no arranca si falta `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` u `ORIGIN_SECRET`, y las migraciones no corren si falta alguna de las `POSTGRES_*`. En local se usan los valores por defecto. `POSTGRES_SSL=true` activa SSL hacia la base (RDS). Ver `.env.example`.
