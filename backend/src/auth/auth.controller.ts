@@ -38,11 +38,18 @@ const opcionesCookie = (): CookieOptions => ({
   path: '/api/auth',
 })
 
-// Express no lee cookies sin cookie-parser; aquí basta con una.
+// Express no lee cookies sin cookie-parser; aquí basta con una. Un valor mal
+// codificado (por ejemplo, "%") se trata como una cookie ausente: refresh y
+// logout responden como sin cookie y la borran.
 export function leerCookie(req: Request, nombre: string): string | undefined {
   for (const par of req.headers.cookie?.split(';') ?? []) {
     const [clave, ...valor] = par.trim().split('=')
-    if (clave === nombre) return decodeURIComponent(valor.join('='))
+    if (clave !== nombre) continue
+    try {
+      return decodeURIComponent(valor.join('='))
+    } catch {
+      return undefined
+    }
   }
   return undefined
 }

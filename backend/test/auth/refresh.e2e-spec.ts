@@ -36,4 +36,36 @@ describe('refresh y logout sin cookie (e2e)', () => {
       .post('/api/auth/refresh')
       .set('Cookie', 'refreshx=abc; otra=1')
       .expect(401))
+
+  // Valores que decodeURIComponent no puede decodificar.
+  describe.each(['%', '%E0%A4%A'])(
+    'con la cookie malformada refresh=%s',
+    (valor) => {
+      // Set-Cookie que borra la cookie refresh (vacía y ya vencida).
+      const borraLaCookie = (respuesta: request.Response) => {
+        const cookie = (respuesta.get('Set-Cookie') ?? []).find((c) =>
+          c.startsWith('refresh='),
+        )
+        expect(cookie).toMatch(/^refresh=;/)
+        expect(cookie).toContain('Expires=Thu, 01 Jan 1970')
+        expect(cookie).toContain('Path=/api/auth')
+      }
+
+      it('refresh responde 401 y borra la cookie', async () => {
+        const respuesta = await request(app.getHttpServer())
+          .post('/api/auth/refresh')
+          .set('Cookie', `refresh=${valor}`)
+          .expect(401)
+        borraLaCookie(respuesta)
+      })
+
+      it('logout responde 204 y borra la cookie', async () => {
+        const respuesta = await request(app.getHttpServer())
+          .post('/api/auth/logout')
+          .set('Cookie', `refresh=${valor}`)
+          .expect(204)
+        borraLaCookie(respuesta)
+      })
+    },
+  )
 })
