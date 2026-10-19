@@ -2,10 +2,12 @@ import { verify } from 'argon2'
 import { DataSource } from 'typeorm'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import {
+  DEMO_POR_FACULTAD,
   ejecutarSeed,
   PERIODO,
   type Rol,
   UNIVERSIDADES,
+  usuariosDeDemo,
 } from '../../src/database/seed.js'
 
 // Base propia, distinta de la de esquema-inicial.db-spec.ts, que se crea y se
@@ -19,7 +21,12 @@ const ROLES: Rol[] = [
   'AYUDANTE',
   'ALUMNO',
 ]
-const TOTAL_USUARIOS = UNIVERSIDADES.reduce((n, u) => n + u.usuarios.length, 0)
+// Usuarios con nombre fijo y de demo (GES-22) de cada universidad.
+const USUARIOS = UNIVERSIDADES.map((u, i) => [
+  ...u.usuarios,
+  ...usuariosDeDemo(i),
+])
+const TOTAL_USUARIOS = USUARIOS.reduce((n, usuarios) => n + usuarios.length, 0)
 
 let admin: DataSource
 let bd: DataSource
@@ -142,12 +149,26 @@ describe('seed de datos simulados', () => {
   })
 
   it('crea al menos un usuario de cada rol en cada universidad', async () => {
-    for (const u of UNIVERSIDADES) {
+    for (const [i, u] of UNIVERSIDADES.entries()) {
       const usuarios = await usuariosDe(u.dominio)
       expect(new Set(usuarios.map((us) => us.rol))).toEqual(new Set(ROLES))
       expect(usuarios.map((us) => us.correo).sort()).toEqual(
-        u.usuarios.map((us) => `${us.usuario}@${u.dominio}`).sort(),
+        USUARIOS[i].map((us) => `${us.usuario}@${u.dominio}`).sort(),
       )
+    }
+  })
+
+  it('crea en cada facultad los profesores, ayudantes y alumnos de demo', async () => {
+    for (const u of UNIVERSIDADES) {
+      const usuarios = await usuariosDe(u.dominio)
+      for (const facultad of u.facultades) {
+        for (const [rol, cantidad] of Object.entries(DEMO_POR_FACULTAD)) {
+          const deLaFacultad = usuarios.filter(
+            (us) => us.facultad === facultad.nombre && us.rol === rol,
+          )
+          expect(deLaFacultad.length).toBeGreaterThanOrEqual(cantidad)
+        }
+      }
     }
   })
 
@@ -170,9 +191,10 @@ describe('seed de datos simulados', () => {
       'SELECT password_hash FROM usuario',
     )
     expect(usuarios).toHaveLength(TOTAL_USUARIOS)
-    for (const { password_hash } of usuarios) {
-      expect(password_hash).toMatch(/^\$argon2id\$/)
-      expect(await verify(password_hash, PASSWORD)).toBe(true)
+    // Todos comparten el mismo hash: se verifica una vez por hash distinto.
+    for (const hashGuardado of new Set(usuarios.map((u) => u.password_hash))) {
+      expect(hashGuardado).toMatch(/^\$argon2id\$/)
+      expect(await verify(hashGuardado, PASSWORD)).toBe(true)
     }
   })
 

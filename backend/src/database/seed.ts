@@ -21,7 +21,7 @@ interface FacultadSeed {
   cursos: CursoSeed[]
 }
 
-interface UsuarioSeed {
+export interface UsuarioSeed {
   rol: Rol
   nombre: string
   // Parte del correo antes de @; el dominio es el de su universidad.
@@ -148,6 +148,117 @@ export const PERIODO = {
   termino: '2026-12-18',
 }
 
+// Usuarios de demo por facultad (GES-22), para que las listas de la demo de
+// gestión parezcan las de un curso real. Se generan siempre iguales, así que
+// el seed no los duplica. Los tests recorren los usuarios con nombre fijo de
+// UNIVERSIDADES, no estos.
+export const DEMO_POR_FACULTAD = {
+  PROFESOR: 3,
+  AYUDANTE: 4,
+  ALUMNO: 25,
+} as const satisfies Partial<Record<Rol, number>>
+
+const NOMBRES = [
+  'Camila',
+  'Matías',
+  'Valentina',
+  'Benjamín',
+  'Sofía',
+  'Vicente',
+  'Catalina',
+  'Joaquín',
+  'Martina',
+  'Tomás',
+  'Isidora',
+  'Agustín',
+  'Florencia',
+  'Lucas',
+  'Antonia',
+  'Diego',
+  'Josefa',
+  'Cristóbal',
+  'Fernanda',
+  'Ignacio',
+  'Javiera',
+  'Sebastián',
+  'Constanza',
+  'Nicolás',
+  'Francisca',
+  'Felipe',
+  'Daniela',
+  'Maximiliano',
+  'Trinidad',
+  'Gabriel',
+]
+// 29 apellidos: con 30 nombres, cada combinación sale una sola vez (ver
+// usuariosDeDemo).
+const APELLIDOS = [
+  'Rojas',
+  'Muñoz',
+  'Díaz',
+  'Soto',
+  'Contreras',
+  'Silva',
+  'Martínez',
+  'Sepúlveda',
+  'Morales',
+  'Rodríguez',
+  'López',
+  'Fuentes',
+  'Hernández',
+  'Torres',
+  'Araya',
+  'Flores',
+  'Espinoza',
+  'Valenzuela',
+  'Castillo',
+  'Tapia',
+  'Reyes',
+  'Gutiérrez',
+  'Castro',
+  'Pizarro',
+  'Álvarez',
+  'Vásquez',
+  'Sánchez',
+  'Fernández',
+  'Ramírez',
+]
+// Desfase entre universidades, para que no repitan los mismos nombres.
+const DESFASE_UNIVERSIDAD = 400
+
+const paraCorreo = (texto: string) =>
+  texto
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+
+// Usuarios de demo de una universidad: DEMO_POR_FACULTAD en cada facultad,
+// con correo nombre.apellido. El índice k recorre las combinaciones de forma
+// que ninguna se repite mientras k < NOMBRES.length * APELLIDOS.length (el
+// apellido avanza un paso extra por cada vuelta de los nombres, y 31 y 29 no
+// tienen divisores comunes).
+export function usuariosDeDemo(indiceUniversidad: number): UsuarioSeed[] {
+  const universidad = UNIVERSIDADES[indiceUniversidad]
+  const usuarios: UsuarioSeed[] = []
+  let k = indiceUniversidad * DESFASE_UNIVERSIDAD
+  for (const facultad of universidad.facultades) {
+    for (const [rol, cantidad] of Object.entries(DEMO_POR_FACULTAD)) {
+      for (let i = 0; i < cantidad; i++, k++) {
+        const nombre = NOMBRES[k % NOMBRES.length]
+        const apellido =
+          APELLIDOS[(k + Math.floor(k / NOMBRES.length)) % APELLIDOS.length]
+        usuarios.push({
+          rol: rol as Rol,
+          nombre: `${nombre} ${apellido}`,
+          usuario: `${paraCorreo(nombre)}.${paraCorreo(apellido)}`,
+          facultad: facultad.nombre,
+        })
+      }
+    }
+  }
+  return usuarios
+}
+
 // El seed crea usuarios con una contraseña conocida, así que en producción solo
 // corre si se autoriza de forma explícita (por ejemplo, para levantar staging).
 export function verificarEntorno(env: NodeJS.ProcessEnv = process.env) {
@@ -175,6 +286,7 @@ async function upsert(
 async function sembrarUniversidad(
   m: EntityManager,
   u: UniversidadSeed,
+  usuariosDemo: UsuarioSeed[],
   passwordHash: string,
 ) {
   const universidadId = await upsert(
@@ -241,7 +353,7 @@ async function sembrarUniversidad(
     }
   }
 
-  for (const usuario of u.usuarios) {
+  for (const usuario of [...u.usuarios, ...usuariosDemo]) {
     const facultadId = usuario.facultad
       ? facultadIds.get(usuario.facultad)
       : null
@@ -287,10 +399,16 @@ export async function ejecutarSeed(
     )
   }
 
+  // Un solo hash para todos los usuarios: argon2 es lento a propósito.
   const passwordHash = await hash(password)
   await bd.transaction(async (m) => {
-    for (const universidad of UNIVERSIDADES) {
-      await sembrarUniversidad(m, universidad, passwordHash)
+    for (const [indice, universidad] of UNIVERSIDADES.entries()) {
+      await sembrarUniversidad(
+        m,
+        universidad,
+        usuariosDeDemo(indice),
+        passwordHash,
+      )
     }
   })
 }
