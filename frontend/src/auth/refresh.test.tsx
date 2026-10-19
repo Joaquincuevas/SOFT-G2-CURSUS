@@ -1,7 +1,10 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useEffect } from 'react'
+import { MemoryRouter } from 'react-router'
 import { describe, expect, test, vi } from 'vitest'
 import { renderApp, usuarioDePrueba } from '../test/sesion'
-import { AVISO_SESION_EXPIRADA, renovarToken } from './auth'
+import { AVISO_SESION_EXPIRADA, renovarToken, useAuth } from './auth'
+import { AuthProvider } from './AuthProvider'
 
 const json = (cuerpo: unknown) =>
   new Response(JSON.stringify(cuerpo), { status: 200 })
@@ -19,8 +22,7 @@ function simular({
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/api/auth/refresh') return Promise.resolve(refresh())
     if (url === '/api/auth/logout') return Promise.resolve(status(204))
-    const auth = (init?.headers as Record<string, string> | undefined)
-      ?.Authorization
+    const auth = new Headers(init?.headers).get('Authorization')
     return Promise.resolve(
       auth === `Bearer ${valido}`
         ? json(usuarioDePrueba('PROFESOR'))
@@ -72,9 +74,10 @@ describe('JWT expirado', () => {
       await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
     ).toBeInTheDocument()
     expect(llamadasA(fetch, '/api/auth/refresh')).toHaveLength(1)
-    expect(llamadasA(fetch, '/api/auth/yo').at(-1)?.[1]).toEqual({
-      headers: { Authorization: 'Bearer jwt-nuevo' },
-    })
+    const [, init] = llamadasA(fetch, '/api/auth/yo').at(-1)!
+    expect(new Headers(init?.headers).get('Authorization')).toBe(
+      'Bearer jwt-nuevo',
+    )
   })
 
   test('si la renovación falla, vuelve al login con el aviso', async () => {
@@ -166,4 +169,42 @@ test('Cerrar Sesión revoca el refresh token en el backend', async () => {
   )
   // Un logout pedido por el usuario no muestra el aviso de expiración.
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+describe('fetchConSesion', () => {
+  // Hace un pedido con sesión al montarse.
+  function Pedido({ init }: { init: RequestInit }) {
+    const { fetchConSesion } = useAuth()
+    useEffect(() => {
+      void fetchConSesion('/api/prueba', init)
+    }, [fetchConSesion, init])
+    return null
+  }
+
+  test('conserva los headers de un Headers y agrega Authorization', async () => {
+    const fetch = vi.fn(() => Promise.resolve(json({})))
+    vi.stubGlobal('fetch', fetch)
+    const init = {
+      method: 'POST',
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider initialToken="jwt">
+          <Pedido init={init} />
+        </AuthProvider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    const [ruta, enviado] = fetch.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ]
+    const headers = new Headers(enviado.headers)
+    expect(ruta).toBe('/api/prueba')
+    expect(enviado.method).toBe('POST')
+    expect(headers.get('Content-Type')).toBe('application/json')
+    expect(headers.get('Authorization')).toBe('Bearer jwt')
+  })
 })
