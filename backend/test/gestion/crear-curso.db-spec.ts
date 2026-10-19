@@ -179,27 +179,28 @@ describe('POST /api/cursos', () => {
     ])
   })
 
+  // ICC301 no está en el seed (que sí tiene ICC101 e ICC201).
   it('responde 409 si el código ya existe en el período', async () => {
     const opciones = await opcionesDe(ADMIN_INGENIERIA)
     await crear(
       ADMIN_INGENIERIA,
-      { ...opciones, codigo: 'ICC101', nombre: 'Programación' },
+      { ...opciones, codigo: 'ICC301', nombre: 'Programación' },
       201,
     )
     const respuesta = await crear(
       ADMIN_INGENIERIA,
-      { ...opciones, codigo: 'icc101', nombre: 'Otro nombre' },
+      { ...opciones, codigo: 'icc301', nombre: 'Otro nombre' },
       409,
     )
     expect(respuesta.message).toBe(
-      'Ya existe un curso con el código ICC101 en el período 2026-2',
+      'Ya existe un curso con el código ICC301 en el período 2026-2',
     )
   })
 
   it('el mismo código sirve en otra universidad', async () => {
     await crear(
       ADMIN_SUR,
-      { ...(await opcionesDe(ADMIN_SUR)), codigo: 'ICC101', nombre: 'Otro' },
+      { ...(await opcionesDe(ADMIN_SUR)), codigo: 'ICC301', nombre: 'Otro' },
       201,
     )
   })
