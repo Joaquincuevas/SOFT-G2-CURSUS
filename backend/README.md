@@ -52,6 +52,23 @@ Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y la
 
 Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
 
+### Validación de bodies
+
+Un `ValidationPipe` global (`configurarApp`) valida cada body contra su clase y responde `400` si un campo no cumple o si llega un campo no declarado. Por eso cada `@Body()` nuevo debe usar una clase con decoradores de `class-validator`, en un archivo `.dto.ts` (por ejemplo, `auth/login.dto.ts`). Un `@Body()` tipado como `unknown`, como una interfaz o como un `type` pasa **sin validar**, porque esos tipos no existen en tiempo de ejecución.
+
+```ts
+export class CrearCarreraDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  nombre!: string
+}
+
+@Puede('create', 'Carrera')
+@Post()
+crear(@Body() datos: CrearCarreraDto) { ... }
+```
+
 ## Aislamiento por universidad
 
 Toda consulta a una tabla con datos institucionales se filtra por la universidad del usuario de la sesión. Un usuario nunca ve datos de otra universidad, y pedir un recurso de otra universidad responde `404`, igual que si no existiera.
