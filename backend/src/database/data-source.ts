@@ -8,6 +8,8 @@ import { CrearRefreshToken1792428000000 } from './migrations/1792428000000-Crear
 import { CrearSesionAuth1792430000000 } from './migrations/1792430000000-CrearSesionAuth.js'
 import { CrearIntentosLogin1792436000000 } from './migrations/1792436000000-CrearIntentosLogin.js'
 import { AmpliarLimiteLoginIp1792440000000 } from './migrations/1792440000000-AmpliarLimiteLoginIp.js'
+import { AgregarArchivado1792441000000 } from './migrations/1792441000000-AgregarArchivado.js'
+import { ActivarRls1792441100000 } from './migrations/1792441100000-ActivarRls.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -37,6 +39,8 @@ export function opcionesDataSource(
       CrearSesionAuth1792430000000,
       CrearIntentosLogin1792436000000,
       AmpliarLimiteLoginIp1792440000000,
+      AgregarArchivado1792441000000,
+      ActivarRls1792441100000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

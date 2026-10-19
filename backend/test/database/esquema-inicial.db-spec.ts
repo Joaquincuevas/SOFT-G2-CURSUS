@@ -152,7 +152,12 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // Se revierten en orden inverso a su aplicación.
+    // Se revierten en orden inverso a su aplicación. ActivarRls y
+    // AgregarArchivado no crean tablas.
+    await bd.undoLastMigration()
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
     await bd.query(
       `INSERT INTO limite_login (clave, fallos) VALUES (repeat('a', 64), ARRAY(SELECT clock_timestamp() FROM generate_series(1, 20)))`,
     )
@@ -186,6 +191,7 @@ describe('migraciones', () => {
     const [{ restos }] = await bd.query<{ restos: string }[]>(
       `SELECT (SELECT count(*) FROM pg_type WHERE typname = 'rol_usuario')
             + (SELECT count(*) FROM pg_proc WHERE proname = 'actualizar_updated_at')
+            + (SELECT count(*) FROM pg_proc WHERE proname = 'universidad_actual')
               AS restos`,
     )
     expect(Number(restos)).toBe(0)
@@ -217,6 +223,23 @@ describe('migraciones', () => {
         ]),
       )
     }
+  })
+
+  it('agrega archived_at opcional a las tablas que se archivan', async () => {
+    const filas = await bd.query<
+      { table_name: string; data_type: string; is_nullable: string }[]
+    >(
+      `SELECT table_name, data_type, is_nullable FROM information_schema.columns
+       WHERE table_schema = 'public' AND column_name = 'archived_at'
+       ORDER BY table_name`,
+    )
+    expect(filas).toEqual(
+      ['carrera', 'facultad', 'universidad', 'usuario'].map((tabla) => ({
+        table_name: tabla,
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+      })),
+    )
   })
 
   it('indexa la FK compuesta de usuario a facultad', async () => {
