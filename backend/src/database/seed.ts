@@ -229,6 +229,7 @@ async function sembrarUniversidad(
   // Los cursos van solo en el período activo, que puede no ser el del seed. Si
   // el código ya existe en ese período no se toca: ni su nombre ni su
   // archived_at, por si alguien lo editó o lo archivó (por ejemplo, en staging).
+  // Cada curso lleva las secciones 1 y 2 (GES-08).
   for (const [facultad, carreraId] of carreraIds) {
     for (const curso of facultad.cursos) {
       await m.query(
@@ -237,6 +238,18 @@ async function sembrarUniversidad(
           WHERE p.universidad_id = $1 AND p.activo
          ON CONFLICT (codigo, periodo_id) DO NOTHING`,
         [universidadId, carreraId, curso.codigo, curso.nombre],
+      )
+      // Secciones 1 y 2 del curso, con el mismo criterio: si ya existen, no
+      // se tocan.
+      await m.query(
+        `INSERT INTO seccion (universidad_id, curso_id, numero)
+         SELECT $1, c.id, numero
+           FROM curso c
+           JOIN periodo p ON p.id = c.periodo_id AND p.activo
+          CROSS JOIN unnest(ARRAY[1, 2]) AS numero
+          WHERE c.universidad_id = $1 AND c.codigo = $2
+         ON CONFLICT (curso_id, numero) DO NOTHING`,
+        [universidadId, curso.codigo],
       )
     }
   }

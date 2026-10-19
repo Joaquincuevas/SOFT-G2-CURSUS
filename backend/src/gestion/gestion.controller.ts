@@ -1,5 +1,14 @@
-import type { CursoCreado, CursoListado } from '@cursus/shared'
-import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common'
+import type { CursoCreado, CursoDetalle, CursoListado } from '@cursus/shared'
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
@@ -23,6 +32,16 @@ export class GestionController {
     @Query() filtro: FiltroCursosDto,
   ): Promise<CursoListado[]> {
     return this.gestion.listarCursos(contexto, usuarioDe(req), filtro)
+  }
+
+  @Puede('read', 'Curso')
+  @Get('cursos/:id')
+  obtenerCurso(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CursoDetalle> {
+    return this.gestion.obtenerCurso(contexto, usuarioDe(req), id)
   }
 
   @Puede('create', 'Curso')

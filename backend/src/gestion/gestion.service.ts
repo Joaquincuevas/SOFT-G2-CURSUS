@@ -1,5 +1,6 @@
 import type {
   CursoCreado,
+  CursoDetalle,
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
@@ -26,13 +27,33 @@ const facultadDe = (parametro: string) =>
 
 // Columnas comunes del listado de cursos. secciones va en 0 hasta que exista
 // la tabla de secciones (GES-09).
-const COLUMNAS_LISTADO = `
+// Columnas de un curso, comunes al listado y al detalle.
+const COLUMNAS_CURSO = `
   c.id, c.codigo, c.nombre, ca.nombre AS carrera_nombre,
-  p.id AS periodo_id, p.anio, p.semestre, un.nombre AS universidad_nombre
+  p.id AS periodo_id, p.anio, p.semestre, un.nombre AS universidad_nombre`
+
+const DESDE_CURSO = `
   FROM curso c
   JOIN carrera ca ON ca.id = c.carrera_id
   JOIN periodo p ON p.id = c.periodo_id
   JOIN universidad un ON un.id = c.universidad_id`
+
+// Secciones vigentes del curso (GES-08): la cantidad para el listado y la
+// lista ordenada por número para el detalle.
+const CANTIDAD_SECCIONES = `
+  (SELECT count(*)::int FROM seccion s
+    WHERE s.curso_id = c.id AND s.archived_at IS NULL) AS secciones`
+const LISTA_SECCIONES = `
+  COALESCE((SELECT json_agg(json_build_object('id', s.id, 'numero', s.numero)
+                            ORDER BY s.numero)
+              FROM seccion s
+             WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
+
+const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
+
+interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
+  secciones: { id: string; numero: number }[]
+}
 
 interface FilaListado {
   id: string
@@ -43,6 +64,7 @@ interface FilaListado {
   anio: number
   semestre: number
   universidad_nombre: string
+  secciones: number
 }
 
 interface FilaCurso {
@@ -105,9 +127,60 @@ export class GestionService {
         anio: fila.anio,
         semestre: fila.semestre,
       },
-      secciones: 0,
+      secciones: fila.secciones,
       ...(esDirector && { universidadNombre: fila.universidad_nombre }),
     }))
+  }
+
+  // GES-08. Mismo criterio que listarCursos: el Director ve cualquier curso
+  // (lectura READ ONLY), el resto solo los de su facultad. Un curso que no
+  // existe, está archivado, es de otra universidad o de otra facultad
+  // responde 404.
+  async obtenerCurso(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<CursoDetalle> {
+    const esDirector = contexto.rol === 'DIRECTOR'
+    const [fila] = esDirector
+      ? await this.bd.consultarEnTodasLasUniversidades<FilaDetalle>(
+          contexto,
+          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES} ${DESDE_CURSO}
+            WHERE c.id = $1 AND c.archived_at IS NULL`,
+          [cursoId],
+        )
+      : await this.bd.consultarEnUniversidad<FilaDetalle>(
+          contexto,
+          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES} ${DESDE_CURSO}
+            WHERE c.universidad_id = $1 AND c.id = $2
+              AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$3')}`,
+          [cursoId, usuarioId],
+        )
+    if (!fila) {
+      throw new NotFoundException('El curso no existe')
+    }
+    return {
+      id: fila.id,
+      codigo: fila.codigo,
+      nombre: fila.nombre,
+      carreraNombre: fila.carrera_nombre,
+      periodo: {
+        id: fila.periodo_id,
+        anio: fila.anio,
+        semestre: fila.semestre,
+      },
+      ...(esDirector && { universidadNombre: fila.universidad_nombre }),
+      // Horario, profesor, ayudantes y alumnos llegan con GES-10, 12, 13 y 15.
+      secciones: fila.secciones.map(({ id, numero }) => ({
+        id,
+        numero,
+        horario: null,
+        profesor: null,
+        ayudantes: [],
+        alumnos: 0,
+      })),
+    }
   }
 
   // Inserta el curso en una sola consulta, solo si la carrera es de la

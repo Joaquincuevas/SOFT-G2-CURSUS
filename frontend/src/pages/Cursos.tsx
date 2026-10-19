@@ -5,7 +5,7 @@ import type {
   CursoListado,
   OpcionPeriodo,
 } from '@cursus/shared'
-import { useEffect, useEffectEvent, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   Link,
   Navigate,
@@ -18,16 +18,19 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
+import { CursoDetalle } from './CursoDetalle'
+import { useDatos } from './useDatos'
 import './Cursos.css'
 
-// Gestión de cursos del Figma: listado (nodo 97:102, GES-03) y creación (nodo
-// 97:202, GES-05).
+// Gestión de cursos del Figma: listado (nodo 97:102, GES-03), creación (nodo
+// 97:202, GES-05) y detalle con sus secciones (GES-08).
 export function Cursos() {
   const opciones = useOpciones()
   return (
     <Routes>
       <Route index element={<InicioCursos opciones={opciones} />} />
       <Route path="nuevo" element={<NuevoCurso opciones={opciones} />} />
+      <Route path=":id" element={<CursoDetalle />} />
       <Route path="*" element={<Navigate to="/cursos" replace />} />
     </Routes>
   )
@@ -36,38 +39,6 @@ export function Cursos() {
 // State con el que NuevoCurso vuelve a /cursos después de crear.
 interface EstadoCreado {
   creado?: string
-}
-
-// GET con la sesión: undefined mientras carga y null si falla. `recargar`
-// vuelve a pedir, para el botón Reintentar. Con `ruta` null no pide nada.
-function useDatos<T>(ruta: string | null) {
-  const { fetchConSesion } = useAuth()
-  const [datos, setDatos] = useState<T | null>()
-  const [intento, setIntento] = useState(0)
-  // fetchConSesion cambia de identidad al navegar (useNavigate en
-  // BrowserRouter); fuera de las dependencias, solo se pide de nuevo cuando
-  // cambia la ruta o se reintenta.
-  const pedir = useEffectEvent((url: string) => fetchConSesion(url))
-  useEffect(() => {
-    if (ruta === null) return
-    let vigente = true
-    void pedir(ruta)
-      .then(async (respuesta) =>
-        respuesta.ok ? ((await respuesta.json()) as T) : null,
-      )
-      .catch(() => null)
-      .then((resultado) => {
-        if (vigente) setDatos(resultado)
-      })
-    return () => {
-      vigente = false
-    }
-  }, [ruta, intento])
-  const recargar = () => {
-    setDatos(undefined)
-    setIntento((n) => n + 1)
-  }
-  return [datos, recargar] as const
 }
 
 // Carreras y períodos para los filtros del listado (GES-04) y el formulario
@@ -203,7 +174,11 @@ function InicioCursos({ opciones }: { opciones: Opciones }) {
             {cursos.map((curso) => (
               <tr key={curso.id}>
                 {conUniversidad && <td>{curso.universidadNombre}</td>}
-                <td>{curso.codigo}</td>
+                <td>
+                  <Link className="cursos__enlace" to={`/cursos/${curso.id}`}>
+                    {curso.codigo}
+                  </Link>
+                </td>
                 <td>{curso.nombre}</td>
                 <td>{curso.carreraNombre}</td>
                 <td>

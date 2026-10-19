@@ -15,11 +15,16 @@ import type { Rol } from './index.js'
 
 export type Accion = 'manage' | 'create' | 'read' | 'update' | 'delete'
 
-// Sujetos de tabla: uno por cada tabla del schema. 'Curso' se adelanta a la
-// tabla de cursos (GES-*). Deciden qué acciones ve cada rol dentro de una
-// página (crear, editar...) y qué endpoints puede usar.
+// Sujetos de tabla: uno por cada tabla del schema. Deciden qué acciones ve
+// cada rol dentro de una página (crear, editar...) y qué endpoints puede usar.
 export type SujetoTabla =
-  'Universidad' | 'Facultad' | 'Carrera' | 'Periodo' | 'Usuario' | 'Curso'
+  | 'Universidad'
+  | 'Facultad'
+  | 'Carrera'
+  | 'Periodo'
+  | 'Usuario'
+  | 'Curso'
+  | 'Seccion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -48,6 +53,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
         'Periodo',
         'Usuario',
         'Curso',
+        'Seccion',
       ])
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
@@ -56,7 +62,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       can('read', ['Universidad', 'Facultad'])
       can(
         ['create', 'read', 'update'],
-        ['Carrera', 'Periodo', 'Curso', 'Usuario'],
+        ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
       break

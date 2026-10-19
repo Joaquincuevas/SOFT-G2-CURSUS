@@ -97,7 +97,8 @@ describe('GET /api/cursos', () => {
         anio: 2026,
         semestre: 2,
       },
-      secciones: 0,
+      // Las secciones 1 y 2 del seed (GES-08).
+      secciones: 2,
     })
   })
 

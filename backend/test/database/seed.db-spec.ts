@@ -32,6 +32,7 @@ async function conteos() {
     'periodo',
     'usuario',
     'curso',
+    'seccion',
   ]
   const filas = await Promise.all(
     tablas.map(async (tabla) => {
@@ -139,6 +140,20 @@ describe('seed de datos simulados', () => {
         expect(f.cursos.length).toBeGreaterThanOrEqual(2)
       }
     }
+  })
+
+  it('crea las secciones 1 y 2 de cada curso', async () => {
+    const secciones = await bd.query<{ codigo: string; numeros: number[] }[]>(
+      `SELECT c.codigo, array_agg(s.numero ORDER BY s.numero) AS numeros
+         FROM curso c JOIN seccion s ON s.curso_id = c.id
+        GROUP BY c.codigo ORDER BY c.codigo`,
+    )
+    const codigos = UNIVERSIDADES.flatMap((u) =>
+      u.facultades.flatMap((f) => f.cursos.map((c) => c.codigo)),
+    ).sort()
+    expect(secciones).toEqual(
+      codigos.map((codigo) => ({ codigo, numeros: [1, 2] })),
+    )
   })
 
   it('crea al menos un usuario de cada rol en cada universidad', async () => {
