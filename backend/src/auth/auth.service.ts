@@ -66,12 +66,14 @@ export class AuthService {
     // El correo es único por universidad, no global: la universidad se
     // identifica por el dominio del correo. Por eso no usa
     // consultarEnUniversidad: antes del login no hay universidad de sesión.
+    // Un usuario archivado responde igual que uno que no existe.
     const [usuario] = await bd.query<Credenciales>(
       `SELECT u.id, u.rol, u.universidad_id, u.password_hash
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
         WHERE lower(u.correo) = $1
-          AND un.dominio_correo = split_part($1, '@', 2)`,
+          AND un.dominio_correo = split_part($1, '@', 2)
+          AND u.archived_at IS NULL`,
       [correo.trim().toLowerCase()],
     )
     const passwordValida = await verify(
@@ -95,8 +97,8 @@ export class AuthService {
     // El UPDATE es atómico: dos renovaciones simultáneas del mismo token no
     // pueden ganar las dos. Va en un CTE porque TypeORM devuelve [filas,
     // afectadas] para un UPDATE suelto.
-    // Pendiente para MT-02: usuario aún no tiene archived_at; cuando exista,
-    // un usuario archivado no debe poder renovar su sesión.
+    // Un usuario archivado no renueva: el token se revoca igual y, como no
+    // devuelve fila, se revocan también todas sus sesiones.
     const [usuario] = await this.bd.query<
       Omit<Credenciales, 'password_hash'> & { sesion_id: string }
     >(
@@ -107,7 +109,8 @@ export class AuthService {
           RETURNING usuario_id, sesion_id
        )
        SELECT u.id, u.rol, u.universidad_id, rotado.sesion_id
-         FROM rotado JOIN usuario u ON u.id = rotado.usuario_id`,
+         FROM rotado JOIN usuario u ON u.id = rotado.usuario_id
+        WHERE u.archived_at IS NULL`,
       [hashToken],
     )
     if (!usuario) {
@@ -177,10 +180,14 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
+  // También corta la sesión de un usuario archivado, sin esperar a que venza
+  // su JWT.
   async sesionActiva(sid: string, usuarioId: string): Promise<boolean> {
     const [sesion] = await this.bd.query<{ id: string }>(
-      `SELECT id FROM sesion_auth WHERE id::text = $1 AND usuario_id::text = $2
-        AND revocado_en IS NULL`,
+      `SELECT s.id FROM sesion_auth s
+         JOIN usuario u ON u.id = s.usuario_id
+        WHERE s.id::text = $1 AND s.usuario_id::text = $2
+          AND s.revocado_en IS NULL AND u.archived_at IS NULL`,
       [sid, usuarioId],
     )
     return !!sesion
