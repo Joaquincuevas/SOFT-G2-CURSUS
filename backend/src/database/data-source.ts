@@ -6,6 +6,7 @@ import { VARIABLES_BASE_DE_DATOS, validarEntorno } from '../config/entorno.js'
 import { EsquemaInicial1791923526004 } from './migrations/1791923526004-EsquemaInicial.js'
 import { CrearRefreshToken1792428000000 } from './migrations/1792428000000-CrearRefreshToken.js'
 import { CrearSesionAuth1792430000000 } from './migrations/1792430000000-CrearSesionAuth.js'
+import { CrearIntentosLogin1792436000000 } from './migrations/1792436000000-CrearIntentosLogin.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -33,6 +34,7 @@ export function opcionesDataSource(
       EsquemaInicial1791923526004,
       CrearRefreshToken1792428000000,
       CrearSesionAuth1792430000000,
+      CrearIntentosLogin1792436000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

@@ -14,6 +14,7 @@ import {
   pedirToken,
   renovarToken,
   SESION_CERRADA,
+  LoginLimitado,
 } from './auth'
 
 interface Props {
@@ -122,10 +123,17 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       iniciarSesion: async (correo: string, password: string) => {
         await cierreEnCurso.current
         const version = ++generacion.current
-        const nuevo = await pedirToken(correo, password)
-        if (version !== generacion.current) return false
-        if (nuevo) empezar(nuevo)
-        return nuevo !== null
+        setAviso(null)
+        try {
+          const nuevo = await pedirToken(correo, password)
+          if (version !== generacion.current) return false
+          if (nuevo) empezar(nuevo)
+          return nuevo !== null
+        } catch (error) {
+          if (version === generacion.current && error instanceof LoginLimitado)
+            setAviso(error.message)
+          return false
+        }
       },
       cerrarSesion,
       fetchConSesion,

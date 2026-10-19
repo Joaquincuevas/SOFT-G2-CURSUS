@@ -59,7 +59,11 @@ export function Login() {
             </p>
           </div>
 
-          {aviso && <p role="alert">{aviso}</p>}
+          {aviso && (
+            <p className="login__aviso" role="alert">
+              {aviso}
+            </p>
+          )}
 
           <form className="login__card" onSubmit={handleSubmit}>
             <p className="login__caption">

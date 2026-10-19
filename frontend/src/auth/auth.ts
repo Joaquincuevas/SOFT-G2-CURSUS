@@ -8,6 +8,15 @@ export const AVISO_SESION_EXPIRADA = 'Tu sesi처n expir처, vuelve a iniciar sesi�
 // Solo una marca de cierre; nunca se guardan credenciales en localStorage.
 export const SESION_CERRADA = 'cursus-sesion-cerrada'
 
+export class LoginLimitado extends Error {
+  constructor(segundos: number) {
+    const minutos = Math.max(1, Math.ceil(segundos / 60))
+    super(
+      `Demasiados intentos fallidos. Espera ${minutos} ${minutos === 1 ? 'minuto' : 'minutos'} antes de volver a intentar.`,
+    )
+  }
+}
+
 export interface AuthValue {
   // Token con el que empez처 la sesi처n (login o restauraci처n). Los JWT que
   // llegan al renovar no cambian este valor, para no recargar la sesi처n.
@@ -54,12 +63,29 @@ export function pedirToken(
   correo: string,
   password: string,
 ): Promise<string | null> {
-  return conCandado(() =>
-    pedirAccessToken('/api/auth/login', {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ correo, password }),
-    }),
-  )
+  return conCandado(async () => {
+    try {
+      const respuesta = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo, password }),
+      })
+      if (respuesta.status === 429) {
+        const segundos = Number(respuesta.headers.get('Retry-After'))
+        throw new LoginLimitado(
+          Number.isFinite(segundos) && segundos > 0 ? segundos : 900,
+        )
+      }
+      if (!respuesta.ok) return null
+      const { accessToken } = (await respuesta.json()) as {
+        accessToken: string
+      }
+      return accessToken
+    } catch (error) {
+      if (error instanceof LoginLimitado) throw error
+      return null
+    }
+  })
 }
 
 // Refresh en curso, compartido: si varios pedidos reciben 401 a la vez, todos

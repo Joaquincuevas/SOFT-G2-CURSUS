@@ -17,9 +17,24 @@ export class BaseDeDatos implements OnModuleDestroy {
   private conexion?: Promise<DataSource>
 
   async query<T>(sql: string, parametros: unknown[] = []): Promise<T[]> {
+    return (await this.conectar()).query(sql, parametros)
+  }
+
+  async enTransaccion<T>(
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    return (await this.conectar()).transaction((manager) =>
+      tarea({
+        query: <Fila>(sql: string, parametros: unknown[] = []) =>
+          manager.query<Fila[]>(sql, parametros),
+      }),
+    )
+  }
+
+  private async conectar(): Promise<DataSource> {
     this.conexion ??= new DataSource(opcionesDataSource()).initialize()
     try {
-      return await (await this.conexion).query(sql, parametros)
+      return await this.conexion
     } catch (error) {
       // Si la conexión no se pudo abrir, se reintenta desde cero la próxima vez.
       const bd = await this.conexion.catch(() => undefined)

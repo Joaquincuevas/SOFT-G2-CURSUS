@@ -16,6 +16,7 @@ const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'carrera',
   'facultad',
+  'limite_login',
   'periodo',
   'refresh_token',
   'sesion_auth',
@@ -151,15 +152,24 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearSesionAuth, CrearRefreshToken y después EsquemaInicial.
+    // Se revierten en orden inverso a su aplicación.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter((tabla) => tabla !== 'sesion_auth'),
+      TABLAS.filter((tabla) => tabla !== 'limite_login'),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
       TABLAS.filter(
-        (tabla) => tabla !== 'refresh_token' && tabla !== 'sesion_auth',
+        (tabla) => tabla !== 'sesion_auth' && tabla !== 'limite_login',
+      ),
+    )
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(
+      TABLAS.filter(
+        (tabla) =>
+          tabla !== 'refresh_token' &&
+          tabla !== 'sesion_auth' &&
+          tabla !== 'limite_login',
       ),
     )
     await bd.undoLastMigration()
@@ -186,7 +196,8 @@ describe('migraciones', () => {
     // refresh_token usa creado_en y no tiene updated_at: sus filas no cambian
     // salvo revocado_en.
     for (const tabla of TABLAS.filter(
-      (t) => t !== 'refresh_token' && t !== 'sesion_auth',
+      (t) =>
+        t !== 'refresh_token' && t !== 'sesion_auth' && t !== 'limite_login',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
