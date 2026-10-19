@@ -1,4 +1,9 @@
-import type { CursoCreado, OpcionPeriodo } from '@cursus/shared'
+import type {
+  CursoCreado,
+  CursoListado,
+  FiltroCursos,
+  OpcionPeriodo,
+} from '@cursus/shared'
 import {
   ConflictException,
   Injectable,
@@ -19,6 +24,27 @@ const UNIQUE = '23505'
 const facultadDe = (parametro: string) =>
   `(SELECT facultad_id FROM usuario WHERE id = ${parametro} AND universidad_id = $1)`
 
+// Columnas comunes del listado de cursos. secciones va en 0 hasta que exista
+// la tabla de secciones (GES-09).
+const COLUMNAS_LISTADO = `
+  c.id, c.codigo, c.nombre, ca.nombre AS carrera_nombre,
+  p.id AS periodo_id, p.anio, p.semestre, un.nombre AS universidad_nombre
+  FROM curso c
+  JOIN carrera ca ON ca.id = c.carrera_id
+  JOIN periodo p ON p.id = c.periodo_id
+  JOIN universidad un ON un.id = c.universidad_id`
+
+interface FilaListado {
+  id: string
+  codigo: string
+  nombre: string
+  carrera_nombre: string
+  periodo_id: string
+  anio: number
+  semestre: number
+  universidad_nombre: string
+}
+
 interface FilaCurso {
   id: string
   codigo: string
@@ -34,6 +60,55 @@ interface FilaCurso {
 @Injectable()
 export class GestionService {
   constructor(private readonly bd: BaseDeDatos) {}
+
+  // GES-03. El Director ve los cursos de todas las universidades (lectura
+  // READ ONLY), con el nombre de la universidad; el resto, los de la facultad
+  // del usuario. Sin archivados, con el período activo primero.
+  // GES-04: carrera y período filtran solo si vienen (NULL = sin filtro), y
+  // siempre como parámetros de la consulta. Un id de otra universidad no
+  // calza con ningún curso visible, así que devuelve una lista vacía.
+  async listarCursos(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    filtro: FiltroCursos = {},
+  ): Promise<CursoListado[]> {
+    const esDirector = contexto.rol === 'DIRECTOR'
+    const carreraId = filtro.carreraId ?? null
+    const periodoId = filtro.periodoId ?? null
+    const filas = esDirector
+      ? await this.bd.consultarEnTodasLasUniversidades<FilaListado>(
+          contexto,
+          `SELECT ${COLUMNAS_LISTADO}
+            WHERE c.archived_at IS NULL
+              AND ($1::uuid IS NULL OR c.carrera_id = $1)
+              AND ($2::uuid IS NULL OR c.periodo_id = $2)
+            ORDER BY p.activo DESC, c.codigo, un.nombre`,
+          [carreraId, periodoId],
+        )
+      : await this.bd.consultarEnUniversidad<FilaListado>(
+          contexto,
+          `SELECT ${COLUMNAS_LISTADO}
+            WHERE c.universidad_id = $1 AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$2')}
+              AND ($3::uuid IS NULL OR c.carrera_id = $3)
+              AND ($4::uuid IS NULL OR c.periodo_id = $4)
+            ORDER BY p.activo DESC, c.codigo`,
+          [usuarioId, carreraId, periodoId],
+        )
+    return filas.map((fila) => ({
+      id: fila.id,
+      codigo: fila.codigo,
+      nombre: fila.nombre,
+      carreraNombre: fila.carrera_nombre,
+      periodo: {
+        id: fila.periodo_id,
+        anio: fila.anio,
+        semestre: fila.semestre,
+      },
+      secciones: 0,
+      ...(esDirector && { universidadNombre: fila.universidad_nombre }),
+    }))
+  }
 
   // Inserta el curso en una sola consulta, solo si la carrera es de la
   // facultad del usuario (y no está archivada) y el período es de su

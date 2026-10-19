@@ -9,9 +9,16 @@ import type { DataSource, EntityManager } from 'typeorm'
 export type Rol =
   'DIRECTOR' | 'ADMINISTRATIVO' | 'PROFESOR' | 'AYUDANTE' | 'ALUMNO'
 
+interface CursoSeed {
+  codigo: string
+  nombre: string
+}
+
 interface FacultadSeed {
   nombre: string
   carrera: string
+  // Cursos de la carrera, en el período activo de la universidad.
+  cursos: CursoSeed[]
 }
 
 export interface UsuarioSeed {
@@ -39,8 +46,22 @@ export const UNIVERSIDADES: UniversidadSeed[] = [
     nombre: 'Universidad Demo Norte',
     dominio: 'norte.cursus.test',
     facultades: [
-      { nombre: INGENIERIA, carrera: 'Ingeniería Civil en Informática' },
-      { nombre: ECONOMIA, carrera: 'Ingeniería Comercial' },
+      {
+        nombre: INGENIERIA,
+        carrera: 'Ingeniería Civil en Informática',
+        cursos: [
+          { codigo: 'ICC101', nombre: 'Introducción a la Programación' },
+          { codigo: 'ICC201', nombre: 'Estructuras de Datos' },
+        ],
+      },
+      {
+        nombre: ECONOMIA,
+        carrera: 'Ingeniería Comercial',
+        cursos: [
+          { codigo: 'ICO101', nombre: 'Introducción a la Economía' },
+          { codigo: 'ICO201', nombre: 'Contabilidad' },
+        ],
+      },
     ],
     // Un administrativo por facultad, para probar el aislamiento entre ellas.
     usuarios: [
@@ -80,7 +101,16 @@ export const UNIVERSIDADES: UniversidadSeed[] = [
   {
     nombre: 'Universidad Demo Sur',
     dominio: 'sur.cursus.test',
-    facultades: [{ nombre: SALUD, carrera: 'Enfermería' }],
+    facultades: [
+      {
+        nombre: SALUD,
+        carrera: 'Enfermería',
+        cursos: [
+          { codigo: 'ENF101', nombre: 'Fundamentos de Enfermería' },
+          { codigo: 'ENF201', nombre: 'Anatomía y Fisiología' },
+        ],
+      },
+    ],
     usuarios: [
       { rol: 'DIRECTOR', nombre: 'Director Sur', usuario: 'director' },
       {
@@ -264,6 +294,7 @@ async function sembrarUniversidad(
   )
 
   const facultadIds = new Map<string, string>()
+  const carreraIds = new Map<FacultadSeed, string>()
   for (const facultad of u.facultades) {
     const facultadId = await upsert(
       m,
@@ -273,12 +304,13 @@ async function sembrarUniversidad(
     )
     facultadIds.set(facultad.nombre, facultadId)
 
-    await upsert(
+    const carreraId = await upsert(
       m,
       `INSERT INTO carrera (universidad_id, facultad_id, nombre) VALUES ($1, $2, $3)
        ON CONFLICT (facultad_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre`,
       [universidadId, facultadId, facultad.carrera],
     )
+    carreraIds.set(facultad, carreraId)
   }
 
   // Solo puede haber un período activo por universidad: el del seed queda
@@ -302,6 +334,21 @@ async function sembrarUniversidad(
       PERIODO.termino,
     ],
   )
+
+  // Los cursos van solo en el período activo, que puede no ser el del seed. Si
+  // el código ya existe en ese período no se toca: ni su nombre ni su
+  // archived_at, por si alguien lo editó o lo archivó (por ejemplo, en staging).
+  for (const [facultad, carreraId] of carreraIds) {
+    for (const curso of facultad.cursos) {
+      await m.query(
+        `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+         SELECT $1, $2, p.id, $3, $4 FROM periodo p
+          WHERE p.universidad_id = $1 AND p.activo
+         ON CONFLICT (codigo, periodo_id) DO NOTHING`,
+        [universidadId, carreraId, curso.codigo, curso.nombre],
+      )
+    }
+  }
 
   for (const usuario of [...u.usuarios, ...usuariosDemo]) {
     const facultadId = usuario.facultad
