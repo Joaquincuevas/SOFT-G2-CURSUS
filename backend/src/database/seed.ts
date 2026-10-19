@@ -227,7 +227,10 @@ const APELLIDOS = [
 const DESFASE_UNIVERSIDAD = 400
 
 const paraCorreo = (texto: string) =>
-  texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  texto
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
 
 // Usuarios de demo de una universidad: DEMO_POR_FACULTAD en cada facultad,
 // con correo nombre.apellido. El índice k recorre las combinaciones de forma
