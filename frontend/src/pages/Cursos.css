@@ -84,6 +84,17 @@
   color: var(--color-text-secondary);
 }
 
+/* Filtros del listado (GES-04): carrera y período lado a lado. */
+.cursos__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+}
+
+.cursos__filtros .cursos__campo {
+  min-width: var(--button-width);
+}
+
 /* Dos columnas de campos, como en el Figma. */
 .cursos__campos {
   display: grid;

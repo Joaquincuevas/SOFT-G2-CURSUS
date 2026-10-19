@@ -1,4 +1,9 @@
-import type { CursoCreado, CursoListado, OpcionPeriodo } from '@cursus/shared'
+import type {
+  CursoCreado,
+  CursoListado,
+  FiltroCursos,
+  OpcionPeriodo,
+} from '@cursus/shared'
 import {
   ConflictException,
   Injectable,
@@ -59,25 +64,36 @@ export class GestionService {
   // GES-03. El Director ve los cursos de todas las universidades (lectura
   // READ ONLY), con el nombre de la universidad; el resto, los de la facultad
   // del usuario. Sin archivados, con el período activo primero.
+  // GES-04: carrera y período filtran solo si vienen (NULL = sin filtro), y
+  // siempre como parámetros de la consulta. Un id de otra universidad no
+  // calza con ningún curso visible, así que devuelve una lista vacía.
   async listarCursos(
     contexto: ContextoUniversidad,
     usuarioId: string,
+    filtro: FiltroCursos = {},
   ): Promise<CursoListado[]> {
     const esDirector = contexto.rol === 'DIRECTOR'
+    const carreraId = filtro.carreraId ?? null
+    const periodoId = filtro.periodoId ?? null
     const filas = esDirector
       ? await this.bd.consultarEnTodasLasUniversidades<FilaListado>(
           contexto,
           `SELECT ${COLUMNAS_LISTADO}
             WHERE c.archived_at IS NULL
+              AND ($1::uuid IS NULL OR c.carrera_id = $1)
+              AND ($2::uuid IS NULL OR c.periodo_id = $2)
             ORDER BY p.activo DESC, c.codigo, un.nombre`,
+          [carreraId, periodoId],
         )
       : await this.bd.consultarEnUniversidad<FilaListado>(
           contexto,
           `SELECT ${COLUMNAS_LISTADO}
             WHERE c.universidad_id = $1 AND c.archived_at IS NULL
               AND ca.facultad_id = ${facultadDe('$2')}
+              AND ($3::uuid IS NULL OR c.carrera_id = $3)
+              AND ($4::uuid IS NULL OR c.periodo_id = $4)
             ORDER BY p.activo DESC, c.codigo`,
-          [usuarioId],
+          [usuarioId, carreraId, periodoId],
         )
     return filas.map((fila) => ({
       id: fila.id,

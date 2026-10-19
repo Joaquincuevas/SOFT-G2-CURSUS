@@ -54,20 +54,31 @@ export const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status })
 
 // Respuesta simulada de una ruta de la API: un Response, o un cuerpo JSON que
-// responde 200.
-export type RutaSimulada = (init?: RequestInit) => unknown
+// responde 200. Recibe la URL completa, con su query (por ejemplo, los filtros
+// de /api/cursos).
+export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
+
+// Listas de gestión académica: vacías salvo que el test las simule.
+const LISTAS_VACIAS: Record<string, RutaSimulada> = {
+  '/api/carreras': () => [],
+  '/api/periodos': () => [],
+  '/api/cursos': () => [],
+}
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh
 // responde 401 (no hay cookie), /api/auth/logout 204, cada ruta de `rutas`
-// responde lo que devuelva y el resto (/api/auth/yo) devuelve el usuario del
-// rol. Restaurar con vi.unstubAllGlobals().
+// (comparada sin la query) responde lo que devuelva, las listas de gestión
+// responden vacías y el resto (/api/auth/yo) devuelve el usuario del rol.
+// Restaurar con vi.unstubAllGlobals().
 export function simularBackend(
   rol: Rol,
   rutas: Record<string, RutaSimulada> = {},
 ) {
+  const simuladas = { ...LISTAS_VACIAS, ...rutas }
   const fetch = vi.fn((url: string, init?: RequestInit) => {
-    if (url in rutas) {
-      const respuesta = rutas[url](init)
+    const ruta = url.split('?')[0]
+    if (ruta in simuladas) {
+      const respuesta = simuladas[ruta](init, url)
       return Promise.resolve(
         respuesta instanceof Response ? respuesta : json(respuesta),
       )
