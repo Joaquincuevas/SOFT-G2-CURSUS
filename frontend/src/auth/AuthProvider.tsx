@@ -31,7 +31,15 @@ export function AuthProvider({ children, initialToken = null }: Props) {
   const vigente = useRef(initialToken)
   const generacion = useRef(0)
   const cierreEnCurso = useRef<Promise<void> | null>(null)
+  // useNavigate() cambia de identidad al navegar (BrowserRouter). Si
+  // cerrarSesion y fetchConSesion dependieran de él, también cambiarían en
+  // cada navegación, y los efectos que los usan volverían a pedir sus datos.
+  // Se guarda en una ref para que las dos funciones sean estables.
   const navigate = useNavigate()
+  const navegar = useRef(navigate)
+  useEffect(() => {
+    navegar.current = navigate
+  }, [navigate])
 
   const empezar = useCallback((nuevo: string) => {
     localStorage.removeItem(SESION_CERRADA)
@@ -55,23 +63,20 @@ export function AuthProvider({ children, initialToken = null }: Props) {
     }
   }, [initialToken, empezar])
 
-  const cerrarSesion = useCallback(
-    async (motivo?: string) => {
-      // Ya cerrada: por ejemplo, SessionProvider no debe borrar el aviso que
-      // dejó fetchConSesion al fallar la renovación.
-      if (!vigente.current) return
-      generacion.current += 1
-      localStorage.setItem(SESION_CERRADA, '1')
-      vigente.current = null
-      setAviso(motivo ?? null)
-      setToken(null)
-      setRestaurando(false)
-      navigate('/login', { replace: true })
-      cierreEnCurso.current = pedirLogout()
-      await cierreEnCurso.current
-    },
-    [navigate],
-  )
+  const cerrarSesion = useCallback(async (motivo?: string) => {
+    // Ya cerrada: por ejemplo, SessionProvider no debe borrar el aviso que
+    // dejó fetchConSesion al fallar la renovación.
+    if (!vigente.current) return
+    generacion.current += 1
+    localStorage.setItem(SESION_CERRADA, '1')
+    vigente.current = null
+    setAviso(motivo ?? null)
+    setToken(null)
+    setRestaurando(false)
+    navegar.current('/login', { replace: true })
+    cierreEnCurso.current = pedirLogout()
+    await cierreEnCurso.current
+  }, [])
 
   useEffect(() => {
     const alCerrarEnOtraPestana = (event: StorageEvent) => {
@@ -81,11 +86,11 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       setToken(null)
       setRestaurando(false)
       setAviso(null)
-      navigate('/login', { replace: true })
+      navegar.current('/login', { replace: true })
     }
     window.addEventListener('storage', alCerrarEnOtraPestana)
     return () => window.removeEventListener('storage', alCerrarEnOtraPestana)
-  }, [navigate])
+  }, [])
 
   const fetchConSesion = useCallback(
     async (ruta: string, init: RequestInit = {}) => {
