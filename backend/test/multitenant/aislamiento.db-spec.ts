@@ -18,7 +18,10 @@ import type { PayloadJwt } from '../../src/auth/auth.service.js'
 import { Puede } from '../../src/auth/permisos.decorator.js'
 import { UniversidadActual } from '../../src/auth/universidad-actual.decorator.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
-import { BaseDeDatos } from '../../src/database/base-de-datos.service.js'
+import {
+  BaseDeDatos,
+  type ContextoUniversidad,
+} from '../../src/database/base-de-datos.service.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import { ejecutarSeed, UNIVERSIDADES } from '../../src/database/seed.js'
 
@@ -36,9 +39,9 @@ class FacultadesPruebaController {
 
   @Puede('read', 'Facultad')
   @Get('facultades')
-  listar(@UniversidadActual() universidadId: string) {
+  listar(@UniversidadActual() contexto: ContextoUniversidad) {
     return this.bd.consultarEnUniversidad<Facultad>(
-      universidadId,
+      contexto,
       `SELECT id, nombre, universidad_id FROM facultad
         WHERE universidad_id = $1 ORDER BY nombre`,
     )
@@ -48,9 +51,9 @@ class FacultadesPruebaController {
   // solo RLS (MT-02) la aísla.
   @Puede('read', 'Facultad')
   @Get('facultades-sin-filtro')
-  listarSinFiltro(@UniversidadActual() universidadId: string) {
+  listarSinFiltro(@UniversidadActual() contexto: ContextoUniversidad) {
     return this.bd.consultarEnUniversidad<Facultad>(
-      universidadId,
+      contexto,
       `SELECT id, nombre, universidad_id FROM facultad
         WHERE $1::uuid IS NOT NULL ORDER BY nombre`,
     )
@@ -59,11 +62,11 @@ class FacultadesPruebaController {
   @Puede('read', 'Facultad')
   @Get('facultades/:id')
   obtener(
-    @UniversidadActual() universidadId: string,
+    @UniversidadActual() contexto: ContextoUniversidad,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.bd.obtenerEnUniversidad<Facultad>(
-      universidadId,
+      contexto,
       `SELECT id, nombre, universidad_id FROM facultad
         WHERE universidad_id = $1 AND id = $2`,
       [id],

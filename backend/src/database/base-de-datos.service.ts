@@ -1,4 +1,6 @@
+import type { Rol } from '@cursus/shared'
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
   type OnModuleDestroy,
@@ -12,6 +14,13 @@ const USA_UNIVERSIDAD = /\$1(?!\d)/
 // Rol de base de datos de las consultas institucionales, creado por la
 // migración ActivarRls. No es dueño de las tablas, así que RLS se le aplica.
 export const ROL_APP = 'cursus_app'
+
+// Universidad y rol de la sesión (@UniversidadActual()), que las consultas
+// institucionales fijan en la base para RLS.
+export interface ContextoUniversidad {
+  universidadId: string
+  rol: Rol
+}
 
 // Conexión compartida para las consultas de la API. Se abre en la primera
 // consulta y no al arrancar, para que la API levante aunque la base no esté
@@ -54,15 +63,16 @@ export class BaseDeDatos implements OnModuleDestroy {
   // - En la consulta: por convención, $1 es siempre la universidad y los demás
   //   parámetros siguen desde $2. Falla si la consulta no usa $1, para que no
   //   se pueda olvidar el filtro.
-  // - En la base (RLS): corre con ROL_APP y la universidad fijada en
-  //   app.universidad_id. SET LOCAL y set_config(..., true) duran solo la
-  //   transacción, así que no pasan a otra consulta que use la misma conexión.
+  // - En la base (RLS): corre con ROL_APP, con la universidad y el rol fijados
+  //   en app.universidad_id y app.rol. SET LOCAL y set_config(..., true) duran
+  //   solo la transacción, así que no pasan a otra consulta que use la misma
+  //   conexión.
   async consultarEnUniversidad<T>(
-    universidadId: string,
+    contexto: ContextoUniversidad,
     sql: string,
     parametros: unknown[] = [],
   ): Promise<T[]> {
-    if (!universidadId) {
+    if (!contexto.universidadId || !contexto.rol) {
       throw new Error('Falta la universidad de la sesión')
     }
     if (!USA_UNIVERSIDAD.test(sql)) {
@@ -70,22 +80,45 @@ export class BaseDeDatos implements OnModuleDestroy {
     }
     return this.enTransaccion(async (bd) => {
       await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
-      await bd.query(`SELECT set_config('app.universidad_id', $1, true)`, [
-        universidadId,
-      ])
-      return bd.query<T>(sql, [universidadId, ...parametros])
+      await bd.query(
+        `SELECT set_config('app.universidad_id', $1, true),
+                set_config('app.rol', $2, true)`,
+        [contexto.universidadId, contexto.rol],
+      )
+      return bd.query<T>(sql, [contexto.universidadId, ...parametros])
+    })
+  }
+
+  // Lectura de todas las universidades, solo para el Director (ADR 0001): la
+  // vista consolidada del directorio. No exige $1 porque no filtra por
+  // universidad. Responde 403 a cualquier otro rol, y corre en una transacción
+  // READ ONLY: aunque la consulta intente escribir, la base la rechaza.
+  async consultarEnTodasLasUniversidades<T>(
+    contexto: ContextoUniversidad,
+    sql: string,
+    parametros: unknown[] = [],
+  ): Promise<T[]> {
+    if (contexto.rol !== 'DIRECTOR') {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccion(async (bd) => {
+      // Debe ir antes que cualquier otra consulta de la transacción.
+      await bd.query('SET TRANSACTION READ ONLY')
+      await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await bd.query(`SELECT set_config('app.rol', $1, true)`, [contexto.rol])
+      return bd.query<T>(sql, parametros)
     })
   }
 
   // Un recurso de la universidad de la sesión. Responde 404 si no existe o es
   // de otra universidad: desde fuera no se distinguen.
   async obtenerEnUniversidad<T>(
-    universidadId: string,
+    contexto: ContextoUniversidad,
     sql: string,
     parametros: unknown[] = [],
   ): Promise<T> {
     const [fila] = await this.consultarEnUniversidad<T>(
-      universidadId,
+      contexto,
       sql,
       parametros,
     )

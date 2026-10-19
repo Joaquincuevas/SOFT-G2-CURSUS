@@ -75,16 +75,16 @@ login(@Body() { correo }: LoginDto) { ... }
 
 Toda consulta a una tabla con datos institucionales se filtra por la universidad del usuario de la sesión. Un usuario nunca ve datos de otra universidad, y pedir un recurso de otra universidad responde `404`, igual que si no existiera.
 
-- `@UniversidadActual()` entrega la universidad del JWT. Es el único punto del backend donde se lee.
-- `BaseDeDatos.consultarEnUniversidad(universidadId, sql, parametros)` ejecuta la consulta con la universidad como `$1`; los demás parámetros siguen desde `$2`. Falla si la consulta no usa `$1`.
+- `@UniversidadActual()` entrega la universidad y el rol del JWT (`ContextoUniversidad`). Es el único punto del backend donde se leen.
+- `BaseDeDatos.consultarEnUniversidad(contexto, sql, parametros)` ejecuta la consulta con la universidad como `$1`; los demás parámetros siguen desde `$2`. Falla si la consulta no usa `$1`.
 - `BaseDeDatos.obtenerEnUniversidad(...)` hace lo mismo para un solo recurso y responde `404` si no lo encuentra.
 
 ```ts
 @Puede('read', 'Facultad')
 @Get(':id')
-obtener(@UniversidadActual() universidadId: string, @Param('id', ParseUUIDPipe) id: string) {
+obtener(@UniversidadActual() contexto: ContextoUniversidad, @Param('id', ParseUUIDPipe) id: string) {
   return this.bd.obtenerEnUniversidad<Facultad>(
-    universidadId,
+    contexto,
     'SELECT id, nombre FROM facultad WHERE universidad_id = $1 AND id = $2',
     [id],
   )
@@ -97,17 +97,30 @@ Excepciones, que usan `BaseDeDatos.query`:
 - El límite de login usa `limite_login` por cuenta o IP antes de tener una universidad de sesión. Sus bloqueos, autenticación y emisión de tokens se ejecutan con `BaseDeDatos.enTransaccion` en una misma conexión; ver [AUTH-07](../docs/auth-07-rate-limiting-login.md).
 - `refresh`, `logout` y la validación de la sesión en `JwtAuthGuard` usan `refresh_token` y `sesion_auth`, que no son tablas institucionales.
 
-Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades. El acceso del Director a todas las universidades es de MT-03 (ver [ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+Los tests de aislamiento (`test/multitenant/aislamiento.db-spec.ts`) usan los usuarios del seed de las dos universidades.
+
+### Director
+
+El Director lee los datos de todas las universidades, pero no modifica ninguno, ni los de su universidad de origen ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+
+- Para la vista consolidada se usa `BaseDeDatos.consultarEnTodasLasUniversidades(contexto, sql, parametros)`. Responde `403` a cualquier otro rol, no exige `$1` y corre en una transacción `READ ONLY`, así que la base rechaza cualquier escritura.
+- Para lo que es solo de su universidad (por ejemplo, `/api/auth/yo`), usa `consultarEnUniversidad` como los demás roles.
+- En la API, sus permisos son de solo lectura (`definirAbilityPara`). En la base, RLS tampoco le deja crear ni modificar (ver abajo).
+
+Los tests están en `test/multitenant/director.db-spec.ts`.
 
 ### Row-Level Security
 
 Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-Level Security (migración `ActivarRls`), así que un filtro olvidado no expone datos de otra universidad.
 
-- `consultarEnUniversidad` ejecuta cada consulta en una transacción con el rol `cursus_app` (`SET LOCAL ROLE`) y la universidad fijada en `app.universidad_id` (`set_config(..., true)`). Los dos duran solo esa transacción, así que no pasan a otra consulta que reciba la misma conexión del pool.
-- `universidad`, `facultad`, `carrera`, `periodo` y `usuario` tienen la política `pol_<tabla>_universidad`: con `cursus_app` solo se leen, crean o modifican filas de la universidad fijada. Sin universidad fijada, una consulta no devuelve filas.
+- `consultarEnUniversidad` ejecuta cada consulta en una transacción con el rol `cursus_app` (`SET LOCAL ROLE`), y con la universidad y el rol de la sesión fijados en `app.universidad_id` y `app.rol` (`set_config(..., true)`). Duran solo esa transacción, así que no pasan a otra consulta que reciba la misma conexión del pool.
+- `universidad`, `facultad`, `carrera`, `periodo` y `usuario` tienen tres políticas para `cursus_app` (migración `PermitirLecturaDirector`):
+  - `pol_<tabla>_lectura` (`SELECT`): filas de la universidad fijada, o de todas si el rol es `DIRECTOR`.
+  - `pol_<tabla>_insercion` y `pol_<tabla>_modificacion` (`INSERT` y `UPDATE`): solo filas de la universidad fijada, con un rol fijado que no sea `DIRECTOR`.
+- Sin universidad fijada, una consulta no devuelve filas (salvo para el Director).
 - `cursus_app` tiene `SELECT`, `INSERT` y `UPDATE`, pero no `DELETE`: nada institucional se borra, se archiva con `archived_at`. Un usuario archivado no puede iniciar sesión, renovar su sesión ni seguir usando su JWT.
 - El dueño de las tablas (el usuario de `POSTGRES_USER`) no pasa por RLS: lo usan las migraciones, el seed y las excepciones de arriba.
-- Una tabla nueva con `universidad_id` necesita sus permisos para `cursus_app`, `ENABLE ROW LEVEL SECURITY` y su política. Si falta, el test de contrato de `test/multitenant/rls.db-spec.ts` falla.
+- Una tabla nueva con `universidad_id` necesita sus permisos para `cursus_app`, `ENABLE ROW LEVEL SECURITY` y sus tres políticas. Si falta algo, el test de contrato de `test/multitenant/rls.db-spec.ts` falla.
 
 ## Sesión
 
