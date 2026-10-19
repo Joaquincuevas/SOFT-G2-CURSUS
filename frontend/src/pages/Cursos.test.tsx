@@ -5,7 +5,7 @@ import type {
   OpcionPeriodo,
 } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
 const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
@@ -244,5 +244,161 @@ describe('listado de cursos', () => {
     fallar = false
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByRole('table')).toBeInTheDocument()
+  })
+})
+
+describe('filtros del listado (GES-04)', () => {
+  const INDUSTRIAL: Carrera = {
+    id: 'carrera-2',
+    nombre: 'Ingeniería Civil Industrial',
+  } as Carrera
+  const CURSOS: CursoListado[] = [
+    LISTADO,
+    {
+      ...LISTADO,
+      id: 'curso-2',
+      codigo: 'IND101',
+      nombre: 'Optimización',
+      carreraNombre: INDUSTRIAL.nombre,
+    },
+    {
+      ...LISTADO,
+      id: 'curso-3',
+      codigo: 'ICC001',
+      nombre: 'Curso anterior',
+      periodo: { id: 'periodo-2026-1', anio: 2026, semestre: 1 },
+    },
+  ]
+  const CARRERA_DE: Record<string, string> = {
+    'carrera-1': 'Ingeniería Civil en Informática',
+    'carrera-2': INDUSTRIAL.nombre,
+  }
+
+  // Backend que filtra como la API y anota cada URL pedida a /api/cursos.
+  function simular(periodos = PERIODOS) {
+    const pedidos: string[] = []
+    const rutas: Record<string, RutaSimulada> = {
+      '/api/carreras': () => [...CARRERAS, INDUSTRIAL],
+      '/api/periodos': () => periodos,
+      '/api/cursos': (_init, url = '') => {
+        pedidos.push(url)
+        const query = new URLSearchParams(url.split('?')[1])
+        const carrera = query.get('carreraId')
+        const periodo = query.get('periodoId')
+        return CURSOS.filter(
+          (curso) =>
+            (!carrera || curso.carreraNombre === CARRERA_DE[carrera]) &&
+            (!periodo || curso.periodo.id === periodo),
+        )
+      },
+    }
+    return { pedidos, rutas }
+  }
+
+  const filtro = (nombre: 'Carrera' | 'Período') =>
+    within(screen.getByRole('search', { name: 'Filtros' })).getByLabelText(
+      nombre,
+    )
+  const codigos = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((fila) => within(fila).getAllByRole('cell')[0].textContent)
+
+  test('por defecto muestra el período activo, con una sola petición', async () => {
+    const { pedidos, rutas } = simular()
+    await renderConSesion('ADMINISTRATIVO', '/cursos', rutas)
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(filtro('Período')).toHaveValue('periodo-2026-2')
+    expect(filtro('Carrera')).toHaveValue('')
+    expect(codigos()).toEqual(['ICC101', 'IND101'])
+    // No pide primero sin filtros y después con el período.
+    expect(pedidos).toEqual(['/api/cursos?periodoId=periodo-2026-2'])
+  })
+
+  test('sin período activo, el período queda en Todos', async () => {
+    const { pedidos, rutas } = simular(
+      PERIODOS.map((periodo) => ({ ...periodo, activo: false })),
+    )
+    await renderConSesion('ADMINISTRATIVO', '/cursos', rutas)
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(filtro('Período')).toHaveValue('')
+    expect(codigos()).toEqual(['ICC101', 'IND101', 'ICC001'])
+    expect(pedidos).toEqual(['/api/cursos'])
+  })
+
+  test('combina carrera y período y actualiza el listado sin recargar', async () => {
+    const { pedidos, rutas } = simular()
+    await renderConSesion('ADMINISTRATIVO', '/cursos', rutas)
+    await screen.findByRole('table')
+
+    fireEvent.change(filtro('Carrera'), { target: { value: 'carrera-2' } })
+    await screen.findByRole('cell', { name: 'Optimización' })
+    expect(codigos()).toEqual(['IND101'])
+    expect(pedidos.at(-1)).toBe(
+      '/api/cursos?carreraId=carrera-2&periodoId=periodo-2026-2',
+    )
+
+    fireEvent.change(filtro('Período'), { target: { value: '' } })
+    fireEvent.change(filtro('Carrera'), { target: { value: 'carrera-1' } })
+    await screen.findByRole('cell', { name: 'Curso anterior' })
+    expect(codigos()).toEqual(['ICC101', 'ICC001'])
+    expect(pedidos.at(-1)).toBe('/api/cursos?carreraId=carrera-1')
+    // Sigue en la misma página, con el encabezado y los filtros.
+    expect(
+      screen.getByRole('region', { name: 'Gestión de cursos' }),
+    ).toBeInTheDocument()
+  })
+
+  test('sin resultados muestra el estado vacío de los filtros', async () => {
+    const { rutas } = simular()
+    await renderConSesion('ADMINISTRATIVO', '/cursos', rutas)
+    await screen.findByRole('table')
+
+    fireEvent.change(filtro('Período'), {
+      target: { value: 'periodo-2026-1' },
+    })
+    fireEvent.change(filtro('Carrera'), { target: { value: 'carrera-2' } })
+
+    expect(
+      await screen.findByText('No hay cursos con estos filtros.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    // Crear curso sigue disponible arriba de los filtros.
+    expect(
+      screen.getByRole('link', { name: 'Crear curso' }),
+    ).toBeInTheDocument()
+  })
+
+  test('el formulario reutiliza las carreras y los períodos ya cargados', async () => {
+    const { rutas } = simular()
+    const fetch = await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos',
+      rutas,
+    ).then(() => vi.mocked(globalThis.fetch))
+    await screen.findByRole('table')
+
+    fireEvent.click(screen.getByRole('link', { name: 'Crear curso' }))
+    expect(await screen.findByLabelText('Período académico')).toHaveValue(
+      'periodo-2026-2',
+    )
+    const pedidosA = (ruta: string) =>
+      fetch.mock.calls.filter(([url]) => String(url) === ruta).length
+    expect(pedidosA('/api/carreras')).toBe(1)
+    expect(pedidosA('/api/periodos')).toBe(1)
+  })
+
+  test('el Director ve el listado sin filtros', async () => {
+    const { pedidos, rutas } = simular()
+    await renderConSesion('DIRECTOR', '/cursos', rutas)
+
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('search', { name: 'Filtros' }),
+    ).not.toBeInTheDocument()
+    expect(pedidos).toEqual(['/api/cursos'])
   })
 })

@@ -23,6 +23,12 @@ export interface CursoCreado {
   periodo: PeriodoResumen
 }
 
+// Query opcional de GET /api/cursos (GES-04): se pueden combinar.
+export interface FiltroCursos {
+  carreraId?: string
+  periodoId?: string
+}
+
 // Fila de GET /api/cursos (GES-03).
 export interface CursoListado {
   id: string
