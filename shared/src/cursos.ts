@@ -23,6 +23,19 @@ export interface CursoCreado {
   periodo: PeriodoResumen
 }
 
+// Fila de GET /api/cursos (GES-03).
+export interface CursoListado {
+  id: string
+  codigo: string
+  nombre: string
+  carreraNombre: string
+  periodo: PeriodoResumen
+  // Siempre 0 hasta que exista la tabla de secciones (GES-09).
+  secciones: number
+  // Solo para el Director, que ve los cursos de todas las universidades.
+  universidadNombre?: string
+}
+
 // Opciones de las listas del formulario (GET /api/carreras y /api/periodos).
 export interface OpcionCarrera {
   id: string
