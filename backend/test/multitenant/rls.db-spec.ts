@@ -1,10 +1,12 @@
+import type { Rol } from '@cursus/shared'
 import { DataSource, type QueryRunner } from 'typeorm'
-import { opcionesDataSource } from '../../src/database/data-source.js'
 import { ROL_APP } from '../../src/database/base-de-datos.service.js'
+import { opcionesDataSource } from '../../src/database/data-source.js'
 import { ejecutarSeed, UNIVERSIDADES } from '../../src/database/seed.js'
 
 // Consultas directas a la base, sin pasar por la API: prueban que RLS aísla
-// las universidades aunque una consulta no filtre por universidad.
+// las universidades aunque una consulta no filtre por universidad, y que el
+// Director lee todas pero no modifica ninguna (ADR 0001).
 
 // Base propia con el seed cargado, que se crea y se borra en cada ejecución.
 const BD_TEST = `${process.env.POSTGRES_TEST_DB ?? 'cursus_test'}_rls`
@@ -24,21 +26,25 @@ const TABLAS = [
 let admin: DataSource
 let bd: DataSource
 const universidades: Record<string, string> = {}
+const [NORTE, SUR] = UNIVERSIDADES.map((u) => u.dominio)
 
 // Ejecuta la prueba con el rol de la API, dentro de una transacción que se
-// revierte al terminar. Sin universidadId, no fija ninguna universidad.
+// revierte al terminar. Solo fija lo que se le pasa, igual que la API.
 async function comoApp(
-  universidadId: string | null,
+  sesion: { universidadId?: string; rol?: Rol },
   prueba: (q: QueryRunner) => Promise<void>,
 ) {
   const q = bd.createQueryRunner()
   await q.startTransaction()
   try {
     await q.query(`SET LOCAL ROLE ${ROL_APP}`)
-    if (universidadId) {
+    if (sesion.universidadId) {
       await q.query(`SELECT set_config('app.universidad_id', $1, true)`, [
-        universidadId,
+        sesion.universidadId,
       ])
+    }
+    if (sesion.rol) {
+      await q.query(`SELECT set_config('app.rol', $1, true)`, [sesion.rol])
     }
     await prueba(q)
   } finally {
@@ -46,6 +52,13 @@ async function comoApp(
     await q.release()
   }
 }
+
+// Lo que hay en la base, leído por el dueño de las tablas (sin RLS).
+const idsDe = (tabla: string, filtro = '', parametros: unknown[] = []) =>
+  bd.query<{ id: string }[]>(
+    `SELECT id FROM ${tabla} ${filtro} ORDER BY id`,
+    parametros,
+  )
 
 beforeAll(async () => {
   admin = await new DataSource(opcionesDataSource()).initialize()
@@ -76,7 +89,7 @@ describe('RLS por universidad', () => {
   it.each(TABLAS)(
     '%s: sin universidad fijada no devuelve filas',
     async (tabla) => {
-      await comoApp(null, async (q) => {
+      await comoApp({ rol: 'ADMINISTRATIVO' }, async (q) => {
         expect(await q.query(`SELECT * FROM ${tabla}`)).toEqual([])
       })
     },
@@ -89,14 +102,12 @@ describe('RLS por universidad', () => {
         '%s: una consulta sin filtro devuelve solo sus filas',
         async (tabla, columna) => {
           const universidadId = universidades[dominio]
-          // Lo que hay en la base, leído por el dueño de las tablas (sin RLS).
-          const propias = await bd.query<{ id: string }[]>(
-            `SELECT id FROM ${tabla} WHERE ${columna} = $1 ORDER BY id`,
-            [universidadId],
-          )
+          const propias = await idsDe(tabla, `WHERE ${columna} = $1`, [
+            universidadId,
+          ])
           expect(propias.length).toBeGreaterThan(0)
 
-          await comoApp(universidadId, async (q) => {
+          await comoApp({ universidadId, rol: 'PROFESOR' }, async (q) => {
             const filas = await q.query<{ id: string }[]>(
               `SELECT id FROM ${tabla} ORDER BY id`,
             )
@@ -108,33 +119,47 @@ describe('RLS por universidad', () => {
   )
 
   describe('escrituras', () => {
-    const [norte, sur] = UNIVERSIDADES.map((u) => u.dominio)
+    const administrativo = () => ({
+      universidadId: universidades[NORTE],
+      rol: 'ADMINISTRATIVO' as const,
+    })
 
     it('rechaza crear un registro en otra universidad', async () => {
-      await comoApp(universidades[norte], async (q) => {
+      await comoApp(administrativo(), async (q) => {
         await expect(
           q.query(
             `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Intrusa')`,
-            [universidades[sur]],
+            [universidades[SUR]],
           ),
         ).rejects.toMatchObject({ code: SIN_PERMISO })
       })
     })
 
     it('permite crear un registro en su universidad', async () => {
-      await comoApp(universidades[norte], async (q) => {
+      await comoApp(administrativo(), async (q) => {
         await q.query(
           `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Nueva')`,
-          [universidades[norte]],
+          [universidades[NORTE]],
         )
       })
     })
 
+    it('no permite escribir sin un rol fijado', async () => {
+      await comoApp({ universidadId: universidades[NORTE] }, async (q) => {
+        await expect(
+          q.query(
+            `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Sin rol')`,
+            [universidades[NORTE]],
+          ),
+        ).rejects.toMatchObject({ code: SIN_PERMISO })
+      })
+    })
+
     it('no ve ni modifica los registros de otra universidad', async () => {
-      await comoApp(universidades[norte], async (q) => {
+      await comoApp(administrativo(), async (q) => {
         const [filas, afectadas] = await q.query<[unknown[], number]>(
           `UPDATE facultad SET nombre = 'Cambiada' WHERE universidad_id = $1`,
-          [universidades[sur]],
+          [universidades[SUR]],
         )
         expect(filas).toEqual([])
         expect(afectadas).toBe(0)
@@ -142,17 +167,17 @@ describe('RLS por universidad', () => {
     })
 
     it('rechaza mover un registro propio a otra universidad', async () => {
-      await comoApp(universidades[norte], async (q) => {
+      await comoApp(administrativo(), async (q) => {
         await expect(
           q.query(`UPDATE periodo SET universidad_id = $1`, [
-            universidades[sur],
+            universidades[SUR],
           ]),
         ).rejects.toMatchObject({ code: SIN_PERMISO })
       })
     })
 
     it.each(TABLAS)('%s: no permite borrar', async (tabla) => {
-      await comoApp(universidades[norte], async (q) => {
+      await comoApp(administrativo(), async (q) => {
         await expect(q.query(`DELETE FROM ${tabla}`)).rejects.toMatchObject({
           code: SIN_PERMISO,
         })
@@ -162,7 +187,7 @@ describe('RLS por universidad', () => {
     it.each(['refresh_token', 'sesion_auth'])(
       '%s: no es accesible con el rol de la API',
       async (tabla) => {
-        await comoApp(universidades[norte], async (q) => {
+        await comoApp(administrativo(), async (q) => {
           await expect(q.query(`SELECT * FROM ${tabla}`)).rejects.toMatchObject(
             { code: SIN_PERMISO },
           )
@@ -172,18 +197,73 @@ describe('RLS por universidad', () => {
   })
 })
 
+describe('Director (ADR 0001)', () => {
+  it.each(TABLAS)(
+    '%s: lee las filas de todas las universidades',
+    async (tabla) => {
+      const todas = await idsDe(tabla)
+      await comoApp({ rol: 'DIRECTOR' }, async (q) => {
+        expect(await q.query(`SELECT id FROM ${tabla} ORDER BY id`)).toEqual(
+          todas,
+        )
+      })
+    },
+  )
+
+  it('no puede crear registros, ni en su universidad', async () => {
+    const universidadId = universidades[NORTE]
+    await comoApp({ universidadId, rol: 'DIRECTOR' }, async (q) => {
+      await expect(
+        q.query(
+          `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Del director')`,
+          [universidadId],
+        ),
+      ).rejects.toMatchObject({ code: SIN_PERMISO })
+    })
+  })
+
+  it.each(TABLAS)(
+    '%s: no puede modificar registros, ni de su universidad',
+    async (tabla) => {
+      const universidadId = universidades[NORTE]
+      await comoApp({ universidadId, rol: 'DIRECTOR' }, async (q) => {
+        const [, afectadas] = await q.query<[unknown[], number]>(
+          `UPDATE ${tabla} SET updated_at = now()`,
+        )
+        expect(afectadas).toBe(0)
+      })
+    },
+  )
+
+  it.each(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as const)(
+    'el rol %s no lee otras universidades',
+    async (rol) => {
+      const universidadId = universidades[NORTE]
+      const propias = await idsDe('facultad', 'WHERE universidad_id = $1', [
+        universidadId,
+      ])
+      await comoApp({ universidadId, rol }, async (q) => {
+        expect(await q.query(`SELECT id FROM facultad ORDER BY id`)).toEqual(
+          propias,
+        )
+      })
+    },
+  )
+})
+
 describe('contrato del schema', () => {
-  // Toda tabla con datos de una universidad debe tener RLS y su política.
-  // Si una migración nueva agrega una tabla con universidad_id y se olvida,
-  // este test falla.
-  it('toda tabla con universidad_id tiene RLS y una política para la API', async () => {
+  // Toda tabla con datos de una universidad debe tener RLS y sus políticas de
+  // lectura, inserción y modificación para la API. Si una migración nueva
+  // agrega una tabla con universidad_id y se olvida, este test falla.
+  it('toda tabla con universidad_id tiene RLS y sus políticas para la API', async () => {
     const tablas = await bd.query<
-      { tabla: string; rls: boolean; politicas: number }[]
+      { tabla: string; rls: boolean; comandos: string[] }[]
     >(
       `SELECT c.relname AS tabla, c.relrowsecurity AS rls,
-              (SELECT count(*)::int FROM pg_policies p
-                WHERE p.schemaname = 'public' AND p.tablename = c.relname
-                  AND $1 = ANY (p.roles)) AS politicas
+              ARRAY(SELECT p.cmd FROM pg_policies p
+                     WHERE p.schemaname = 'public' AND p.tablename = c.relname
+                       AND $1 = ANY (p.roles)
+                     ORDER BY p.cmd) AS comandos
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r'
@@ -199,7 +279,10 @@ describe('contrato del schema', () => {
       TABLAS.map(([tabla]) => tabla).sort(),
     )
     for (const tabla of tablas) {
-      expect(tabla).toMatchObject({ rls: true, politicas: 1 })
+      expect(tabla).toMatchObject({
+        rls: true,
+        comandos: ['INSERT', 'SELECT', 'UPDATE'],
+      })
     }
   })
 

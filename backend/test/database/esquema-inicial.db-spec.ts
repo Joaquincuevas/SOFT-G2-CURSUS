@@ -152,8 +152,9 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // Se revierten en orden inverso a su aplicación. ActivarRls y
-    // AgregarArchivado no crean tablas.
+    // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
+    // ActivarRls y AgregarArchivado no crean tablas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(TABLAS)
@@ -192,6 +193,7 @@ describe('migraciones', () => {
       `SELECT (SELECT count(*) FROM pg_type WHERE typname = 'rol_usuario')
             + (SELECT count(*) FROM pg_proc WHERE proname = 'actualizar_updated_at')
             + (SELECT count(*) FROM pg_proc WHERE proname = 'universidad_actual')
+            + (SELECT count(*) FROM pg_proc WHERE proname = 'rol_actual')
               AS restos`,
     )
     expect(Number(restos)).toBe(0)
