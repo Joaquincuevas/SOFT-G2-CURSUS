@@ -1,3 +1,4 @@
+import { PeriodosModule } from './periodos/periodos.module.js'
 import { Module } from '@nestjs/common'
 import { AppController } from './app.controller.js'
 import { AppService } from './app.service.js'
@@ -14,6 +15,7 @@ import { CarrerasModule } from './carreras/carreras.module.js'
     GestionModule,
     HealthModule,
     CarrerasModule,
+    PeriodosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

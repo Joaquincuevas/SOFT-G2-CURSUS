@@ -126,6 +126,10 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 `GET /api/carreras`, `POST /api/carreras` y `PATCH /api/carreras/:id` permiten al administrativo listar, crear y editar las carreras de su facultad. POST/PATCH reciben únicamente `{ nombre }`; el ámbito se obtiene del usuario de sesión en la BD y las consultas mantienen RLS por universidad más filtro de facultad. Duplicados responden 409 y una carrera ajena, archivada o inexistente responde 404 al editar. La migración nueva garantiza nombres únicos por facultad también al ignorar mayúsculas y espacios. Ver [contrato y pruebas de GES-01](../docs/ges-01-carreras-facultad.md).
 
+## Períodos (GES-02)
+
+`PeriodosController` concentra `GET /api/periodos` (incluye fechas y conserva los campos usados por Cursos), `POST /api/periodos` y `PATCH /api/periodos/:id/activar`. El administrativo crea períodos y cambia el activo de su universidad con RLS y una transacción serializada por universidad. Crear un duplicado responde 409 y revierte la desactivación anterior. Se reutilizan las restricciones existentes, sin nueva migración. Ver [contrato y pruebas de GES-02](../docs/ges-02-periodos-academicos.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.

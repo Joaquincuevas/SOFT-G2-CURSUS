@@ -1,4 +1,4 @@
-import type { CursoCreado, CursoListado, OpcionPeriodo } from '@cursus/shared'
+import type { CursoCreado, CursoListado } from '@cursus/shared'
 import { Body, Controller, Get, Post, Req } from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
@@ -13,14 +13,6 @@ const usuarioDe = (req: RequestConUsuario) => req.usuario?.sub as string
 @Controller()
 export class GestionController {
   constructor(private readonly gestion: GestionService) {}
-
-  @Puede('read', 'Periodo')
-  @Get('periodos')
-  listarPeriodos(
-    @UniversidadActual() contexto: ContextoUniversidad,
-  ): Promise<OpcionPeriodo[]> {
-    return this.gestion.listarPeriodos(contexto)
-  }
 
   @Puede('read', 'Curso')
   @Get('cursos')

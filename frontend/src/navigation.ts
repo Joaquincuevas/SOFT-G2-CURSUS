@@ -1,3 +1,4 @@
+import { Periodos } from './pages/Periodos'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
@@ -77,6 +78,15 @@ export const NAV_ITEMS: readonly NavItem[] = [
     title: () => 'Carreras',
     subtitle: (user) =>
       conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
+    to: '/periodos',
+    label: 'Períodos',
+    icon: 'book',
+    permiso: { accion: 'create', sujeto: 'Periodo' },
+    page: Periodos,
+    title: () => 'Períodos académicos',
+    subtitle: universidadYSemestre,
   },
   {
     to: '/mis-cursos',

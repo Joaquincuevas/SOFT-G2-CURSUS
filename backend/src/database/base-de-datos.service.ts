@@ -72,11 +72,21 @@ export class BaseDeDatos implements OnModuleDestroy {
     sql: string,
     parametros: unknown[] = [],
   ): Promise<T[]> {
-    if (!contexto.universidadId || !contexto.rol) {
-      throw new Error('Falta la universidad de la sesión')
-    }
     if (!USA_UNIVERSIDAD.test(sql)) {
       throw new Error('La consulta no filtra por universidad ($1)')
+    }
+    return this.enTransaccionEnUniversidad(contexto, (bd) =>
+      bd.query<T>(sql, [contexto.universidadId, ...parametros]),
+    )
+  }
+
+  // Varias consultas con el mismo contexto RLS y commit/rollback conjunto.
+  async enTransaccionEnUniversidad<T>(
+    contexto: ContextoUniversidad,
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    if (!contexto.universidadId || !contexto.rol) {
+      throw new Error('Falta la universidad de la sesión')
     }
     return this.enTransaccion(async (bd) => {
       await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
@@ -85,7 +95,7 @@ export class BaseDeDatos implements OnModuleDestroy {
                 set_config('app.rol', $2, true)`,
         [contexto.universidadId, contexto.rol],
       )
-      return bd.query<T>(sql, [contexto.universidadId, ...parametros])
+      return tarea(bd)
     })
   }
 
