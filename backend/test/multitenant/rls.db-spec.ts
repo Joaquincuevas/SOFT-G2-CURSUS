@@ -21,6 +21,7 @@ const TABLAS = [
   ['carrera', 'universidad_id'],
   ['periodo', 'universidad_id'],
   ['usuario', 'universidad_id'],
+  ['curso', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -74,6 +75,16 @@ beforeAll(async () => {
       [dominio],
     )
     universidades[dominio] = id
+
+    // El seed no crea cursos: uno por universidad, como dueño de las tablas.
+    await bd.query(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       SELECT $1, c.id, p.id, 'RLS101', 'Curso de prueba'
+         FROM carrera c, periodo p
+        WHERE c.universidad_id = $1 AND p.universidad_id = $1
+        LIMIT 1`,
+      [id],
+    )
   }
 })
 
@@ -217,6 +228,26 @@ describe('Director (ADR 0001)', () => {
         q.query(
           `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Del director')`,
           [universidadId],
+        ),
+      ).rejects.toMatchObject({ code: SIN_PERMISO })
+    })
+  })
+
+  it('no puede crear cursos, ni en su universidad', async () => {
+    const universidadId = universidades[NORTE]
+    const [{ carrera, periodo }] = await bd.query<
+      { carrera: string; periodo: string }[]
+    >(
+      `SELECT c.id AS carrera, p.id AS periodo FROM carrera c, periodo p
+        WHERE c.universidad_id = $1 AND p.universidad_id = $1 LIMIT 1`,
+      [universidadId],
+    )
+    await comoApp({ universidadId, rol: 'DIRECTOR' }, async (q) => {
+      await expect(
+        q.query(
+          `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+           VALUES ($1, $2, $3, 'DIR101', 'Del director')`,
+          [universidadId, carrera, periodo],
         ),
       ).rejects.toMatchObject({ code: SIN_PERMISO })
     })
