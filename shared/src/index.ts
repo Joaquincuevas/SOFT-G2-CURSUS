@@ -27,6 +27,7 @@ export interface UsuarioSesion {
 
 export * from './permisos.js'
 export * from './cursos.js'
+export * from './periodos.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

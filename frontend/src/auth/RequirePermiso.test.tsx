@@ -88,7 +88,13 @@ describe('usePuede', () => {
   function renderBoton(rol: Rol) {
     const user = usuarioDePrueba(rol)
     render(
-      <SessionContext value={{ user, ability: definirAbilityPara(user) }}>
+      <SessionContext
+        value={{
+          user,
+          ability: definirAbilityPara(user),
+          actualizarPeriodoActivo: () => undefined,
+        }}
+      >
         <BotonCrear />
       </SessionContext>,
     )

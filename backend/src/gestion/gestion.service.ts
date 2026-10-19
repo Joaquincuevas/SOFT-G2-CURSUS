@@ -35,16 +35,6 @@ interface FilaCurso {
 export class GestionService {
   constructor(private readonly bd: BaseDeDatos) {}
 
-  // El período activo primero y después los más recientes.
-  listarPeriodos(contexto: ContextoUniversidad): Promise<OpcionPeriodo[]> {
-    return this.bd.consultarEnUniversidad<OpcionPeriodo>(
-      contexto,
-      `SELECT id, anio, semestre, activo FROM periodo
-        WHERE universidad_id = $1
-        ORDER BY activo DESC, anio DESC, semestre DESC`,
-    )
-  }
-
   // Inserta el curso en una sola consulta, solo si la carrera es de la
   // facultad del usuario (y no está archivada) y el período es de su
   // universidad. Si no, no inserta nada y responde 404. Un código repetido en
