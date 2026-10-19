@@ -38,7 +38,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () =>
       cargada && cargada.token === token
-        ? { user: cargada.user, ability: definirAbilityPara(cargada.user) }
+        ? {
+            user: cargada.user,
+            ability: definirAbilityPara(cargada.user),
+            actualizarPeriodoActivo: (
+              periodoActivo: SessionUser['periodoActivo'],
+            ) =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? { ...anterior, user: { ...anterior.user, periodoActivo } }
+                  : anterior,
+              ),
+          }
         : null,
     [cargada, token],
   )

@@ -8,6 +8,7 @@ export type SessionUser = UsuarioSesion
 export interface SessionValue {
   user: SessionUser
   ability: AppAbility
+  actualizarPeriodoActivo: (periodo: SessionUser['periodoActivo']) => void
 }
 
 // null mientras no hay sesión o todavía no llega /api/auth/yo.

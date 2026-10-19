@@ -3,6 +3,7 @@
 Documentación del proyecto:
 
 - [GES-01: carreras por facultad y guía de revisión](ges-01-carreras-facultad.md)
+- [GES-02: períodos académicos y guía de revisión](ges-02-periodos-academicos.md)
 
 - [AUTH-02: credenciales inválidas y guía de revisión](auth-02-credenciales-invalidas.md)
 - [AUTH-03: cierre de sesión y guía de revisión](auth-03-cierre-sesion.md)
