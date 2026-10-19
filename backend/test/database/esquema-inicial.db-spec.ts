@@ -15,6 +15,7 @@ const VALOR_INVALIDO = '22P02'
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'carrera',
+  'curso',
   'facultad',
   'limite_login',
   'periodo',
@@ -152,12 +153,17 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearCurso es la última.
+    await bd.undoLastMigration()
+    const SIN_CURSO = TABLAS.filter((tabla) => tabla !== 'curso')
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
+
     // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
     // ActivarRls y AgregarArchivado no crean tablas.
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
 
     await bd.query(
       `INSERT INTO limite_login (clave, fallos) VALUES (repeat('a', 64), ARRAY(SELECT clock_timestamp() FROM generate_series(1, 20)))`,
@@ -167,20 +173,20 @@ describe('migraciones', () => {
       'SELECT cardinality(fallos) AS cantidad FROM limite_login',
     )
     expect(cantidad).toBe(5)
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter((tabla) => tabla !== 'limite_login'),
+      SIN_CURSO.filter((tabla) => tabla !== 'limite_login'),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter(
+      SIN_CURSO.filter(
         (tabla) => tabla !== 'sesion_auth' && tabla !== 'limite_login',
       ),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter(
+      SIN_CURSO.filter(
         (tabla) =>
           tabla !== 'refresh_token' &&
           tabla !== 'sesion_auth' &&
@@ -236,11 +242,13 @@ describe('migraciones', () => {
        ORDER BY table_name`,
     )
     expect(filas).toEqual(
-      ['carrera', 'facultad', 'universidad', 'usuario'].map((tabla) => ({
-        table_name: tabla,
-        data_type: 'timestamp with time zone',
-        is_nullable: 'YES',
-      })),
+      ['carrera', 'curso', 'facultad', 'universidad', 'usuario'].map(
+        (tabla) => ({
+          table_name: tabla,
+          data_type: 'timestamp with time zone',
+          is_nullable: 'YES',
+        }),
+      ),
     )
   })
 
