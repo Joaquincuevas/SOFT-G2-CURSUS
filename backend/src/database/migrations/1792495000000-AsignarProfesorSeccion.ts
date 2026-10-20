@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm'
 
-export class AsignarProfesorSeccion1792490000000 implements MigrationInterface {
-  name = 'AsignarProfesorSeccion1792490000000'
+export class AsignarProfesorSeccion1792495000000 implements MigrationInterface {
+  name = 'AsignarProfesorSeccion1792495000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // GES-12 (RN-05): una sola columna, así que una sección tiene a lo más un
