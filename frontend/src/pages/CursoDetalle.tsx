@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
-import { usePuede } from '../session/session'
+import { usePuede, useSession } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
 import './Cursos.css'
 import { useDatos } from './useDatos'
@@ -29,12 +29,15 @@ function Proximamente({ texto }: { texto: string }) {
 
 // Horario (GES-10), profesor y ayudantes (GES-12/13) se muestran como "Sin
 // asignar" hasta que existan. Con onAgregarAlumno, la fila tiene el botón
-// "Agregar alumno" (GES-15).
+// "Agregar alumno" (GES-15). Con verAlumnos, el número de alumnos enlaza a
+// su lista (GES-18).
 function FilaSeccion({
   seccion,
+  verAlumnos,
   onAgregarAlumno,
 }: {
   seccion: SeccionDetalle
+  verAlumnos: boolean
   onAgregarAlumno?: () => void
 }) {
   return (
@@ -47,7 +50,19 @@ function FilaSeccion({
           ? seccion.ayudantes.join(', ')
           : SIN_ASIGNAR}
       </td>
-      <td>{seccion.alumnos}</td>
+      <td>
+        {verAlumnos ? (
+          <Link
+            className="cursos__enlace"
+            to={`/secciones/${seccion.id}/alumnos`}
+            aria-label={`Ver los ${seccion.alumnos} alumnos de la sección ${seccion.numero}`}
+          >
+            {seccion.alumnos}
+          </Link>
+        ) : (
+          seccion.alumnos
+        )}
+      </td>
       {onAgregarAlumno && (
         <td>
           <button
@@ -92,6 +107,10 @@ function Detalle({ id }: { id: string }) {
   // GES-15: sección con el diálogo abierto, y alumnos agregados aquí por
   // sección, que se suman al conteo sin volver a pedir el curso.
   const puedeInscribir = usePuede('create', 'Inscripcion')
+  // La lista de alumnos es solo de la universidad de la sesión: el Director
+  // no la ve en los cursos de otras universidades (el backend responde 404).
+  const { user } = useSession()
+  const puedeVerAlumnos = usePuede('read', 'Inscripcion')
   const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
   const [agregados, setAgregados] = useState<Record<string, number>>({})
 
@@ -138,6 +157,9 @@ function Detalle({ id }: { id: string }) {
   }
 
   const { periodo } = curso
+  const verAlumnos =
+    puedeVerAlumnos &&
+    (!curso.universidadId || curso.universidadId === user.universidadId)
   const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
     ...seccion,
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
@@ -206,6 +228,7 @@ function Detalle({ id }: { id: string }) {
                 <FilaSeccion
                   key={seccion.id}
                   seccion={seccion}
+                  verAlumnos={verAlumnos}
                   onAgregarAlumno={
                     puedeInscribir
                       ? () => {

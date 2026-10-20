@@ -1,4 +1,5 @@
 import { Periodos } from './pages/Periodos'
+import { Secciones } from './pages/AlumnosSeccion'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
@@ -21,6 +22,9 @@ export interface NavItem {
   label: string | ((user: SessionUser) => string)
   icon: NavIconName
   permiso: PermisoRuta
+  // false: la ruta existe (con su guard y su encabezado) pero no va en el
+  // Sidebar; se llega a ella desde otra página.
+  enMenu?: false
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
   // Título y subtítulo del encabezado en esta ruta.
@@ -89,6 +93,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
     subtitle: universidadYSemestre,
   },
   {
+    // Alumnos de una sección (GES-18), desde el detalle del curso.
+    to: '/secciones',
+    label: 'Secciones',
+    icon: 'book',
+    enMenu: false,
+    permiso: { accion: 'read', sujeto: 'Inscripcion' },
+    page: Secciones,
+    title: () => 'Gestión académica',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
     to: '/mis-cursos',
     label: 'Mis Cursos',
     icon: 'book',
@@ -106,7 +122,9 @@ export function puedeVer(item: NavItem, ability: AppAbility): boolean {
 }
 
 export function navItemsFor(ability: AppAbility): NavItem[] {
-  return NAV_ITEMS.filter((item) => puedeVer(item, ability))
+  return NAV_ITEMS.filter(
+    (item) => item.enMenu !== false && puedeVer(item, ability),
+  )
 }
 
 export function etiquetaDe(item: NavItem, user: SessionUser): string {
