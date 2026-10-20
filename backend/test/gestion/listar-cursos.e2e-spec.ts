@@ -58,6 +58,17 @@ describe('GET /api/cursos (e2e)', () => {
     },
   )
 
+  // Solo el Administrativo crea secciones; el Director solo lee.
+  it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE', 'DIRECTOR'])(
+    '%s recibe 403 al crear una sección (GES-09)',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .post('/api/cursos/00000000-0000-4000-8000-000000000001/secciones')
+        .set('Authorization', sesionDe(rol))
+        .expect(403)
+    },
+  )
+
   describe('filtros (GES-04)', () => {
     // El ValidationPipe responde antes de tocar la base.
     const listar = (query: Record<string, string>) =>

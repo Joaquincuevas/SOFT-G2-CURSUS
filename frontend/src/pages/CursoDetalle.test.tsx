@@ -1,5 +1,5 @@
 import type { CursoDetalle, CursoListado } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
@@ -66,18 +66,19 @@ describe('detalle de un curso', () => {
     ])
   })
 
-  test('Editar curso y Crear sección están deshabilitados con "Próximamente"', async () => {
+  test('Editar curso sigue deshabilitado con "Próximamente"', async () => {
     await renderConSesion(
       'ADMINISTRATIVO',
       '/cursos/curso-1',
       ruta(() => CURSO),
     )
 
-    for (const nombre of ['Editar curso', 'Crear sección']) {
-      const boton = await screen.findByRole('button', { name: nombre })
-      expect(boton).toHaveAttribute('aria-disabled', 'true')
-      expect(boton).toHaveAttribute('title', 'Próximamente')
-    }
+    const editar = await screen.findByRole('button', { name: 'Editar curso' })
+    expect(editar).toHaveAttribute('aria-disabled', 'true')
+    expect(editar).toHaveAttribute('title', 'Próximamente')
+    const crear = screen.getByRole('button', { name: 'Crear sección' })
+    expect(crear).not.toHaveAttribute('aria-disabled')
+    expect(crear).not.toHaveAttribute('title')
   })
 
   test('el Director ve el detalle sin acciones y con la universidad', async () => {
@@ -141,6 +142,83 @@ describe('detalle de un curso', () => {
     expect(
       await screen.findByRole('table', { name: 'Secciones' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('crear una sección (GES-09)', () => {
+  const NUEVA = { id: 'seccion-3', numero: 3, ...SECCION }
+  const conCreacion = (crear: RutaSimulada) => ({
+    ...ruta(() => CURSO),
+    '/api/cursos/curso-1/secciones': crear,
+  })
+
+  test('crea la sección y la agrega a la tabla con un aviso', async () => {
+    let pedidosDelCurso = 0
+    let metodo: string | undefined
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => {
+        pedidosDelCurso++
+        return CURSO
+      },
+      '/api/cursos/curso-1/secciones': (init) => {
+        metodo = init?.method
+        return json(NUEVA, 201)
+      },
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Crear sección' }),
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Sección 3 creada.',
+    )
+    expect(
+      filasDe(screen.getByRole('table', { name: 'Secciones' })).map(
+        ([numero]) => numero,
+      ),
+    ).toEqual(['1', '2', '3'])
+    expect(metodo).toBe('POST')
+    // Sin volver a pedir el curso.
+    expect(pedidosDelCurso).toBe(1)
+  })
+
+  test('el botón se deshabilita mientras se crea', async () => {
+    let responder: (respuesta: Response) => void = () => {}
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      conCreacion(
+        () =>
+          new Promise<Response>((resolve) => {
+            responder = resolve
+          }),
+      ),
+    )
+
+    const boton = await screen.findByRole('button', { name: 'Crear sección' })
+    fireEvent.click(boton)
+    await waitFor(() => expect(boton).toBeDisabled())
+    responder(json(NUEVA, 201))
+    await waitFor(() => expect(boton).toBeEnabled())
+  })
+
+  test('si falla, muestra un error y no agrega nada', async () => {
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      conCreacion(() => new Response(null, { status: 500 })),
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Crear sección' }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo crear la sección.',
+    )
+    expect(
+      filasDe(screen.getByRole('table', { name: 'Secciones' })),
+    ).toHaveLength(2)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })
 

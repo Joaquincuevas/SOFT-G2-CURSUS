@@ -1,4 +1,9 @@
-import type { CursoCreado, CursoDetalle, CursoListado } from '@cursus/shared'
+import type {
+  CursoCreado,
+  CursoDetalle,
+  CursoListado,
+  SeccionDetalle,
+} from '@cursus/shared'
 import {
   Body,
   Controller,
@@ -52,5 +57,16 @@ export class GestionController {
     @Body() datos: CrearCursoDto,
   ): Promise<CursoCreado> {
     return this.gestion.crearCurso(contexto, usuarioDe(req), datos)
+  }
+
+  // Sin body: el número de la sección lo asigna el backend.
+  @Puede('create', 'Seccion')
+  @Post('cursos/:id/secciones')
+  crearSeccion(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<SeccionDetalle> {
+    return this.gestion.crearSeccion(contexto, usuarioDe(req), id)
   }
 }

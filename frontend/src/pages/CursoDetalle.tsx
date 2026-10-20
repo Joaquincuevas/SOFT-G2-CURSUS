@@ -1,5 +1,7 @@
 import type { CursoDetalle as DatosCurso, SeccionDetalle } from '@cursus/shared'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
+import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
@@ -50,12 +52,40 @@ function VolverACursos() {
   )
 }
 
-// Detalle de un curso con sus secciones (GES-08), en /cursos/:id.
+// Detalle de un curso con sus secciones (GES-08), en /cursos/:id. La key
+// reinicia el estado (secciones nuevas, avisos) al pasar a otro curso.
 export function CursoDetalle() {
-  const { id } = useParams()
+  const { id = '' } = useParams()
+  return <Detalle key={id} id={id} />
+}
+
+function Detalle({ id }: { id: string }) {
+  const { fetchConSesion } = useAuth()
   const [curso, recargar, status] = useDatos<DatosCurso>(`/api/cursos/${id}`)
   const puedeEditar = usePuede('update', 'Curso')
   const puedeCrearSeccion = usePuede('create', 'Seccion')
+  // Secciones creadas aquí (GES-09): se agregan a la tabla sin volver a pedir
+  // el curso.
+  const [nuevas, setNuevas] = useState<SeccionDetalle[]>([])
+  const [creando, setCreando] = useState(false)
+  const [aviso, setAviso] = useState<{ exito: boolean; texto: string }>()
+
+  async function crearSeccion() {
+    setCreando(true)
+    setAviso(undefined)
+    try {
+      const respuesta = await fetchConSesion(`/api/cursos/${id}/secciones`, {
+        method: 'POST',
+      })
+      if (!respuesta.ok) throw new Error()
+      const seccion = (await respuesta.json()) as SeccionDetalle
+      setNuevas((anteriores) => [...anteriores, seccion])
+      setAviso({ exito: true, texto: `Sección ${seccion.numero} creada.` })
+    } catch {
+      setAviso({ exito: false, texto: 'No se pudo crear la sección.' })
+    }
+    setCreando(false)
+  }
 
   if (curso === undefined) {
     return <Cargando texto="Cargando curso…" />
@@ -83,6 +113,7 @@ export function CursoDetalle() {
   }
 
   const { periodo } = curso
+  const secciones = [...curso.secciones, ...nuevas]
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -103,10 +134,29 @@ export function CursoDetalle() {
       {(puedeEditar || puedeCrearSeccion) && (
         <div className="cursos__acciones">
           {puedeEditar && <Proximamente texto="Editar curso" />}
-          {puedeCrearSeccion && <Proximamente texto="Crear sección" />}
+          {puedeCrearSeccion && (
+            <button
+              className="cursos__boton"
+              type="button"
+              disabled={creando}
+              onClick={() => void crearSeccion()}
+            >
+              Crear sección
+            </button>
+          )}
         </div>
       )}
-      {curso.secciones.length === 0 ? (
+      {aviso?.exito && (
+        <p className="cursos__exito" role="status">
+          {aviso.texto}
+        </p>
+      )}
+      {aviso?.exito === false && (
+        <p className="cursos__error" role="alert">
+          {aviso.texto}
+        </p>
+      )}
+      {secciones.length === 0 ? (
         <div className="cursos__tarjeta cursos__vacio">
           <p className="cursos__mensaje">Este curso aún no tiene secciones.</p>
         </div>
@@ -123,7 +173,7 @@ export function CursoDetalle() {
               </tr>
             </thead>
             <tbody>
-              {curso.secciones.map((seccion) => (
+              {secciones.map((seccion) => (
                 <FilaSeccion key={seccion.id} seccion={seccion} />
               ))}
             </tbody>
