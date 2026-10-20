@@ -1,0 +1,259 @@
+import type { AlumnosSeccion, CursoDetalle } from '@cursus/shared'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, test } from 'vitest'
+import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
+
+const RUTA = '/api/secciones/seccion-1/alumnos'
+const SECCION = {
+  id: 'seccion-1',
+  numero: 1,
+  curso: {
+    id: 'curso-1',
+    codigo: 'ICC101',
+    nombre: 'Introducción a la Programación',
+  },
+}
+const ALUMNOS: AlumnosSeccion = {
+  seccion: SECCION,
+  alumnos: [
+    { id: 'a-1', nombre: 'Ángela Mora', correo: 'angela@norte.cursus.test' },
+    { id: 'a-2', nombre: 'Ñandú Pérez', correo: 'nandu@norte.cursus.test' },
+  ],
+  total: 2,
+}
+const VACIA: AlumnosSeccion = { seccion: SECCION, alumnos: [], total: 0 }
+
+const abrir = (
+  respuesta: RutaSimulada,
+  rol: 'ADMINISTRATIVO' | 'DIRECTOR' = 'ADMINISTRATIVO',
+) => renderConSesion(rol, '/secciones/seccion-1/alumnos', { [RUTA]: respuesta })
+
+describe('alumnos de una sección (GES-18)', () => {
+  test('muestra el encabezado, el total y la tabla en el orden del backend', async () => {
+    await abrir(() => ALUMNOS)
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Sección 1 · ICC101 Introducción a la Programación',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('2 alumnos inscritos')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '← Volver al curso' }),
+    ).toHaveAttribute('href', '/cursos/curso-1')
+    const tabla = screen.getByRole('table', { name: 'Alumnos' })
+    expect(
+      within(tabla)
+        .getAllByRole('row')
+        .map((fila) =>
+          within(fila)
+            .queryAllByRole('cell')
+            .map((celda) => celda.textContent),
+        )
+        .slice(1),
+    ).toEqual([
+      ['Ángela Mora', 'angela@norte.cursus.test'],
+      ['Ñandú Pérez', 'nandu@norte.cursus.test'],
+    ])
+    expect(screen.getByRole('button', { name: 'Agregar alumno' })).toBeVisible()
+    // El encabezado de la página es el de Gestión académica.
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Gestión académica' }),
+    ).toBeInTheDocument()
+  })
+
+  test('usa el singular con un alumno', async () => {
+    await abrir(() => ({
+      ...ALUMNOS,
+      alumnos: ALUMNOS.alumnos.slice(0, 1),
+      total: 1,
+    }))
+    expect(await screen.findByText('1 alumno inscrito')).toBeInTheDocument()
+  })
+
+  test('sin alumnos ofrece agregar uno o cargar un CSV (Próximamente)', async () => {
+    await abrir(() => VACIA)
+
+    expect(
+      await screen.findByText('Esta sección aún no tiene alumnos.'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('0 alumnos inscritos')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Agregar alumno' })).toBeVisible()
+    const csv = screen.getByRole('button', { name: 'Cargar CSV' })
+    expect(csv).toHaveAttribute('aria-disabled', 'true')
+    expect(csv).toHaveAttribute('title', 'Próximamente')
+  })
+
+  test('agregar un alumno recarga la lista y el total sin desmontar la página', async () => {
+    let pedidos = 0
+    await renderConSesion('ADMINISTRATIVO', '/secciones/seccion-1/alumnos', {
+      [RUTA]: (init) => {
+        if (init?.method === 'POST') {
+          return json(
+            {
+              alumno: {
+                id: 'a-3',
+                nombre: 'Ana Pérez',
+                correo: 'ana@norte.cursus.test',
+              },
+              cuentaCreada: true,
+              passwordProvisoria: 'ABCD2345EFGH6789',
+            },
+            201,
+          )
+        }
+        pedidos++
+        return pedidos === 1
+          ? VACIA
+          : {
+              ...VACIA,
+              alumnos: [
+                {
+                  id: 'a-3',
+                  nombre: 'Ana Pérez',
+                  correo: 'ana@norte.cursus.test',
+                },
+              ],
+              total: 1,
+            }
+      },
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Agregar alumno' }),
+    )
+    const dialogo = screen.getByRole('dialog', {
+      name: 'Agregar alumno a la sección 1',
+    })
+    fireEvent.change(within(dialogo).getByLabelText('Correo institucional'), {
+      target: { value: 'ana@norte.cursus.test' },
+    })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar' }))
+
+    // La lista se actualiza y el diálogo sigue mostrando la contraseña.
+    expect(await screen.findByText('1 alumno inscrito')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: 'Ana Pérez' })).toBeInTheDocument()
+    expect(within(dialogo).getByText('ABCD2345EFGH6789')).toBeInTheDocument()
+    expect(pedidos).toBe(2)
+  })
+
+  test('el Director ve la lista sin acciones', async () => {
+    await abrir(() => VACIA, 'DIRECTOR')
+    expect(
+      await screen.findByText('Esta sección aún no tiene alumnos.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Agregar alumno' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cargar CSV' })).toBeNull()
+  })
+
+  test('una sección que no existe muestra el 404', async () => {
+    await abrir(() =>
+      json({ statusCode: 404, message: 'La sección no existe' }, 404),
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Sección no encontrada' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull()
+  })
+
+  test('si falla, muestra el error y reintenta', async () => {
+    let fallar = true
+    await abrir(() => (fallar ? new Response(null, { status: 500 }) : ALUMNOS))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudieron cargar los alumnos.',
+    )
+    fallar = false
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('table', { name: 'Alumnos' }),
+    ).toBeInTheDocument()
+  })
+
+  test('muestra "Cargando alumnos…" mientras llega la lista', async () => {
+    let responder: (respuesta: Response) => void = () => {}
+    await abrir(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    expect(await screen.findByText('Cargando alumnos…')).toBeInTheDocument()
+    responder(json(ALUMNOS))
+    await waitFor(() =>
+      expect(screen.queryByText('Cargando alumnos…')).toBeNull(),
+    )
+  })
+
+  test('un rol sin permiso vuelve al Dashboard y la ruta no está en el menú', async () => {
+    await renderConSesion('PROFESOR', '/secciones/seccion-1/alumnos')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /Bienvenido/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Secciones' })).toBeNull()
+  })
+})
+
+describe('desde el detalle del curso', () => {
+  const CURSO: CursoDetalle = {
+    id: 'curso-1',
+    codigo: 'ICC101',
+    nombre: 'Introducción a la Programación',
+    carreraNombre: 'Ingeniería Civil en Informática',
+    periodo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
+    secciones: [
+      {
+        id: 'seccion-1',
+        numero: 1,
+        horario: null,
+        profesor: null,
+        ayudantes: [],
+        alumnos: 2,
+      },
+    ],
+  }
+
+  test('el número de alumnos enlaza a la lista de la sección', async () => {
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => CURSO,
+      [RUTA]: () => ALUMNOS,
+    })
+    fireEvent.click(
+      await screen.findByRole('link', {
+        name: 'Ver los 2 alumnos de la sección 1',
+      }),
+    )
+    expect(
+      await screen.findByRole('table', { name: 'Alumnos' }),
+    ).toBeInTheDocument()
+  })
+
+  test('el Director no tiene el enlace en un curso de otra universidad', async () => {
+    await renderConSesion('DIRECTOR', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => ({
+        ...CURSO,
+        universidadId: 'universidad-sur',
+        universidadNombre: 'Universidad Demo Sur',
+      }),
+    })
+    expect(
+      await screen.findByRole('table', { name: 'Secciones' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Ver los/ })).toBeNull()
+  })
+
+  test('el Director tiene el enlace en un curso de su universidad', async () => {
+    await renderConSesion('DIRECTOR', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => ({
+        ...CURSO,
+        universidadId: 'universidad-norte',
+        universidadNombre: 'Universidad Demo Norte',
+      }),
+    })
+    expect(
+      await screen.findByRole('link', {
+        name: 'Ver los 2 alumnos de la sección 1',
+      }),
+    ).toBeInTheDocument()
+  })
+})

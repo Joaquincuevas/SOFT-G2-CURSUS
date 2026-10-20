@@ -123,6 +123,16 @@ describe('GET /api/cursos (e2e)', () => {
     })
   })
 
+  it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE'])(
+    '%s recibe 403 en la lista de alumnos de una sección (GES-18)',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get('/api/secciones/00000000-0000-4000-8000-000000000001/alumnos')
+        .set('Authorization', sesionDe(rol))
+        .expect(403)
+    },
+  )
+
   describe('agregar un alumno (GES-15)', () => {
     const agregar = (rol: string, datos: object) =>
       request(app.getHttpServer())

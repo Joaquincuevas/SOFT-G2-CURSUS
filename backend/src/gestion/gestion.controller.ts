@@ -1,5 +1,6 @@
 import type {
   AlumnoAgregado,
+  AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
   CursoEditable,
@@ -109,6 +110,16 @@ export class GestionController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SeccionDetalle> {
     return this.gestion.crearSeccion(contexto, usuarioDe(req), id)
+  }
+
+  @Puede('read', 'Inscripcion')
+  @Get('secciones/:id/alumnos')
+  listarAlumnos(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<AlumnosSeccion> {
+    return this.gestion.listarAlumnos(contexto, usuarioDe(req), id)
   }
 
   // La respuesta puede traer la contraseña provisoria: no se guarda en caché

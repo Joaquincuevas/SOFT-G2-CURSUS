@@ -93,6 +93,11 @@ describe('GES-13: asignar ayudantes', () => {
     expect(screen.getByRole('table', { name: 'Secciones' })).toHaveTextContent(
       'Ana Pérez, Luis Soto, Ya Asignado',
     )
+    expect(
+      screen.getByRole('link', {
+        name: 'Ver los 0 alumnos de la sección 1',
+      }),
+    ).toHaveAttribute('href', '/secciones/seccion-1/alumnos')
     expect(responder).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'POST',

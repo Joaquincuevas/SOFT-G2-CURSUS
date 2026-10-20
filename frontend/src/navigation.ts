@@ -1,4 +1,5 @@
 import { Periodos } from './pages/Periodos'
+import { Secciones } from './pages/AlumnosSeccion'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
@@ -91,6 +92,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
     page: Periodos,
     title: () => 'Períodos académicos',
     subtitle: universidadYSemestre,
+  },
+  {
+    // Alumnos de una sección (GES-18), desde el detalle del curso.
+    to: '/secciones',
+    label: 'Secciones',
+    icon: 'book',
+    enMenu: false,
+    permiso: { accion: 'read', sujeto: 'Inscripcion' },
+    page: Secciones,
+    title: () => 'Gestión académica',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
   },
   {
     to: '/mis-cursos',
