@@ -247,6 +247,11 @@ function ConfirmarQuitar({
       className="cursos__dialogo"
       aria-labelledby="quitar-alumno-titulo"
       aria-describedby="quitar-alumno-detalle"
+      // Mientras el PATCH está pendiente no se cierra (ni con Escape): así su
+      // respuesta no cierra la confirmación de otro alumno ni pierde su error.
+      onCancel={(event) => {
+        if (quitando) event.preventDefault()
+      }}
       onClose={onCerrar}
     >
       <h3 id="quitar-alumno-titulo" className="cursos__titulo-dialogo">
@@ -265,6 +270,7 @@ function ConfirmarQuitar({
         <button
           className="cursos__boton cursos__boton--secundario"
           type="button"
+          disabled={quitando}
           onClick={onCerrar}
         >
           Cancelar

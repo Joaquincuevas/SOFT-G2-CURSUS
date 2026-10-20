@@ -275,6 +275,47 @@ describe('quitar a un alumno (GES-19)', () => {
     expect(pedidosLista).toBe(1)
   })
 
+  test('mientras el PATCH está pendiente no se puede cerrar ni abrir otra confirmación', async () => {
+    let responder: (respuesta: Response) => void = () => {}
+    const dialogo = await abrirConfirmacion(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    // Escape sin petición pendiente sí cierra (no se previene).
+    expect(
+      dialogo.dispatchEvent(new Event('cancel', { cancelable: true })),
+    ).toBe(true)
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+    const cancelar = within(dialogo).getByRole('button', { name: 'Cancelar' })
+    await waitFor(() => expect(cancelar).toBeDisabled())
+
+    // Ni Cancelar ni Escape cierran la confirmación de Ángela.
+    fireEvent.click(cancelar)
+    expect(
+      dialogo.dispatchEvent(new Event('cancel', { cancelable: true })),
+    ).toBe(false)
+    expect(screen.getByRole('dialog', { name: 'Quitar alumno' })).toBe(dialogo)
+    expect(dialogo).toHaveAccessibleDescription(/Ángela Mora/)
+
+    // Al terminar, la respuesta corresponde a su propia confirmación.
+    responder(json(QUITADO))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Ángela Mora fue quitado de la sección.',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // Recién ahora se puede confirmar la baja de otro alumno.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Quitar a Ñandú Pérez' }),
+    )
+    expect(
+      screen.getByRole('dialog', { name: 'Quitar alumno' }),
+    ).toHaveAccessibleDescription(/Ñandú Pérez/)
+  })
+
   test('si falla, muestra el error y no cambia la lista', async () => {
     const dialogo = await abrirConfirmacion(() =>
       json(
