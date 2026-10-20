@@ -150,3 +150,12 @@ export interface AlumnosSeccion {
   alumnos: AlumnoInscrito[]
   total: number
 }
+
+// Respuesta de PATCH /api/secciones/:seccionId/alumnos/:usuarioId/quitar
+// (GES-19). Quitar archiva la inscripción: la cuenta del alumno sigue igual.
+export interface AlumnoQuitado {
+  alumno: AlumnoInscrito
+  // Fecha ISO 8601 en que se archivó la inscripción.
+  quitadoEn: string
+  quitadoPor: { id: string; nombre: string }
+}

@@ -52,8 +52,8 @@ describe('alumnos de una sección (GES-18)', () => {
         )
         .slice(1),
     ).toEqual([
-      ['Ángela Mora', 'angela@norte.cursus.test'],
-      ['Ñandú Pérez', 'nandu@norte.cursus.test'],
+      ['Ángela Mora', 'angela@norte.cursus.test', 'Quitar'],
+      ['Ñandú Pérez', 'nandu@norte.cursus.test', 'Quitar'],
     ])
     expect(screen.getByRole('button', { name: 'Agregar alumno' })).toBeVisible()
     // El encabezado de la página es el de Gestión académica.
@@ -191,6 +191,159 @@ describe('alumnos de una sección (GES-18)', () => {
       await screen.findByRole('heading', { level: 1, name: /Bienvenido/ }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Secciones' })).toBeNull()
+  })
+})
+
+describe('quitar a un alumno (GES-19)', () => {
+  const RUTA_QUITAR = '/api/secciones/seccion-1/alumnos/a-1/quitar'
+  const QUITADO = {
+    alumno: ALUMNOS.alumnos[0],
+    quitadoEn: '2026-10-20T03:00:00.000Z',
+    quitadoPor: { id: 'usuario-administrativo', nombre: 'Administrativo' },
+  }
+  const nombres = () =>
+    within(screen.getByRole('table', { name: 'Alumnos' }))
+      .getAllByRole('row')
+      .slice(1)
+      .map((fila) => within(fila).getAllByRole('cell')[0].textContent)
+
+  async function abrirConfirmacion(quitar: RutaSimulada) {
+    await renderConSesion('ADMINISTRATIVO', '/secciones/seccion-1/alumnos', {
+      [RUTA]: () => ALUMNOS,
+      [RUTA_QUITAR]: quitar,
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Quitar a Ángela Mora' }),
+    )
+    return screen.getByRole('dialog', { name: 'Quitar alumno' })
+  }
+
+  test('pide confirmación con el nombre, el correo y la sección', async () => {
+    const dialogo = await abrirConfirmacion(() => QUITADO)
+    expect(dialogo).toHaveAccessibleDescription(
+      '¿Quitar a Ángela Mora (angela@norte.cursus.test) de la sección 1? Su cuenta no se elimina.',
+    )
+  })
+
+  test('cancelar no quita a nadie', async () => {
+    let pedidos = 0
+    const dialogo = await abrirConfirmacion(() => {
+      pedidos++
+      return QUITADO
+    })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(pedidos).toBe(0)
+    expect(nombres()).toEqual(['Ángela Mora', 'Ñandú Pérez'])
+    expect(screen.getByText('2 alumnos inscritos')).toBeInTheDocument()
+  })
+
+  test('confirmar quita la fila y baja el total sin recargar', async () => {
+    let pedidosLista = 0
+    let metodo: string | undefined
+    let responder: (respuesta: Response) => void = () => {}
+    await renderConSesion('ADMINISTRATIVO', '/secciones/seccion-1/alumnos', {
+      [RUTA]: () => {
+        pedidosLista++
+        return ALUMNOS
+      },
+      [RUTA_QUITAR]: (init) => {
+        metodo = init?.method
+        return new Promise<Response>((resolve) => {
+          responder = resolve
+        })
+      },
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Quitar a Ángela Mora' }),
+    )
+    const dialogo = screen.getByRole('dialog', { name: 'Quitar alumno' })
+    const confirmar = within(dialogo).getByRole('button', { name: 'Quitar' })
+    fireEvent.click(confirmar)
+
+    // Deshabilitado mientras está en curso.
+    await waitFor(() => expect(confirmar).toBeDisabled())
+    responder(json(QUITADO))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Ángela Mora fue quitado de la sección.',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(nombres()).toEqual(['Ñandú Pérez'])
+    expect(screen.getByText('1 alumno inscrito')).toBeInTheDocument()
+    expect(metodo).toBe('PATCH')
+    expect(pedidosLista).toBe(1)
+  })
+
+  test('mientras el PATCH está pendiente no se puede cerrar ni abrir otra confirmación', async () => {
+    let responder: (respuesta: Response) => void = () => {}
+    const dialogo = await abrirConfirmacion(
+      () =>
+        new Promise<Response>((resolve) => {
+          responder = resolve
+        }),
+    )
+    // Escape sin petición pendiente sí cierra (no se previene).
+    expect(
+      dialogo.dispatchEvent(new Event('cancel', { cancelable: true })),
+    ).toBe(true)
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+    const cancelar = within(dialogo).getByRole('button', { name: 'Cancelar' })
+    await waitFor(() => expect(cancelar).toBeDisabled())
+
+    // Ni Cancelar ni Escape cierran la confirmación de Ángela.
+    fireEvent.click(cancelar)
+    expect(
+      dialogo.dispatchEvent(new Event('cancel', { cancelable: true })),
+    ).toBe(false)
+    expect(screen.getByRole('dialog', { name: 'Quitar alumno' })).toBe(dialogo)
+    expect(dialogo).toHaveAccessibleDescription(/Ángela Mora/)
+
+    // Al terminar, la respuesta corresponde a su propia confirmación.
+    responder(json(QUITADO))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Ángela Mora fue quitado de la sección.',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    // Recién ahora se puede confirmar la baja de otro alumno.
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Quitar a Ñandú Pérez' }),
+    )
+    expect(
+      screen.getByRole('dialog', { name: 'Quitar alumno' }),
+    ).toHaveAccessibleDescription(/Ñandú Pérez/)
+  })
+
+  test('si falla, muestra el error y no cambia la lista', async () => {
+    const dialogo = await abrirConfirmacion(() =>
+      json(
+        {
+          statusCode: 404,
+          message: 'El alumno no está inscrito en esta sección',
+        },
+        404,
+      ),
+    )
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(
+      'El alumno no está inscrito en esta sección',
+    )
+    expect(
+      within(dialogo).getByRole('button', { name: 'Quitar' }),
+    ).toBeEnabled()
+    expect(nombres()).toEqual(['Ángela Mora', 'Ñandú Pérez'])
+    expect(screen.getByText('2 alumnos inscritos')).toBeInTheDocument()
+  })
+
+  test('el Director no ve el botón ni la columna', async () => {
+    await abrir(() => ALUMNOS, 'DIRECTOR')
+    expect(
+      await screen.findByRole('table', { name: 'Alumnos' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Quitar/ })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
   })
 })
 

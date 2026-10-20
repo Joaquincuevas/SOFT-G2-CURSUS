@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type {
   AlumnoAgregado,
+  AlumnoQuitado,
   AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
@@ -403,6 +404,62 @@ export class GestionService {
       alumnos: fila.alumnos,
       total: fila.alumnos.length,
     }
+  }
+
+  // GES-19. Quita a un alumno de una sección archivando su inscripción, con
+  // la fecha y el usuario de la sesión como responsable; su cuenta no cambia.
+  // Mismo criterio de sección que agregarAlumno y listarAlumnos (si no, 404).
+  // Un alumno que no está inscrito (o ya se quitó) también responde 404. El
+  // índice único parcial deja volver a inscribirlo.
+  async quitarAlumno(
+    contexto: ContextoUniversidad,
+    responsableId: string,
+    seccionId: string,
+    alumnoId: string,
+  ): Promise<AlumnoQuitado> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const universidad = contexto.universidadId
+      const [seccion] = await bd.query<{ id: string }>(
+        `SELECT s.id ${SECCION_VIGENTE}
+            AND ca.facultad_id = ${facultadDe('$3')}`,
+        [universidad, seccionId, responsableId],
+      )
+      if (!seccion) {
+        throw new NotFoundException('La sección no existe')
+      }
+      const [fila] = await bd.query<{
+        id: string
+        nombre: string
+        correo: string
+        quitado_en: Date
+        por_id: string
+        por_nombre: string
+      }>(
+        `WITH quitada AS (
+           UPDATE inscripcion
+              SET archived_at = now(), archivada_por = $4
+            WHERE universidad_id = $1 AND seccion_id = $2 AND usuario_id = $3
+              AND archived_at IS NULL
+           RETURNING usuario_id, archived_at, archivada_por
+         )
+         SELECT u.id, u.nombre, u.correo, q.archived_at AS quitado_en,
+                r.id AS por_id, r.nombre AS por_nombre
+           FROM quitada q
+           JOIN usuario u ON u.id = q.usuario_id
+           JOIN usuario r ON r.id = q.archivada_por`,
+        [universidad, seccionId, alumnoId, responsableId],
+      )
+      if (!fila) {
+        throw new NotFoundException(
+          'El alumno no está inscrito en esta sección',
+        )
+      }
+      return {
+        alumno: { id: fila.id, nombre: fila.nombre, correo: fila.correo },
+        quitadoEn: fila.quitado_en.toISOString(),
+        quitadoPor: { id: fila.por_id, nombre: fila.por_nombre },
+      }
+    })
   }
 
   // GES-15. Inscribe a un alumno en una sección por su correo institucional,
