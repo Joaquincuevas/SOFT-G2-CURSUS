@@ -10,3 +10,8 @@ afterEach(cleanup)
 afterEach(() => {
   vi.unstubAllGlobals()
 })
+
+// jsdom no implementa los diálogos modales: basta con abrir y cerrar.
+HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+  this.open = true
+}

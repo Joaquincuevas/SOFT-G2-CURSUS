@@ -69,6 +69,34 @@ describe('GET /api/cursos (e2e)', () => {
     },
   )
 
+  describe('agregar un alumno (GES-15)', () => {
+    const agregar = (rol: string, datos: object) =>
+      request(app.getHttpServer())
+        .post('/api/secciones/00000000-0000-4000-8000-000000000001/alumnos')
+        .set('Authorization', sesionDe(rol))
+        .send(datos)
+
+    it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE', 'DIRECTOR'])(
+      '%s recibe 403',
+      async (rol) => {
+        await agregar(rol, { correo: 'alumno@norte.cursus.test' }).expect(403)
+      },
+    )
+
+    // El ValidationPipe responde antes de tocar la base.
+    it.each([
+      ['sin correo', {}],
+      ['un correo inválido', { correo: 'no-es-correo' }],
+      [
+        'un nombre de más de 120 caracteres',
+        { correo: 'a@b.cl', nombre: 'x'.repeat(121) },
+      ],
+      ['un campo no esperado', { correo: 'a@b.cl', rol: 'ADMINISTRATIVO' }],
+    ])('responde 400 con %s', async (_caso, datos) => {
+      await agregar('ADMINISTRATIVO', datos).expect(400)
+    })
+  })
+
   describe('filtros (GES-04)', () => {
     // El ValidationPipe responde antes de tocar la base.
     const listar = (query: Record<string, string>) =>

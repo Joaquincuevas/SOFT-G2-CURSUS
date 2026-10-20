@@ -32,11 +32,13 @@ El backend toma `FOR UPDATE OF c` antes de leer el valor anterior y conserva ese
 
 La confirmación es un paso de interfaz. No se implementa control de versiones: con dos formularios abiertos, el último guardado exitoso prevalece y el historial registra ambas ediciones.
 
-La migración aditiva `CrearHistorialCurso1792470000000` crea `curso_cambio`, su índice por curso/fecha, claves foráneas compuestas que vinculan curso y responsable a la misma universidad, y RLS. `cursus_app` tiene únicamente SELECT/INSERT sobre el historial; no UPDATE/DELETE/TRUNCATE. El contrato de RLS documenta esta excepción de solo adición. No se cambian migraciones anteriores. Aplicarla antes de arrancar la nueva API. Su reversión elimina el historial y el índice auxiliar de usuario; conserva los cursos, así que el rollback no recupera sus valores anteriores.
+La migración aditiva `CrearHistorialCurso1792480000000` crea `curso_cambio`, su índice por curso/fecha, claves foráneas compuestas que vinculan curso y responsable a la misma universidad, y RLS. `cursus_app` tiene únicamente SELECT/INSERT sobre el historial; no UPDATE/DELETE/TRUNCATE. El contrato de RLS documenta esta excepción de solo adición. No se cambian migraciones anteriores. Aplicarla antes de arrancar la nueva API. Su reversión elimina el historial; conserva los cursos, así que el rollback no recupera sus valores anteriores.
 
 El registro cubre las ediciones hechas por este endpoint desde su despliegue. No se reconstruye historial de datos anteriores ni de cambios administrativos hechos directamente por el dueño de la base.
 
 ## Preparación
+
+La branch integra `develop` mediante merge, incluida GES-15. `CrearHistorialCurso1792480000000` se ejecuta después de `CrearInscripcion1792470000000` y reutiliza su clave `uq_usuario_id_universidad`; al revertir auditoría, esa clave se conserva para Inscripción. La edición y la acción de agregar alumnos coexisten en el detalle del curso.
 
 Desde la raíz del repositorio:
 

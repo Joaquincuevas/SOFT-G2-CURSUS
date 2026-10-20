@@ -171,11 +171,23 @@ describe('GES-07: edición de cursos y auditoría', () => {
 
   it('mantiene las secciones y refleja el curso en listado, detalle y filtros', async () => {
     const curso = await nuevo()
-    await solicitar(`/api/cursos/${curso.id}/secciones`, 'post')
+    const seccion = await solicitar(`/api/cursos/${curso.id}/secciones`, 'post')
+    expect(seccion.status).toBe(201)
+    const seccionId = (seccion.body as { id: string }).id
+    const inscripcion = await solicitar(
+      `/api/secciones/${seccionId}/alumnos`,
+      'post',
+      { correo: 'alumno@norte.cursus.test' },
+    )
+    expect(inscripcion.status).toBe(201)
     const respuesta = await editar(curso, { periodoId, nombre: 'Con sección' })
     expect(respuesta.status).toBe(200)
     const detalle = await solicitar(`/api/cursos/${curso.id}`, 'get')
     expect((detalle.body as { secciones: unknown[] }).secciones).toHaveLength(1)
+    expect(
+      (detalle.body as { secciones: { id: string; alumnos: number }[] })
+        .secciones[0],
+    ).toMatchObject({ id: seccionId, alumnos: 1 })
     const listado = await solicitar(`/api/cursos?periodoId=${periodoId}`, 'get')
     expect(listado.body).toEqual(
       expect.arrayContaining([

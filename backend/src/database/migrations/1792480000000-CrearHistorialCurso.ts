@@ -1,12 +1,9 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm'
 
-export class CrearHistorialCurso1792470000000 implements MigrationInterface {
-  name = 'CrearHistorialCurso1792470000000'
+export class CrearHistorialCurso1792480000000 implements MigrationInterface {
+  name = 'CrearHistorialCurso1792480000000'
 
   async up(q: QueryRunner): Promise<void> {
-    await q.query(
-      `ALTER TABLE usuario ADD CONSTRAINT uq_usuario_id_universidad UNIQUE (id, universidad_id)`,
-    )
     await q.query(`CREATE TABLE curso_cambio (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       universidad_id uuid NOT NULL,
@@ -36,8 +33,5 @@ export class CrearHistorialCurso1792470000000 implements MigrationInterface {
 
   async down(q: QueryRunner): Promise<void> {
     await q.query('DROP TABLE curso_cambio')
-    await q.query(
-      'ALTER TABLE usuario DROP CONSTRAINT uq_usuario_id_universidad',
-    )
   }
 }
