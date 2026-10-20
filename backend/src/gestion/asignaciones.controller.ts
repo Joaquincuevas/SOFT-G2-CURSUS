@@ -12,7 +12,10 @@ import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
 import { AsignacionesService } from './asignaciones.service.js'
-import { QuitarAsignacionDto } from './quitar-asignacion.dto.js'
+import {
+  QuitarAsignacionDto,
+  QuitarProfesorDto,
+} from './quitar-asignacion.dto.js'
 
 // GES-14. Quitar es un PATCH y no un DELETE: nada se elimina (el rol de la
 // API no tiene DELETE). Mismo permiso que asignar (GES-12 y GES-13).
@@ -26,12 +29,13 @@ export class AsignacionesController {
     @UniversidadActual() contexto: ContextoUniversidad,
     @Req() req: RequestConUsuario,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() { motivo }: QuitarAsignacionDto,
+    @Body() { motivo, profesorId }: QuitarProfesorDto,
   ): Promise<AsignacionQuitada> {
     return this.asignaciones.quitarProfesor(
       contexto,
       req.usuario!.sub,
       id,
+      profesorId,
       motivo,
     )
   }

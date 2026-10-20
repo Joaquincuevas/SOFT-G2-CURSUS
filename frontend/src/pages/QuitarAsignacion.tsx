@@ -3,7 +3,10 @@ import {
   type AsignacionQuitada,
   type AyudanteOpcion,
   type AyudanteQuitado,
+  type ProfesorCambiado,
+  type ProfesorOpcion,
   type QuitarAsignacion,
+  type QuitarProfesor,
   type SeccionDetalle,
 } from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
@@ -22,16 +25,21 @@ function mensajeDe(cuerpo: { message?: unknown }): string | null {
 
 // Confirmación para quitar al profesor o a un ayudante de una sección (GES-14).
 // El motivo es obligatorio: queda en el historial de asignaciones. Para un
-// ayudante, se elige cuál quitar entre los asignados.
+// ayudante, se elige cuál quitar entre los asignados. Para el profesor, se
+// envía el que se está mostrando: si la sección cambió mientras tanto, la API
+// responde 409 con el actual, onProfesorCambiado actualiza la sección y el
+// diálogo pide confirmar de nuevo.
 export function QuitarAsignacionDialogo({
   seccion,
   tipo,
   onQuitada,
+  onProfesorCambiado,
   onCerrar,
 }: {
   seccion: SeccionDetalle
   tipo: TipoAsignacion
   onQuitada: (resultado: AsignacionQuitada | AyudanteQuitado) => void
+  onProfesorCambiado: (profesor: ProfesorOpcion | null, mensaje: string) => void
   onCerrar: () => void
 }) {
   const { fetchConSesion } = useAuth()
@@ -61,19 +69,33 @@ export function QuitarAsignacionDialogo({
     setQuitando(true)
     setError(null)
     try {
-      const ruta = esAyudante
-        ? `/api/secciones/${seccion.id}/ayudantes/${ayudanteId}/quitar`
-        : `/api/secciones/${seccion.id}/profesor/quitar`
+      const [ruta, body]: [string, QuitarAsignacion | QuitarProfesor] =
+        esAyudante
+          ? [
+              `/api/secciones/${seccion.id}/ayudantes/${ayudanteId}/quitar`,
+              { motivo },
+            ]
+          : [
+              `/api/secciones/${seccion.id}/profesor/quitar`,
+              { motivo, profesorId: seccion.profesorId ?? '' },
+            ]
       const respuesta = await fetchConSesion(ruta, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo } satisfies QuitarAsignacion),
+        body: JSON.stringify(body),
       })
       const cuerpo = (await respuesta.json().catch(() => ({}))) as {
         message?: unknown
       }
       if (respuesta.ok) {
         onQuitada(cuerpo as AsignacionQuitada | AyudanteQuitado)
+        return
+      }
+      if (respuesta.status === 409 && !esAyudante && 'profesor' in cuerpo) {
+        const cambio = cuerpo as ProfesorCambiado
+        onProfesorCambiado(cambio.profesor, cambio.message)
+        setError(cambio.message)
+        setQuitando(false)
         return
       }
       setError(

@@ -7,6 +7,7 @@ const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
 const SECCION = {
   horario: null,
   profesor: null,
+  profesorId: null,
   ayudantes: [],
   alumnos: 0,
 }
@@ -246,7 +247,13 @@ describe('asignar el profesor de una sección (GES-12)', () => {
   const CON_PROFESOR: CursoDetalle = {
     ...CURSO,
     secciones: [
-      { id: 'seccion-1', numero: 1, ...SECCION, profesor: 'Camila Rojas' },
+      {
+        id: 'seccion-1',
+        numero: 1,
+        ...SECCION,
+        profesor: 'Camila Rojas',
+        profesorId: 'profesor-1',
+      },
       { id: 'seccion-2', numero: 2, ...SECCION },
     ],
   }
@@ -293,6 +300,7 @@ describe('asignar el profesor de una sección (GES-12)', () => {
           numero: 1,
           ...SECCION,
           profesor: 'Matías Muñoz',
+          profesorId: 'profesor-2',
         }
       }),
     )
@@ -339,6 +347,7 @@ describe('asignar el profesor de una sección (GES-12)', () => {
           numero: 1,
           ...SECCION,
           profesor: 'Matías Muñoz',
+          profesorId: 'profesor-2',
         }
       }, CON_PROFESOR),
     )

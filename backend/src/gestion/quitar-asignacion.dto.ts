@@ -1,6 +1,10 @@
-import { LARGO_MOTIVO_ASIGNACION, type QuitarAsignacion } from '@cursus/shared'
+import {
+  LARGO_MOTIVO_ASIGNACION,
+  type QuitarAsignacion,
+  type QuitarProfesor,
+} from '@cursus/shared'
 import { Transform } from 'class-transformer'
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator'
+import { IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator'
 
 const sinEspaciosExtremos = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value
@@ -15,4 +19,14 @@ export class QuitarAsignacionDto implements QuitarAsignacion {
     message: `El motivo puede tener hasta ${LARGO_MOTIVO_ASIGNACION} caracteres`,
   })
   motivo!: string
+}
+
+// Body de PATCH .../profesor/quitar: también el profesor que se confirmó
+// quitar, para no quitar a otro si la sección cambió mientras tanto.
+export class QuitarProfesorDto
+  extends QuitarAsignacionDto
+  implements QuitarProfesor
+{
+  @IsUUID('all', { message: 'Indica el profesor que quieres quitar' })
+  profesorId!: string
 }

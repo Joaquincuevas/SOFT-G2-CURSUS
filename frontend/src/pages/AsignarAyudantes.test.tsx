@@ -15,6 +15,7 @@ const CURSO: CursoDetalle = {
       numero: 1,
       horario: null,
       profesor: null,
+      profesorId: null,
       ayudantes: ['Ya Asignado'],
       alumnos: 0,
     },

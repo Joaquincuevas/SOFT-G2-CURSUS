@@ -3,6 +3,7 @@ import type {
   AyudanteOpcion,
   AyudanteQuitado,
   CursoDetalle,
+  ProfesorCambiado,
 } from '@cursus/shared'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
@@ -20,6 +21,7 @@ const CURSO: CursoDetalle = {
       numero: 1,
       horario: null,
       profesor: 'Ana Profesora',
+      profesorId: 'profesor-1',
       ayudantes: ['Luis Soto', 'Marta Díaz'],
       alumnos: 0,
     },
@@ -28,6 +30,7 @@ const CURSO: CursoDetalle = {
       numero: 2,
       horario: null,
       profesor: null,
+      profesorId: null,
       ayudantes: [],
       alumnos: 0,
     },
@@ -108,7 +111,10 @@ describe('GES-14: quitar al profesor', () => {
     expect(responder).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'PATCH',
-        body: JSON.stringify({ motivo: 'Asignación equivocada' }),
+        body: JSON.stringify({
+          motivo: 'Asignación equivocada',
+          profesorId: 'profesor-1',
+        }),
       }),
       RUTA_PROFESOR,
     )
@@ -160,6 +166,81 @@ describe('GES-14: quitar al profesor', () => {
     )
     expect(within(filaDe(1)).getAllByRole('cell')[2]).toHaveTextContent(
       'Ana Profesora',
+    )
+  })
+
+  test('si otro cambió al profesor, muestra al nuevo y pide confirmar de nuevo', async () => {
+    const enviados: unknown[] = []
+    const dialogo = await abrir('Quitar profesor de la sección 1', {
+      [RUTA_PROFESOR]: (init) => {
+        enviados.push(JSON.parse(String(init?.body)))
+        if (enviados.length === 1) {
+          return json(
+            {
+              statusCode: 409,
+              message:
+                'Bruno Pérez es ahora el profesor de la sección. Revisa y confirma de nuevo.',
+              profesor: { id: 'profesor-2', nombre: 'Bruno Pérez' },
+            } satisfies ProfesorCambiado,
+            409,
+          )
+        }
+        return {
+          ...QUITADA,
+          quitado: { id: 'profesor-2', nombre: 'Bruno Pérez' },
+        } satisfies AsignacionQuitada
+      },
+    })
+    escribirMotivo(dialogo, 'Error')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+
+    // No se quitó a nadie: el diálogo sigue abierto con el profesor actual,
+    // en la tabla también, y conserva el motivo.
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(
+      'Bruno Pérez es ahora el profesor de la sección.',
+    )
+    expect(dialogo).toHaveAccessibleDescription(/Bruno Pérez/)
+    expect(within(filaDe(1)).getAllByRole('cell')[2]).toHaveTextContent(
+      'Bruno Pérez',
+    )
+    expect(within(dialogo).getByLabelText('Motivo')).toHaveValue('Error')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(enviados).toEqual([
+      { motivo: 'Error', profesorId: 'profesor-1' },
+      { motivo: 'Error', profesorId: 'profesor-2' },
+    ])
+    expect(within(filaDe(1)).getAllByRole('cell')[2]).toHaveTextContent(
+      'Sin asignar',
+    )
+  })
+
+  test('si la sección ya no tiene profesor, cierra el diálogo y lo avisa', async () => {
+    const dialogo = await abrir('Quitar profesor de la sección 1', {
+      [RUTA_PROFESOR]: () =>
+        json(
+          {
+            statusCode: 409,
+            message: 'La sección ya no tiene profesor asignado.',
+            profesor: null,
+          } satisfies ProfesorCambiado,
+          409,
+        ),
+    })
+    escribirMotivo(dialogo, 'Error')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Quitar' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'La sección ya no tiene profesor asignado.',
+    )
+    expect(within(filaDe(1)).getAllByRole('cell')[2]).toHaveTextContent(
+      'Sin asignar',
     )
   })
 

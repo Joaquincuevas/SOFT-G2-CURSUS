@@ -2,8 +2,14 @@ import type {
   AsignacionQuitada,
   AyudanteQuitado,
   AyudanteResumen,
+  ProfesorCambiado,
+  ProfesorOpcion,
 } from '@cursus/shared'
-import { Injectable, NotFoundException } from '@nestjs/common'
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
@@ -63,10 +69,15 @@ const aQuitada = (fila: FilaRegistro): AsignacionQuitada => ({
 export class AsignacionesService {
   constructor(private readonly bd: BaseDeDatos) {}
 
+  // profesorId es el profesor que se confirmó quitar. Se compara con el actual
+  // después de bloquear la sección: si otra petición lo cambió o lo quitó
+  // mientras tanto, responde 409 con quien está a cargo ahora, sin quitar a
+  // nadie ni registrar una baja.
   async quitarProfesor(
     contexto: ContextoUniversidad,
     responsableId: string,
     seccionId: string,
+    profesorId: string,
     motivo: string,
   ): Promise<AsignacionQuitada> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
@@ -76,8 +87,20 @@ export class AsignacionesService {
         [universidad, seccionId, responsableId],
       )
       if (!seccion) throw new NotFoundException('La sección no existe')
-      if (!seccion.profesor_id) {
-        throw new NotFoundException('La sección no tiene profesor asignado')
+      if (seccion.profesor_id !== profesorId) {
+        const [profesor] = seccion.profesor_id
+          ? await bd.query<ProfesorOpcion>(
+              'SELECT id, nombre FROM usuario WHERE universidad_id = $1 AND id = $2',
+              [universidad, seccion.profesor_id],
+            )
+          : []
+        throw new ConflictException({
+          statusCode: 409,
+          message: profesor
+            ? `${profesor.nombre} es ahora el profesor de la sección. Revisa y confirma de nuevo.`
+            : 'La sección ya no tiene profesor asignado.',
+          profesor: profesor ?? null,
+        } satisfies ProfesorCambiado)
       }
       await bd.query(
         `UPDATE seccion SET profesor_id = NULL

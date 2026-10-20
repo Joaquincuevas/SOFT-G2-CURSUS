@@ -65,6 +65,8 @@ export interface SeccionDetalle {
   horario: string | null
   // Nombre del profesor a cargo (GES-12), o null si no tiene.
   profesor: string | null
+  // Su id, para que quitarlo (GES-14) apunte a la persona que se ve.
+  profesorId: string | null
   ayudantes: string[]
   alumnos: number
 }
@@ -166,6 +168,20 @@ export const LARGO_MOTIVO_ASIGNACION = 500
 // PATCH /api/secciones/:id/ayudantes/:usuarioId/quitar.
 export interface QuitarAsignacion {
   motivo: string
+}
+
+// Body de PATCH /api/secciones/:id/profesor/quitar: además del motivo, el
+// profesor que se confirmó quitar. Si la sección ya tiene otro (o ninguno),
+// responde 409 con un ProfesorCambiado y no quita a nadie.
+export interface QuitarProfesor extends QuitarAsignacion {
+  profesorId: string
+}
+
+// Cuerpo del 409 al quitar al profesor: quién está a cargo ahora.
+export interface ProfesorCambiado {
+  statusCode: 409
+  message: string
+  profesor: ProfesorOpcion | null
 }
 
 // Respuesta al quitar una asignación: quién se quitó, quién y cuándo, y el

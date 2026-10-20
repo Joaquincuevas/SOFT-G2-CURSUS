@@ -343,14 +343,18 @@ function Detalle({ id }: { id: string }) {
     Record<string, HorarioSeccion>
   >({})
   // GES-12: sección cuyo profesor se está asignando, y profesores asignados
-  // aquí (id de sección → nombre, o null si se quitó con GES-14), que
+  // aquí (id de sección → profesor, o null si se quitó con GES-14), que
   // reemplazan al de la tabla sin volver a pedir el curso. La lista de
   // profesores se pide al abrir el formulario.
   const [asignando, setAsignando] = useState<SeccionDetalle>()
-  const [asignados, setAsignados] = useState<Record<string, string | null>>({})
-  // GES-14: sección y tipo de la asignación que se está quitando.
+  const [asignados, setAsignados] = useState<
+    Record<string, ProfesorOpcion | null>
+  >({})
+  // GES-14: sección y tipo de la asignación que se está quitando. La sección
+  // se toma de la tabla en cada render, para que el diálogo muestre al
+  // profesor actual si cambió (409).
   const [quitando, setQuitando] = useState<{
-    seccion: SeccionDetalle
+    seccionId: string
     tipo: TipoAsignacion
   } | null>(null)
   const [pedirProfesores, setPedirProfesores] = useState(false)
@@ -369,7 +373,10 @@ function Detalle({ id }: { id: string }) {
   function asignada(seccion: SeccionDetalle) {
     setAsignados((anteriores) => ({
       ...anteriores,
-      [seccion.id]: seccion.profesor as string,
+      [seccion.id]: {
+        id: seccion.profesorId as string,
+        nombre: seccion.profesor as string,
+      },
     }))
     setAsignando(undefined)
     setAviso({
@@ -396,6 +403,20 @@ function Detalle({ id }: { id: string }) {
       exito: true,
       texto: `${resultado.quitado.nombre} ya no es ${tipo === 'PROFESOR' ? 'el profesor' : 'ayudante'} de la sección ${seccion.numero}.`,
     })
+  }
+
+  // 409 al quitar al profesor: la sección cambió desde que se cargó. Se
+  // muestra al actual; si ya no tiene, no queda nada que quitar y se cierra.
+  function profesorCambiado(
+    seccion: SeccionDetalle,
+    profesor: ProfesorOpcion | null,
+    mensaje: string,
+  ) {
+    setAsignados((anteriores) => ({ ...anteriores, [seccion.id]: profesor }))
+    if (!profesor) {
+      setQuitando(null)
+      setAviso({ exito: false, texto: mensaje })
+    }
   }
 
   async function crearSeccion() {
@@ -446,14 +467,19 @@ function Detalle({ id }: { id: string }) {
     (!curso.universidadId || curso.universidadId === user.universidadId)
   const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
     ...seccion,
-    profesor:
-      seccion.id in asignados ? asignados[seccion.id] : seccion.profesor,
+    ...(seccion.id in asignados && {
+      profesor: asignados[seccion.id]?.nombre ?? null,
+      profesorId: asignados[seccion.id]?.id ?? null,
+    }),
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
     ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
     horario: horariosGuardados[seccion.id]
       ? horariosGuardados[seccion.id].resumen
       : seccion.horario,
   }))
+  const seccionQuitando = quitando
+    ? secciones.find((seccion) => seccion.id === quitando.seccionId)
+    : undefined
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -566,7 +592,7 @@ function Detalle({ id }: { id: string }) {
                       ? (tipo) => {
                           setAviso(undefined)
                           setAsignando(undefined)
-                          setQuitando({ seccion, tipo })
+                          setQuitando({ seccionId: seccion.id, tipo })
                         }
                       : undefined
                   }
@@ -604,14 +630,17 @@ function Detalle({ id }: { id: string }) {
           onCancelar={() => setAsignando(undefined)}
         />
       )}
-      {quitando && (
+      {seccionQuitando && quitando && (
         <QuitarAsignacionDialogo
           // La key reinicia el diálogo al pasar a otra sección o tipo.
-          key={`${quitando.seccion.id}-${quitando.tipo}`}
-          seccion={quitando.seccion}
+          key={`${seccionQuitando.id}-${quitando.tipo}`}
+          seccion={seccionQuitando}
           tipo={quitando.tipo}
           onQuitada={(resultado) =>
-            quitada(quitando.seccion, quitando.tipo, resultado)
+            quitada(seccionQuitando, quitando.tipo, resultado)
+          }
+          onProfesorCambiado={(profesor, mensaje) =>
+            profesorCambiado(seccionQuitando, profesor, mensaje)
           }
           onCerrar={() => setQuitando(null)}
         />

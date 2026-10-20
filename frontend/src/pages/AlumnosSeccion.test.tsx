@@ -360,6 +360,7 @@ describe('desde el detalle del curso', () => {
         numero: 1,
         horario: null,
         profesor: null,
+        profesorId: null,
         ayudantes: [],
         alumnos: 2,
       },

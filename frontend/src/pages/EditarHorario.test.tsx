@@ -32,6 +32,7 @@ const curso = (horario: string | null): CursoDetalle => ({
       numero: 1,
       horario,
       profesor: 'Profesor Norte',
+      profesorId: 'profesor-norte',
       ayudantes: ['Ana Ayudante'],
       alumnos: 2,
     },

@@ -61,6 +61,7 @@ const CANTIDAD_SECCIONES = `
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
                      'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
+                     'profesorId', pr.id,
                      'bloquesHorario', ${BLOQUES_HORARIO},
                      'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                                      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
@@ -80,6 +81,7 @@ interface FilaSeccion {
   id: string
   numero: number
   profesor?: string | null
+  profesorId?: string | null
   ayudantes?: string[]
   alumnos?: number
   bloquesHorario?: BloqueHorario[]
@@ -90,6 +92,7 @@ const seccionDetalle = ({
   id,
   numero,
   profesor = null,
+  profesorId = null,
   ayudantes = [],
   alumnos = 0,
   bloquesHorario = [],
@@ -98,6 +101,7 @@ const seccionDetalle = ({
   numero,
   horario: resumirHorario(bloquesHorario),
   profesor,
+  profesorId,
   ayudantes,
   alumnos,
 })
@@ -374,6 +378,7 @@ export class GestionService {
          RETURNING s.id, s.numero
        )
        SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
+              profesor.id AS "profesorId",
               ${BLOQUES_HORARIO} AS "bloquesHorario",
               (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                  FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id

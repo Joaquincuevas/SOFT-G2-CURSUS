@@ -2,6 +2,7 @@ import type {
   AsignacionQuitada,
   AyudanteQuitado,
   CursoDetalle,
+  ProfesorCambiado,
 } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -58,7 +59,8 @@ async function quitarProfesor(
     .set('Authorization', `Bearer ${token}`)
     .send(cuerpo)
     .expect(estado)
-  return respuesta.body as AsignacionQuitada & { message: unknown }
+  return respuesta.body as AsignacionQuitada &
+    Partial<ProfesorCambiado> & { message: unknown }
 }
 
 async function quitarAyudante(
@@ -120,6 +122,16 @@ const ayudantesNorte = async () =>
     `SELECT u.id, u.nombre FROM usuario u
        JOIN universidad un ON un.id = u.universidad_id
       WHERE un.dominio_correo = 'norte.cursus.test' AND u.rol = 'AYUDANTE'
+        AND u.archived_at IS NULL
+      ORDER BY u.nombre, u.id`,
+  )
+
+// Profesores de Norte del seed, en un orden fijo.
+const profesoresNorte = async () =>
+  bd.query<{ id: string; nombre: string }[]>(
+    `SELECT u.id, u.nombre FROM usuario u
+       JOIN universidad un ON un.id = u.universidad_id
+      WHERE un.dominio_correo = 'norte.cursus.test' AND u.rol = 'PROFESOR'
         AND u.archived_at IS NULL
       ORDER BY u.nombre, u.id`,
   )
@@ -196,6 +208,7 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
 
     const quitada = await quitarProfesor(seccion.id, {
       motivo: '  Asignación equivocada  ',
+      profesorId: profesor,
     })
 
     expect(quitada).toMatchObject({
@@ -217,38 +230,102 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
     ])
     // El detalle del curso (GES-08) la muestra sin profesor.
     const curso = await detalle(seccion.curso_id)
-    expect(curso.secciones.find((s) => s.id === seccion.id)?.profesor).toBe(
-      null,
+    expect(curso.secciones.find((s) => s.id === seccion.id)).toMatchObject({
+      profesor: null,
+      profesorId: null,
+    })
+  })
+
+  it('el detalle del curso trae el id del profesor que se va a quitar', async () => {
+    const seccion = await seccionDe('ICC101', 1)
+    const profesor = await idUsuario(PROFESOR)
+    await asignarProfesorEnBase(seccion.id, profesor)
+
+    const curso = await detalle(seccion.curso_id)
+
+    expect(curso.secciones.find((s) => s.id === seccion.id)?.profesorId).toBe(
+      profesor,
     )
   })
 
-  it('responde 404 si la sección no tiene profesor, sin registrar nada', async () => {
+  it('si otro cambió al profesor, responde 409 con el actual y no quita a nadie', async () => {
+    // El caso del review: el detalle muestra a A, otra petición lo
+    // reemplaza por B y se confirma la baja desde la vista anterior.
+    const seccion = await seccionDe('ICC101', 1)
+    const [a, b] = await profesoresNorte()
+    await asignarProfesorEnBase(seccion.id, a.id)
+    const visto = (await detalle(seccion.curso_id)).secciones.find(
+      (s) => s.id === seccion.id,
+    )
+    expect(visto?.profesorId).toBe(a.id)
+    await asignarProfesorEnBase(seccion.id, b.id)
+    const antes = await cantidadHistorial()
+
+    const respuesta = await quitarProfesor(
+      seccion.id,
+      { motivo: 'Error', profesorId: visto?.profesorId },
+      409,
+    )
+
+    expect(respuesta).toEqual({
+      statusCode: 409,
+      message: `${b.nombre} es ahora el profesor de la sección. Revisa y confirma de nuevo.`,
+      profesor: { id: b.id, nombre: b.nombre },
+    })
+    expect(await profesorDe(seccion.id)).toBe(b.id)
+    expect(await cantidadHistorial()).toBe(antes)
+
+    // Confirmado de nuevo con el actual, se quita.
+    const quitada = await quitarProfesor(seccion.id, {
+      motivo: 'Error',
+      profesorId: b.id,
+    })
+    expect(quitada.quitado).toEqual({ id: b.id, nombre: b.nombre })
+    expect(await profesorDe(seccion.id)).toBeNull()
+  })
+
+  it('responde 409 si la sección ya no tiene profesor, sin registrar nada', async () => {
     const seccion = await seccionDe('ICC101', 2)
     await bd.query('UPDATE seccion SET profesor_id = NULL WHERE id = $1', [
       seccion.id,
     ])
     const antes = await cantidadHistorial()
 
-    const respuesta = await quitarProfesor(seccion.id, { motivo: 'Error' }, 404)
+    const respuesta = await quitarProfesor(
+      seccion.id,
+      { motivo: 'Error', profesorId: await idUsuario(PROFESOR) },
+      409,
+    )
 
-    expect(respuesta.message).toBe('La sección no tiene profesor asignado')
+    expect(respuesta).toEqual({
+      statusCode: 409,
+      message: 'La sección ya no tiene profesor asignado.',
+      profesor: null,
+    })
     expect(await cantidadHistorial()).toBe(antes)
   })
 
+  // Cada caso cambia un campo de un body válido (undefined lo quita).
   it.each([
-    {},
+    { motivo: undefined },
     { motivo: '' },
     { motivo: '    ' },
     { motivo: 42 },
     { motivo: 'x'.repeat(501) },
-    { motivo: 'Error', profesorId: '00000000-0000-4000-8000-000000000001' },
-  ])('rechaza un body inválido %j sin cambiar nada', async (cuerpo) => {
+    { profesorId: undefined },
+    { profesorId: 'no-es-un-uuid' },
+    { otro: 1 },
+  ])('rechaza un body inválido %j sin cambiar nada', async (cambio) => {
     const seccion = await seccionDe('ICC201', 1)
     const profesor = await idUsuario(PROFESOR)
     await asignarProfesorEnBase(seccion.id, profesor)
     const antes = await cantidadHistorial()
 
-    await quitarProfesor(seccion.id, cuerpo, 400)
+    await quitarProfesor(
+      seccion.id,
+      { motivo: 'Error', profesorId: profesor, ...cambio },
+      400,
+    )
 
     expect(await profesorDe(seccion.id)).toBe(profesor)
     expect(await cantidadHistorial()).toBe(antes)
@@ -256,10 +333,12 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
 
   it('acepta un motivo de 500 caracteres', async () => {
     const seccion = await seccionDe('ICC201', 1)
-    await asignarProfesorEnBase(seccion.id, await idUsuario(PROFESOR))
+    const profesor = await idUsuario(PROFESOR)
+    await asignarProfesorEnBase(seccion.id, profesor)
 
     const quitada = await quitarProfesor(seccion.id, {
       motivo: 'x'.repeat(500),
+      profesorId: profesor,
     })
 
     expect(quitada.motivo).toHaveLength(500)
@@ -276,7 +355,12 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
       await asignarProfesorEnBase(seccion.id, profesor)
       const antes = await cantidadHistorial()
 
-      await quitarProfesor(seccion.id, { motivo: 'Error' }, 404, correo)
+      await quitarProfesor(
+        seccion.id,
+        { motivo: 'Error', profesorId: profesor },
+        404,
+        correo,
+      )
 
       expect(await profesorDe(seccion.id)).toBe(profesor)
       expect(await cantidadHistorial()).toBe(antes)
@@ -291,7 +375,11 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
       seccion.id,
     ])
     try {
-      await quitarProfesor(seccion.id, { motivo: 'Error' }, 404)
+      await quitarProfesor(
+        seccion.id,
+        { motivo: 'Error', profesorId: profesor },
+        404,
+      )
       expect(await profesorDe(seccion.id)).toBe(profesor)
     } finally {
       await bd.query('UPDATE seccion SET archived_at = NULL WHERE id = $1', [
@@ -305,7 +393,12 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
     const profesor = await idUsuario(PROFESOR)
     await asignarProfesorEnBase(seccion.id, profesor)
 
-    await quitarProfesor(seccion.id, { motivo: 'Error' }, 403, DIRECTOR)
+    await quitarProfesor(
+      seccion.id,
+      { motivo: 'Error', profesorId: profesor },
+      403,
+      DIRECTOR,
+    )
 
     expect(await profesorDe(seccion.id)).toBe(profesor)
   })
@@ -318,7 +411,11 @@ describe('PATCH /api/secciones/:id/profesor/quitar', () => {
       'ALTER TABLE asignacion_cambio ADD CONSTRAINT ck_test_historial CHECK (false) NOT VALID',
     )
     try {
-      await quitarProfesor(seccion.id, { motivo: 'Error' }, 500)
+      await quitarProfesor(
+        seccion.id,
+        { motivo: 'Error', profesorId: profesor },
+        500,
+      )
     } finally {
       await bd.query(
         'ALTER TABLE asignacion_cambio DROP CONSTRAINT ck_test_historial',
