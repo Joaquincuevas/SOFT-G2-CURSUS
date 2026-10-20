@@ -142,6 +142,12 @@
   cursor: pointer;
 }
 
+/* Acción que llega en otra tarjeta (tooltip "Próximamente"). */
+.cursos__boton[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cursos__boton:disabled {
   cursor: progress;
 }
@@ -163,4 +169,15 @@
   .cursos__campos {
     grid-template-columns: 1fr;
   }
+}
+
+/* Enlaces del listado al detalle y de vuelta al listado (GES-08). */
+.cursos__enlace {
+  font: var(--font-button);
+  color: var(--color-primary);
+}
+
+.cursos__enlace:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

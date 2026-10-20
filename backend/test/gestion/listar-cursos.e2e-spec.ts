@@ -48,6 +48,16 @@ describe('GET /api/cursos (e2e)', () => {
       .expect(403)
   })
 
+  it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE'])(
+    '%s recibe 403 en el detalle de un curso (GES-08)',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get('/api/cursos/00000000-0000-4000-8000-000000000001')
+        .set('Authorization', sesionDe(rol))
+        .expect(403)
+    },
+  )
+
   describe('filtros (GES-04)', () => {
     // El ValidationPipe responde antes de tocar la base.
     const listar = (query: Record<string, string>) =>
