@@ -1,5 +1,10 @@
-import type { CursoDetalle as DatosCurso, SeccionDetalle } from '@cursus/shared'
-import { useState } from 'react'
+import type {
+  AsignarProfesor as CuerpoAsignar,
+  CursoDetalle as DatosCurso,
+  ProfesorOpcion,
+  SeccionDetalle,
+} from '@cursus/shared'
+import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
@@ -26,9 +31,16 @@ function Proximamente({ texto }: { texto: string }) {
   )
 }
 
-// Horario (GES-10), profesor y ayudantes (GES-12/13) y alumnos (GES-15) se
-// muestran como "Sin asignar" hasta que existan.
-function FilaSeccion({ seccion }: { seccion: SeccionDetalle }) {
+// Horario (GES-10), ayudantes (GES-13) y alumnos (GES-15) se muestran como
+// "Sin asignar" hasta que existan. Con `onAsignar`, la fila agrega la acción
+// para asignar o cambiar el profesor (GES-12).
+function FilaSeccion({
+  seccion,
+  onAsignar,
+}: {
+  seccion: SeccionDetalle
+  onAsignar?: () => void
+}) {
   return (
     <tr>
       <td>{seccion.numero}</td>
@@ -40,7 +52,156 @@ function FilaSeccion({ seccion }: { seccion: SeccionDetalle }) {
           : SIN_ASIGNAR}
       </td>
       <td>{seccion.alumnos}</td>
+      {onAsignar && (
+        <td>
+          <button
+            className="cursos__boton cursos__boton--secundario"
+            type="button"
+            aria-label={`${seccion.profesor ? 'Cambiar' : 'Asignar'} profesor de la sección ${seccion.numero}`}
+            onClick={onAsignar}
+          >
+            {seccion.profesor ? 'Cambiar profesor' : 'Asignar profesor'}
+          </button>
+        </td>
+      )}
     </tr>
+  )
+}
+
+// Formulario para asignar el profesor de una sección (GES-12). Si la sección
+// ya tiene uno, pide confirmar el reemplazo antes de guardar.
+function AsignarProfesor({
+  seccion,
+  profesores,
+  onReintentar,
+  onAsignada,
+  onCancelar,
+}: {
+  seccion: SeccionDetalle
+  profesores: ProfesorOpcion[] | null | undefined
+  onReintentar: () => void
+  onAsignada: (seccion: SeccionDetalle) => void
+  onCancelar: () => void
+}) {
+  const { fetchConSesion } = useAuth()
+  const [profesorId, setProfesorId] = useState('')
+  const [confirmando, setConfirmando] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const elegido = profesores?.find((profesor) => profesor.id === profesorId)
+
+  async function guardar() {
+    setGuardando(true)
+    setError(null)
+    try {
+      const respuesta = await fetchConSesion(
+        `/api/secciones/${seccion.id}/profesor`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profesorId } satisfies CuerpoAsignar),
+        },
+      )
+      const cuerpo = (await respuesta.json().catch(() => ({}))) as Partial<
+        SeccionDetalle & { message: string }
+      >
+      if (respuesta.ok) {
+        onAsignada(cuerpo as SeccionDetalle)
+        return
+      }
+      // El 404 (sección o profesor que ya no existen) trae un mensaje.
+      setError(
+        typeof cuerpo.message === 'string'
+          ? cuerpo.message
+          : 'No se pudo asignar el profesor.',
+      )
+    } catch {
+      setError('No se pudo asignar el profesor.')
+    }
+    setConfirmando(false)
+    setGuardando(false)
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (seccion.profesor && !confirmando) {
+      setConfirmando(true)
+      return
+    }
+    void guardar()
+  }
+
+  let contenido
+  if (profesores === undefined) {
+    contenido = <Cargando texto="Cargando profesores…" />
+  } else if (profesores === null) {
+    contenido = (
+      <ErrorEstado
+        mensaje="No se pudieron cargar los profesores."
+        onReintentar={onReintentar}
+      />
+    )
+  } else {
+    contenido = (
+      <>
+        <label className="cursos__campo">
+          Profesor
+          <select
+            className="cursos__input"
+            name="profesorId"
+            value={profesorId}
+            disabled={confirmando || guardando}
+            onChange={(event) => setProfesorId(event.target.value)}
+            required
+          >
+            <option value="" disabled>
+              Selecciona un profesor
+            </option>
+            {profesores.map((profesor) => (
+              <option key={profesor.id} value={profesor.id}>
+                {profesor.nombre}
+              </option>
+            ))}
+          </select>
+        </label>
+        {confirmando && (
+          <p className="cursos__mensaje" role="status">
+            La sección {seccion.numero} ya tiene a {seccion.profesor} como
+            profesor a cargo. ¿Reemplazarlo por {elegido?.nombre}?
+          </p>
+        )}
+        {error && (
+          <p className="cursos__error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="cursos__acciones">
+          <button className="cursos__boton" type="submit" disabled={guardando}>
+            {confirmando ? 'Reemplazar' : 'Guardar'}
+          </button>
+          <button
+            className="cursos__boton cursos__boton--secundario"
+            type="button"
+            onClick={confirmando ? () => setConfirmando(false) : onCancelar}
+          >
+            {confirmando ? 'Volver' : 'Cancelar'}
+          </button>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <form
+      className="cursos__tarjeta"
+      aria-label={`Profesor de la sección ${seccion.numero}`}
+      onSubmit={handleSubmit}
+    >
+      <h3 className="cursos__titulo">
+        Profesor de la sección {seccion.numero}
+      </h3>
+      {contenido}
+    </form>
   )
 }
 
@@ -64,11 +225,39 @@ function Detalle({ id }: { id: string }) {
   const [curso, recargar, status] = useDatos<DatosCurso>(`/api/cursos/${id}`)
   const puedeEditar = usePuede('update', 'Curso')
   const puedeCrearSeccion = usePuede('create', 'Seccion')
+  const puedeAsignar = usePuede('update', 'Seccion')
   // Secciones creadas aquí (GES-09): se agregan a la tabla sin volver a pedir
   // el curso.
   const [nuevas, setNuevas] = useState<SeccionDetalle[]>([])
   const [creando, setCreando] = useState(false)
   const [aviso, setAviso] = useState<{ exito: boolean; texto: string }>()
+  // GES-12: sección cuyo profesor se está asignando, y profesores asignados
+  // aquí (id de sección → nombre), que reemplazan al de la tabla sin volver a
+  // pedir el curso. La lista de profesores se pide al abrir el formulario.
+  const [asignando, setAsignando] = useState<SeccionDetalle>()
+  const [asignados, setAsignados] = useState<Record<string, string>>({})
+  const [pedirProfesores, setPedirProfesores] = useState(false)
+  const [profesores, recargarProfesores] = useDatos<ProfesorOpcion[]>(
+    pedirProfesores ? '/api/profesores' : null,
+  )
+
+  function abrirAsignacion(seccion: SeccionDetalle) {
+    setPedirProfesores(true)
+    setAviso(undefined)
+    setAsignando(seccion)
+  }
+
+  function asignada(seccion: SeccionDetalle) {
+    setAsignados((anteriores) => ({
+      ...anteriores,
+      [seccion.id]: seccion.profesor as string,
+    }))
+    setAsignando(undefined)
+    setAviso({
+      exito: true,
+      texto: `${seccion.profesor} quedó a cargo de la sección ${seccion.numero}.`,
+    })
+  }
 
   async function crearSeccion() {
     setCreando(true)
@@ -113,7 +302,11 @@ function Detalle({ id }: { id: string }) {
   }
 
   const { periodo } = curso
-  const secciones = [...curso.secciones, ...nuevas]
+  const secciones = [...curso.secciones, ...nuevas].map((seccion) =>
+    seccion.id in asignados
+      ? { ...seccion, profesor: asignados[seccion.id] }
+      : seccion,
+  )
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -170,15 +363,33 @@ function Detalle({ id }: { id: string }) {
                 <th scope="col">Profesor</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
+                {puedeAsignar && <th scope="col">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {secciones.map((seccion) => (
-                <FilaSeccion key={seccion.id} seccion={seccion} />
+                <FilaSeccion
+                  key={seccion.id}
+                  seccion={seccion}
+                  onAsignar={
+                    puedeAsignar ? () => abrirAsignacion(seccion) : undefined
+                  }
+                />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {asignando && (
+        <AsignarProfesor
+          // La key reinicia el formulario al pasar a otra sección.
+          key={asignando.id}
+          seccion={asignando}
+          profesores={profesores}
+          onReintentar={recargarProfesores}
+          onAsignada={asignada}
+          onCancelar={() => setAsignando(undefined)}
+        />
       )}
     </section>
   )
