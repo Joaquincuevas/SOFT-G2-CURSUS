@@ -114,6 +114,7 @@ describe('POST /api/cursos/:id/secciones', () => {
         numero,
         horario: null,
         profesor: null,
+        profesorId: null,
         ayudantes: [],
         alumnos: 0,
       })),
