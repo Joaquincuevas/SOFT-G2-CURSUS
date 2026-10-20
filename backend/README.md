@@ -136,6 +136,8 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 ## Horarios de secciones (GES-10)
 
+GES-11 comprueba salas ocupadas al guardar el horario: misma universidad, período, día e intervalos superpuestos. Responde 409 con `code: SALA_OCUPADA` y los cursos/secciones ocupantes, sin modificar ningún bloque ni la versión. Los guardados se serializan por universidad para evitar reservas simultáneas en cursos diferentes. Ver [contrato y revisión de GES-11](../docs/ges-11-sala-ocupada.md).
+
 `GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).
 
 ## Carga CSV de alumnos (GES-16)
