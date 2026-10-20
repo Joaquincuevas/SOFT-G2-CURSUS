@@ -5,6 +5,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
+import { AgregarAlumnoDialogo } from './AgregarAlumno'
 import './Cursos.css'
 import { useDatos } from './useDatos'
 
@@ -26,9 +27,16 @@ function Proximamente({ texto }: { texto: string }) {
   )
 }
 
-// Horario (GES-10), profesor y ayudantes (GES-12/13) y alumnos (GES-15) se
-// muestran como "Sin asignar" hasta que existan.
-function FilaSeccion({ seccion }: { seccion: SeccionDetalle }) {
+// Horario (GES-10), profesor y ayudantes (GES-12/13) se muestran como "Sin
+// asignar" hasta que existan. Con onAgregarAlumno, la fila tiene el botón
+// "Agregar alumno" (GES-15).
+function FilaSeccion({
+  seccion,
+  onAgregarAlumno,
+}: {
+  seccion: SeccionDetalle
+  onAgregarAlumno?: () => void
+}) {
   return (
     <tr>
       <td>{seccion.numero}</td>
@@ -40,6 +48,18 @@ function FilaSeccion({ seccion }: { seccion: SeccionDetalle }) {
           : SIN_ASIGNAR}
       </td>
       <td>{seccion.alumnos}</td>
+      {onAgregarAlumno && (
+        <td>
+          <button
+            className="cursos__boton cursos__boton--secundario"
+            type="button"
+            aria-label={`Agregar alumno a la sección ${seccion.numero}`}
+            onClick={onAgregarAlumno}
+          >
+            Agregar alumno
+          </button>
+        </td>
+      )}
     </tr>
   )
 }
@@ -69,6 +89,11 @@ function Detalle({ id }: { id: string }) {
   const [nuevas, setNuevas] = useState<SeccionDetalle[]>([])
   const [creando, setCreando] = useState(false)
   const [aviso, setAviso] = useState<{ exito: boolean; texto: string }>()
+  // GES-15: sección con el diálogo abierto, y alumnos agregados aquí por
+  // sección, que se suman al conteo sin volver a pedir el curso.
+  const puedeInscribir = usePuede('create', 'Inscripcion')
+  const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
+  const [agregados, setAgregados] = useState<Record<string, number>>({})
 
   async function crearSeccion() {
     setCreando(true)
@@ -113,7 +138,10 @@ function Detalle({ id }: { id: string }) {
   }
 
   const { periodo } = curso
-  const secciones = [...curso.secciones, ...nuevas]
+  const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
+    ...seccion,
+    alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
+  }))
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -170,15 +198,44 @@ function Detalle({ id }: { id: string }) {
                 <th scope="col">Profesor</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
+                {puedeInscribir && <th scope="col">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {secciones.map((seccion) => (
-                <FilaSeccion key={seccion.id} seccion={seccion} />
+                <FilaSeccion
+                  key={seccion.id}
+                  seccion={seccion}
+                  onAgregarAlumno={
+                    puedeInscribir
+                      ? () => {
+                          setAviso(undefined)
+                          setInscribirEn(seccion)
+                        }
+                      : undefined
+                  }
+                />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {inscribirEn && (
+        <AgregarAlumnoDialogo
+          seccionId={inscribirEn.id}
+          numero={inscribirEn.numero}
+          onAgregado={({ alumno }) => {
+            setAgregados((anteriores) => ({
+              ...anteriores,
+              [inscribirEn.id]: (anteriores[inscribirEn.id] ?? 0) + 1,
+            }))
+            setAviso({
+              exito: true,
+              texto: `${alumno.nombre} agregado a la sección ${inscribirEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setInscribirEn(null)}
+        />
       )}
     </section>
   )
