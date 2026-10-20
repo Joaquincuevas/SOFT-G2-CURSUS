@@ -20,6 +20,7 @@ const TABLAS = [
   'curso',
   'curso_cambio',
   'facultad',
+  'horario_seccion',
   'inscripcion',
   'limite_login',
   'periodo',
@@ -165,20 +166,26 @@ describe('migraciones', () => {
     )
     expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
 
-    // ArchivarInscripcionConResponsable: solo quita la columna.
+    await bd.undoLastMigration() // CrearHorarioSeccion.
+    const SIN_HORARIO = SIN_ASIGNACION_CAMBIO.filter(
+      (tabla) => tabla !== 'horario_seccion',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_HORARIO)
+
+    // ArchivarInscripcionConResponsable: quita la columna y sus restricciones.
     await bd.undoLastMigration()
     const [{ columnas }] = await bd.query<{ columnas: string }[]>(
       `SELECT count(*) AS columnas FROM information_schema.columns
         WHERE table_name = 'inscripcion' AND column_name = 'archivada_por'`,
     )
     expect(Number(columnas)).toBe(0)
-    expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
+    expect(await tablasExistentes()).toEqual(SIN_HORARIO)
 
     await bd.undoLastMigration() // AsignarProfesorSeccion.
 
     // La asignación de ayudantes se revierte antes de sus claves foráneas.
     await bd.undoLastMigration()
-    const SIN_AYUDANTES = SIN_ASIGNACION_CAMBIO.filter(
+    const SIN_AYUDANTES = SIN_HORARIO.filter(
       (tabla) => tabla !== 'ayudante_seccion',
     )
     expect(await tablasExistentes()).toEqual(SIN_AYUDANTES)
@@ -306,6 +313,7 @@ describe('migraciones', () => {
         'carrera',
         'curso',
         'facultad',
+        'horario_seccion',
         'inscripcion',
         'seccion',
         'universidad',

@@ -4,8 +4,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // Cada fila es un cambio: quién estaba (anterior_id), quién quedó (nuevo_id),
 // quién lo hizo, cuándo y por qué. Al quitar una asignación, nuevo_id es NULL.
 // Es de solo adición, como curso_cambio: la API no modifica ni borra entradas.
-export class CrearAsignacionCambio1792510000000 implements MigrationInterface {
-  name = 'CrearAsignacionCambio1792510000000'
+export class CrearAsignacionCambio1792520000000 implements MigrationInterface {
+  name = 'CrearAsignacionCambio1792520000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Las FKs compuestas aseguran que la sección y las personas sean de la

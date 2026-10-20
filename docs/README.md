@@ -2,7 +2,10 @@
 
 Documentación del proyecto:
 
+- [GES-10: horarios de secciones y guía de revisión](ges-10-horarios-seccion.md)
+
 - [GES-16: carga de alumnos desde CSV y guía de revisión](ges-16-carga-alumnos-csv.md)
+
 - [GES-13: asignar ayudantes a una sección](ges-13-asignar-ayudantes.md)
 
 - [GES-01: carreras por facultad y guía de revisión](ges-01-carreras-facultad.md)

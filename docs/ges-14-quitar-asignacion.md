@@ -21,7 +21,7 @@ El Administrativo solo puede quitar asignaciones de secciones vigentes de cursos
 - `PATCH /api/secciones/:id/ayudantes/:usuarioId/quitar`, con `{ motivo }`: responde 200 con lo mismo, más los ayudantes que siguen asignados (`AyudanteQuitado`).
 - Las dos rutas requieren `update` sobre `Seccion` (solo el Administrativo). Son `PATCH` y no `DELETE`, porque nada se elimina. Un motivo vacío o de solo espacios, de más de 500 caracteres o un campo extra responden 400. El motivo se guarda sin espacios al inicio ni al final.
 
-La migración `1792510000000-CrearAsignacionCambio` crea `asignacion_cambio`:
+La migración `1792520000000-CrearAsignacionCambio` crea `asignacion_cambio`:
 
 | Columna          | Detalle                                                                  |
 | ---------------- | ------------------------------------------------------------------------ |

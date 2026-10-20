@@ -3,6 +3,7 @@ import type {
   AsignarProfesor as CuerpoAsignar,
   AyudanteQuitado,
   CursoDetalle as DatosCurso,
+  HorarioSeccion,
   ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
@@ -19,6 +20,7 @@ import {
   QuitarAsignacionDialogo,
   type TipoAsignacion,
 } from './QuitarAsignacion'
+import { EditarHorarioDialogo } from './EditarHorario'
 import './Cursos.css'
 import { useDatos } from './useDatos'
 
@@ -27,8 +29,9 @@ const SIN_ASIGNAR = 'Sin asignar'
 // Lo que no está asignado se muestra como "Sin asignar". Con verAlumnos, el
 // número de alumnos enlaza a su lista (GES-18). Las acciones por sección
 // dependen de los permisos de la sesión: asignar o cambiar el profesor
-// (GES-12), agregar un alumno (GES-15), asignar ayudantes (GES-13) y quitar al
-// profesor o a un ayudante (GES-14), si los tiene.
+// (GES-12), agregar alumnos (GES-15/16), asignar ayudantes (GES-13), editar
+// el horario (GES-10) y quitar al profesor o a un ayudante (GES-14), si los
+// tiene.
 function FilaSeccion({
   seccion,
   verAlumnos,
@@ -37,6 +40,7 @@ function FilaSeccion({
   onCargarCsv,
   onAsignarAyudantes,
   onQuitar,
+  onHorario,
 }: {
   seccion: SeccionDetalle
   verAlumnos: boolean
@@ -45,6 +49,7 @@ function FilaSeccion({
   onCargarCsv?: () => void
   onAsignarAyudantes?: () => void
   onQuitar?: (tipo: TipoAsignacion) => void
+  onHorario?: () => void
 }) {
   return (
     <tr>
@@ -69,7 +74,11 @@ function FilaSeccion({
           seccion.alumnos
         )}
       </td>
-      {(onAsignar || onAgregarAlumno || onAsignarAyudantes) && (
+      {(onAsignar ||
+        onAgregarAlumno ||
+        onCargarCsv ||
+        onAsignarAyudantes ||
+        onHorario) && (
         <td>
           <div className="cursos__acciones">
             {onAsignar && (
@@ -130,6 +139,16 @@ function FilaSeccion({
                 onClick={() => onQuitar('AYUDANTE')}
               >
                 Quitar ayudante
+              </button>
+            )}
+            {onHorario && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`${seccion.horario ? 'Editar' : 'Asignar'} horario de la sección ${seccion.numero}`}
+                onClick={onHorario}
+              >
+                {seccion.horario ? 'Editar horario' : 'Asignar horario'}
               </button>
             )}
           </div>
@@ -317,6 +336,12 @@ function Detalle({ id }: { id: string }) {
   const [ayudantesAsignados, setAyudantesAsignados] = useState<
     Record<string, string[]>
   >({})
+  const [editarHorarioEn, setEditarHorarioEn] = useState<SeccionDetalle | null>(
+    null,
+  )
+  const [horariosGuardados, setHorariosGuardados] = useState<
+    Record<string, HorarioSeccion>
+  >({})
   // GES-12: sección cuyo profesor se está asignando, y profesores asignados
   // aquí (id de sección → nombre, o null si se quitó con GES-14), que
   // reemplazan al de la tabla sin volver a pedir el curso. La lista de
@@ -425,6 +450,9 @@ function Detalle({ id }: { id: string }) {
       seccion.id in asignados ? asignados[seccion.id] : seccion.profesor,
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
     ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
+    horario: horariosGuardados[seccion.id]
+      ? horariosGuardados[seccion.id].resumen
+      : seccion.horario,
   }))
   const subtitulo = [
     curso.universidadNombre,
@@ -499,6 +527,15 @@ function Detalle({ id }: { id: string }) {
                 <FilaSeccion
                   key={seccion.id}
                   seccion={seccion}
+                  onHorario={
+                    puedeAsignar
+                      ? () => {
+                          setAviso(undefined)
+                          setAsignando(undefined)
+                          setEditarHorarioEn(seccion)
+                        }
+                      : undefined
+                  }
                   onAsignar={
                     puedeAsignar ? () => abrirAsignacion(seccion) : undefined
                   }
@@ -538,6 +575,23 @@ function Detalle({ id }: { id: string }) {
             </tbody>
           </table>
         </div>
+      )}
+      {editarHorarioEn && (
+        <EditarHorarioDialogo
+          seccionId={editarHorarioEn.id}
+          numero={editarHorarioEn.numero}
+          onGuardado={(horario) => {
+            setHorariosGuardados((anteriores) => ({
+              ...anteriores,
+              [editarHorarioEn.id]: horario,
+            }))
+            setAviso({
+              exito: true,
+              texto: `Horario de la sección ${editarHorarioEn.numero} guardado.`,
+            })
+          }}
+          onCerrar={() => setEditarHorarioEn(null)}
+        />
       )}
       {asignando && (
         <AsignarProfesor
