@@ -55,6 +55,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                   ? { ...anterior, user: { ...anterior.user, nombre } }
                   : anterior,
               ),
+            marcarPasswordCambiada: () =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? {
+                      ...anterior,
+                      user: { ...anterior.user, debeCambiarPassword: false },
+                    }
+                  : anterior,
+              ),
           }
         : null,
     [cargada, token],

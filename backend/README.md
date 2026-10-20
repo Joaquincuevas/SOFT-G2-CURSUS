@@ -161,6 +161,7 @@ GES-11 comprueba salas ocupadas al guardar el horario: misma universidad, perío
 - `GET /api/auth/yo` entrega los datos del perfil: nombre, correo, rol, universidad y facultad.
 - `PATCH /api/perfil` (`{ nombre }`, PER-01) cambia el nombre del usuario de la sesión: el id sale del JWT, nunca de la petición. Cualquier otro campo responde `400`. El Director recibe `403`: ve su perfil en solo lectura ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
 - `PUT /api/auth/password` (`{ passwordActual, passwordNueva }`, PER-02) cambia la contraseña del usuario de la sesión, también la del Director. La nueva debe tener al menos 8 caracteres y ser distinta de la actual; si no, o si la actual no es correcta, responde `400`. Responde `204` y cierra las demás sesiones del usuario; la actual sigue abierta. Una contraseña actual incorrecta cuenta para el mismo límite por cuenta del login (`429` con `Retry-After`).
+- Contraseña provisoria (PER-03): las cuentas que crea un administrativo (alumnos de GES-15 y GES-16, profesores y ayudantes de GES-21) quedan con `usuario.credencial_provisoria = true`. Mientras la tengan, `GET /api/auth/yo` devuelve `debeCambiarPassword: true` y el resto de las rutas con sesión responde `403`, salvo `PUT /api/auth/password`. Las rutas que se permiten llevan `@PermitidaConProvisoria()`. La marca se lee de la base en cada petición, así que al cambiar la contraseña se quita sin pedir otro JWT. El frontend lleva a esos usuarios a `/cambiar-password`.
 
 ## Variables de entorno
 

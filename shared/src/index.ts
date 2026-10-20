@@ -22,6 +22,8 @@ export interface UsuarioSesion {
   // "Directorio" para el Director, que ve todas las universidades.
   universidadNombre: string
   facultadNombre: string | null
+  // PER-03: true mientras tenga la contraseña provisoria; solo puede cambiarla.
+  debeCambiarPassword: boolean
   // Período activo de su universidad, o null si no hay uno activo.
   periodoActivo: { id: string; anio: number; semestre: number } | null
 }

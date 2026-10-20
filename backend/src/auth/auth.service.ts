@@ -43,6 +43,7 @@ interface FilaUsuario {
   universidad_id: string
   universidad_nombre: string
   facultad_nombre: string | null
+  credencial_provisoria: boolean
 }
 
 // El Director ve todas las universidades: el Figma lo muestra como "Directorio".
@@ -222,10 +223,12 @@ export class AuthService {
       return 'igual'
     }
 
-    await bd.query(`UPDATE usuario SET password_hash = $2 WHERE id = $1`, [
-      usuarioId,
-      await hash(nueva),
-    ])
+    // Con la contraseña nueva deja de ser provisoria (PER-03).
+    await bd.query(
+      `UPDATE usuario SET password_hash = $2, credencial_provisoria = false
+        WHERE id = $1`,
+      [usuarioId, await hash(nueva)],
+    )
     // Las demás sesiones quedan fuera: si alguien entró con la contraseña
     // anterior, ya no puede seguir usándola ni renovarla.
     await bd.query(
@@ -241,17 +244,23 @@ export class AuthService {
     return 'cambiada'
   }
 
-  // También corta la sesión de un usuario archivado, sin esperar a que venza
-  // su JWT.
-  async sesionActiva(sid: string, usuarioId: string): Promise<boolean> {
-    const [sesion] = await this.bd.query<{ id: string }>(
-      `SELECT s.id FROM sesion_auth s
+  // null si la sesión ya no sirve. También corta la sesión de un usuario
+  // archivado, sin esperar a que venza su JWT. Devuelve además si el usuario
+  // todavía tiene la contraseña provisoria (PER-03), en la misma consulta.
+  async sesionActiva(
+    sid: string,
+    usuarioId: string,
+  ): Promise<{ credencialProvisoria: boolean } | null> {
+    const [sesion] = await this.bd.query<{ credencial_provisoria: boolean }>(
+      `SELECT u.credencial_provisoria FROM sesion_auth s
          JOIN usuario u ON u.id = s.usuario_id
         WHERE s.id::text = $1 AND s.usuario_id::text = $2
           AND s.revocado_en IS NULL AND u.archived_at IS NULL`,
       [sid, usuarioId],
     )
-    return !!sesion
+    return sesion
+      ? { credencialProvisoria: sesion.credencial_provisoria }
+      : null
   }
 
   // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe en la
@@ -263,7 +272,8 @@ export class AuthService {
     const [fila] = await this.bd.consultarEnUniversidad<FilaUsuario>(
       contexto,
       `SELECT u.id, u.nombre, u.correo, u.rol, u.universidad_id,
-              un.nombre AS universidad_nombre, f.nombre AS facultad_nombre
+              un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
+              u.credencial_provisoria
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
          LEFT JOIN facultad f ON f.id = u.facultad_id
@@ -282,6 +292,7 @@ export class AuthService {
       universidadNombre:
         fila.rol === 'DIRECTOR' ? NOMBRE_DIRECTORIO : fila.universidad_nombre,
       facultadNombre: fila.facultad_nombre,
+      debeCambiarPassword: fila.credencial_provisoria,
       periodoActivo: await this.periodoActivo(contexto),
     }
   }

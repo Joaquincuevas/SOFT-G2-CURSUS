@@ -166,7 +166,7 @@ describe('GET /api/auth/yo', () => {
   // Un usuario de cada rol, y el de Salud Sur para cubrir la otra universidad.
   const casos: (Omit<
     UsuarioSesion,
-    'id' | 'universidadId' | 'periodoActivo'
+    'id' | 'universidadId' | 'periodoActivo' | 'debeCambiarPassword'
   > & {
     correo: string
   })[] = [
@@ -225,6 +225,8 @@ describe('GET /api/auth/yo', () => {
         universidadId: usuario.universidad_id,
         correo,
         ...esperado,
+        // Las cuentas del seed no tienen contraseña provisoria (PER-03).
+        debeCambiarPassword: false,
         periodoActivo: {
           id: periodo.id,
           anio: PERIODO.anio,

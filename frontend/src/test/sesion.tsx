@@ -49,6 +49,7 @@ export function usuarioDePrueba(rol: Rol): UsuarioSesion {
         : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
+    debeCambiarPassword: false,
     // PERIODO del seed: año 2026, semestre 2.
     periodoActivo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
     ...USUARIOS[rol],

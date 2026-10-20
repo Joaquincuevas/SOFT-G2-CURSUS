@@ -94,6 +94,7 @@ describe('usePuede', () => {
           ability: definirAbilityPara(user),
           actualizarPeriodoActivo: () => undefined,
           actualizarNombre: () => undefined,
+          marcarPasswordCambiada: () => undefined,
         }}
       >
         <BotonCrear />

@@ -159,7 +159,16 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAsignacionCambio es la última: solo quita su tabla.
+    // AgregarCredencialProvisoria es la última: quita la columna de usuario.
+    await bd.undoLastMigration()
+    const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
+      `SELECT count(*) AS provisoria FROM information_schema.columns
+        WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
+    )
+    expect(Number(provisoria)).toBe(0)
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    // CrearAsignacionCambio: solo quita su tabla.
     await bd.undoLastMigration()
     const SIN_ASIGNACION_CAMBIO = TABLAS.filter(
       (tabla) => tabla !== 'asignacion_cambio',

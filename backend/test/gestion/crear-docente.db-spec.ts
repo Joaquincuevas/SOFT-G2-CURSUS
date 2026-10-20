@@ -116,16 +116,22 @@ describe('POST /api/usuarios', () => {
         passwordProvisoria: expect.stringMatching(/^[A-Z2-9]{16}$/) as string,
       })
 
-      // Con la facultad del administrativo y sin la contraseña en texto plano.
+      // Con la facultad del administrativo, sin la contraseña en texto plano y
+      // marcada como provisoria (PER-03).
       const [usuario] = await bd.query<
-        { facultad: string; password_hash: string }[]
+        {
+          facultad: string
+          password_hash: string
+          credencial_provisoria: boolean
+        }[]
       >(
-        `SELECT f.nombre AS facultad, u.password_hash
+        `SELECT f.nombre AS facultad, u.password_hash, u.credencial_provisoria
          FROM usuario u JOIN facultad f ON f.id = u.facultad_id
         WHERE u.id = $1`,
         [cuerpo.usuario.id],
       )
       expect(usuario.facultad).toBe('Facultad de Ingeniería')
+      expect(usuario.credencial_provisoria).toBe(true)
       expect(usuario.password_hash).toMatch(/^\$argon2id\$/)
       expect(usuario.password_hash).not.toContain(cuerpo.passwordProvisoria)
 

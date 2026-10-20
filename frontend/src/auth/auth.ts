@@ -5,6 +5,8 @@ import { createContext, useContext } from 'react'
 // no puede leer; con ella se renueva el JWT y se restaura la sesión al recargar.
 
 export const AVISO_SESION_EXPIRADA = 'Tu sesión expiró, vuelve a iniciar sesión'
+// Pantalla del cambio obligatorio de la contraseña provisoria (PER-03).
+export const RUTA_CAMBIO_OBLIGATORIO = '/cambiar-password'
 // Solo una marca de cierre; nunca se guardan credenciales en localStorage.
 export const SESION_CERRADA = 'cursus-sesion-cerrada'
 
