@@ -8,6 +8,12 @@ export type SessionUser = UsuarioSesion
 export interface SessionValue {
   user: SessionUser
   ability: AppAbility
+  actualizarPeriodoActivo: (periodo: SessionUser['periodoActivo']) => void
+  // PER-01: el encabezado muestra el nombre nuevo sin volver a pedir la sesión.
+  actualizarNombre: (nombre: string) => void
+  // PER-03: al cambiar la contraseña provisoria se quita la marca, sin volver
+  // a pedir la sesión.
+  marcarPasswordCambiada: () => void
 }
 
 // null mientras no hay sesión o todavía no llega /api/auth/yo.

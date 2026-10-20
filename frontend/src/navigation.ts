@@ -1,6 +1,12 @@
+import { Periodos } from './pages/Periodos'
+import { Docentes } from './pages/Docentes'
+import { Secciones } from './pages/AlumnosSeccion'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
+import { Cursos } from './pages/Cursos'
 import { Dashboard } from './pages/Dashboard'
+import { Carreras } from './pages/Carreras'
+import { Perfil } from './pages/Perfil'
 import type { SessionUser } from './session/session'
 
 // Única fuente de la navegación: el Sidebar, las rutas, su guard y el
@@ -20,6 +26,9 @@ export interface NavItem {
   permiso: PermisoRuta
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
+  // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,
+  // al que se llega desde el encabezado).
+  enMenu?: boolean
   // Título y subtítulo del encabezado en esta ruta.
   title: (user: SessionUser) => string
   subtitle: (user: SessionUser) => string
@@ -60,6 +69,50 @@ export const NAV_ITEMS: readonly NavItem[] = [
       user.rol === 'DIRECTOR' ? 'Gestión académica' : 'Mis Cursos',
     icon: 'book',
     permiso: { accion: 'read', sujeto: 'GestionAcademica' },
+    page: Cursos,
+    title: () => 'Gestión académica',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
+    to: '/carreras',
+    label: 'Carreras',
+    icon: 'book',
+    // GES-01 gestiona carreras de facultad; solo el administrativo las crea.
+    permiso: { accion: 'create', sujeto: 'Carrera' },
+    page: Carreras,
+    title: () => 'Carreras',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
+    to: '/periodos',
+    label: 'Períodos',
+    icon: 'book',
+    permiso: { accion: 'create', sujeto: 'Periodo' },
+    page: Periodos,
+    title: () => 'Períodos académicos',
+    subtitle: universidadYSemestre,
+  },
+  {
+    // GES-21: el administrativo crea cuentas de profesores y ayudantes.
+    to: '/docentes',
+    label: 'Profesores y ayudantes',
+    icon: 'book',
+    permiso: { accion: 'create', sujeto: 'Usuario' },
+    page: Docentes,
+    title: () => 'Profesores y ayudantes',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
+  },
+  {
+    // Alumnos de una sección (GES-18), desde el detalle del curso.
+    to: '/secciones',
+    label: 'Secciones',
+    icon: 'book',
+    enMenu: false,
+    permiso: { accion: 'read', sujeto: 'Inscripcion' },
+    page: Secciones,
     title: () => 'Gestión académica',
     subtitle: (user) =>
       conSemestre(user.facultadNombre ?? user.universidadNombre, user),
@@ -72,6 +125,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     title: () => 'Mis Cursos',
     subtitle: universidadYSemestre,
   },
+  {
+    // PER-01: se llega desde el nombre del encabezado, no desde el menú.
+    to: '/perfil',
+    label: 'Mi perfil',
+    icon: 'grid',
+    permiso: 'sesion',
+    page: Perfil,
+    enMenu: false,
+    title: () => 'Mi perfil',
+    subtitle: universidadYSemestre,
+  },
 ]
 
 export function puedeVer(item: NavItem, ability: AppAbility): boolean {
@@ -81,8 +145,12 @@ export function puedeVer(item: NavItem, ability: AppAbility): boolean {
   )
 }
 
+// Ítems del menú lateral: los que el rol puede ver, sin los que no van en el
+// menú.
 export function navItemsFor(ability: AppAbility): NavItem[] {
-  return NAV_ITEMS.filter((item) => puedeVer(item, ability))
+  return NAV_ITEMS.filter(
+    (item) => item.enMenu !== false && puedeVer(item, ability),
+  )
 }
 
 export function etiquetaDe(item: NavItem, user: SessionUser): string {

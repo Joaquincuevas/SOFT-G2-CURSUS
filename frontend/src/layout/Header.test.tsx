@@ -9,7 +9,8 @@ import {
 } from '../test/sesion'
 
 async function renderApp(rol: Rol, path = '/') {
-  await renderConSesion(rol, path)
+  // /cursos pide el listado; sin cursos basta para revisar el encabezado.
+  await renderConSesion(rol, path, { '/api/cursos': () => [] })
   return screen.getByRole('banner')
 }
 

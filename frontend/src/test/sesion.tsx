@@ -42,23 +42,54 @@ const USUARIOS: Record<
 export function usuarioDePrueba(rol: Rol): UsuarioSesion {
   return {
     id: `usuario-${rol.toLowerCase()}`,
+    // Correos del seed (backend/src/database/seed.ts).
+    correo:
+      rol === 'ADMINISTRATIVO'
+        ? 'administrativo.ingenieria@norte.cursus.test'
+        : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
+    debeCambiarPassword: false,
     // PERIODO del seed: año 2026, semestre 2.
     periodoActivo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
     ...USUARIOS[rol],
   }
 }
 
-const json = (cuerpo: unknown) =>
-  new Response(JSON.stringify(cuerpo), { status: 200 })
+export const json = (cuerpo: unknown, status = 200) =>
+  new Response(JSON.stringify(cuerpo), { status })
+
+// Respuesta simulada de una ruta de la API: un Response, o un cuerpo JSON que
+// responde 200 (o una promesa de cualquiera de los dos, para una respuesta que
+// tarda). Recibe la URL completa, con su query (por ejemplo, los filtros
+// de /api/cursos).
+export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
+
+// Listas de gestión académica: vacías salvo que el test las simule.
+const LISTAS_VACIAS: Record<string, RutaSimulada> = {
+  '/api/carreras': () => [],
+  '/api/periodos': () => [],
+  '/api/cursos': () => [],
+}
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh
-// responde 401 (no hay cookie), /api/auth/logout 204 y /api/auth/yo devuelve
-// el usuario del rol. Restaurar con vi.unstubAllGlobals().
-export function simularBackend(rol: Rol) {
-  const fetch = vi.fn((url: string) =>
-    Promise.resolve(
+// responde 401 (no hay cookie), /api/auth/logout 204, cada ruta de `rutas`
+// (comparada sin la query) responde lo que devuelva, las listas de gestión
+// responden vacías y el resto (/api/auth/yo) devuelve el usuario del rol.
+// Restaurar con vi.unstubAllGlobals().
+export function simularBackend(
+  rol: Rol,
+  rutas: Record<string, RutaSimulada> = {},
+) {
+  const simuladas = { ...LISTAS_VACIAS, ...rutas }
+  const fetch = vi.fn((url: string, init?: RequestInit) => {
+    const ruta = url.split('?')[0]
+    if (ruta in simuladas) {
+      return Promise.resolve(simuladas[ruta](init, url)).then((respuesta) =>
+        respuesta instanceof Response ? respuesta : json(respuesta),
+      )
+    }
+    return Promise.resolve(
       url === '/api/auth/login'
         ? json({ accessToken: 'jwt-de-prueba' })
         : url === '/api/auth/refresh'
@@ -66,8 +97,8 @@ export function simularBackend(rol: Rol) {
           : url === '/api/auth/logout'
             ? new Response(null, { status: 204 })
             : json(usuarioDePrueba(rol)),
-    ),
-  )
+    )
+  })
   vi.stubGlobal('fetch', fetch)
   return fetch
 }
@@ -85,8 +116,12 @@ export function renderApp(path: string, initialToken: string | null = null) {
 }
 
 // Renderiza la app con la sesión ya iniciada y espera a que cargue el menú.
-export async function renderConSesion(rol: Rol, path = '/') {
-  simularBackend(rol)
+export async function renderConSesion(
+  rol: Rol,
+  path = '/',
+  rutas: Record<string, RutaSimulada> = {},
+) {
+  simularBackend(rol, rutas)
   renderApp(path, 'jwt-de-prueba')
   return screen.findByRole('navigation', { name: 'Navegación principal' })
 }

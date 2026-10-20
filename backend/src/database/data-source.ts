@@ -11,6 +11,18 @@ import { AmpliarLimiteLoginIp1792440000000 } from './migrations/1792440000000-Am
 import { AgregarArchivado1792441000000 } from './migrations/1792441000000-AgregarArchivado.js'
 import { ActivarRls1792441100000 } from './migrations/1792441100000-ActivarRls.js'
 import { PermitirLecturaDirector1792442000000 } from './migrations/1792442000000-PermitirLecturaDirector.js'
+import { CrearCurso1792443000000 } from './migrations/1792443000000-CrearCurso.js'
+import { NombreCarreraUnicoNormalizado1792450000000 } from './migrations/1792450000000-NombreCarreraUnicoNormalizado.js'
+import { CrearSeccion1792451000000 } from './migrations/1792451000000-CrearSeccion.js'
+import { CodigoCursoUnicoNormalizado1792460000000 } from './migrations/1792460000000-CodigoCursoUnicoNormalizado.js'
+import { CrearInscripcion1792470000000 } from './migrations/1792470000000-CrearInscripcion.js'
+import { CrearHistorialCurso1792480000000 } from './migrations/1792480000000-CrearHistorialCurso.js'
+import { CrearAyudanteSeccion1792490000000 } from './migrations/1792490000000-CrearAyudanteSeccion.js'
+import { AsignarProfesorSeccion1792495000000 } from './migrations/1792495000000-AsignarProfesorSeccion.js'
+import { ArchivarInscripcionConResponsable1792500000000 } from './migrations/1792500000000-ArchivarInscripcionConResponsable.js'
+import { CrearHorarioSeccion1792510000000 } from './migrations/1792510000000-CrearHorarioSeccion.js'
+import { CrearAsignacionCambio1792520000000 } from './migrations/1792520000000-CrearAsignacionCambio.js'
+import { AgregarCredencialProvisoria1792530000000 } from './migrations/1792530000000-AgregarCredencialProvisoria.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -43,6 +55,18 @@ export function opcionesDataSource(
       AgregarArchivado1792441000000,
       ActivarRls1792441100000,
       PermitirLecturaDirector1792442000000,
+      CrearCurso1792443000000,
+      NombreCarreraUnicoNormalizado1792450000000,
+      CrearSeccion1792451000000,
+      CodigoCursoUnicoNormalizado1792460000000,
+      CrearInscripcion1792470000000,
+      CrearHistorialCurso1792480000000,
+      CrearAyudanteSeccion1792490000000,
+      AsignarProfesorSeccion1792495000000,
+      ArchivarInscripcionConResponsable1792500000000,
+      CrearHorarioSeccion1792510000000,
+      CrearAsignacionCambio1792520000000,
+      AgregarCredencialProvisoria1792530000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

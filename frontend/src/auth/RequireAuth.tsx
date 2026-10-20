@@ -2,7 +2,7 @@ import { useContext } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { SessionContext } from '../session/session'
-import { useAuth } from './auth'
+import { RUTA_CAMBIO_OBLIGATORIO, useAuth } from './auth'
 
 // Ruta de layout: sin sesión redirige a /login y recuerda a dónde se quería ir.
 // Mientras se restaura la sesión con la cookie, o con token mientras llega el
@@ -20,6 +20,12 @@ export function RequireAuth() {
   }
   if (!sesion) {
     return <Cargando pantallaCompleta />
+  }
+  // PER-03: con la contraseña provisoria solo se entra a la pantalla para
+  // cambiarla (la API rechaza el resto), y sin ella esa pantalla no aplica.
+  const provisoria = sesion.user.debeCambiarPassword
+  if (provisoria !== (pathname === RUTA_CAMBIO_OBLIGATORIO)) {
+    return <Navigate to={provisoria ? RUTA_CAMBIO_OBLIGATORIO : '/'} replace />
   }
   return <Outlet />
 }

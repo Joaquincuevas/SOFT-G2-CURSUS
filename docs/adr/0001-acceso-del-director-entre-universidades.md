@@ -15,6 +15,7 @@ El Director administra el directorio y necesita una visión consolidada de todas
 - El Director sigue perteneciendo a una sola universidad: su `universidad_id` es su universidad de origen. El schema no cambia.
 - La política RLS le permite **solo leer** (`SELECT`) los datos de todas las universidades. Las políticas de escritura (`INSERT` y `UPDATE`) no lo incluyen, así que tampoco puede modificar los de su universidad de origen.
 - En la API, sus permisos son de solo lectura (`definirAbilityPara` en `@cursus/shared`: nunca `manage`, `create`, `update` ni `delete`).
+- La única excepción es su propia contraseña (PER-02): es una credencial de su cuenta, no un dato académico ni institucional, y el cambio no pasa por las políticas RLS.
 
 ## Alternativas descartadas
 

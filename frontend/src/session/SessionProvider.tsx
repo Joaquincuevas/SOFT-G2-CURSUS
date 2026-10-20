@@ -38,7 +38,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () =>
       cargada && cargada.token === token
-        ? { user: cargada.user, ability: definirAbilityPara(cargada.user) }
+        ? {
+            user: cargada.user,
+            ability: definirAbilityPara(cargada.user),
+            actualizarPeriodoActivo: (
+              periodoActivo: SessionUser['periodoActivo'],
+            ) =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? { ...anterior, user: { ...anterior.user, periodoActivo } }
+                  : anterior,
+              ),
+            actualizarNombre: (nombre: string) =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? { ...anterior, user: { ...anterior.user, nombre } }
+                  : anterior,
+              ),
+            marcarPasswordCambiada: () =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? {
+                      ...anterior,
+                      user: { ...anterior.user, debeCambiarPassword: false },
+                    }
+                  : anterior,
+              ),
+          }
         : null,
     [cargada, token],
   )

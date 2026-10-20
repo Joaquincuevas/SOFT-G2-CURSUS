@@ -122,6 +122,32 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 - El dueño de las tablas (el usuario de `POSTGRES_USER`) no pasa por RLS: lo usan las migraciones, el seed y las excepciones de arriba.
 - Una tabla nueva con `universidad_id` necesita sus permisos para `cursus_app`, `ENABLE ROW LEVEL SECURITY` y sus tres políticas. Si falta algo, el test de contrato de `test/multitenant/rls.db-spec.ts` falla.
 
+## Carreras (GES-01)
+
+`GET /api/carreras`, `POST /api/carreras` y `PATCH /api/carreras/:id` permiten al administrativo listar, crear y editar las carreras de su facultad. POST/PATCH reciben únicamente `{ nombre }`; el ámbito se obtiene del usuario de sesión en la BD y las consultas mantienen RLS por universidad más filtro de facultad. Duplicados responden 409 y una carrera ajena, archivada o inexistente responde 404 al editar. La migración nueva garantiza nombres únicos por facultad también al ignorar mayúsculas y espacios. Ver [contrato y pruebas de GES-01](../docs/ges-01-carreras-facultad.md).
+
+## Períodos (GES-02)
+
+`PeriodosController` concentra `GET /api/periodos` (incluye fechas y conserva los campos usados por Cursos), `POST /api/periodos` y `PATCH /api/periodos/:id/activar`. El administrativo crea períodos y cambia el activo de su universidad con RLS y una transacción serializada por universidad. Crear un duplicado responde 409 y revierte la desactivación anterior. Se reutilizan las restricciones existentes, sin nueva migración. Ver [contrato y pruebas de GES-02](../docs/ges-02-periodos-academicos.md).
+
+## Edición de cursos (GES-07)
+
+`GET /api/cursos/:id/edicion`, `PATCH /api/cursos/:id` y `GET /api/cursos/:id/historial` permiten al administrativo editar cursos de su facultad con las validaciones de creación. Curso e historial se guardan en una transacción con bloqueo del curso y RLS; una falla revierte ambos. La migración `CrearHistorialCurso1792480000000` agrega el historial de solo adición, con fecha de BD, responsable y snapshots anterior/nuevo. La interfaz exige revisar y confirmar antes de enviar el PATCH. Ver [contrato y pasos de revisión](../docs/ges-07-editar-curso.md).
+
+## Horarios de secciones (GES-10)
+
+GES-11 comprueba salas ocupadas al guardar el horario: misma universidad, período, día e intervalos superpuestos. Responde 409 con `code: SALA_OCUPADA` y los cursos/secciones ocupantes, sin modificar ningún bloque ni la versión. Los guardados se serializan por universidad para evitar reservas simultáneas en cursos diferentes. Ver [contrato y revisión de GES-11](../docs/ges-11-sala-ocupada.md).
+
+`GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).
+
+## Carga CSV de alumnos (GES-16)
+
+`POST /api/secciones/:id/alumnos/csv` recibe `{ csv }` y devuelve total, cargados, errores y detalle por fila. Solo el administrativo de la facultad/universidad de la sección puede cargar. Cada fila reutiliza el DTO y la transacción de GES-15; un fallo individual no revierte otras filas. Formato UTF-8 `correo,nombre`, hasta 100 alumnos y 48 KiB. La plantilla se descarga desde el diálogo de la sección. No requiere migraciones ni dependencias nuevas. Ver [formato, permisos, límites y pruebas](../docs/ges-16-carga-alumnos-csv.md).
+
+## Facultad completa de demo (GES-20)
+
+`npm run seed` y `npm run seed:prod` completan Ingeniería de Norte con tres carreras, quince cursos y treinta secciones con horario, sala y participantes. La carga es transaccional y se puede repetir sin duplicar ni restaurar asignaciones retiradas. Ver [datos y verificación de GES-20](../docs/ges-20-seed-facultad.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
@@ -129,6 +155,13 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 - `POST /api/auth/refresh` cambia la cookie por un JWT nuevo y rota el refresh token. Responde `401` y borra la cookie si el token no existe, expiró o fue revocado. Reusar un token ya rotado revoca todas las sesiones del usuario.
 - `POST /api/auth/logout` revoca el refresh token de la cookie y la borra. Siempre responde `204`.
 - El refresh token es opaco (32 bytes aleatorios) y en la tabla `refresh_token` solo se guarda su sha256. Dura `JWT_REFRESH_EXPIRES_IN` (7 días por defecto) desde su último uso.
+
+## Perfil
+
+- `GET /api/auth/yo` entrega los datos del perfil: nombre, correo, rol, universidad y facultad.
+- `PATCH /api/perfil` (`{ nombre }`, PER-01) cambia el nombre del usuario de la sesión: el id sale del JWT, nunca de la petición. Cualquier otro campo responde `400`. El Director recibe `403`: ve su perfil en solo lectura ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+- `PUT /api/auth/password` (`{ passwordActual, passwordNueva }`, PER-02) cambia la contraseña del usuario de la sesión, también la del Director. La nueva debe tener al menos 8 caracteres y ser distinta de la actual; si no, o si la actual no es correcta, responde `400`. Responde `204` y cierra las demás sesiones del usuario; la actual sigue abierta. Una contraseña actual incorrecta cuenta para el mismo límite por cuenta del login (`429` con `Retry-After`).
+- Contraseña provisoria (PER-03): las cuentas que crea un administrativo (alumnos de GES-15 y GES-16, profesores y ayudantes de GES-21) quedan con `usuario.credencial_provisoria = true`. Mientras la tengan, `GET /api/auth/yo` devuelve `debeCambiarPassword: true` y el resto de las rutas con sesión responde `403`, salvo `PUT /api/auth/password`. Las rutas que se permiten llevan `@PermitidaConProvisoria()`. La marca se lee de la base en cada petición, así que al cambiar la contraseña se quita sin pedir otro JWT. El frontend lleva a esos usuarios a `/cambiar-password`.
 
 ## Variables de entorno
 

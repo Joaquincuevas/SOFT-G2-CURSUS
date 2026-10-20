@@ -109,10 +109,10 @@ npm run seed --workspace=backend
 - Los dominios usan `.test`, un TLD reservado, así que ningún correo es real.
 - El período 2026-2 queda activo solo si la universidad no tiene ya otro período activo.
 
-| Universidad            | Facultades y carreras                                                                                            | Período |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ------- |
-| Universidad Demo Norte | Facultad de Ingeniería (Ingeniería Civil en Informática), Facultad de Economía y Negocios (Ingeniería Comercial) | 2026-2  |
-| Universidad Demo Sur   | Facultad de Ciencias de la Salud (Enfermería)                                                                    | 2026-2  |
+| Universidad            | Facultades y carreras                                                                                                                                                      | Período |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Universidad Demo Norte | Facultad de Ingeniería (Ingeniería Civil en Informática, Ingeniería Civil Industrial e Ingeniería Civil Eléctrica), Facultad de Economía y Negocios (Ingeniería Comercial) | 2026-2  |
+| Universidad Demo Sur   | Facultad de Ciencias de la Salud (Enfermería)                                                                                                                              | 2026-2  |
 
 | Rol            | Universidad Demo Norte                                                                                                        | Universidad Demo Sur             |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
@@ -123,6 +123,10 @@ npm run seed --workspace=backend
 | Alumno         | `alumno@norte.cursus.test`                                                                                                    | `alumno@sur.cursus.test`         |
 
 El Director no tiene facultad asociada. En Norte, cada administrativo pertenece a su facultad, para probar el aislamiento entre facultades; profesor, ayudante y alumno pertenecen a Ingeniería. En Sur, todos pertenecen a Ciencias de la Salud.
+
+Además, para que las listas de la demo de gestión parezcan las de un curso real, cada facultad tiene **3 profesores, 4 ayudantes y 25 alumnos de demo** con nombres realistas y correos `nombre.apellido@<dominio>` (por ejemplo, `camila.rojas@norte.cursus.test`). Usan la misma contraseña que el resto y se generan siempre iguales (`usuariosDeDemo` en `backend/src/database/seed.ts`), así que el seed no los duplica. Los tests usan los usuarios de la tabla, no los de demo.
+
+El mismo comando completa **Ingeniería de Norte con 3 carreras, 15 cursos y 30 secciones** en su período activo (GES-20). Cada sección incluye dos bloques con sala, profesor, dos ayudantes y alumnos de demo. Los horarios no se superponen. Repetirlo conserva las asignaciones y los retiros posteriores; una sala o código demo ocupado por otros datos hace fallar la carga completa sin cambios parciales. Ver [datos, criterios y guía de revisión](docs/ges-20-seed-facultad.md).
 
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
@@ -231,7 +235,7 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 
 ### Datos simulados en staging
 
-Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol) en la base de staging:
+Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol, usuarios de demo por facultad y la facultad completa de Ingeniería de Norte de GES-20) en la base de staging:
 
 ```bash
 bash infra/aws/seed.sh staging

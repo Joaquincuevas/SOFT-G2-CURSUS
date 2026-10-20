@@ -14,11 +14,18 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'asignacion_cambio',
+  'ayudante_seccion',
   'carrera',
+  'curso',
+  'curso_cambio',
   'facultad',
+  'horario_seccion',
+  'inscripcion',
   'limite_login',
   'periodo',
   'refresh_token',
+  'seccion',
   'sesion_auth',
   'universidad',
   'usuario',
@@ -152,12 +159,82 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // AgregarCredencialProvisoria es la última: quita la columna de usuario.
+    await bd.undoLastMigration()
+    const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
+      `SELECT count(*) AS provisoria FROM information_schema.columns
+        WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
+    )
+    expect(Number(provisoria)).toBe(0)
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    // CrearAsignacionCambio: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ASIGNACION_CAMBIO = TABLAS.filter(
+      (tabla) => tabla !== 'asignacion_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
+
+    await bd.undoLastMigration() // CrearHorarioSeccion.
+    const SIN_HORARIO = SIN_ASIGNACION_CAMBIO.filter(
+      (tabla) => tabla !== 'horario_seccion',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_HORARIO)
+
+    // ArchivarInscripcionConResponsable: quita la columna y sus restricciones.
+    await bd.undoLastMigration()
+    const [{ columnas }] = await bd.query<{ columnas: string }[]>(
+      `SELECT count(*) AS columnas FROM information_schema.columns
+        WHERE table_name = 'inscripcion' AND column_name = 'archivada_por'`,
+    )
+    expect(Number(columnas)).toBe(0)
+    expect(await tablasExistentes()).toEqual(SIN_HORARIO)
+
+    await bd.undoLastMigration() // AsignarProfesorSeccion.
+
+    // La asignación de ayudantes se revierte antes de sus claves foráneas.
+    await bd.undoLastMigration()
+    const SIN_AYUDANTES = SIN_HORARIO.filter(
+      (tabla) => tabla !== 'ayudante_seccion',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_AYUDANTES)
+    await bd.undoLastMigration() // CrearHistorialCurso.
+    const SIN_HISTORIAL = SIN_AYUDANTES.filter(
+      (tabla) => tabla !== 'curso_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_HISTORIAL)
+    // CrearInscripcion es ahora la última.
+    await bd.undoLastMigration()
+    const SIN_INSCRIPCION = SIN_HISTORIAL.filter(
+      (tabla) => tabla !== 'inscripcion',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_INSCRIPCION)
+    const [{ restricciones }] = await bd.query<{ restricciones: string }[]>(
+      `SELECT count(*) AS restricciones FROM pg_constraint
+        WHERE conname IN ('uq_seccion_id_universidad', 'uq_usuario_id_universidad')`,
+    )
+    expect(Number(restricciones)).toBe(0)
+
+    await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
+
+    // CrearSeccion es ahora la última.
+    await bd.undoLastMigration()
+    const SIN_SECCION = SIN_INSCRIPCION.filter((tabla) => tabla !== 'seccion')
+    expect(await tablasExistentes()).toEqual(SIN_SECCION)
+
+    await bd.undoLastMigration() // NombreCarreraUnicoNormalizado.
+
+    // CrearCurso es ahora la última.
+    await bd.undoLastMigration()
+    const SIN_CURSO = SIN_SECCION.filter((tabla) => tabla !== 'curso')
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
+
     // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
     // ActivarRls y AgregarArchivado no crean tablas.
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
 
     await bd.query(
       `INSERT INTO limite_login (clave, fallos) VALUES (repeat('a', 64), ARRAY(SELECT clock_timestamp() FROM generate_series(1, 20)))`,
@@ -167,20 +244,20 @@ describe('migraciones', () => {
       'SELECT cardinality(fallos) AS cantidad FROM limite_login',
     )
     expect(cantidad).toBe(5)
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CURSO)
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter((tabla) => tabla !== 'limite_login'),
+      SIN_CURSO.filter((tabla) => tabla !== 'limite_login'),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter(
+      SIN_CURSO.filter(
         (tabla) => tabla !== 'sesion_auth' && tabla !== 'limite_login',
       ),
     )
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(
-      TABLAS.filter(
+      SIN_CURSO.filter(
         (tabla) =>
           tabla !== 'refresh_token' &&
           tabla !== 'sesion_auth' &&
@@ -214,7 +291,11 @@ describe('migraciones', () => {
     // salvo revocado_en.
     for (const tabla of TABLAS.filter(
       (t) =>
-        t !== 'refresh_token' && t !== 'sesion_auth' && t !== 'limite_login',
+        t !== 'refresh_token' &&
+        t !== 'sesion_auth' &&
+        t !== 'limite_login' &&
+        t !== 'curso_cambio' &&
+        t !== 'asignacion_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
@@ -236,7 +317,17 @@ describe('migraciones', () => {
        ORDER BY table_name`,
     )
     expect(filas).toEqual(
-      ['carrera', 'facultad', 'universidad', 'usuario'].map((tabla) => ({
+      [
+        'ayudante_seccion',
+        'carrera',
+        'curso',
+        'facultad',
+        'horario_seccion',
+        'inscripcion',
+        'seccion',
+        'universidad',
+        'usuario',
+      ].map((tabla) => ({
         table_name: tabla,
         data_type: 'timestamp with time zone',
         is_nullable: 'YES',
@@ -620,4 +711,174 @@ describe('refresh_token', () => {
         constraint: 'ck_refresh_token_hash',
       })
     }))
+})
+
+describe('seccion', () => {
+  // Universidad con un curso, para crear secciones.
+  async function crearCursoBase(q: QueryRunner, dominio: string) {
+    const universidadId = await crearUniversidad(q, `U ${dominio}`, dominio)
+    const facultadId = await crearFacultad(q, universidadId, 'Ingeniería')
+    const carreraId = await insertar(
+      q,
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       VALUES ($1, $2, 'Informática')`,
+      [universidadId, facultadId],
+    )
+    const periodoId = await insertar(
+      q,
+      `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino)
+       VALUES ($1, 2026, 2, '2026-08-03', '2026-12-18')`,
+      [universidadId],
+    )
+    const cursoId = await insertar(
+      q,
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       VALUES ($1, $2, $3, 'ICC101', 'Programación')`,
+      [universidadId, carreraId, periodoId],
+    )
+    return { universidadId, cursoId }
+  }
+
+  const crearSeccion = (
+    q: QueryRunner,
+    datos: { universidadId: string; cursoId: string; numero: number },
+  ) =>
+    insertar(
+      q,
+      'INSERT INTO seccion (universidad_id, curso_id, numero) VALUES ($1, $2, $3)',
+      [datos.universidadId, datos.cursoId, datos.numero],
+    )
+
+  it('rechaza un curso de otra universidad', () =>
+    enTransaccion(async (q) => {
+      const a = await crearCursoBase(q, 'a.cl')
+      const b = await crearCursoBase(q, 'b.cl')
+      await expect(
+        crearSeccion(q, { ...a, cursoId: b.cursoId, numero: 1 }),
+      ).rejects.toMatchObject({
+        code: FOREIGN_KEY,
+        constraint: 'fk_seccion_curso',
+      })
+    }))
+
+  it('no repite el número en el mismo curso', () =>
+    enTransaccion(async (q) => {
+      const base = await crearCursoBase(q, 'a.cl')
+      await crearSeccion(q, { ...base, numero: 1 })
+      await expect(
+        crearSeccion(q, { ...base, numero: 1 }),
+      ).rejects.toMatchObject({
+        code: UNIQUE,
+        constraint: 'uq_seccion_curso_numero',
+      })
+    }))
+
+  it('rechaza un número menor que 1', () =>
+    enTransaccion(async (q) => {
+      const base = await crearCursoBase(q, 'a.cl')
+      await expect(
+        crearSeccion(q, { ...base, numero: 0 }),
+      ).rejects.toMatchObject({ code: CHECK, constraint: 'ck_seccion_numero' })
+    }))
+
+  describe('inscripcion', () => {
+    // Una sección y un alumno de la misma universidad.
+    async function crearBase(q: QueryRunner, dominio: string) {
+      const base = await crearCursoBase(q, dominio)
+      const seccionId = await crearSeccion(q, { ...base, numero: 1 })
+      const usuarioId = await crearUsuario(q, {
+        universidadId: base.universidadId,
+        correo: `alumno@${dominio}`,
+      })
+      return { universidadId: base.universidadId, seccionId, usuarioId }
+    }
+
+    const inscribir = (
+      q: QueryRunner,
+      datos: { universidadId: string; seccionId: string; usuarioId: string },
+    ) =>
+      insertar(
+        q,
+        'INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id) VALUES ($1, $2, $3)',
+        [datos.universidadId, datos.seccionId, datos.usuarioId],
+      )
+
+    it('rechaza una sección de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        await expect(
+          inscribir(q, { ...a, seccionId: b.seccionId }),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_seccion',
+        })
+      }))
+
+    it('rechaza un alumno de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        await expect(
+          inscribir(q, { ...a, usuarioId: b.usuarioId }),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_usuario',
+        })
+      }))
+
+    it('no inscribe dos veces al mismo alumno, salvo si la anterior está archivada', () =>
+      enTransaccion(async (q) => {
+        const base = await crearBase(q, 'a.cl')
+        const id = await inscribir(q, base)
+        // El savepoint deja seguir la transacción después del error.
+        await q.query('SAVEPOINT repetida')
+        await expect(inscribir(q, base)).rejects.toMatchObject({
+          code: UNIQUE,
+          constraint: 'ux_inscripcion_seccion_usuario',
+        })
+        await q.query('ROLLBACK TO SAVEPOINT repetida')
+        await q.query(
+          'UPDATE inscripcion SET archived_at = now(), archivada_por = usuario_id WHERE id = $1',
+          [id],
+        )
+        await expect(inscribir(q, base)).resolves.toEqual(expect.any(String))
+      }))
+
+    // GES-19: quitar a un alumno archiva la inscripción con su responsable.
+    it('exige archived_at y archivada_por juntos', () =>
+      enTransaccion(async (q) => {
+        const base = await crearBase(q, 'a.cl')
+        const id = await inscribir(q, base)
+        for (const cambio of [
+          'archived_at = now()',
+          'archivada_por = usuario_id',
+        ]) {
+          await q.query('SAVEPOINT a_medias')
+          await expect(
+            q.query(`UPDATE inscripcion SET ${cambio} WHERE id = $1`, [id]),
+          ).rejects.toMatchObject({
+            code: CHECK,
+            constraint: 'ck_inscripcion_archivada_por',
+          })
+          await q.query('ROLLBACK TO SAVEPOINT a_medias')
+        }
+      }))
+
+    it('rechaza un responsable de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        const id = await inscribir(q, a)
+        await expect(
+          q.query(
+            'UPDATE inscripcion SET archived_at = now(), archivada_por = $2 WHERE id = $1',
+            [id, b.usuarioId],
+          ),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_archivada_por',
+        })
+      }))
+  })
 })

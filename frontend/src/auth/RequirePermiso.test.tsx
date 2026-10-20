@@ -75,7 +75,7 @@ describe('una ruta que no existe muestra la 404', () => {
 })
 
 test('el Director entra a Gestión académica en solo lectura', async () => {
-  await renderConSesion('DIRECTOR', '/cursos')
+  await renderConSesion('DIRECTOR', '/cursos', { '/api/cursos': () => [] })
   expect(titulo()).toHaveTextContent('Gestión académica')
   expect(screen.getByText('Directorio · Semestre 2026-2')).toBeInTheDocument()
 })
@@ -88,7 +88,15 @@ describe('usePuede', () => {
   function renderBoton(rol: Rol) {
     const user = usuarioDePrueba(rol)
     render(
-      <SessionContext value={{ user, ability: definirAbilityPara(user) }}>
+      <SessionContext
+        value={{
+          user,
+          ability: definirAbilityPara(user),
+          actualizarPeriodoActivo: () => undefined,
+          actualizarNombre: () => undefined,
+          marcarPasswordCambiada: () => undefined,
+        }}
+      >
         <BotonCrear />
       </SessionContext>,
     )

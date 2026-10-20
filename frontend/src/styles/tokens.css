@@ -70,6 +70,8 @@
   --control-size: 40px;
   --input-height: 46px;
   --button-height: 42px;
+  /* Botón principal de las páginas de gestión (Figma, Crear curso). */
+  --button-width: 220px;
   --dot-size: 8px;
 
   /* Login (nodo 66:2 del Figma) */

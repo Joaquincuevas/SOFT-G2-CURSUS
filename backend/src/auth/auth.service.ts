@@ -38,10 +38,12 @@ const hashDe = (token: string) =>
 interface FilaUsuario {
   id: string
   nombre: string
+  correo: string
   rol: Rol
   universidad_id: string
   universidad_nombre: string
   facultad_nombre: string | null
+  credencial_provisoria: boolean
 }
 
 // El Director ve todas las universidades: el Figma lo muestra como "Directorio".
@@ -183,17 +185,82 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
-  // También corta la sesión de un usuario archivado, sin esperar a que venza
-  // su JWT.
-  async sesionActiva(sid: string, usuarioId: string): Promise<boolean> {
-    const [sesion] = await this.bd.query<{ id: string }>(
-      `SELECT s.id FROM sesion_auth s
+  // Correo del usuario vigente, para el límite de intentos por cuenta del
+  // cambio de contraseña (PER-02). null si no existe o está archivado.
+  async correoDe(usuarioId: string): Promise<string | null> {
+    const [usuario] = await this.bd.query<{ correo: string }>(
+      `SELECT correo FROM usuario WHERE id = $1 AND archived_at IS NULL`,
+      [usuarioId],
+    )
+    return usuario?.correo ?? null
+  }
+
+  // PER-02. Cambia la contraseña del usuario de la sesión y cierra sus demás
+  // sesiones; la actual (sesionId) sigue abierta. Devuelve null si la
+  // contraseña actual no es correcta (cuenta como intento fallido) e 'igual'
+  // si la nueva es la misma.
+  //
+  // Como el login, no usa consultarEnUniversidad: la contraseña es una
+  // credencial, no un dato institucional, y también la cambia el Director, que
+  // no modifica datos (ADR 0001). Solo toca la fila del id del JWT.
+  async cambiarPassword(
+    usuarioId: string,
+    sesionId: string,
+    actual: string,
+    nueva: string,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
+  ): Promise<'cambiada' | 'igual' | null> {
+    const [usuario] = await bd.query<{ password_hash: string }>(
+      `SELECT password_hash FROM usuario
+        WHERE id = $1 AND archived_at IS NULL
+        FOR UPDATE`,
+      [usuarioId],
+    )
+    if (!usuario || !(await verify(usuario.password_hash, actual))) {
+      return null
+    }
+    if (nueva === actual) {
+      return 'igual'
+    }
+
+    // Con la contraseña nueva deja de ser provisoria (PER-03).
+    await bd.query(
+      `UPDATE usuario SET password_hash = $2, credencial_provisoria = false
+        WHERE id = $1`,
+      [usuarioId, await hash(nueva)],
+    )
+    // Las demás sesiones quedan fuera: si alguien entró con la contraseña
+    // anterior, ya no puede seguir usándola ni renovarla.
+    await bd.query(
+      `UPDATE sesion_auth SET revocado_en = now()
+        WHERE usuario_id = $1 AND id <> $2 AND revocado_en IS NULL`,
+      [usuarioId, sesionId],
+    )
+    await bd.query(
+      `UPDATE refresh_token SET revocado_en = now()
+        WHERE usuario_id = $1 AND sesion_id <> $2 AND revocado_en IS NULL`,
+      [usuarioId, sesionId],
+    )
+    return 'cambiada'
+  }
+
+  // null si la sesión ya no sirve. También corta la sesión de un usuario
+  // archivado, sin esperar a que venza su JWT. Devuelve además si el usuario
+  // todavía tiene la contraseña provisoria (PER-03), en la misma consulta.
+  async sesionActiva(
+    sid: string,
+    usuarioId: string,
+  ): Promise<{ credencialProvisoria: boolean } | null> {
+    const [sesion] = await this.bd.query<{ credencial_provisoria: boolean }>(
+      `SELECT u.credencial_provisoria FROM sesion_auth s
          JOIN usuario u ON u.id = s.usuario_id
         WHERE s.id::text = $1 AND s.usuario_id::text = $2
           AND s.revocado_en IS NULL AND u.archived_at IS NULL`,
       [sid, usuarioId],
     )
-    return !!sesion
+    return sesion
+      ? { credencialProvisoria: sesion.credencial_provisoria }
+      : null
   }
 
   // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe en la
@@ -204,8 +271,9 @@ export class AuthService {
   ): Promise<UsuarioSesion | null> {
     const [fila] = await this.bd.consultarEnUniversidad<FilaUsuario>(
       contexto,
-      `SELECT u.id, u.nombre, u.rol, u.universidad_id,
-              un.nombre AS universidad_nombre, f.nombre AS facultad_nombre
+      `SELECT u.id, u.nombre, u.correo, u.rol, u.universidad_id,
+              un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
+              u.credencial_provisoria
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
          LEFT JOIN facultad f ON f.id = u.facultad_id
@@ -218,11 +286,13 @@ export class AuthService {
     return {
       id: fila.id,
       nombre: fila.nombre,
+      correo: fila.correo,
       rol: fila.rol,
       universidadId: fila.universidad_id,
       universidadNombre:
         fila.rol === 'DIRECTOR' ? NOMBRE_DIRECTORIO : fila.universidad_nombre,
       facultadNombre: fila.facultad_nombre,
+      debeCambiarPassword: fila.credencial_provisoria,
       periodoActivo: await this.periodoActivo(contexto),
     }
   }

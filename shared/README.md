@@ -13,7 +13,7 @@ DTOs, tipos e interfaces TypeScript compartidos entre `frontend` y `backend`.
 
 ### Sujetos de tabla
 
-Uno por tabla del schema (`Curso` se adelanta a la tabla de GES-*). Deciden qué endpoints puede usar cada rol y qué acciones ve dentro de una página.
+Uno por tabla del schema. Deciden qué endpoints puede usar cada rol y qué acciones ve dentro de una página.
 
 | Sujeto      | DIRECTOR | ADMINISTRATIVO       | PROFESOR | AYUDANTE | ALUMNO |
 | ----------- | -------- | -------------------- | -------- | -------- | ------ |
@@ -23,6 +23,8 @@ Uno por tabla del schema (`Curso` se adelanta a la tabla de GES-*). Deciden qué
 | Periodo     | read     | create, read, update | read     | read     | read   |
 | Usuario     | read     | create, read, update | —        | —        | —      |
 | Curso       | read     | create, read, update | —        | —        | —      |
+| Seccion     | read     | create, read, update | —        | —        | —      |
+| Inscripcion | read     | create, read, update | —        | —        | —      |
 
 ### Sujetos de sección
 

@@ -1,6 +1,11 @@
 import { DataSource } from 'typeorm'
 import { opcionesDataSource } from './data-source.js'
-import { ejecutarSeed, UNIVERSIDADES, verificarEntorno } from './seed.js'
+import {
+  ejecutarSeed,
+  UNIVERSIDADES,
+  usuariosDeDemo,
+  verificarEntorno,
+} from './seed.js'
 
 // Punto de entrada de npm run seed. Las variables se leen del .env de la raíz
 // (lo carga data-source.ts) o del entorno.
@@ -19,11 +24,22 @@ try {
 
 const bd = await new DataSource(opcionesDataSource()).initialize()
 try {
-  await ejecutarSeed(bd, password)
+  const facultad = await ejecutarSeed(bd, password, process.env, {
+    facultadCompleta: true,
+  })
   const usuarios = UNIVERSIDADES.reduce((n, u) => n + u.usuarios.length, 0)
-  console.log(
-    `Seed listo: ${UNIVERSIDADES.length} universidades y ${usuarios} usuarios de prueba`,
+  const demo = UNIVERSIDADES.reduce(
+    (n, _u, i) => n + usuariosDeDemo(i).length,
+    0,
   )
+  console.log(
+    `Seed listo: ${UNIVERSIDADES.length} universidades, ${usuarios} usuarios de prueba y ${demo} usuarios de demo`,
+  )
+  if (facultad) {
+    console.log(
+      `Ingeniería de Norte: ${facultad.carreras} carreras, ${facultad.cursos} cursos y ${facultad.secciones} secciones en el período activo`,
+    )
+  }
 } catch (error) {
   // Solo el mensaje: el DETAIL de PostgreSQL puede incluir la fila completa,
   // con correo y password_hash.

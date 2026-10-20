@@ -1,6 +1,8 @@
 import { Route, Routes } from 'react-router'
 import { RequireAuth } from './auth/RequireAuth'
 import { RequirePermiso } from './auth/RequirePermiso'
+import { RUTA_CAMBIO_OBLIGATORIO } from './auth/auth'
+import { CambioObligatorio } from './pages/CambioObligatorio'
 import { AppShell } from './layout/AppShell'
 import { NAV_ITEMS } from './navigation'
 import { Login } from './pages/Login'
@@ -14,6 +16,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<RequireAuth />}>
+        {/* PER-03: sin el menú, porque no se puede ir a otra pantalla. */}
+        <Route path={RUTA_CAMBIO_OBLIGATORIO} element={<CambioObligatorio />} />
         <Route element={<AppShell />}>
           {NAV_ITEMS.map((item) => (
             <Route

@@ -21,6 +21,11 @@ const TABLAS = [
   ['carrera', 'universidad_id'],
   ['periodo', 'universidad_id'],
   ['usuario', 'universidad_id'],
+  ['curso', 'universidad_id'],
+  ['seccion', 'universidad_id'],
+  ['inscripcion', 'universidad_id'],
+  ['ayudante_seccion', 'universidad_id'],
+  ['horario_seccion', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -74,6 +79,48 @@ beforeAll(async () => {
       [dominio],
     )
     universidades[dominio] = id
+
+    // Un curso propio por universidad, como dueño de las tablas.
+    await bd.query(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       SELECT $1, c.id, p.id, 'RLS101', 'Curso de prueba'
+         FROM carrera c, periodo p
+        WHERE c.universidad_id = $1 AND p.universidad_id = $1
+        LIMIT 1`,
+      [id],
+    )
+    // Una sección del curso anterior, para los tests genéricos de seccion.
+    await bd.query(
+      `INSERT INTO seccion (universidad_id, curso_id, numero)
+       SELECT $1, id, 1 FROM curso WHERE universidad_id = $1 AND codigo = 'RLS101'`,
+      [id],
+    )
+    // Un alumno del seed inscrito en esa sección.
+    await bd.query(
+      `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+       SELECT $1, s.id, u.id
+         FROM seccion s
+         JOIN curso c ON c.id = s.curso_id AND c.codigo = 'RLS101'
+         JOIN LATERAL (SELECT id FROM usuario
+                        WHERE universidad_id = $1 AND rol = 'ALUMNO' LIMIT 1) u ON true
+        WHERE s.universidad_id = $1`,
+      [id],
+    )
+    await bd.query(
+      `INSERT INTO ayudante_seccion (universidad_id, seccion_id, usuario_id)
+      SELECT $1, s.id, u.id FROM seccion s
+        JOIN curso c ON c.id = s.curso_id AND c.codigo = 'RLS101'
+        JOIN LATERAL (SELECT id FROM usuario WHERE universidad_id = $1 AND rol = 'AYUDANTE' LIMIT 1) u ON true
+       WHERE s.universidad_id = $1`,
+      [id],
+    )
+    await bd.query(
+      `INSERT INTO horario_seccion (universidad_id, seccion_id, dia, inicio, termino, sala)
+      SELECT $1, s.id, 1, '08:30', '09:20', 'Sala RLS' FROM seccion s
+        JOIN curso c ON c.id = s.curso_id AND c.codigo = 'RLS101'
+       WHERE s.universidad_id = $1`,
+      [id],
+    )
   }
 })
 
@@ -222,6 +269,26 @@ describe('Director (ADR 0001)', () => {
     })
   })
 
+  it('no puede crear cursos, ni en su universidad', async () => {
+    const universidadId = universidades[NORTE]
+    const [{ carrera, periodo }] = await bd.query<
+      { carrera: string; periodo: string }[]
+    >(
+      `SELECT c.id AS carrera, p.id AS periodo FROM carrera c, periodo p
+        WHERE c.universidad_id = $1 AND p.universidad_id = $1 LIMIT 1`,
+      [universidadId],
+    )
+    await comoApp({ universidadId, rol: 'DIRECTOR' }, async (q) => {
+      await expect(
+        q.query(
+          `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+           VALUES ($1, $2, $3, 'DIR101', 'Del director')`,
+          [universidadId, carrera, periodo],
+        ),
+      ).rejects.toMatchObject({ code: SIN_PERMISO })
+    })
+  })
+
   it.each(TABLAS)(
     '%s: no puede modificar registros, ni de su universidad',
     async (tabla) => {
@@ -276,12 +343,19 @@ describe('contrato del schema', () => {
     )
 
     expect(tablas.map((t) => t.tabla)).toEqual(
-      TABLAS.map(([tabla]) => tabla).sort(),
+      [
+        ...TABLAS.map(([tabla]) => tabla),
+        'curso_cambio',
+        'asignacion_cambio',
+      ].sort(),
     )
     for (const tabla of tablas) {
       expect(tabla).toMatchObject({
         rls: true,
-        comandos: ['INSERT', 'SELECT', 'UPDATE'],
+        // Las auditorías son de solo adición: no conceden UPDATE a la API.
+        comandos: ['curso_cambio', 'asignacion_cambio'].includes(tabla.tabla)
+          ? ['INSERT', 'SELECT']
+          : ['INSERT', 'SELECT', 'UPDATE'],
       })
     }
   })
