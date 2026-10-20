@@ -22,6 +22,8 @@ function simular({
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     if (url === '/api/auth/refresh') return Promise.resolve(refresh())
     if (url === '/api/auth/logout') return Promise.resolve(status(204))
+    // Dashboard del profesor (ESP-01).
+    if (url === '/api/dashboard/mis-secciones') return Promise.resolve(json([]))
     const auth = new Headers(init?.headers).get('Authorization')
     return Promise.resolve(
       auth === `Bearer ${valido}`
