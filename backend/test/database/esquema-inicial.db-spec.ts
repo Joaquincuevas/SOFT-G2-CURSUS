@@ -166,6 +166,8 @@ describe('migraciones', () => {
     expect(Number(columnas)).toBe(0)
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    await bd.undoLastMigration() // AsignarProfesorSeccion.
+
     // La asignación de ayudantes se revierte antes de sus claves foráneas.
     await bd.undoLastMigration()
     const SIN_AYUDANTES = TABLAS.filter((tabla) => tabla !== 'ayudante_seccion')

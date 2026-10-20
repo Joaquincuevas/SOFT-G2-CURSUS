@@ -58,12 +58,14 @@ export interface CursoListado {
 }
 
 // Sección dentro del detalle de un curso (GES-08). Lo que todavía no se puede
-// asignar llega vacío: horario (GES-10) y profesor (GES-12).
-// Ayudantes (GES-13) y alumnos (GES-15) consideran las asociaciones activas.
+// asignar llega vacío: horario (GES-10), que el frontend muestra como "Sin
+// asignar". Profesor (GES-12), ayudantes (GES-13) y alumnos (GES-15) vienen de
+// sus asignaciones activas.
 export interface SeccionDetalle {
   id: string
   numero: number
   horario: string | null
+  // Nombre del profesor a cargo (GES-12), o null si no tiene.
   profesor: string | null
   ayudantes: string[]
   alumnos: number
@@ -81,6 +83,17 @@ export interface CursoDetalle {
   universidadNombre?: string
   // Ordenadas por número, sin las archivadas.
   secciones: SeccionDetalle[]
+}
+
+// Opción de GET /api/profesores (GES-12): profesores de la universidad.
+export interface ProfesorOpcion {
+  id: string
+  nombre: string
+}
+
+// Cuerpo de PUT /api/secciones/:id/profesor (GES-12).
+export interface AsignarProfesor {
+  profesorId: string
 }
 
 // Opciones de GET /api/periodos; GET /api/carreras usa el tipo Carrera.
