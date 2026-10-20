@@ -135,9 +135,11 @@ test('revisar muestra anterior/nuevo, volver conserva datos y solo confirmar env
     'Bearer jwt-de-prueba',
   )
   expect(screen.getByLabelText('Código')).toHaveValue(NUEVO.codigo)
-  expect(
-    fetch.mock.calls.filter(([ruta]) => ruta.endsWith('/historial')),
-  ).toHaveLength(2)
+  await waitFor(() =>
+    expect(
+      fetch.mock.calls.filter(([ruta]) => ruta.endsWith('/historial')),
+    ).toHaveLength(2),
+  )
 })
 
 test('cancelar sale sin enviar cambios', async () => {

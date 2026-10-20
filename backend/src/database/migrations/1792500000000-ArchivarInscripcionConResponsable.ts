@@ -3,8 +3,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // GES-19: quitar a un alumno de una sección archiva su inscripción y guarda
 // quién lo hizo. Con archived_at (la fecha) queda el registro que leerá el
 // historial de GES-14; no hay tabla aparte.
-export class ArchivarInscripcionConResponsable1792490000000 implements MigrationInterface {
-  name = 'ArchivarInscripcionConResponsable1792490000000'
+export class ArchivarInscripcionConResponsable1792500000000 implements MigrationInterface {
+  name = 'ArchivarInscripcionConResponsable1792500000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // La FK compuesta asegura que el responsable sea de la misma universidad.
