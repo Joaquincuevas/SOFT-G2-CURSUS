@@ -158,6 +158,14 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // AgregarCredencialProvisoria: quita la columna de usuario.
+    await bd.undoLastMigration()
+    const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
+      `SELECT count(*) AS provisoria FROM information_schema.columns
+        WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
+    )
+    expect(Number(provisoria)).toBe(0)
+
     await bd.undoLastMigration() // CrearHorarioSeccion.
     const SIN_HORARIO = TABLAS.filter((tabla) => tabla !== 'horario_seccion')
     expect(await tablasExistentes()).toEqual(SIN_HORARIO)

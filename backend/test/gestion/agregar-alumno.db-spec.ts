@@ -135,11 +135,17 @@ describe('POST /api/secciones/:id/alumnos', () => {
       passwordProvisoria: expect.stringMatching(/^[A-Z2-9]{16}$/) as string,
     })
 
-    // Alumno de la facultad del curso, sin la contraseña en texto plano.
+    // Alumno de la facultad del curso, sin la contraseña en texto plano y
+    // marcada como provisoria (PER-03).
     const [usuario] = await bd.query<
-      { rol: string; facultad: string; password_hash: string }[]
+      {
+        rol: string
+        facultad: string
+        password_hash: string
+        credencial_provisoria: boolean
+      }[]
     >(
-      `SELECT u.rol, f.nombre AS facultad, u.password_hash
+      `SELECT u.rol, f.nombre AS facultad, u.password_hash, u.credencial_provisoria
          FROM usuario u JOIN facultad f ON f.id = u.facultad_id
         WHERE u.id = $1`,
       [cuerpo.alumno.id],
@@ -147,6 +153,7 @@ describe('POST /api/secciones/:id/alumnos', () => {
     expect(usuario).toMatchObject({
       rol: 'ALUMNO',
       facultad: 'Facultad de Ingeniería',
+      credencial_provisoria: true,
     })
     expect(usuario.password_hash).toMatch(/^\$argon2id\$/)
     expect(usuario.password_hash).not.toContain(cuerpo.passwordProvisoria)
