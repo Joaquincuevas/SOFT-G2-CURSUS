@@ -10,6 +10,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
+import { AgregarAlumnoDialogo } from './AgregarAlumno'
 import './Cursos.css'
 import { useDatos } from './useDatos'
 
@@ -31,15 +32,18 @@ function Proximamente({ texto }: { texto: string }) {
   )
 }
 
-// Horario (GES-10), ayudantes (GES-13) y alumnos (GES-15) se muestran como
-// "Sin asignar" hasta que existan. Con `onAsignar`, la fila agrega la acción
-// para asignar o cambiar el profesor (GES-12).
+// Horario (GES-10) y ayudantes (GES-13) se muestran como "Sin asignar" hasta
+// que existan. Con onAsignar u onAgregarAlumno, la fila tiene la columna de
+// acciones: asignar o cambiar el profesor (GES-12) y agregar un alumno
+// (GES-15).
 function FilaSeccion({
   seccion,
   onAsignar,
+  onAgregarAlumno,
 }: {
   seccion: SeccionDetalle
   onAsignar?: () => void
+  onAgregarAlumno?: () => void
 }) {
   return (
     <tr>
@@ -52,16 +56,30 @@ function FilaSeccion({
           : SIN_ASIGNAR}
       </td>
       <td>{seccion.alumnos}</td>
-      {onAsignar && (
+      {(onAsignar || onAgregarAlumno) && (
         <td>
-          <button
-            className="cursos__boton cursos__boton--secundario"
-            type="button"
-            aria-label={`${seccion.profesor ? 'Cambiar' : 'Asignar'} profesor de la sección ${seccion.numero}`}
-            onClick={onAsignar}
-          >
-            {seccion.profesor ? 'Cambiar profesor' : 'Asignar profesor'}
-          </button>
+          <div className="cursos__acciones">
+            {onAsignar && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`${seccion.profesor ? 'Cambiar' : 'Asignar'} profesor de la sección ${seccion.numero}`}
+                onClick={onAsignar}
+              >
+                {seccion.profesor ? 'Cambiar profesor' : 'Asignar profesor'}
+              </button>
+            )}
+            {onAgregarAlumno && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Agregar alumno a la sección ${seccion.numero}`}
+                onClick={onAgregarAlumno}
+              >
+                Agregar alumno
+              </button>
+            )}
+          </div>
         </td>
       )}
     </tr>
@@ -231,6 +249,11 @@ function Detalle({ id }: { id: string }) {
   const [nuevas, setNuevas] = useState<SeccionDetalle[]>([])
   const [creando, setCreando] = useState(false)
   const [aviso, setAviso] = useState<{ exito: boolean; texto: string }>()
+  // GES-15: sección con el diálogo abierto, y alumnos agregados aquí por
+  // sección, que se suman al conteo sin volver a pedir el curso.
+  const puedeInscribir = usePuede('create', 'Inscripcion')
+  const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
+  const [agregados, setAgregados] = useState<Record<string, number>>({})
   // GES-12: sección cuyo profesor se está asignando, y profesores asignados
   // aquí (id de sección → nombre), que reemplazan al de la tabla sin volver a
   // pedir el curso. La lista de profesores se pide al abrir el formulario.
@@ -244,6 +267,7 @@ function Detalle({ id }: { id: string }) {
   function abrirAsignacion(seccion: SeccionDetalle) {
     setPedirProfesores(true)
     setAviso(undefined)
+    setInscribirEn(null)
     setAsignando(seccion)
   }
 
@@ -302,11 +326,11 @@ function Detalle({ id }: { id: string }) {
   }
 
   const { periodo } = curso
-  const secciones = [...curso.secciones, ...nuevas].map((seccion) =>
-    seccion.id in asignados
-      ? { ...seccion, profesor: asignados[seccion.id] }
-      : seccion,
-  )
+  const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
+    ...seccion,
+    profesor: asignados[seccion.id] ?? seccion.profesor,
+    alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
+  }))
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -363,7 +387,9 @@ function Detalle({ id }: { id: string }) {
                 <th scope="col">Profesor</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
-                {puedeAsignar && <th scope="col">Acciones</th>}
+                {(puedeAsignar || puedeInscribir) && (
+                  <th scope="col">Acciones</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -373,6 +399,15 @@ function Detalle({ id }: { id: string }) {
                   seccion={seccion}
                   onAsignar={
                     puedeAsignar ? () => abrirAsignacion(seccion) : undefined
+                  }
+                  onAgregarAlumno={
+                    puedeInscribir
+                      ? () => {
+                          setAviso(undefined)
+                          setAsignando(undefined)
+                          setInscribirEn(seccion)
+                        }
+                      : undefined
                   }
                 />
               ))}
@@ -389,6 +424,23 @@ function Detalle({ id }: { id: string }) {
           onReintentar={recargarProfesores}
           onAsignada={asignada}
           onCancelar={() => setAsignando(undefined)}
+        />
+      )}
+      {inscribirEn && (
+        <AgregarAlumnoDialogo
+          seccionId={inscribirEn.id}
+          numero={inscribirEn.numero}
+          onAgregado={({ alumno }) => {
+            setAgregados((anteriores) => ({
+              ...anteriores,
+              [inscribirEn.id]: (anteriores[inscribirEn.id] ?? 0) + 1,
+            }))
+            setAviso({
+              exito: true,
+              texto: `${alumno.nombre} agregado a la sección ${inscribirEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setInscribirEn(null)}
         />
       )}
     </section>

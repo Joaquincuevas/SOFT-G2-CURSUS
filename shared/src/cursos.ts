@@ -43,8 +43,8 @@ export interface CursoListado {
 }
 
 // Sección dentro del detalle de un curso (GES-08). Lo que todavía no se puede
-// asignar llega vacío: horario (GES-10), ayudantes (GES-13) y alumnos
-// (GES-15). El frontend lo muestra como "Sin asignar".
+// asignar llega vacío: horario (GES-10) y ayudantes (GES-13). El frontend lo
+// muestra como "Sin asignar". alumnos cuenta las inscripciones activas (GES-15).
 export interface SeccionDetalle {
   id: string
   numero: number
@@ -82,4 +82,19 @@ export interface AsignarProfesor {
 // Opciones de GET /api/periodos; GET /api/carreras usa el tipo Carrera.
 export interface OpcionPeriodo extends PeriodoResumen {
   activo: boolean
+}
+
+// Cuerpo de POST /api/secciones/:id/alumnos (GES-15). El nombre solo se exige
+// si el alumno no tiene cuenta y hay que crearla.
+export interface AgregarAlumno {
+  correo: string
+  nombre?: string
+}
+
+// Respuesta de POST /api/secciones/:id/alumnos. passwordProvisoria viene solo
+// si se creó la cuenta, y no se puede volver a pedir.
+export interface AlumnoAgregado {
+  alumno: { id: string; nombre: string; correo: string }
+  cuentaCreada: boolean
+  passwordProvisoria?: string
 }

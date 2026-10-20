@@ -1,6 +1,6 @@
 import type { CursoDetalle, CursoListado, ProfesorOpcion } from '@cursus/shared'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
 const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
@@ -66,24 +66,12 @@ describe('detalle de un curso', () => {
       'Alumnos',
       'Acciones',
     ])
-    // Lo que todavía no se asigna aparece como "Sin asignar", y alumnos en 0.
+    // Lo que todavía no se asigna aparece como "Sin asignar", y la columna
+    // Acciones tiene los botones de GES-12 y GES-15.
+    const ACCIONES = 'Asignar profesorAgregar alumno'
     expect(filasDe(tabla)).toEqual([
-      [
-        '1',
-        'Sin asignar',
-        'Sin asignar',
-        'Sin asignar',
-        '0',
-        'Asignar profesor',
-      ],
-      [
-        '2',
-        'Sin asignar',
-        'Sin asignar',
-        'Sin asignar',
-        '0',
-        'Asignar profesor',
-      ],
+      ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
+      ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
     ])
   })
 
@@ -116,9 +104,10 @@ describe('detalle de un curso', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
-    // Sin la columna para asignar profesor (GES-12).
+    // Sin la columna Acciones (GES-12 y GES-15).
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
     expect(screen.queryByRole('button', { name: /profesor/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Agregar alumno/ })).toBeNull()
   })
 
   test('sin secciones muestra el estado vacío', async () => {
@@ -456,6 +445,150 @@ describe('asignar el profesor de una sección (GES-12)', () => {
     fallar = false
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByLabelText('Profesor')).toBeInTheDocument()
+  })
+})
+
+describe('agregar un alumno (GES-15)', () => {
+  const RUTA_ALUMNOS = '/api/secciones/seccion-1/alumnos'
+  const EXISTENTE = {
+    alumno: {
+      id: 'alumno-1',
+      nombre: 'Alumno Norte',
+      correo: 'alumno@norte.cursus.test',
+    },
+    cuentaCreada: false,
+  }
+  const alumnosDeLaSeccion1 = () =>
+    filasDe(screen.getByRole('table', { name: 'Secciones' }))[0][4]
+
+  async function abrirDialogo(alumnos: RutaSimulada) {
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      ...ruta(() => CURSO),
+      [RUTA_ALUMNOS]: alumnos,
+    })
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Agregar alumno a la sección 1',
+      }),
+    )
+    return screen.getByRole('dialog', {
+      name: 'Agregar alumno a la sección 1',
+    })
+  }
+
+  const enviar = (dialogo: HTMLElement, campos: Record<string, string>) => {
+    for (const [nombre, valor] of Object.entries(campos)) {
+      fireEvent.change(within(dialogo).getByLabelText(nombre), {
+        target: { value: valor },
+      })
+    }
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Agregar' }))
+  }
+
+  test('vincula a un alumno con cuenta y sube el conteo sin recargar', async () => {
+    let cuerpo: unknown
+    const dialogo = await abrirDialogo((init) => {
+      cuerpo = JSON.parse(String(init?.body))
+      return json(EXISTENTE, 201)
+    })
+    // El nombre no se pide de entrada.
+    expect(within(dialogo).queryByLabelText('Nombre')).toBeNull()
+
+    enviar(dialogo, { 'Correo institucional': 'alumno@norte.cursus.test' })
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Alumno Norte agregado a la sección 1.',
+    )
+    expect(cuerpo).toEqual({ correo: 'alumno@norte.cursus.test' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(alumnosDeLaSeccion1()).toBe('1')
+  })
+
+  test('pide el nombre si hay que crear la cuenta y muestra la contraseña una sola vez', async () => {
+    const escribir = vi.fn(() => Promise.resolve())
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: { writeText: escribir },
+    })
+    const cuerpos: unknown[] = []
+    const dialogo = await abrirDialogo((init) => {
+      const cuerpo = JSON.parse(String(init?.body)) as { nombre?: string }
+      cuerpos.push(cuerpo)
+      return cuerpo.nombre
+        ? json(
+            {
+              alumno: {
+                id: 'alumno-2',
+                nombre: 'Ana Pérez',
+                correo: 'ana@norte.cursus.test',
+              },
+              cuentaCreada: true,
+              passwordProvisoria: 'ABCD2345EFGH6789',
+            },
+            201,
+          )
+        : json(
+            { statusCode: 400, message: 'Ingresa el nombre del alumno' },
+            400,
+          )
+    })
+
+    enviar(dialogo, { 'Correo institucional': 'ana@norte.cursus.test' })
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(
+      'Ingresa el nombre del alumno',
+    )
+    enviar(dialogo, { Nombre: 'Ana Pérez' })
+
+    expect(await within(dialogo).findByText('ABCD2345EFGH6789')).toBeVisible()
+    expect(dialogo).toHaveTextContent('No se volverá a mostrar.')
+    expect(cuerpos).toEqual([
+      { correo: 'ana@norte.cursus.test' },
+      { correo: 'ana@norte.cursus.test', nombre: 'Ana Pérez' },
+    ])
+    expect(alumnosDeLaSeccion1()).toBe('1')
+
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Copiar' }))
+    expect(
+      await within(dialogo).findByText('Contraseña copiada.'),
+    ).toBeInTheDocument()
+    expect(escribir).toHaveBeenCalledWith('ABCD2345EFGH6789')
+
+    // Al cerrar se descarta: no queda en la página ni en localStorage.
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByText('ABCD2345EFGH6789')).toBeNull()
+    expect(JSON.stringify({ ...localStorage })).not.toContain(
+      'ABCD2345EFGH6789',
+    )
+  })
+
+  test('muestra los errores del backend en el diálogo sin cambiar el conteo', async () => {
+    const dialogo = await abrirDialogo(() =>
+      json(
+        {
+          statusCode: 409,
+          message: 'El alumno ya está inscrito en esta sección',
+        },
+        409,
+      ),
+    )
+
+    enviar(dialogo, { 'Correo institucional': 'alumno@norte.cursus.test' })
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(
+      'El alumno ya está inscrito en esta sección',
+    )
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(alumnosDeLaSeccion1()).toBe('0')
+  })
+
+  test('Cancelar cierra el diálogo sin agregar a nadie', async () => {
+    let pedidos = 0
+    const dialogo = await abrirDialogo(() => {
+      pedidos++
+      return json(EXISTENTE, 201)
+    })
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(pedidos).toBe(0)
   })
 })
 

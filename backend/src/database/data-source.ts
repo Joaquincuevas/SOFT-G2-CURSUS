@@ -15,6 +15,7 @@ import { CrearCurso1792443000000 } from './migrations/1792443000000-CrearCurso.j
 import { NombreCarreraUnicoNormalizado1792450000000 } from './migrations/1792450000000-NombreCarreraUnicoNormalizado.js'
 import { CrearSeccion1792451000000 } from './migrations/1792451000000-CrearSeccion.js'
 import { CodigoCursoUnicoNormalizado1792460000000 } from './migrations/1792460000000-CodigoCursoUnicoNormalizado.js'
+import { CrearInscripcion1792470000000 } from './migrations/1792470000000-CrearInscripcion.js'
 import { AsignarProfesorSeccion1792470000000 } from './migrations/1792470000000-AsignarProfesorSeccion.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
@@ -52,6 +53,7 @@ export function opcionesDataSource(
       NombreCarreraUnicoNormalizado1792450000000,
       CrearSeccion1792451000000,
       CodigoCursoUnicoNormalizado1792460000000,
+      CrearInscripcion1792470000000,
       AsignarProfesorSeccion1792470000000,
     ],
     migrationsTableName: 'migraciones',
