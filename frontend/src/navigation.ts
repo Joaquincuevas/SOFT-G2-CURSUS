@@ -1,4 +1,5 @@
 import { Periodos } from './pages/Periodos'
+import { Docentes } from './pages/Docentes'
 import { Secciones } from './pages/AlumnosSeccion'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
@@ -92,6 +93,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     page: Periodos,
     title: () => 'Períodos académicos',
     subtitle: universidadYSemestre,
+  },
+  {
+    // GES-21: el administrativo crea cuentas de profesores y ayudantes.
+    to: '/docentes',
+    label: 'Profesores y ayudantes',
+    icon: 'book',
+    permiso: { accion: 'create', sujeto: 'Usuario' },
+    page: Docentes,
+    title: () => 'Profesores y ayudantes',
+    subtitle: (user) =>
+      conSemestre(user.facultadNombre ?? user.universidadNombre, user),
   },
   {
     // Alumnos de una sección (GES-18), desde el detalle del curso.

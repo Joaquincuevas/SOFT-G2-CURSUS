@@ -145,6 +145,17 @@ describe('GET /api/cursos (e2e)', () => {
     },
   )
 
+  it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE', 'DIRECTOR'])(
+    '%s recibe 403 al crear un profesor o ayudante (GES-21)',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .post('/api/usuarios')
+        .set('Authorization', sesionDe(rol))
+        .send({ nombre: 'X', correo: 'x@norte.cursus.test', rol: 'PROFESOR' })
+        .expect(403)
+    },
+  )
+
   describe('agregar un alumno (GES-15)', () => {
     const agregar = (rol: string, datos: object) =>
       request(app.getHttpServer())
