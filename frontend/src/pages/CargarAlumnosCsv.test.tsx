@@ -1,4 +1,9 @@
-import type { ResultadoCargaAlumnos, Rol } from '@cursus/shared'
+import {
+  MAX_BYTES_ALUMNOS_CSV,
+  MAX_BYTES_ARCHIVO_CSV,
+  type ResultadoCargaAlumnos,
+  type Rol,
+} from '@cursus/shared'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { test, expect, vi } from 'vitest'
 import { json, renderApp, usuarioDePrueba } from '../test/sesion'
@@ -178,7 +183,7 @@ test('un error de red explica que puede haber filas cargadas', async () => {
 
 test('rechaza archivo grande y UTF-8 inválido antes de enviar', async () => {
   const fetch = await abrir()
-  seleccionar('a'.repeat(48 * 1024 + 1))
+  seleccionar('a'.repeat(MAX_BYTES_ARCHIVO_CSV + 1))
   fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
   expect(await screen.findByRole('alert')).toHaveTextContent('48 KiB')
   seleccionar('a', () => Promise.resolve(new Uint8Array([255]).buffer))
@@ -223,9 +228,9 @@ test('el Director no ve el botón CSV en el detalle', async () => {
 
 // GES-17: filas con error y CSV descargable.
 const CON_ERRORES: ResultadoCargaAlumnos = {
-  total: 4,
+  total: 5,
   cargados: 1,
-  errores: 3,
+  errores: 4,
   filas: [
     RESULTADO.filas[1],
     {
@@ -252,6 +257,14 @@ const CON_ERRORES: ResultadoCargaAlumnos = {
       motivo: 'falta_nombre',
       mensaje: 'Ingresa el nombre del alumno',
     },
+    {
+      fila: 6,
+      correo: '=HYPERLINK("x")',
+      nombre: '=1+1',
+      estado: 'error',
+      motivo: 'correo_invalido',
+      mensaje: 'Correo inválido',
+    },
   ],
 }
 
@@ -264,7 +277,7 @@ async function cargarCon(resultado: ResultadoCargaAlumnos) {
 test('muestra solo las filas con error en una tabla con su motivo', async () => {
   await cargarCon(CON_ERRORES)
   expect(
-    await screen.findByText('1 de 4 cargados, 3 con error.'),
+    await screen.findByText('1 de 5 cargados, 4 con error.'),
   ).toBeInTheDocument()
   const tabla = screen.getByRole('table', { name: 'Filas con error' })
   expect(
@@ -285,6 +298,8 @@ test('muestra solo las filas con error en una tabla con su motivo', async () => 
     ],
     ['4', 'lucho@u.cl', 'Luis "Lucho"', 'Correo repetido en el archivo'],
     ['5', 'nuevo@u.cl', '', 'Falta el nombre para crear la cuenta'],
+    // En pantalla se ven tal cual; el apóstrofo es solo del archivo.
+    ['6', '=HYPERLINK("x")', '=1+1', 'Correo inválido'],
   ])
   // La fila cargada sigue en la lista, no en la tabla.
   expect(screen.getByText('Cuenta vinculada a la sección.')).toBeInTheDocument()
@@ -324,7 +339,9 @@ test('descarga los errores como CSV con BOM, escapado y sin filas cargadas', asy
       '\uFEFFcorreo,nombre,motivo\r\n' +
         'perez@otro.cl,"Pérez, Ana",El correo no es del dominio de la universidad\r\n' +
         'lucho@u.cl,"Luis ""Lucho""",Correo repetido en el archivo\r\n' +
-        'nuevo@u.cl,,Falta el nombre para crear la cuenta\r\n',
+        'nuevo@u.cl,,Falta el nombre para crear la cuenta\r\n' +
+        // Las fórmulas quedan como texto, con un apóstrofo delante.
+        `"'=HYPERLINK(""x"")",'=1+1,Correo inválido\r\n`,
     )
     // La URL del Blob se libera después de iniciar la descarga.
     await waitFor(() => expect(liberar).toHaveBeenCalledWith('blob:errores'))
@@ -348,4 +365,90 @@ test('si todo se cargó, solo muestra el resumen', async () => {
   expect(
     screen.queryByRole('button', { name: 'Descargar errores (CSV)' }),
   ).toBeNull()
+})
+
+// Caso de la revisión del #62: 95 alumnos ya inscritos con nombres de 120
+// emojis. El archivo original (48 463 B) cabe en 48 KiB; su CSV de errores
+// (BOM, CRLF y motivo) pesa más, y aun así se envía al volver a subirlo.
+test('el CSV de errores de un archivo cerca de 48 KiB se vuelve a subir', async () => {
+  const filas = Array.from({ length: 95 }, (_, i) => ({
+    fila: i + 2,
+    correo: `alumno.${String(i).padStart(3, '0')}@norte.cursus.test`,
+    nombre: '😀'.repeat(120),
+  }))
+  const bytes = (texto: string) => new TextEncoder().encode(texto).length
+  expect(
+    bytes(
+      ['correo,nombre', ...filas.map((f) => `${f.correo},${f.nombre}`)].join(
+        '\n',
+      ),
+    ),
+  ).toBe(48_463)
+  const enviados: string[] = []
+  await abrir((init) => {
+    enviados.push((JSON.parse(init!.body as string) as { csv: string }).csv)
+    return Promise.resolve(
+      json({
+        total: 95,
+        cargados: 0,
+        errores: 95,
+        filas: filas.map((f) => ({
+          ...f,
+          estado: 'error',
+          motivo: 'ya_inscrito',
+          mensaje: 'El alumno ya está inscrito en esta sección',
+        })),
+      } satisfies ResultadoCargaAlumnos),
+    )
+  })
+  seleccionar()
+  fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
+
+  let blob: Blob | undefined
+  const originales = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+  }
+  Object.assign(URL, {
+    createObjectURL: (b: Blob) => ((blob = b), 'blob:errores'),
+    revokeObjectURL: () => {},
+  })
+  const clic = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => {})
+  try {
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Descargar errores (CSV)' }),
+    )
+  } finally {
+    clic.mockRestore()
+    Object.assign(URL, originales)
+  }
+  const descargado = new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+    await blob!.arrayBuffer(),
+  )
+  expect(bytes(descargado)).toBe(51_895)
+  expect(bytes(descargado)).toBeLessThanOrEqual(MAX_BYTES_ARCHIVO_CSV)
+  const corregido = descargado.replaceAll('alumno.', 'alumna.')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Cargar CSV en la sección 1' }),
+  )
+  seleccionar(corregido)
+  fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
+  await waitFor(() => expect(enviados).toHaveLength(2))
+  // Se envía el archivo completo; TextDecoder solo quita el BOM.
+  expect(enviados[1]).toBe(corregido.replace(/^\uFEFF/, ''))
+  expect(bytes(corregido)).toBeGreaterThan(MAX_BYTES_ALUMNOS_CSV)
+})
+
+test('rechaza sin enviarlo un archivo sobre el límite bruto', async () => {
+  const fetch = await abrir()
+  seleccionar('correo,nombre,motivo\n' + 'x'.repeat(MAX_BYTES_ARCHIVO_CSV))
+  fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'El archivo supera el máximo de 48 KiB.',
+  )
+  expect(fetch.mock.calls.some(([ruta]) => ruta.endsWith('/csv'))).toBe(false)
 })

@@ -1,4 +1,10 @@
-import { MAX_BYTES_ALUMNOS_CSV, MAX_FILAS_ALUMNOS_CSV } from '@cursus/shared'
+import {
+  bytesContenidoCsv,
+  MAX_BYTES_ALUMNOS_CSV,
+  MAX_BYTES_ARCHIVO_CSV,
+  MAX_FILAS_ALUMNOS_CSV,
+  quitarNeutralizacion,
+} from '@cursus/shared'
 import { BadRequestException } from '@nestjs/common'
 
 export interface FilaCsv {
@@ -6,11 +12,15 @@ export interface FilaCsv {
   celdas: string[]
 }
 
+const MENSAJE_TAMANO = 'El CSV supera el máximo de 48 KiB'
+
 // Coma como separador, CRLF/LF, BOM, comillas dobles y comillas escapadas.
 // Se analiza todo antes de escribir: un archivo mal formado no carga filas.
 export function leerCsvAlumnos(texto: string): FilaCsv[] {
-  if (Buffer.byteLength(texto, 'utf8') > MAX_BYTES_ALUMNOS_CSV)
-    throw new BadRequestException('El CSV supera el máximo de 48 KiB')
+  // El archivo bruto puede pasar de 48 KiB (BOM, CRLF, motivo y apóstrofos
+  // del CSV de errores); los 48 KiB se aplican al contenido, más abajo.
+  if (Buffer.byteLength(texto, 'utf8') > MAX_BYTES_ARCHIVO_CSV)
+    throw new BadRequestException(MENSAJE_TAMANO)
   texto = texto.replace(/^\uFEFF/, '')
   const filas: FilaCsv[] = []
   let celdas: string[] = [],
@@ -86,11 +96,18 @@ export function leerCsvAlumnos(texto: string): FilaCsv[] {
   if (!filas.length) throw new BadRequestException('El CSV no contiene alumnos')
   // Con motivo, una fila de 3 celdas es válida y se queda con correo y
   // nombre; sin motivo, sigue siendo un error de formato por fila.
-  return conMotivo
-    ? filas.map((fila) =>
-        fila.celdas.length === 3
-          ? { ...fila, celdas: fila.celdas.slice(0, 2) }
-          : fila,
-      )
-    : filas
+  // El apóstrofo que neutraliza fórmulas en el CSV de errores se quita, así
+  // el correo y el nombre vuelven a ser los originales.
+  const leidas = filas.map((fila) => ({
+    ...fila,
+    celdas: (conMotivo && fila.celdas.length === 3
+      ? fila.celdas.slice(0, 2)
+      : fila.celdas
+    ).map(quitarNeutralizacion),
+  }))
+  if (
+    bytesContenidoCsv(leidas.map((fila) => fila.celdas)) > MAX_BYTES_ALUMNOS_CSV
+  )
+    throw new BadRequestException(MENSAJE_TAMANO)
+  return leidas
 }

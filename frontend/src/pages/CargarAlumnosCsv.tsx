@@ -1,5 +1,6 @@
 import {
-  MAX_BYTES_ALUMNOS_CSV,
+  csvDeErrores,
+  MAX_BYTES_ARCHIVO_CSV,
   MAX_FILAS_ALUMNOS_CSV,
   MENSAJES_MOTIVO_CSV,
   type FilaCargaAlumnos,
@@ -7,7 +8,7 @@ import {
 } from '@cursus/shared'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
-import { csvDeErrores, descargar } from './csvErrores'
+import { descargar } from './csvErrores'
 
 export function CargarAlumnosCsvDialogo({
   seccionId,
@@ -43,7 +44,9 @@ export function CargarAlumnosCsvDialogo({
       setError('Selecciona un archivo CSV.')
       return
     }
-    if (file.size > MAX_BYTES_ALUMNOS_CSV) {
+    // Límite del archivo bruto, que deja volver a subir el CSV de errores
+    // (GES-17); el backend aplica los 48 KiB al contenido.
+    if (file.size > MAX_BYTES_ARCHIVO_CSV) {
       setError('El archivo supera el máximo de 48 KiB.')
       return
     }

@@ -1,4 +1,10 @@
-import type { ResultadoCargaAlumnos, CursoDetalle } from '@cursus/shared'
+import {
+  csvDeErrores,
+  type CursoDetalle,
+  type FilaConError,
+  MAX_BYTES_ALUMNOS_CSV,
+  type ResultadoCargaAlumnos,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -368,5 +374,96 @@ describe('GES-17: filas con error de la carga CSV', () => {
       ['corregido.ges17@norte.cursus.test'],
     )
     expect(nombre).toBe('Rojas, Luis')
+  })
+
+  // Los dos casos de la revisión del #62: el CSV de errores se arma con
+  // csvDeErrores, la misma función que usa la descarga del navegador.
+  const erroresDe = (resultado: ResultadoCargaAlumnos) =>
+    csvDeErrores(
+      resultado.filas.filter(
+        (fila): fila is FilaConError => fila.estado === 'error',
+      ),
+    )
+
+  it('neutraliza fórmulas en el CSV de errores y las recupera al volver a subirlo', async () => {
+    const seccion = await seccionDe('ICO201')
+    const original = await cargar(
+      seccion,
+      'correo,nombre\ninvalido,=1+1\notro-invalido,@SUMA(A1)',
+      ADMIN_ECONOMIA,
+    )
+    const errores = erroresDe(original.body as ResultadoCargaAlumnos)
+    expect(errores).toBe(
+      '\uFEFFcorreo,nombre,motivo\r\n' +
+        "invalido,'=1+1,Correo inválido\r\n" +
+        "otro-invalido,'@SUMA(A1),Correo inválido\r\n",
+    )
+
+    const corregido = errores
+      .replace('invalido,', 'formula.uno@norte.cursus.test,')
+      .replace('otro-invalido,', 'formula.dos@norte.cursus.test,')
+    const resultado = (await cargar(seccion, corregido, ADMIN_ECONOMIA))
+      .body as ResultadoCargaAlumnos
+    expect(resultado).toMatchObject({ cargados: 2, errores: 0 })
+    const nombres = await bd.query<{ nombre: string }[]>(
+      `SELECT nombre FROM usuario WHERE correo LIKE 'formula.%' ORDER BY correo`,
+    )
+    expect(nombres.map((n) => n.nombre)).toEqual(['@SUMA(A1)', '=1+1'])
+  })
+
+  it('el CSV de errores de 95 alumnos ya inscritos se corrige y se vuelve a subir', async () => {
+    const seccion = await seccionDe('ICO201', 2)
+    // Caso de la revisión: 95 filas con nombres de 120 emojis (48 463 B).
+    const original = [
+      'correo,nombre',
+      ...Array.from(
+        { length: 95 },
+        (_, i) =>
+          `alumno.${String(i).padStart(3, '0')}@norte.cursus.test,${'😀'.repeat(120)}`,
+      ),
+    ].join('\n')
+    expect(Buffer.byteLength(original, 'utf8')).toBe(48_463)
+    expect(
+      (await cargar(seccion, original, ADMIN_ECONOMIA)).body,
+    ).toMatchObject({ cargados: 95, errores: 0 })
+
+    // Al subirlo de nuevo, los 95 ya están inscritos.
+    const repetida = (await cargar(seccion, original, ADMIN_ECONOMIA))
+      .body as ResultadoCargaAlumnos
+    expect(repetida).toMatchObject({ total: 95, cargados: 0, errores: 95 })
+    expect(
+      new Set(
+        repetida.filas.map((fila) => fila.estado === 'error' && fila.motivo),
+      ),
+    ).toEqual(new Set(['ya_inscrito']))
+    const errores = erroresDe(repetida)
+    expect(Buffer.byteLength(errores, 'utf8')).toBe(51_895)
+
+    const corregido = errores.replaceAll('alumno.', 'alumna.')
+    const respuesta = await cargar(seccion, corregido, ADMIN_ECONOMIA)
+    expect(respuesta.status).toBe(200)
+    expect(respuesta.body).toMatchObject({
+      total: 95,
+      cargados: 95,
+      errores: 0,
+    })
+    const [{ inscritos }] = await bd.query<{ inscritos: string }[]>(
+      `SELECT count(*) AS inscritos FROM usuario WHERE correo LIKE 'alumna.%@norte.cursus.test'`,
+    )
+    expect(Number(inscritos)).toBe(95)
+  }, 120_000)
+
+  it('sigue rechazando un CSV correo,nombre de contenido sobre 48 KiB', async () => {
+    const seccion = await seccionDe('ICO201')
+    const fila = `grande@norte.cursus.test,${'😀'.repeat(120)}`
+    const csv = ['correo,nombre', ...Array<string>(98).fill(fila)].join('\n')
+    expect(Buffer.byteLength(csv, 'utf8')).toBeGreaterThan(
+      MAX_BYTES_ALUMNOS_CSV,
+    )
+    const respuesta = await cargar(seccion, csv, ADMIN_ECONOMIA)
+    expect(respuesta.status).toBe(400)
+    expect(respuesta.body).toMatchObject({
+      message: 'El CSV supera el máximo de 48 KiB',
+    })
   })
 })
