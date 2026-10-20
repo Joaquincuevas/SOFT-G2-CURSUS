@@ -134,6 +134,10 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 `GET /api/cursos/:id/edicion`, `PATCH /api/cursos/:id` y `GET /api/cursos/:id/historial` permiten al administrativo editar cursos de su facultad con las validaciones de creación. Curso e historial se guardan en una transacción con bloqueo del curso y RLS; una falla revierte ambos. La migración `CrearHistorialCurso1792480000000` agrega el historial de solo adición, con fecha de BD, responsable y snapshots anterior/nuevo. La interfaz exige revisar y confirmar antes de enviar el PATCH. Ver [contrato y pasos de revisión](../docs/ges-07-editar-curso.md).
 
+## Horarios de secciones (GES-10)
+
+`GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
@@ -159,7 +163,3 @@ Con `NODE_ENV=production` (la imagen Docker), la API no arranca si falta `POSTGR
 - Convención de nombres: tablas en singular y en snake_case (`universidad`, `periodo`), columnas en snake_case (`universidad_id`, `created_at`) y restricciones con prefijo `pk_`, `fk_`, `uq_`, `ck_`, `ux_` (índice único) o `ix_` (índice).
 
 El proyecto es ESM (`"type": "module"`): los imports relativos llevan extensión `.js` (por ejemplo, `import { AppService } from './app.service.js'`).
-
-### Horarios de secciones (GES-10)
-
-`GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).

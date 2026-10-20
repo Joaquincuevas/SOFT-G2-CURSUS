@@ -57,3 +57,17 @@ En la interfaz se verifica el guardado, edición, eliminación de bloques, cance
 6. Quitar el bloque restante y guardar: debe aparecer **Sin asignar**. Cancelar una edición diferente y confirmar que no se guarda.
 7. Con el editor abierto en dos pestañas, guardar en una y luego en la otra: la segunda debe mostrar un conflicto y exigir recargar.
 8. Entrar como Director y comprobar que ve el horario sin acciones de edición. Revisar también el diálogo en móvil.
+
+## Evidencia
+
+Editor con dos bloques semanales:
+
+![Editor de horario con día, horas y sala para varios bloques](evidencias/ges-10-editar.png)
+
+Horario guardado en el detalle del curso:
+
+![Horario visible en el detalle del curso](evidencias/ges-10-detalle.png)
+
+Editor en móvil, con desplazamiento dentro del diálogo:
+
+![Horario en móvil](evidencias/ges-10-movil.png)
