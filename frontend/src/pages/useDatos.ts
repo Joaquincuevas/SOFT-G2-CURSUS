@@ -3,8 +3,10 @@ import { useAuth } from '../auth/auth'
 
 // GET con la sesión: undefined mientras carga y null si falla; en ese caso
 // `status` dice cómo falló (por ejemplo, 404), o es undefined si el backend
-// no respondió. `recargar` vuelve a pedir, para el botón Reintentar. Con
-// `ruta` null no pide nada.
+// no respondió. `recargar` vuelve a pedir: tras un error (Reintentar) muestra
+// la carga; con datos, los mantiene hasta que llegan los nuevos, para no
+// desmontar la página (por ejemplo, un diálogo abierto). Con `ruta` null no
+// pide nada.
 export function useDatos<T>(ruta: string | null) {
   const { fetchConSesion } = useAuth()
   const [resultado, setResultado] = useState<{
@@ -30,7 +32,7 @@ export function useDatos<T>(ruta: string | null) {
     }
   }, [fetchConSesion, ruta, intento])
   const recargar = () => {
-    setResultado({ datos: undefined })
+    setResultado((actual) => (actual.datos ? actual : { datos: undefined }))
     setIntento((n) => n + 1)
   }
   return [resultado.datos, recargar, resultado.status] as const
