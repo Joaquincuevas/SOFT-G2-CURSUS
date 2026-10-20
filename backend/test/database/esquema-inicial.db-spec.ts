@@ -154,7 +154,9 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearSeccion es la última.
+    await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
+
+    // CrearSeccion es ahora la última.
     await bd.undoLastMigration()
     const SIN_SECCION = TABLAS.filter((tabla) => tabla !== 'seccion')
     expect(await tablasExistentes()).toEqual(SIN_SECCION)

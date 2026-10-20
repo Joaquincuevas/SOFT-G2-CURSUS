@@ -14,6 +14,7 @@ import { PermitirLecturaDirector1792442000000 } from './migrations/1792442000000
 import { CrearCurso1792443000000 } from './migrations/1792443000000-CrearCurso.js'
 import { NombreCarreraUnicoNormalizado1792450000000 } from './migrations/1792450000000-NombreCarreraUnicoNormalizado.js'
 import { CrearSeccion1792451000000 } from './migrations/1792451000000-CrearSeccion.js'
+import { CodigoCursoUnicoNormalizado1792460000000 } from './migrations/1792460000000-CodigoCursoUnicoNormalizado.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -49,6 +50,7 @@ export function opcionesDataSource(
       CrearCurso1792443000000,
       NombreCarreraUnicoNormalizado1792450000000,
       CrearSeccion1792451000000,
+      CodigoCursoUnicoNormalizado1792460000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
