@@ -1,4 +1,4 @@
-import type { AgregarAlumno } from '@cursus/shared'
+import { type AgregarAlumno, LARGO_NOMBRE_USUARIO } from '@cursus/shared'
 import { Transform } from 'class-transformer'
 import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator'
 
@@ -19,6 +19,7 @@ export class AgregarAlumnoDto implements AgregarAlumno {
   @Transform(sinEspacios)
   @IsOptional()
   @IsString()
-  @MaxLength(120)
+  // Mismo límite que al editar el nombre en el perfil (PER-01).
+  @MaxLength(LARGO_NOMBRE_USUARIO)
   nombre?: string
 }

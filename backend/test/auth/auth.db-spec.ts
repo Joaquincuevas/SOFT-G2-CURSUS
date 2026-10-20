@@ -223,6 +223,7 @@ describe('GET /api/auth/yo', () => {
       expect(respuesta.body).toEqual({
         id: usuario.id,
         universidadId: usuario.universidad_id,
+        correo,
         ...esperado,
         periodoActivo: {
           id: periodo.id,

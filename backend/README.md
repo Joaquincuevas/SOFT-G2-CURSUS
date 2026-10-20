@@ -130,6 +130,10 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 `PeriodosController` concentra `GET /api/periodos` (incluye fechas y conserva los campos usados por Cursos), `POST /api/periodos` y `PATCH /api/periodos/:id/activar`. El administrativo crea períodos y cambia el activo de su universidad con RLS y una transacción serializada por universidad. Crear un duplicado responde 409 y revierte la desactivación anterior. Se reutilizan las restricciones existentes, sin nueva migración. Ver [contrato y pruebas de GES-02](../docs/ges-02-periodos-academicos.md).
 
+## Edición de cursos (GES-07)
+
+`GET /api/cursos/:id/edicion`, `PATCH /api/cursos/:id` y `GET /api/cursos/:id/historial` permiten al administrativo editar cursos de su facultad con las validaciones de creación. Curso e historial se guardan en una transacción con bloqueo del curso y RLS; una falla revierte ambos. La migración `CrearHistorialCurso1792480000000` agrega el historial de solo adición, con fecha de BD, responsable y snapshots anterior/nuevo. La interfaz exige revisar y confirmar antes de enviar el PATCH. Ver [contrato y pasos de revisión](../docs/ges-07-editar-curso.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
@@ -137,6 +141,11 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 - `POST /api/auth/refresh` cambia la cookie por un JWT nuevo y rota el refresh token. Responde `401` y borra la cookie si el token no existe, expiró o fue revocado. Reusar un token ya rotado revoca todas las sesiones del usuario.
 - `POST /api/auth/logout` revoca el refresh token de la cookie y la borra. Siempre responde `204`.
 - El refresh token es opaco (32 bytes aleatorios) y en la tabla `refresh_token` solo se guarda su sha256. Dura `JWT_REFRESH_EXPIRES_IN` (7 días por defecto) desde su último uso.
+
+## Perfil
+
+- `GET /api/auth/yo` entrega los datos del perfil: nombre, correo, rol, universidad y facultad.
+- `PATCH /api/perfil` (`{ nombre }`, PER-01) cambia el nombre del usuario de la sesión: el id sale del JWT, nunca de la petición. Cualquier otro campo responde `400`. El Director recibe `403`: ve su perfil en solo lectura ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
 
 ## Variables de entorno
 

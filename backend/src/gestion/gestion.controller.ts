@@ -2,6 +2,8 @@ import type {
   AlumnoAgregado,
   CursoCreado,
   CursoDetalle,
+  CursoEditable,
+  CambioCurso,
   CursoListado,
   ProfesorOpcion,
   SeccionDetalle,
@@ -12,6 +14,7 @@ import {
   Get,
   Header,
   Param,
+  Patch,
   ParseUUIDPipe,
   Post,
   Put,
@@ -27,13 +30,48 @@ import { AsignarProfesorDto } from './asignar-profesor.dto.js'
 import { CrearCursoDto } from './crear-curso.dto.js'
 import { FiltroCursosDto } from './filtro-cursos.dto.js'
 import { GestionService } from './gestion.service.js'
+import { EdicionCursoService } from './edicion-curso.service.js'
 
 // Usuario de la sesión: el JwtAuthGuard global ya lo validó.
 const usuarioDe = (req: RequestConUsuario) => req.usuario?.sub as string
 
 @Controller()
 export class GestionController {
-  constructor(private readonly gestion: GestionService) {}
+  constructor(
+    private readonly gestion: GestionService,
+    private readonly edicion: EdicionCursoService,
+  ) {}
+
+  @Puede('update', 'Curso')
+  @Get('cursos/:id/edicion')
+  obtenerEdicion(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CursoEditable> {
+    return this.edicion.obtener(contexto, usuarioDe(req), id)
+  }
+
+  @Puede('update', 'Curso')
+  @Get('cursos/:id/historial')
+  historialCurso(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CambioCurso[]> {
+    return this.edicion.historial(contexto, usuarioDe(req), id)
+  }
+
+  @Puede('update', 'Curso')
+  @Patch('cursos/:id')
+  editarCurso(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() datos: CrearCursoDto,
+  ): Promise<CursoEditable> {
+    return this.edicion.editar(contexto, usuarioDe(req), id, datos)
+  }
 
   @Puede('read', 'Curso')
   @Get('cursos')

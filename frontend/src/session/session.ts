@@ -9,6 +9,8 @@ export interface SessionValue {
   user: SessionUser
   ability: AppAbility
   actualizarPeriodoActivo: (periodo: SessionUser['periodoActivo']) => void
+  // PER-01: el encabezado muestra el nombre nuevo sin volver a pedir la sesión.
+  actualizarNombre: (nombre: string) => void
 }
 
 // null mientras no hay sesión o todavía no llega /api/auth/yo.

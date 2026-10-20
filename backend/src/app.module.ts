@@ -7,6 +7,7 @@ import { BaseDeDatosModule } from './database/base-de-datos.module.js'
 import { GestionModule } from './gestion/gestion.module.js'
 import { HealthModule } from './health/health.module.js'
 import { CarrerasModule } from './carreras/carreras.module.js'
+import { PerfilModule } from './perfil/perfil.module.js'
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { CarrerasModule } from './carreras/carreras.module.js'
     HealthModule,
     CarrerasModule,
     PeriodosModule,
+    PerfilModule,
   ],
   controllers: [AppController],
   providers: [AppService],

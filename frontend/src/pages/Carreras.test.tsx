@@ -33,6 +33,7 @@ test('muestra carga y luego estado vacío sin habilitar una creación prematura'
   )
   expect(await screen.findByText('Cargando carreras…')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Crear carrera' })).toBeDisabled()
+  await waitFor(() => expect(terminar).toBeDefined())
   await act(async () => terminar(json([])))
   expect(
     await screen.findByText(

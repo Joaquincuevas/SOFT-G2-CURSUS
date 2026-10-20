@@ -38,6 +38,7 @@ const hashDe = (token: string) =>
 interface FilaUsuario {
   id: string
   nombre: string
+  correo: string
   rol: Rol
   universidad_id: string
   universidad_nombre: string
@@ -204,7 +205,7 @@ export class AuthService {
   ): Promise<UsuarioSesion | null> {
     const [fila] = await this.bd.consultarEnUniversidad<FilaUsuario>(
       contexto,
-      `SELECT u.id, u.nombre, u.rol, u.universidad_id,
+      `SELECT u.id, u.nombre, u.correo, u.rol, u.universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
@@ -218,6 +219,7 @@ export class AuthService {
     return {
       id: fila.id,
       nombre: fila.nombre,
+      correo: fila.correo,
       rol: fila.rol,
       universidadId: fila.universidad_id,
       universidadNombre:

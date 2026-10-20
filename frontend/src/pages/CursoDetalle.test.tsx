@@ -75,16 +75,15 @@ describe('detalle de un curso', () => {
     ])
   })
 
-  test('Editar curso sigue deshabilitado con "Próximamente"', async () => {
+  test('Editar curso enlaza al formulario de edición', async () => {
     await renderConSesion(
       'ADMINISTRATIVO',
       '/cursos/curso-1',
       ruta(() => CURSO),
     )
 
-    const editar = await screen.findByRole('button', { name: 'Editar curso' })
-    expect(editar).toHaveAttribute('aria-disabled', 'true')
-    expect(editar).toHaveAttribute('title', 'Próximamente')
+    const editar = await screen.findByRole('link', { name: 'Editar curso' })
+    expect(editar).toHaveAttribute('href', '/cursos/curso-1/editar')
     const crear = screen.getByRole('button', { name: 'Crear sección' })
     expect(crear).not.toHaveAttribute('aria-disabled')
     expect(crear).not.toHaveAttribute('title')
@@ -102,7 +101,7 @@ describe('detalle de un curso', () => {
         'Universidad Demo Sur · Ingeniería Civil en Informática · Período 2026-2',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Editar curso' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
     // Sin la columna Acciones (GES-12 y GES-15).
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()

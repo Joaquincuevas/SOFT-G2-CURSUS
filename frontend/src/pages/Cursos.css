@@ -48,6 +48,18 @@
   box-shadow: var(--shadow-card);
 }
 
+.cursos [hidden] {
+  display: none;
+}
+.cursos__cambio {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+}
+.cursos__cambio dd {
+  margin: var(--space-2) 0 var(--space-4);
+  overflow-wrap: anywhere;
+}
+
 /* Listado: cabecera en surface y filas sin bordes, como en el Figma. En
    pantallas angostas la tabla se desplaza dentro de la card. */
 .cursos__tabla-contenedor {
