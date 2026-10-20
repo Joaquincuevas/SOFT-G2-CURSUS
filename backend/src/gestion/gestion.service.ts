@@ -515,9 +515,10 @@ export class GestionService {
         if (existente) throw yaExiste()
 
         const passwordProvisoria = generarPasswordProvisoria()
+        // credencial_provisoria: debe cambiarla al entrar (PER-03).
         const [usuario] = await bd.query<DocenteCreado['usuario']>(
-          `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol, credencial_provisoria)
+           VALUES ($1, $2, $3, $4, $5, $6, true)
            RETURNING id, nombre, correo, rol`,
           [
             universidad,
@@ -581,9 +582,10 @@ export class GestionService {
             throw new BadRequestException('Ingresa el nombre del alumno')
           }
           passwordProvisoria = generarPasswordProvisoria()
+          // credencial_provisoria: debe cambiarla al entrar (PER-03).
           ;[alumno] = await bd.query<FilaAlumno>(
-            `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol)
-             VALUES ($1, $2, $3, $4, $5, 'ALUMNO')
+            `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol, credencial_provisoria)
+             VALUES ($1, $2, $3, $4, $5, 'ALUMNO', true)
              RETURNING id, nombre, correo, rol, archived_at`,
             [
               universidad,
