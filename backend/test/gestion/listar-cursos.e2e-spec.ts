@@ -79,6 +79,18 @@ describe('GET /api/cursos (e2e)', () => {
     },
   )
 
+  it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE', 'DIRECTOR'])(
+    '%s recibe 403 al quitar a un alumno (GES-19)',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .patch(
+          '/api/secciones/00000000-0000-4000-8000-000000000001/alumnos/00000000-0000-4000-8000-000000000002/quitar',
+        )
+        .set('Authorization', sesionDe(rol))
+        .expect(403)
+    },
+  )
+
   describe('agregar un alumno (GES-15)', () => {
     const agregar = (rol: string, datos: object) =>
       request(app.getHttpServer())

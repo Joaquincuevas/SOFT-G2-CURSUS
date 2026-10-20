@@ -1,5 +1,6 @@
 import type {
   AlumnoAgregado,
+  AlumnoQuitado,
   AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
@@ -120,6 +121,23 @@ export class GestionController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<AlumnosSeccion> {
     return this.gestion.listarAlumnos(contexto, usuarioDe(req), id)
+  }
+
+  // Quitar archiva la inscripción (nada se elimina): por eso PATCH y no DELETE.
+  @Puede('update', 'Inscripcion')
+  @Patch('secciones/:seccionId/alumnos/:usuarioId/quitar')
+  quitarAlumno(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('seccionId', ParseUUIDPipe) seccionId: string,
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ): Promise<AlumnoQuitado> {
+    return this.gestion.quitarAlumno(
+      contexto,
+      usuarioDe(req),
+      seccionId,
+      usuarioId,
+    )
   }
 
   // La respuesta puede traer la contraseña provisoria: no se guarda en caché
