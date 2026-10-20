@@ -1,10 +1,14 @@
 import {
-  MAX_BYTES_ALUMNOS_CSV,
+  csvDeErrores,
+  MAX_BYTES_ARCHIVO_CSV,
   MAX_FILAS_ALUMNOS_CSV,
+  MENSAJES_MOTIVO_CSV,
+  type FilaCargaAlumnos,
   type ResultadoCargaAlumnos,
 } from '@cursus/shared'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
+import { descargar } from './csvErrores'
 
 export function CargarAlumnosCsvDialogo({
   seccionId,
@@ -27,6 +31,10 @@ export function CargarAlumnosCsvDialogo({
   useEffect(() => {
     dialogo.current?.showModal()
   }, [])
+  const errores = (resultado?.filas ?? []).filter(
+    (fila): fila is Extract<FilaCargaAlumnos, { estado: 'error' }> =>
+      fila.estado === 'error',
+  )
 
   async function cargar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -36,7 +44,9 @@ export function CargarAlumnosCsvDialogo({
       setError('Selecciona un archivo CSV.')
       return
     }
-    if (file.size > MAX_BYTES_ALUMNOS_CSV) {
+    // Límite del archivo bruto, que deja volver a subir el CSV de errores
+    // (GES-17); el backend aplica los 48 KiB al contenido.
+    if (file.size > MAX_BYTES_ARCHIVO_CSV) {
       setError('El archivo supera el máximo de 48 KiB.')
       return
     }
@@ -115,8 +125,8 @@ export function CargarAlumnosCsvDialogo({
       {resultado ? (
         <>
           <p role="status" className="cursos__exito">
-            Se cargaron {resultado.cargados} de {resultado.total} alumnos. Filas
-            con error: {resultado.errores}.
+            {resultado.cargados} de {resultado.total} cargados,{' '}
+            {resultado.errores} con error.
           </p>
           {resultado.filas.some(
             (fila) => fila.estado === 'cargado' && fila.cuentaCreada,
@@ -127,15 +137,13 @@ export function CargarAlumnosCsvDialogo({
             </p>
           )}
           <ol className="cursos__resultado-csv">
-            {resultado.filas.map((fila) => (
-              <li key={fila.fila}>
-                <strong>
-                  Fila {fila.fila}: {fila.correo || 'Sin correo'}
-                </strong>
-                {fila.estado === 'error' ? (
-                  <p className="cursos__error">{fila.mensaje}</p>
-                ) : (
-                  <>
+            {resultado.filas.map(
+              (fila) =>
+                fila.estado === 'cargado' && (
+                  <li key={fila.fila}>
+                    <strong>
+                      Fila {fila.fila}: {fila.correo}
+                    </strong>
                     <p>
                       {fila.cuentaCreada
                         ? 'Cuenta creada e inscripción realizada.'
@@ -162,11 +170,48 @@ export function CargarAlumnosCsvDialogo({
                         )}
                       </>
                     )}
-                  </>
-                )}
-              </li>
-            ))}
+                  </li>
+                ),
+            )}
           </ol>
+          {errores.length > 0 && (
+            <>
+              <div className="cursos__tabla-contenedor">
+                <table className="cursos__tabla" aria-label="Filas con error">
+                  <thead>
+                    <tr>
+                      <th scope="col">Fila</th>
+                      <th scope="col">Correo</th>
+                      <th scope="col">Nombre</th>
+                      <th scope="col">Motivo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {errores.map((fila) => (
+                      <tr key={fila.fila}>
+                        <td>{fila.fila}</td>
+                        <td>{fila.correo || 'Sin correo'}</td>
+                        <td>{fila.nombre}</td>
+                        <td>{MENSAJES_MOTIVO_CSV[fila.motivo]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button
+                type="button"
+                className="cursos__boton cursos__boton--secundario"
+                onClick={() =>
+                  descargar(
+                    `errores-seccion-${numero}.csv`,
+                    csvDeErrores(errores),
+                  )
+                }
+              >
+                Descargar errores (CSV)
+              </button>
+            </>
+          )}
           <button type="button" className="cursos__boton" onClick={onCerrar}>
             Cerrar
           </button>
