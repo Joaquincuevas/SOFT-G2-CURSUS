@@ -49,6 +49,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                   ? { ...anterior, user: { ...anterior.user, periodoActivo } }
                   : anterior,
               ),
+            actualizarNombre: (nombre: string) =>
+              setCargada((anterior) =>
+                anterior?.token === token
+                  ? { ...anterior, user: { ...anterior.user, nombre } }
+                  : anterior,
+              ),
           }
         : null,
     [cargada, token],
