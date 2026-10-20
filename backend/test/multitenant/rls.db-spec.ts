@@ -22,6 +22,7 @@ const TABLAS = [
   ['periodo', 'universidad_id'],
   ['usuario', 'universidad_id'],
   ['curso', 'universidad_id'],
+  ['seccion', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -76,13 +77,19 @@ beforeAll(async () => {
     )
     universidades[dominio] = id
 
-    // El seed no crea cursos: uno por universidad, como dueño de las tablas.
+    // Un curso propio por universidad, como dueño de las tablas.
     await bd.query(
       `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
        SELECT $1, c.id, p.id, 'RLS101', 'Curso de prueba'
          FROM carrera c, periodo p
         WHERE c.universidad_id = $1 AND p.universidad_id = $1
         LIMIT 1`,
+      [id],
+    )
+    // Una sección del curso anterior, para los tests genéricos de seccion.
+    await bd.query(
+      `INSERT INTO seccion (universidad_id, curso_id, numero)
+       SELECT $1, id, 1 FROM curso WHERE universidad_id = $1 AND codigo = 'RLS101'`,
       [id],
     )
   }

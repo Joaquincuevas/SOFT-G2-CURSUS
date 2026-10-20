@@ -2,9 +2,10 @@ import type {
   CrearCurso,
   CursoCreado,
   Carrera,
+  CursoListado,
   OpcionPeriodo,
 } from '@cursus/shared'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   Link,
   Navigate,
@@ -17,15 +18,19 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
+import { CursoDetalle } from './CursoDetalle'
+import { useDatos } from './useDatos'
 import './Cursos.css'
 
-// Gestión de cursos. GES-05 agrega la creación (Figma, nodo 97:202); el
-// listado de /cursos llega con GES-03.
+// Gestión de cursos del Figma: listado (nodo 97:102, GES-03), creación (nodo
+// 97:202, GES-05) y detalle con sus secciones (GES-08).
 export function Cursos() {
+  const opciones = useOpciones()
   return (
     <Routes>
-      <Route index element={<InicioCursos />} />
-      <Route path="nuevo" element={<NuevoCurso />} />
+      <Route index element={<InicioCursos opciones={opciones} />} />
+      <Route path="nuevo" element={<NuevoCurso opciones={opciones} />} />
+      <Route path=":id" element={<CursoDetalle />} />
       <Route path="*" element={<Navigate to="/cursos" replace />} />
     </Routes>
   )
@@ -36,31 +41,41 @@ interface EstadoCreado {
   creado?: string
 }
 
-// GET con la sesión: undefined mientras carga y null si falla. `recargar`
-// vuelve a pedir, para el botón Reintentar.
-function useDatos<T>(ruta: string) {
-  const { fetchConSesion } = useAuth()
-  const [datos, setDatos] = useState<T | null>()
-  const [intento, setIntento] = useState(0)
-  useEffect(() => {
-    let vigente = true
-    void fetchConSesion(ruta)
-      .then(async (respuesta) =>
-        respuesta.ok ? ((await respuesta.json()) as T) : null,
-      )
-      .catch(() => null)
-      .then((resultado) => {
-        if (vigente) setDatos(resultado)
-      })
-    return () => {
-      vigente = false
-    }
-  }, [fetchConSesion, ruta, intento])
-  const recargar = () => {
-    setDatos(undefined)
-    setIntento((n) => n + 1)
+// Carreras y períodos para los filtros del listado (GES-04) y el formulario
+// de creación (GES-05). Se cargan una vez en Cursos y los usan las dos rutas,
+// sin pedirlos de nuevo al pasar del listado al formulario. Solo los pide quien
+// gestiona los cursos de su facultad.
+interface Opciones {
+  carreras: Carrera[] | null | undefined
+  periodos: OpcionPeriodo[] | null | undefined
+  recargar: () => void
+}
+
+function useOpciones(): Opciones {
+  const gestiona = usePuede('create', 'Curso')
+  const [carreras, recargarCarreras] = useDatos<Carrera[]>(
+    gestiona ? '/api/carreras' : null,
+  )
+  const [periodos, recargarPeriodos] = useDatos<OpcionPeriodo[]>(
+    gestiona ? '/api/periodos' : null,
+  )
+  return {
+    carreras,
+    periodos,
+    recargar: () => {
+      recargarCarreras()
+      recargarPeriodos()
+    },
   }
-  return [datos, recargar] as const
+}
+
+// Query de GET /api/cursos: solo los filtros elegidos ('' = todos).
+function rutaCursos(carreraId: string, periodoId: string) {
+  const query = new URLSearchParams()
+  if (carreraId) query.set('carreraId', carreraId)
+  if (periodoId) query.set('periodoId', periodoId)
+  const texto = query.toString()
+  return texto ? `/api/cursos?${texto}` : '/api/cursos'
 }
 
 function Encabezado({ titulo }: { titulo: string }) {
@@ -80,9 +95,103 @@ function Encabezado({ titulo }: { titulo: string }) {
   )
 }
 
-function InicioCursos() {
+function BotonCrear() {
+  return (
+    <Link className="cursos__boton" to="/cursos/nuevo">
+      Crear curso
+    </Link>
+  )
+}
+
+function InicioCursos({ opciones }: { opciones: Opciones }) {
   const puedeCrear = usePuede('create', 'Curso')
   const creado = (useLocation().state as EstadoCreado | null)?.creado
+  const { carreras, periodos } = opciones
+  const [carreraId, setCarreraId] = useState('')
+  // Hasta que el usuario elige uno, el período es el activo (o todos si no
+  // hay activo).
+  const [periodoElegido, setPeriodoElegido] = useState<string>()
+  const periodoId =
+    periodoElegido ?? periodos?.find((periodo) => periodo.activo)?.id ?? ''
+
+  // Quien filtra espera las opciones para pedir el listado ya con el período
+  // activo; quien no filtra (el Director) lo pide sin filtros.
+  const ruta = !puedeCrear
+    ? '/api/cursos'
+    : carreras && periodos
+      ? rutaCursos(carreraId, periodoId)
+      : null
+  const [cursos, recargar] = useDatos<CursoListado[]>(ruta)
+  // La API solo manda la universidad al Director, que ve todas.
+  const conUniversidad = !!cursos?.some((curso) => curso.universidadNombre)
+  const conFiltros = carreraId !== '' || periodoId !== ''
+
+  let contenido
+  if (puedeCrear && (carreras === null || periodos === null)) {
+    contenido = (
+      <ErrorEstado
+        mensaje="No se pudieron cargar las carreras y los períodos."
+        onReintentar={opciones.recargar}
+      />
+    )
+  } else if (cursos === undefined) {
+    contenido = <Cargando texto="Cargando cursos…" />
+  } else if (cursos === null) {
+    contenido = (
+      <ErrorEstado
+        mensaje="No se pudieron cargar los cursos."
+        onReintentar={recargar}
+      />
+    )
+  } else if (cursos.length === 0 && conFiltros) {
+    contenido = (
+      <div className="cursos__tarjeta cursos__vacio">
+        <p className="cursos__mensaje">No hay cursos con estos filtros.</p>
+      </div>
+    )
+  } else if (cursos.length === 0) {
+    contenido = (
+      <div className="cursos__tarjeta cursos__vacio">
+        <p className="cursos__mensaje">Aún no hay cursos en tu facultad.</p>
+        {puedeCrear && <BotonCrear />}
+      </div>
+    )
+  } else {
+    contenido = (
+      <div className="cursos__tarjeta cursos__tabla-contenedor">
+        <table className="cursos__tabla">
+          <thead>
+            <tr>
+              {conUniversidad && <th scope="col">Universidad</th>}
+              <th scope="col">Código</th>
+              <th scope="col">Curso</th>
+              <th scope="col">Carrera</th>
+              <th scope="col">Período</th>
+              <th scope="col">Secciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cursos.map((curso) => (
+              <tr key={curso.id}>
+                {conUniversidad && <td>{curso.universidadNombre}</td>}
+                <td>
+                  <Link className="cursos__enlace" to={`/cursos/${curso.id}`}>
+                    {curso.codigo}
+                  </Link>
+                </td>
+                <td>{curso.nombre}</td>
+                <td>{curso.carreraNombre}</td>
+                <td>
+                  {curso.periodo.anio}-{curso.periodo.semestre}
+                </td>
+                <td>{curso.secciones}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   return (
     <section className="cursos" aria-label="Gestión de cursos">
@@ -92,24 +201,56 @@ function InicioCursos() {
           Curso {creado} creado.
         </p>
       )}
-      {puedeCrear && (
+      {/* Con la lista vacía y sin filtros, el botón va solo en el estado vacío. */}
+      {puedeCrear && (!!cursos?.length || conFiltros) && (
         <div>
-          <Link className="cursos__boton" to="/cursos/nuevo">
-            Crear curso
-          </Link>
+          <BotonCrear />
         </div>
       )}
+      {puedeCrear && carreras && periodos && (
+        <div className="cursos__filtros" role="search" aria-label="Filtros">
+          <label className="cursos__campo">
+            Carrera
+            <select
+              className="cursos__input"
+              value={carreraId}
+              onChange={(event) => setCarreraId(event.target.value)}
+            >
+              <option value="">Todas</option>
+              {carreras.map((carrera) => (
+                <option key={carrera.id} value={carrera.id}>
+                  {carrera.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="cursos__campo">
+            Período
+            <select
+              className="cursos__input"
+              value={periodoId}
+              onChange={(event) => setPeriodoElegido(event.target.value)}
+            >
+              <option value="">Todos</option>
+              {periodos.map((periodo) => (
+                <option key={periodo.id} value={periodo.id}>
+                  {periodo.anio}-{periodo.semestre}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {contenido}
     </section>
   )
 }
 
-function NuevoCurso() {
+function NuevoCurso({ opciones }: { opciones: Opciones }) {
   const puedeCrear = usePuede('create', 'Curso')
   const { fetchConSesion } = useAuth()
   const navigate = useNavigate()
-  const [carreras, recargarCarreras] = useDatos<Carrera[]>('/api/carreras')
-  const [periodos, recargarPeriodos] =
-    useDatos<OpcionPeriodo[]>('/api/periodos')
+  const { carreras, periodos } = opciones
   const [error, setError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
 
@@ -162,10 +303,7 @@ function NuevoCurso() {
     contenido = (
       <ErrorEstado
         mensaje="No se pudieron cargar las carreras y los períodos."
-        onReintentar={() => {
-          recargarCarreras()
-          recargarPeriodos()
-        }}
+        onReintentar={opciones.recargar}
       />
     )
   } else {

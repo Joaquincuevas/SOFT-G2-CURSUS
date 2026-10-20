@@ -48,6 +48,53 @@
   box-shadow: var(--shadow-card);
 }
 
+/* Listado: cabecera en surface y filas sin bordes, como en el Figma. En
+   pantallas angostas la tabla se desplaza dentro de la card. */
+.cursos__tabla-contenedor {
+  overflow-x: auto;
+}
+
+.cursos__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
+
+.cursos__tabla th {
+  padding: var(--space-3);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+  text-align: left;
+  white-space: nowrap;
+  background: var(--color-surface);
+}
+
+.cursos__tabla td {
+  padding: var(--space-5) var(--space-3);
+}
+
+.cursos__vacio {
+  align-items: flex-start;
+}
+
+.cursos__mensaje {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-text-secondary);
+}
+
+/* Filtros del listado (GES-04): carrera y período lado a lado. */
+.cursos__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+}
+
+.cursos__filtros .cursos__campo {
+  min-width: var(--button-width);
+}
+
 /* Dos columnas de campos, como en el Figma. */
 .cursos__campos {
   display: grid;
@@ -95,6 +142,12 @@
   cursor: pointer;
 }
 
+/* Acción que llega en otra tarjeta (tooltip "Próximamente"). */
+.cursos__boton[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cursos__boton:disabled {
   cursor: progress;
 }
@@ -116,4 +169,15 @@
   .cursos__campos {
     grid-template-columns: 1fr;
   }
+}
+
+/* Enlaces del listado al detalle y de vuelta al listado (GES-08). */
+.cursos__enlace {
+  font: var(--font-button);
+  color: var(--color-primary);
+}
+
+.cursos__enlace:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

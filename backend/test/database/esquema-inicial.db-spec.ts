@@ -20,6 +20,7 @@ const TABLAS = [
   'limite_login',
   'periodo',
   'refresh_token',
+  'seccion',
   'sesion_auth',
   'universidad',
   'usuario',
@@ -154,11 +155,17 @@ describe('migraciones', () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
     await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
+
+    // CrearSeccion es ahora la última.
+    await bd.undoLastMigration()
+    const SIN_SECCION = TABLAS.filter((tabla) => tabla !== 'seccion')
+    expect(await tablasExistentes()).toEqual(SIN_SECCION)
+
     await bd.undoLastMigration() // NombreCarreraUnicoNormalizado.
 
     // CrearCurso es ahora la última.
     await bd.undoLastMigration()
-    const SIN_CURSO = TABLAS.filter((tabla) => tabla !== 'curso')
+    const SIN_CURSO = SIN_SECCION.filter((tabla) => tabla !== 'curso')
     expect(await tablasExistentes()).toEqual(SIN_CURSO)
 
     // Se revierten en orden inverso a su aplicación. PermitirLecturaDirector,
@@ -245,7 +252,7 @@ describe('migraciones', () => {
        ORDER BY table_name`,
     )
     expect(filas).toEqual(
-      ['carrera', 'curso', 'facultad', 'universidad', 'usuario'].map(
+      ['carrera', 'curso', 'facultad', 'seccion', 'universidad', 'usuario'].map(
         (tabla) => ({
           table_name: tabla,
           data_type: 'timestamp with time zone',
@@ -630,5 +637,74 @@ describe('refresh_token', () => {
         code: CHECK,
         constraint: 'ck_refresh_token_hash',
       })
+    }))
+})
+
+describe('seccion', () => {
+  // Universidad con un curso, para crear secciones.
+  async function crearCursoBase(q: QueryRunner, dominio: string) {
+    const universidadId = await crearUniversidad(q, `U ${dominio}`, dominio)
+    const facultadId = await crearFacultad(q, universidadId, 'Ingeniería')
+    const carreraId = await insertar(
+      q,
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       VALUES ($1, $2, 'Informática')`,
+      [universidadId, facultadId],
+    )
+    const periodoId = await insertar(
+      q,
+      `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino)
+       VALUES ($1, 2026, 2, '2026-08-03', '2026-12-18')`,
+      [universidadId],
+    )
+    const cursoId = await insertar(
+      q,
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       VALUES ($1, $2, $3, 'ICC101', 'Programación')`,
+      [universidadId, carreraId, periodoId],
+    )
+    return { universidadId, cursoId }
+  }
+
+  const crearSeccion = (
+    q: QueryRunner,
+    datos: { universidadId: string; cursoId: string; numero: number },
+  ) =>
+    insertar(
+      q,
+      'INSERT INTO seccion (universidad_id, curso_id, numero) VALUES ($1, $2, $3)',
+      [datos.universidadId, datos.cursoId, datos.numero],
+    )
+
+  it('rechaza un curso de otra universidad', () =>
+    enTransaccion(async (q) => {
+      const a = await crearCursoBase(q, 'a.cl')
+      const b = await crearCursoBase(q, 'b.cl')
+      await expect(
+        crearSeccion(q, { ...a, cursoId: b.cursoId, numero: 1 }),
+      ).rejects.toMatchObject({
+        code: FOREIGN_KEY,
+        constraint: 'fk_seccion_curso',
+      })
+    }))
+
+  it('no repite el número en el mismo curso', () =>
+    enTransaccion(async (q) => {
+      const base = await crearCursoBase(q, 'a.cl')
+      await crearSeccion(q, { ...base, numero: 1 })
+      await expect(
+        crearSeccion(q, { ...base, numero: 1 }),
+      ).rejects.toMatchObject({
+        code: UNIQUE,
+        constraint: 'uq_seccion_curso_numero',
+      })
+    }))
+
+  it('rechaza un número menor que 1', () =>
+    enTransaccion(async (q) => {
+      const base = await crearCursoBase(q, 'a.cl')
+      await expect(
+        crearSeccion(q, { ...base, numero: 0 }),
+      ).rejects.toMatchObject({ code: CHECK, constraint: 'ck_seccion_numero' })
     }))
 })

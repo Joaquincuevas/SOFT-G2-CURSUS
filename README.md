@@ -124,6 +124,8 @@ npm run seed --workspace=backend
 
 El Director no tiene facultad asociada. En Norte, cada administrativo pertenece a su facultad, para probar el aislamiento entre facultades; profesor, ayudante y alumno pertenecen a Ingeniería. En Sur, todos pertenecen a Ciencias de la Salud.
 
+Además, para que las listas de la demo de gestión parezcan las de un curso real, cada facultad tiene **3 profesores, 4 ayudantes y 25 alumnos de demo** con nombres realistas y correos `nombre.apellido@<dominio>` (por ejemplo, `camila.rojas@norte.cursus.test`). Usan la misma contraseña que el resto y se generan siempre iguales (`usuariosDeDemo` en `backend/src/database/seed.ts`), así que el seed no los duplica. Los tests usan los usuarios de la tabla, no los de demo.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
@@ -231,7 +233,7 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 
 ### Datos simulados en staging
 
-Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol) en la base de staging:
+Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol y los usuarios de demo de cada facultad) en la base de staging:
 
 ```bash
 bash infra/aws/seed.sh staging

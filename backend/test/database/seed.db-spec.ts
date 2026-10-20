@@ -2,10 +2,12 @@ import { verify } from 'argon2'
 import { DataSource } from 'typeorm'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import {
+  DEMO_POR_FACULTAD,
   ejecutarSeed,
   PERIODO,
   type Rol,
   UNIVERSIDADES,
+  usuariosDeDemo,
 } from '../../src/database/seed.js'
 
 // Base propia, distinta de la de esquema-inicial.db-spec.ts, que se crea y se
@@ -19,13 +21,26 @@ const ROLES: Rol[] = [
   'AYUDANTE',
   'ALUMNO',
 ]
-const TOTAL_USUARIOS = UNIVERSIDADES.reduce((n, u) => n + u.usuarios.length, 0)
+// Usuarios con nombre fijo y de demo (GES-22) de cada universidad.
+const USUARIOS = UNIVERSIDADES.map((u, i) => [
+  ...u.usuarios,
+  ...usuariosDeDemo(i),
+])
+const TOTAL_USUARIOS = USUARIOS.reduce((n, usuarios) => n + usuarios.length, 0)
 
 let admin: DataSource
 let bd: DataSource
 
 async function conteos() {
-  const tablas = ['universidad', 'facultad', 'carrera', 'periodo', 'usuario']
+  const tablas = [
+    'universidad',
+    'facultad',
+    'carrera',
+    'periodo',
+    'usuario',
+    'curso',
+    'seccion',
+  ]
   const filas = await Promise.all(
     tablas.map(async (tabla) => {
       const [{ total }] = await bd.query<{ total: string }[]>(
@@ -109,13 +124,66 @@ describe('seed de datos simulados', () => {
     expect(UNIVERSIDADES[0].facultades.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('crea al menos un usuario de cada rol en cada universidad', async () => {
+  it('crea los cursos de cada carrera en el período activo', async () => {
     for (const u of UNIVERSIDADES) {
+      const cursos = await bd.query<{ codigo: string; carrera: string }[]>(
+        `SELECT c.codigo, ca.nombre AS carrera FROM curso c
+           JOIN carrera ca ON ca.id = c.carrera_id
+           JOIN periodo p ON p.id = c.periodo_id
+           JOIN universidad un ON un.id = c.universidad_id
+          WHERE un.dominio_correo = $1 AND p.activo
+          ORDER BY c.codigo`,
+        [u.dominio],
+      )
+      expect(cursos).toEqual(
+        u.facultades
+          .flatMap((f) =>
+            f.cursos.map((c) => ({ codigo: c.codigo, carrera: f.carrera })),
+          )
+          .sort((a, b) => a.codigo.localeCompare(b.codigo)),
+      )
+      // Al menos dos cursos por facultad, para la demo.
+      for (const f of u.facultades) {
+        expect(f.cursos.length).toBeGreaterThanOrEqual(2)
+      }
+    }
+  })
+
+  it('crea las secciones 1 y 2 de cada curso', async () => {
+    const secciones = await bd.query<{ codigo: string; numeros: number[] }[]>(
+      `SELECT c.codigo, array_agg(s.numero ORDER BY s.numero) AS numeros
+         FROM curso c JOIN seccion s ON s.curso_id = c.id
+        GROUP BY c.codigo ORDER BY c.codigo`,
+    )
+    const codigos = UNIVERSIDADES.flatMap((u) =>
+      u.facultades.flatMap((f) => f.cursos.map((c) => c.codigo)),
+    ).sort()
+    expect(secciones).toEqual(
+      codigos.map((codigo) => ({ codigo, numeros: [1, 2] })),
+    )
+  })
+
+  it('crea al menos un usuario de cada rol en cada universidad', async () => {
+    for (const [i, u] of UNIVERSIDADES.entries()) {
       const usuarios = await usuariosDe(u.dominio)
       expect(new Set(usuarios.map((us) => us.rol))).toEqual(new Set(ROLES))
       expect(usuarios.map((us) => us.correo).sort()).toEqual(
-        u.usuarios.map((us) => `${us.usuario}@${u.dominio}`).sort(),
+        USUARIOS[i].map((us) => `${us.usuario}@${u.dominio}`).sort(),
       )
+    }
+  })
+
+  it('crea en cada facultad los profesores, ayudantes y alumnos de demo', async () => {
+    for (const u of UNIVERSIDADES) {
+      const usuarios = await usuariosDe(u.dominio)
+      for (const facultad of u.facultades) {
+        for (const [rol, cantidad] of Object.entries(DEMO_POR_FACULTAD)) {
+          const deLaFacultad = usuarios.filter(
+            (us) => us.facultad === facultad.nombre && us.rol === rol,
+          )
+          expect(deLaFacultad.length).toBeGreaterThanOrEqual(cantidad)
+        }
+      }
     }
   })
 
@@ -138,9 +206,10 @@ describe('seed de datos simulados', () => {
       'SELECT password_hash FROM usuario',
     )
     expect(usuarios).toHaveLength(TOTAL_USUARIOS)
-    for (const { password_hash } of usuarios) {
-      expect(password_hash).toMatch(/^\$argon2id\$/)
-      expect(await verify(password_hash, PASSWORD)).toBe(true)
+    // Todos comparten el mismo hash: se verifica una vez por hash distinto.
+    for (const hashGuardado of new Set(usuarios.map((u) => u.password_hash))) {
+      expect(hashGuardado).toMatch(/^\$argon2id\$/)
+      expect(await verify(hashGuardado, PASSWORD)).toBe(true)
     }
   })
 
@@ -148,6 +217,19 @@ describe('seed de datos simulados', () => {
     const antes = await conteos()
     await ejecutarSeed(bd, PASSWORD)
     expect(await conteos()).toEqual(antes)
+  })
+
+  it('no pisa un curso editado ni lo desarchiva al ejecutarse de nuevo', async () => {
+    await bd.query(
+      `UPDATE curso SET nombre = 'Nombre editado', archived_at = now()
+        WHERE codigo = 'ICC101'`,
+    )
+    await ejecutarSeed(bd, PASSWORD)
+    const [curso] = await bd.query<{ nombre: string; archivado: boolean }[]>(
+      `SELECT nombre, archived_at IS NOT NULL AS archivado FROM curso
+        WHERE codigo = 'ICC101'`,
+    )
+    expect(curso).toEqual({ nombre: 'Nombre editado', archivado: true })
   })
 
   it('no activa su período si la universidad ya tiene otro activo', async () => {
