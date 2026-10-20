@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { BaseDeDatos } from '../database/base-de-datos.service.js'
-import type { TokensSesion } from './auth.service.js'
 
 export const MAX_FALLOS_CUENTA = 5
 export const MAX_FALLOS_IP = 20
@@ -14,13 +13,16 @@ export const claveIntentos = (tipo: 'cuenta' | 'ip', valor: string) =>
 export class LimiteLogin {
   constructor(private readonly bd: BaseDeDatos) {}
 
-  async intentar(
+  // Ejecuta `autenticar` con el límite de fallos de la cuenta (y de la IP, si
+  // viene). `autenticar` devuelve null si la contraseña no es correcta, lo que
+  // cuenta como fallo; cualquier otro resultado reinicia los contadores. Lo usan
+  // el login y el cambio de contraseña (PER-02), que comparten el contador de
+  // la cuenta.
+  async intentar<T>(
     correo: string,
     ip: string | null,
-    autenticar: (
-      bd: Pick<BaseDeDatos, 'query'>,
-    ) => Promise<TokensSesion | null>,
-  ): Promise<{ tokens: TokensSesion | null; retryAfter: number }> {
+    autenticar: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T | null>,
+  ): Promise<{ resultado: T | null; retryAfter: number }> {
     const limites = new Map([
       [claveIntentos('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
     ])
@@ -69,11 +71,12 @@ export class LimiteLogin {
               : 0,
           ),
         )
-      if (espera()) return { tokens: null, retryAfter: espera() }
+      if (espera()) return { resultado: null, retryAfter: espera() }
 
-      const tokens = await autenticar(bd)
+      const resultado = await autenticar(bd)
+      const valido = resultado !== null
       for (const fila of vigentes) {
-        fila.fallos = tokens ? [] : [...fila.fallos, ahora]
+        fila.fallos = valido ? [] : [...fila.fallos, ahora]
         await bd.query(`UPDATE limite_login SET fallos = $2 WHERE clave = $1`, [
           fila.clave,
           fila.fallos,
@@ -81,7 +84,7 @@ export class LimiteLogin {
       }
       // El controller genera 401/429 después del commit: lanzar aquí una
       // excepción HTTP desharía los fallos registrados.
-      return { tokens, retryAfter: tokens ? 0 : espera() }
+      return { resultado, retryAfter: valido ? 0 : espera() }
     })
   }
 }

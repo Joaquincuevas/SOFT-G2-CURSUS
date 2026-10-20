@@ -184,6 +184,63 @@ export class AuthService {
     return { accessToken, refreshToken }
   }
 
+  // Correo del usuario vigente, para el límite de intentos por cuenta del
+  // cambio de contraseña (PER-02). null si no existe o está archivado.
+  async correoDe(usuarioId: string): Promise<string | null> {
+    const [usuario] = await this.bd.query<{ correo: string }>(
+      `SELECT correo FROM usuario WHERE id = $1 AND archived_at IS NULL`,
+      [usuarioId],
+    )
+    return usuario?.correo ?? null
+  }
+
+  // PER-02. Cambia la contraseña del usuario de la sesión y cierra sus demás
+  // sesiones; la actual (sesionId) sigue abierta. Devuelve null si la
+  // contraseña actual no es correcta (cuenta como intento fallido) e 'igual'
+  // si la nueva es la misma.
+  //
+  // Como el login, no usa consultarEnUniversidad: la contraseña es una
+  // credencial, no un dato institucional, y también la cambia el Director, que
+  // no modifica datos (ADR 0001). Solo toca la fila del id del JWT.
+  async cambiarPassword(
+    usuarioId: string,
+    sesionId: string,
+    actual: string,
+    nueva: string,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
+  ): Promise<'cambiada' | 'igual' | null> {
+    const [usuario] = await bd.query<{ password_hash: string }>(
+      `SELECT password_hash FROM usuario
+        WHERE id = $1 AND archived_at IS NULL
+        FOR UPDATE`,
+      [usuarioId],
+    )
+    if (!usuario || !(await verify(usuario.password_hash, actual))) {
+      return null
+    }
+    if (nueva === actual) {
+      return 'igual'
+    }
+
+    await bd.query(`UPDATE usuario SET password_hash = $2 WHERE id = $1`, [
+      usuarioId,
+      await hash(nueva),
+    ])
+    // Las demás sesiones quedan fuera: si alguien entró con la contraseña
+    // anterior, ya no puede seguir usándola ni renovarla.
+    await bd.query(
+      `UPDATE sesion_auth SET revocado_en = now()
+        WHERE usuario_id = $1 AND id <> $2 AND revocado_en IS NULL`,
+      [usuarioId, sesionId],
+    )
+    await bd.query(
+      `UPDATE refresh_token SET revocado_en = now()
+        WHERE usuario_id = $1 AND sesion_id <> $2 AND revocado_en IS NULL`,
+      [usuarioId, sesionId],
+    )
+    return 'cambiada'
+  }
+
   // También corta la sesión de un usuario archivado, sin esperar a que venza
   // su JWT.
   async sesionActiva(sid: string, usuarioId: string): Promise<boolean> {
