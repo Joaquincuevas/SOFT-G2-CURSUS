@@ -159,3 +159,28 @@ export interface AlumnoQuitado {
   quitadoEn: string
   quitadoPor: { id: string; nombre: string }
 }
+
+// GES-14: quitar al profesor o a un ayudante de una sección. El motivo es
+// obligatorio y queda en el historial de asignaciones (asignacion_cambio).
+export const LARGO_MOTIVO_ASIGNACION = 500
+
+// Body de PATCH /api/secciones/:id/profesor/quitar y de
+// PATCH /api/secciones/:id/ayudantes/:usuarioId/quitar.
+export interface QuitarAsignacion {
+  motivo: string
+}
+
+// Respuesta al quitar una asignación: quién se quitó, quién y cuándo, y el
+// motivo, tal como quedaron en el historial.
+export interface AsignacionQuitada {
+  quitado: { id: string; nombre: string }
+  // Fecha ISO 8601 del cambio.
+  quitadoEn: string
+  quitadoPor: { id: string; nombre: string }
+  motivo: string
+}
+
+// Al quitar un ayudante, también llegan los que siguen asignados.
+export interface AyudanteQuitado extends AsignacionQuitada {
+  ayudantes: AyudanteResumen[]
+}
