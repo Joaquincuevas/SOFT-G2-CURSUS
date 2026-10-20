@@ -29,6 +29,15 @@ export interface HorarioSeccion extends GuardarHorario {
   resumen: string | null
 }
 
+export const CODIGO_SALA_OCUPADA = 'SALA_OCUPADA'
+
+// Solo datos de la ocupación: sin IDs ni información personal de otra facultad.
+export interface ChoqueSala extends BloqueHorario {
+  cursoCodigo: string
+  cursoNombre: string
+  seccionNumero: number
+}
+
 export function resumirHorario(
   bloques: readonly BloqueHorario[],
 ): string | null {

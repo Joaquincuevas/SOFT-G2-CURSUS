@@ -136,11 +136,17 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 ## Horarios de secciones (GES-10)
 
+GES-11 comprueba salas ocupadas al guardar el horario: misma universidad, período, día e intervalos superpuestos. Responde 409 con `code: SALA_OCUPADA` y los cursos/secciones ocupantes, sin modificar ningún bloque ni la versión. Los guardados se serializan por universidad para evitar reservas simultáneas en cursos diferentes. Ver [contrato y revisión de GES-11](../docs/ges-11-sala-ocupada.md).
+
 `GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).
 
 ## Carga CSV de alumnos (GES-16)
 
 `POST /api/secciones/:id/alumnos/csv` recibe `{ csv }` y devuelve total, cargados, errores y detalle por fila. Solo el administrativo de la facultad/universidad de la sección puede cargar. Cada fila reutiliza el DTO y la transacción de GES-15; un fallo individual no revierte otras filas. Formato UTF-8 `correo,nombre`, hasta 100 alumnos y 48 KiB. La plantilla se descarga desde el diálogo de la sección. No requiere migraciones ni dependencias nuevas. Ver [formato, permisos, límites y pruebas](../docs/ges-16-carga-alumnos-csv.md).
+
+## Facultad completa de demo (GES-20)
+
+`npm run seed` y `npm run seed:prod` completan Ingeniería de Norte con tres carreras, quince cursos y treinta secciones con horario, sala y participantes. La carga es transaccional y se puede repetir sin duplicar ni restaurar asignaciones retiradas. Ver [datos y verificación de GES-20](../docs/ges-20-seed-facultad.md).
 
 ## Sesión
 

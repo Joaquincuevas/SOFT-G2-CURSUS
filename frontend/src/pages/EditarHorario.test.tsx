@@ -32,6 +32,7 @@ const curso = (horario: string | null): CursoDetalle => ({
       numero: 1,
       horario,
       profesor: 'Profesor Norte',
+      profesorId: 'profesor-norte',
       ayudantes: ['Ana Ayudante'],
       alumnos: 2,
     },
@@ -87,6 +88,105 @@ const resumenVisible = () =>
   )[1].children[1].textContent
 
 describe('GES-10: editor del horario', () => {
+  test('GES-11: informa curso/sección y permite corregir la sala sin recargar ni perder los campos', async () => {
+    let ocupado = true
+    const mensaje =
+      'La sala ya está ocupada. Cambia la sala, el día o las horas antes de guardar.'
+    const { dialogo, pedir } = await abrir(EXISTENTE, (init) =>
+      ocupado
+        ? json(
+            {
+              message: mensaje,
+              code: 'SALA_OCUPADA',
+              choques: [
+                {
+                  ...BLOQUES[0],
+                  cursoCodigo: 'ICC201',
+                  cursoNombre: 'Estructuras de Datos',
+                  seccionNumero: 2,
+                },
+              ],
+            },
+            409,
+          )
+        : respuestaCorrecta(init),
+    )
+    completar(dialogo, 1, { ...BLOQUES[0], sala: 'Sala ocupada' })
+    fireEvent.click(
+      within(dialogo).getByRole('button', { name: 'Guardar horario' }),
+    )
+    const aviso = await within(dialogo).findByRole('alert')
+    expect(aviso).toHaveTextContent(mensaje)
+    expect(aviso).toHaveTextContent(
+      'Sala 201 · Lunes 08:30–09:20: ICC201 · Estructuras de Datos, sección 2.',
+    )
+    expect(within(dialogo).getByLabelText('Sala del bloque 1')).toHaveValue(
+      'Sala ocupada',
+    )
+    expect(
+      within(dialogo).getByRole('button', { name: 'Guardar horario' }),
+    ).toBeDisabled()
+    expect(
+      within(dialogo).queryByRole('button', { name: 'Recargar horario' }),
+    ).toBeNull()
+    expect(resumenVisible()).toBe(EXISTENTE.resumen)
+    ocupado = false
+    completar(dialogo, 1, { ...BLOQUES[0], sala: 'Sala libre' })
+    expect(within(dialogo).queryByRole('alert')).toBeNull()
+    fireEvent.click(
+      within(dialogo).getByRole('button', { name: 'Guardar horario' }),
+    )
+    await screen.findByRole('status')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(resumenVisible()).toContain('Sala libre')
+    expect(
+      pedir.mock.calls.filter(([init]) => init?.method === 'PUT'),
+    ).toHaveLength(2)
+    expect(
+      pedir.mock.calls.filter(([init]) => init?.method !== 'PUT'),
+    ).toHaveLength(1)
+  })
+
+  test('GES-11: muestra varios choques y permite quitar el bloque conflictivo', async () => {
+    const { dialogo } = await abrir(EXISTENTE, () =>
+      json(
+        {
+          message: 'La sala ya está ocupada.',
+          code: 'SALA_OCUPADA',
+          choques: [
+            {
+              ...BLOQUES[0],
+              cursoCodigo: 'ICC201',
+              cursoNombre: 'Datos',
+              seccionNumero: 1,
+            },
+            {
+              ...BLOQUES[1],
+              cursoCodigo: 'ICO101',
+              cursoNombre: 'Economía',
+              seccionNumero: 2,
+            },
+          ],
+        },
+        409,
+      ),
+    )
+    completar(dialogo, 1, { ...BLOQUES[0], sala: 'Sala ocupada' })
+    fireEvent.click(
+      within(dialogo).getByRole('button', { name: 'Guardar horario' }),
+    )
+    const aviso = await within(dialogo).findByRole('alert')
+    expect(within(aviso).getAllByRole('listitem')).toHaveLength(2)
+    expect(aviso).toHaveTextContent('ICO101 · Economía, sección 2')
+    fireEvent.click(
+      within(dialogo).getByRole('button', { name: 'Quitar bloque 1' }),
+    )
+    expect(within(dialogo).queryByRole('alert')).toBeNull()
+    expect(
+      within(dialogo).getByRole('button', { name: 'Guardar horario' }),
+    ).toBeEnabled()
+  })
+
   test('asigna varios bloques y actualiza el detalle conservando las otras acciones', async () => {
     const { dialogo, pedir } = await abrir()
     fireEvent.click(

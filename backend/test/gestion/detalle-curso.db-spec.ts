@@ -109,6 +109,7 @@ describe('GET /api/cursos/:id', () => {
         numero,
         horario: null,
         profesor: null,
+        profesorId: null,
         ayudantes: [],
         alumnos: 0,
       })),
