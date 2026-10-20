@@ -5,6 +5,7 @@ import {
 } from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
+import { PasswordProvisoria } from './PasswordProvisoria'
 
 // Mensaje del backend cuando el alumno no tiene cuenta y falta su nombre.
 const FALTA_NOMBRE = 'Ingresa el nombre del alumno'
@@ -30,7 +31,6 @@ export function AgregarAlumnoDialogo({
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [creado, setCreado] = useState<AlumnoAgregado | null>(null)
-  const [copiada, setCopiada] = useState(false)
 
   // Modal nativo: atrapa el foco y cierra con Escape (evento close).
   useEffect(() => {
@@ -80,15 +80,6 @@ export function AgregarAlumnoDialogo({
     setEnviando(false)
   }
 
-  async function copiar(password: string) {
-    try {
-      await navigator.clipboard.writeText(password)
-      setCopiada(true)
-    } catch {
-      setError('No se pudo copiar; cópiala a mano.')
-    }
-  }
-
   return (
     <dialog
       ref={dialogo}
@@ -100,41 +91,13 @@ export function AgregarAlumnoDialogo({
         Agregar alumno a la sección {numero}
       </h3>
       {creado?.passwordProvisoria ? (
-        <>
-          <p className="cursos__mensaje">
-            Se creó la cuenta de {creado.alumno.nombre} ({creado.alumno.correo}
-            ). Su contraseña provisoria es:
-          </p>
-          <p className="cursos__password">
-            <code>{creado.passwordProvisoria}</code>
-          </p>
-          <p className="cursos__error">
-            <strong>No se volverá a mostrar.</strong> Cópiala y entrégasela al
-            alumno.
-          </p>
-          {copiada && (
-            <p className="cursos__exito" role="status">
-              Contraseña copiada.
-            </p>
-          )}
-          {error && (
-            <p className="cursos__error" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="cursos__acciones">
-            <button
-              className="cursos__boton cursos__boton--secundario"
-              type="button"
-              onClick={() => void copiar(creado.passwordProvisoria as string)}
-            >
-              Copiar
-            </button>
-            <button className="cursos__boton" type="button" onClick={onCerrar}>
-              Cerrar
-            </button>
-          </div>
-        </>
+        <PasswordProvisoria
+          nombre={creado.alumno.nombre}
+          correo={creado.alumno.correo}
+          password={creado.passwordProvisoria}
+          destinatario="al alumno"
+          onCerrar={onCerrar}
+        />
       ) : (
         <form className="cursos__formulario" onSubmit={handleSubmit}>
           <label className="cursos__campo">

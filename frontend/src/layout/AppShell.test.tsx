@@ -22,6 +22,7 @@ describe('navegación por rol', () => {
         ['Mis Cursos', '/cursos'],
         ['Carreras', '/carreras'],
         ['Períodos', '/periodos'],
+        ['Profesores y ayudantes', '/docentes'],
       ],
     ],
     [
