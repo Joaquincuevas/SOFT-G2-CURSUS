@@ -335,16 +335,19 @@ describe('contrato del schema', () => {
     )
 
     expect(tablas.map((t) => t.tabla)).toEqual(
-      [...TABLAS.map(([tabla]) => tabla), 'curso_cambio'].sort(),
+      [
+        ...TABLAS.map(([tabla]) => tabla),
+        'curso_cambio',
+        'asignacion_cambio',
+      ].sort(),
     )
     for (const tabla of tablas) {
       expect(tabla).toMatchObject({
         rls: true,
-        // La auditoría es de solo adición: no concede UPDATE a la API.
-        comandos:
-          tabla.tabla === 'curso_cambio'
-            ? ['INSERT', 'SELECT']
-            : ['INSERT', 'SELECT', 'UPDATE'],
+        // Las auditorías son de solo adición: no conceden UPDATE a la API.
+        comandos: ['curso_cambio', 'asignacion_cambio'].includes(tabla.tabla)
+          ? ['INSERT', 'SELECT']
+          : ['INSERT', 'SELECT', 'UPDATE'],
       })
     }
   })

@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'asignacion_cambio',
   'ayudante_seccion',
   'carrera',
   'curso',
@@ -157,20 +158,29 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // ArchivarInscripcionConResponsable es la última: solo quita la columna.
+    // CrearAsignacionCambio es la última: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ASIGNACION_CAMBIO = TABLAS.filter(
+      (tabla) => tabla !== 'asignacion_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
+
+    // ArchivarInscripcionConResponsable: solo quita la columna.
     await bd.undoLastMigration()
     const [{ columnas }] = await bd.query<{ columnas: string }[]>(
       `SELECT count(*) AS columnas FROM information_schema.columns
         WHERE table_name = 'inscripcion' AND column_name = 'archivada_por'`,
     )
     expect(Number(columnas)).toBe(0)
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
 
     await bd.undoLastMigration() // AsignarProfesorSeccion.
 
     // La asignación de ayudantes se revierte antes de sus claves foráneas.
     await bd.undoLastMigration()
-    const SIN_AYUDANTES = TABLAS.filter((tabla) => tabla !== 'ayudante_seccion')
+    const SIN_AYUDANTES = SIN_ASIGNACION_CAMBIO.filter(
+      (tabla) => tabla !== 'ayudante_seccion',
+    )
     expect(await tablasExistentes()).toEqual(SIN_AYUDANTES)
     await bd.undoLastMigration() // CrearHistorialCurso.
     const SIN_HISTORIAL = SIN_AYUDANTES.filter(
@@ -268,7 +278,8 @@ describe('migraciones', () => {
         t !== 'refresh_token' &&
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
-        t !== 'curso_cambio',
+        t !== 'curso_cambio' &&
+        t !== 'asignacion_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
