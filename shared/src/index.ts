@@ -16,6 +16,7 @@ export type Rol = (typeof ROLES)[number]
 export interface UsuarioSesion {
   id: string
   nombre: string
+  correo: string
   rol: Rol
   universidadId: string
   // "Directorio" para el Director, que ve todas las universidades.
@@ -28,6 +29,7 @@ export interface UsuarioSesion {
 export * from './permisos.js'
 export * from './cursos.js'
 export * from './periodos.js'
+export * from './perfil.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

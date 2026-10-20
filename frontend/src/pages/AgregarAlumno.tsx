@@ -1,4 +1,8 @@
-import type { AgregarAlumno, AlumnoAgregado } from '@cursus/shared'
+import {
+  type AgregarAlumno,
+  type AlumnoAgregado,
+  LARGO_NOMBRE_USUARIO,
+} from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
 
@@ -150,7 +154,7 @@ export function AgregarAlumnoDialogo({
                 className="cursos__input"
                 name="nombre"
                 required
-                maxLength={120}
+                maxLength={LARGO_NOMBRE_USUARIO}
                 autoComplete="off"
               />
             </label>

@@ -4,6 +4,7 @@ import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { Dashboard } from './pages/Dashboard'
 import { Carreras } from './pages/Carreras'
+import { Perfil } from './pages/Perfil'
 import type { SessionUser } from './session/session'
 
 // Única fuente de la navegación: el Sidebar, las rutas, su guard y el
@@ -23,6 +24,9 @@ export interface NavItem {
   permiso: PermisoRuta
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
+  // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,
+  // al que se llega desde el encabezado).
+  enMenu?: boolean
   // Título y subtítulo del encabezado en esta ruta.
   title: (user: SessionUser) => string
   subtitle: (user: SessionUser) => string
@@ -96,6 +100,17 @@ export const NAV_ITEMS: readonly NavItem[] = [
     title: () => 'Mis Cursos',
     subtitle: universidadYSemestre,
   },
+  {
+    // PER-01: se llega desde el nombre del encabezado, no desde el menú.
+    to: '/perfil',
+    label: 'Mi perfil',
+    icon: 'grid',
+    permiso: 'sesion',
+    page: Perfil,
+    enMenu: false,
+    title: () => 'Mi perfil',
+    subtitle: universidadYSemestre,
+  },
 ]
 
 export function puedeVer(item: NavItem, ability: AppAbility): boolean {
@@ -105,8 +120,12 @@ export function puedeVer(item: NavItem, ability: AppAbility): boolean {
   )
 }
 
+// Ítems del menú lateral: los que el rol puede ver, sin los que no van en el
+// menú.
 export function navItemsFor(ability: AppAbility): NavItem[] {
-  return NAV_ITEMS.filter((item) => puedeVer(item, ability))
+  return NAV_ITEMS.filter(
+    (item) => item.enMenu !== false && puedeVer(item, ability),
+  )
 }
 
 export function etiquetaDe(item: NavItem, user: SessionUser): string {

@@ -42,6 +42,11 @@ const USUARIOS: Record<
 export function usuarioDePrueba(rol: Rol): UsuarioSesion {
   return {
     id: `usuario-${rol.toLowerCase()}`,
+    // Correos del seed (backend/src/database/seed.ts).
+    correo:
+      rol === 'ADMINISTRATIVO'
+        ? 'administrativo.ingenieria@norte.cursus.test'
+        : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
     // PERIODO del seed: año 2026, semestre 2.
