@@ -102,7 +102,9 @@ describe('JWT expirado', () => {
       Promise.resolve(
         url === '/api/auth/login'
           ? json({ accessToken: 'jwt-de-prueba' })
-          : json(usuarioDePrueba('PROFESOR')),
+          : url === '/api/dashboard/mis-secciones'
+            ? json([])
+            : json(usuarioDePrueba('PROFESOR')),
       ),
     )
     fireEvent.change(screen.getByLabelText('Correo institucional'), {
