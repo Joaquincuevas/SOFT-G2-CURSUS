@@ -6,6 +6,7 @@ import type {
   CursoCreado,
   CursoDetalle,
   CursoListado,
+  DocenteCreado,
   FiltroCursos,
   OpcionPeriodo,
   ProfesorOpcion,
@@ -24,6 +25,7 @@ import {
 } from '../database/base-de-datos.service.js'
 import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
+import type { CrearDocenteDto } from './crear-docente.dto.js'
 
 // Código de PostgreSQL para una restricción única violada.
 const UNIQUE = '23505'
@@ -103,6 +105,14 @@ export const generarPasswordProvisoria = () =>
   Array.from(randomBytes(16), (byte) => SIMBOLOS[byte % SIMBOLOS.length]).join(
     '',
   )
+
+// El correo de una cuenta nueva debe ser del dominio de su universidad
+// (GES-15 y GES-21). El correo ya viene en minúsculas desde el DTO.
+function exigirDominio(correo: string, dominio: string) {
+  if (correo.split('@')[1] !== dominio) {
+    throw new BadRequestException(`El correo debe ser @${dominio}`)
+  }
+}
 
 // Sección vigente (ella y su curso sin archivar) de la universidad de la
 // sesión ($1 = universidad, $2 = sección), para agregar y listar alumnos. Le
@@ -462,6 +472,61 @@ export class GestionService {
     })
   }
 
+  // GES-21. Crea la cuenta de un profesor o ayudante en la universidad de la
+  // sesión y la facultad del administrativo, con una contraseña provisoria
+  // que solo va en esta respuesta (en la base queda su hash). Un correo ya
+  // registrado en la universidad, con cualquier rol, responde 409 sin cambiar
+  // nada.
+  async crearDocente(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    datos: CrearDocenteDto,
+  ): Promise<DocenteCreado> {
+    const yaExiste = () =>
+      new ConflictException('Ya existe una cuenta con ese correo')
+    try {
+      return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+        const universidad = contexto.universidadId
+        const [administrativo] = await bd.query<{
+          facultad_id: string
+          dominio_correo: string
+        }>(
+          `SELECT u.facultad_id, un.dominio_correo
+             FROM usuario u JOIN universidad un ON un.id = u.universidad_id
+            WHERE u.universidad_id = $1 AND u.id = $2`,
+          [universidad, usuarioId],
+        )
+        exigirDominio(datos.correo, administrativo.dominio_correo)
+
+        const [existente] = await bd.query<{ id: string }>(
+          'SELECT id FROM usuario WHERE universidad_id = $1 AND lower(correo) = $2',
+          [universidad, datos.correo],
+        )
+        if (existente) throw yaExiste()
+
+        const passwordProvisoria = generarPasswordProvisoria()
+        const [usuario] = await bd.query<DocenteCreado['usuario']>(
+          `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, nombre, correo, rol`,
+          [
+            universidad,
+            administrativo.facultad_id,
+            datos.nombre,
+            datos.correo,
+            await hash(passwordProvisoria),
+            datos.rol,
+          ],
+        )
+        return { usuario, passwordProvisoria }
+      })
+    } catch (error) {
+      // Otra petición creó el mismo correo al mismo tiempo.
+      if ((error as { code?: string }).code === UNIQUE) throw yaExiste()
+      throw error
+    }
+  }
+
   // GES-15. Inscribe a un alumno en una sección por su correo institucional,
   // en una transacción. La sección (no archivada) debe ser de un curso vigente
   // de la facultad del usuario; si no, 404. El correo debe ser del dominio de
@@ -486,11 +551,7 @@ export class GestionService {
         if (!seccion) {
           throw new NotFoundException('La sección no existe')
         }
-        if (datos.correo.split('@')[1] !== seccion.dominio_correo) {
-          throw new BadRequestException(
-            `El correo debe ser @${seccion.dominio_correo}`,
-          )
-        }
+        exigirDominio(datos.correo, seccion.dominio_correo)
 
         let [alumno] = await bd.query<FilaAlumno>(
           `SELECT id, nombre, correo, rol, archived_at FROM usuario

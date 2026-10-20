@@ -7,6 +7,7 @@ import type {
   CursoEditable,
   CambioCurso,
   CursoListado,
+  DocenteCreado,
   ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
@@ -30,6 +31,7 @@ import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
 import { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import { AsignarProfesorDto } from './asignar-profesor.dto.js'
 import { CrearCursoDto } from './crear-curso.dto.js'
+import { CrearDocenteDto } from './crear-docente.dto.js'
 import { FiltroCursosDto } from './filtro-cursos.dto.js'
 import { GestionService } from './gestion.service.js'
 import { EdicionCursoService } from './edicion-curso.service.js'
@@ -182,5 +184,18 @@ export class GestionController {
       id,
       datos.profesorId,
     )
+  }
+
+  // GES-21. La respuesta trae la contraseña provisoria: no se guarda en caché
+  // (también lo fija configurarApp para toda la API).
+  @Puede('create', 'Usuario')
+  @Post('usuarios')
+  @Header('Cache-Control', 'no-store')
+  crearDocente(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Body() datos: CrearDocenteDto,
+  ): Promise<DocenteCreado> {
+    return this.gestion.crearDocente(contexto, usuarioDe(req), datos)
   }
 }
