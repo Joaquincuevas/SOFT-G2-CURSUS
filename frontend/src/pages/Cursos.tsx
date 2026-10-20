@@ -18,6 +18,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
+import { EditarCurso } from './EditarCurso'
 import { CursoDetalle } from './CursoDetalle'
 import { useDatos } from './useDatos'
 import './Cursos.css'
@@ -30,6 +31,7 @@ export function Cursos() {
     <Routes>
       <Route index element={<InicioCursos opciones={opciones} />} />
       <Route path="nuevo" element={<NuevoCurso opciones={opciones} />} />
+      <Route path=":id/editar" element={<EditarCurso />} />
       <Route path=":id" element={<CursoDetalle />} />
       <Route path="*" element={<Navigate to="/cursos" replace />} />
     </Routes>
