@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/auth'
+import { PanelMarca } from '../components/PanelMarca'
 import './Login.css'
 
 // Pantalla de login del Figma (nodo 66:2).
@@ -41,26 +42,7 @@ export function Login() {
 
   return (
     <div className="login">
-      <aside className="login__brand">
-        <div className="login__brand-top">
-          <p className="login__logo">CURSUS</p>
-          <span className="login__accent" aria-hidden="true" />
-        </div>
-        <div className="login__brand-message">
-          <p className="login__brand-title">
-            Gestión académica,
-            <br />
-            en un solo lugar.
-          </p>
-          <p className="login__brand-text">
-            CURSUS centraliza cursos, materiales, notas y seguimiento académico
-            para cada universidad.
-          </p>
-        </div>
-        <p className="login__caption login__caption--brand">
-          Sistema de Gestión Académica
-        </p>
-      </aside>
+      <PanelMarca />
 
       <main className="login__area">
         <div className="login__wrapper">
