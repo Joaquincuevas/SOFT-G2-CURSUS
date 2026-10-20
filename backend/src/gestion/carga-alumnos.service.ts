@@ -1,5 +1,9 @@
-import type { FilaCargaAlumnos, ResultadoCargaAlumnos } from '@cursus/shared'
-import { LARGO_NOMBRE_USUARIO } from '@cursus/shared'
+import {
+  type FilaCargaAlumnos,
+  MENSAJES_MOTIVO_CSV,
+  type MotivoErrorCsv,
+  type ResultadoCargaAlumnos,
+} from '@cursus/shared'
 import {
   ForbiddenException,
   HttpException,
@@ -11,7 +15,7 @@ import { validate } from 'class-validator'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
 import { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import { leerCsvAlumnos } from './csv-alumnos.js'
-import { GestionService } from './gestion.service.js'
+import { GestionService, motivoDe } from './gestion.service.js'
 
 @Injectable()
 export class CargaAlumnosService {
@@ -29,23 +33,50 @@ export class CargaAlumnosService {
     await this.gestion.validarSeccionInscripcion(contexto, usuario, seccion)
     const filas = leerCsvAlumnos(csv)
     const resultados: FilaCargaAlumnos[] = []
+    const error = (
+      fila: number,
+      correo: string,
+      nombre: string,
+      motivo: MotivoErrorCsv,
+      mensaje = MENSAJES_MOTIVO_CSV[motivo],
+    ) =>
+      resultados.push({
+        fila,
+        correo,
+        nombre,
+        estado: 'error',
+        motivo,
+        mensaje,
+      })
+    // GES-17: la primera aparición de un correo (sin espacios ni mayúsculas)
+    // se procesa; las siguientes son duplicados y no tocan la base.
+    const vistos = new Set<string>()
     for (const { fila, celdas } of filas) {
+      const nombre = celdas[1] ?? ''
+      const clave = (celdas[0] ?? '').trim().toLowerCase()
+      if (clave && vistos.has(clave)) {
+        error(fila, clave, nombre, 'duplicado_en_archivo')
+        continue
+      }
+      if (clave) vistos.add(clave)
+
       const datos = plainToInstance(AgregarAlumnoDto, {
         correo: celdas[0],
         nombre: celdas[1],
       })
       const correo = typeof datos.correo === 'string' ? datos.correo : ''
-      const errores = await validate(datos)
-      if (celdas.length !== 2 || errores.length) {
-        resultados.push({
+      if (celdas.length !== 2) {
+        error(fila, correo, nombre, 'formato')
+        continue
+      }
+      const invalidas = (await validate(datos)).map((e) => e.property)
+      if (invalidas.length) {
+        error(
           fila,
           correo,
-          estado: 'error',
-          mensaje:
-            celdas.length !== 2
-              ? 'La fila debe tener dos columnas: correo,nombre'
-              : `Revisa el correo y el nombre (máximo ${LARGO_NOMBRE_USUARIO} caracteres)`,
-        })
+          nombre,
+          invalidas.includes('correo') ? 'correo_invalido' : 'nombre_invalido',
+        )
         continue
       }
       try {
@@ -57,8 +88,9 @@ export class CargaAlumnosService {
           datos,
         )
         resultados.push({ fila, correo, estado: 'cargado', ...alumno })
-      } catch (error) {
-        const estado = error instanceof HttpException ? error.getStatus() : 500
+      } catch (excepcion) {
+        const estado =
+          excepcion instanceof HttpException ? excepcion.getStatus() : 500
         if (estado >= 500) {
           // No pasar la excepción: los mensajes/consultas de BD pueden contener
           // correos o contraseñas. El contexto permite ubicar la fila afectada.
@@ -70,23 +102,25 @@ export class CargaAlumnosService {
             estado,
           })
         }
+        const motivo = (estado < 500 && motivoDe(excepcion)) || 'error_interno'
         const respuesta =
-          error instanceof HttpException ? error.getResponse() : null
+          excepcion instanceof HttpException ? excepcion.getResponse() : null
         const mensaje =
           typeof respuesta === 'string'
             ? respuesta
             : (respuesta as { message?: unknown } | null)?.message
-        resultados.push({
+        // El mensaje de GES-15 en los 4xx (por ejemplo, el dominio exacto); en
+        // los 5xx, el genérico. Un 4xx sin motivo conocido queda como
+        // error_interno, pero conserva su mensaje.
+        error(
           fila,
           correo,
-          estado: 'error',
-          mensaje:
-            error instanceof HttpException &&
-            error.getStatus() < 500 &&
-            typeof mensaje === 'string'
-              ? mensaje
-              : 'No se pudo cargar esta fila. Intenta nuevamente.',
-        })
+          nombre,
+          motivo,
+          estado < 500 && typeof mensaje === 'string'
+            ? mensaje
+            : MENSAJES_MOTIVO_CSV[motivo],
+        )
       }
     }
     const cargados = resultados.filter(

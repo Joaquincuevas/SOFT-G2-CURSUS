@@ -39,6 +39,43 @@ describe('CSV de alumnos', () => {
       leerCsvAlumnos('correo,nombre\na@u.cl,Ana,extra')[0].celdas,
     ).toHaveLength(3)
   })
+  describe('cabecera con motivo (GES-17)', () => {
+    it('acepta correo,nombre,motivo e ignora la tercera columna', () => {
+      expect(
+        leerCsvAlumnos(
+          'correo,nombre,motivo\na@u.cl,Ana,Correo inválido\nb@u.cl,Bea\n',
+        ),
+      ).toEqual([
+        { fila: 2, celdas: ['a@u.cl', 'Ana'] },
+        { fila: 3, celdas: ['b@u.cl', 'Bea'] },
+      ])
+    })
+
+    it('lee el CSV de errores descargado (BOM, CRLF y comillas)', () => {
+      const descargado =
+        '﻿correo,nombre,motivo\r\n' +
+        'a@u.cl,"Pérez, Ana",Correo repetido en el archivo\r\n' +
+        'b@u.cl,"Luis ""Lucho""","Falta el nombre, para crear la cuenta"\r\n'
+      expect(leerCsvAlumnos(descargado)).toEqual([
+        { fila: 2, celdas: ['a@u.cl', 'Pérez, Ana'] },
+        { fila: 3, celdas: ['b@u.cl', 'Luis "Lucho"'] },
+      ])
+    })
+
+    it('una fila de 4 celdas sigue siendo un error de formato por fila', () => {
+      expect(
+        leerCsvAlumnos('correo,nombre,motivo\na@u.cl,Ana,x,y')[0].celdas,
+      ).toHaveLength(4)
+    })
+
+    it.each([
+      'correo,nombre,otra\na@u.cl,Ana',
+      'correo,motivo,nombre\na@u.cl,x,Ana',
+    ])('rechaza otra tercera columna: %j', (csv) => {
+      expect(() => leerCsvAlumnos(csv)).toThrow('encabezado')
+    })
+  })
+
   it('limita filas y mide tamaño UTF-8 real', () => {
     const cabecera = 'correo,nombre\n'
     expect(

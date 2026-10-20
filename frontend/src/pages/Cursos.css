@@ -52,6 +52,15 @@
   max-height: 85dvh;
   overflow-y: auto;
 }
+/* GES-17: más ancho para la tabla de filas con error. Sus hijos no se
+   encogen: con la altura máxima, el diálogo se desplaza en vez de aplastar la
+   tabla y los botones. */
+.cursos__dialogo.cursos__dialogo--csv {
+  width: min(48rem, calc(100vw - 2 * var(--space-4)));
+}
+.cursos__dialogo--csv > * {
+  flex-shrink: 0;
+}
 .cursos__resultado-csv {
   display: grid;
   gap: var(--space-4);

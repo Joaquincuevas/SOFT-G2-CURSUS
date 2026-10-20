@@ -211,7 +211,7 @@ describe('GES-10: editor del horario', () => {
       target: { files: [archivo] },
     })
     fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
-    await screen.findByText('Se cargaron 1 de 1 alumnos. Filas con error: 0.')
+    await screen.findByText('1 de 1 cargados, 0 con error.')
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
     expect(resumenVisible()).toBe(EXISTENTE.resumen)
 

@@ -9,6 +9,7 @@ import type {
   CursoListado,
   DocenteCreado,
   FiltroCursos,
+  MotivoErrorCsv,
   OpcionPeriodo,
   ProfesorOpcion,
   SeccionDetalle,
@@ -16,6 +17,7 @@ import type {
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -115,9 +117,23 @@ export const generarPasswordProvisoria = () =>
 // (GES-15 y GES-21). El correo ya viene en minúsculas desde el DTO.
 function exigirDominio(correo: string, dominio: string) {
   if (correo.split('@')[1] !== dominio) {
-    throw new BadRequestException(`El correo debe ser @${dominio}`)
+    throw conMotivo(
+      new BadRequestException(`El correo debe ser @${dominio}`),
+      'dominio_distinto',
+    )
   }
 }
+
+// Agrega a una excepción HTTP un motivo estable (GES-17), para que la carga
+// CSV no dependa del texto. La respuesta HTTP no cambia: Nest solo serializa
+// el mensaje y el código.
+function conMotivo<E extends HttpException>(error: E, motivo: MotivoErrorCsv) {
+  return Object.assign(error, { motivo })
+}
+
+// Motivo de una excepción lanzada con conMotivo, si lo tiene.
+export const motivoDe = (error: unknown): MotivoErrorCsv | undefined =>
+  (error as { motivo?: MotivoErrorCsv } | null)?.motivo
 
 // Sección vigente (ella y su curso sin archivar) de la universidad de la
 // sesión ($1 = universidad, $2 = sección), para agregar y listar alumnos. Le
@@ -566,19 +582,28 @@ export class GestionService {
           [universidad, datos.correo],
         )
         if (alumno && alumno.rol !== 'ALUMNO') {
-          throw new ConflictException(
-            `Ese correo pertenece a un ${alumno.rol.toLowerCase()}`,
+          throw conMotivo(
+            new ConflictException(
+              `Ese correo pertenece a un ${alumno.rol.toLowerCase()}`,
+            ),
+            'rol_distinto',
           )
         }
         // Una cuenta archivada no se reactiva desde aquí.
         if (alumno?.archived_at) {
-          throw new ConflictException('La cuenta de ese alumno está archivada')
+          throw conMotivo(
+            new ConflictException('La cuenta de ese alumno está archivada'),
+            'cuenta_archivada',
+          )
         }
 
         let passwordProvisoria: string | undefined
         if (!alumno) {
           if (!datos.nombre) {
-            throw new BadRequestException('Ingresa el nombre del alumno')
+            throw conMotivo(
+              new BadRequestException('Ingresa el nombre del alumno'),
+              'falta_nombre',
+            )
           }
           passwordProvisoria = generarPasswordProvisoria()
           ;[alumno] = await bd.query<FilaAlumno>(
@@ -616,8 +641,9 @@ export class GestionService {
         constraint?: string
       }
       if (code === UNIQUE && constraint === 'ux_inscripcion_seccion_usuario') {
-        throw new ConflictException(
-          'El alumno ya está inscrito en esta sección',
+        throw conMotivo(
+          new ConflictException('El alumno ya está inscrito en esta sección'),
+          'ya_inscrito',
         )
       }
       // Otra petición creó la misma cuenta al mismo tiempo.
