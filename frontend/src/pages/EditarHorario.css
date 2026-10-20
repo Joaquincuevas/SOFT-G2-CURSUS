@@ -1,0 +1,36 @@
+.horario__dialogo {
+  width: min(44rem, calc(100vw - 2 * var(--space-4)));
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+.horario__campos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.horario__bloque {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.horario__grilla {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .horario__grilla {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

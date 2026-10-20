@@ -158,3 +158,7 @@ Con `NODE_ENV=production` (la imagen Docker), la API no arranca si falta `POSTGR
 - Convención de nombres: tablas en singular y en snake_case (`universidad`, `periodo`), columnas en snake_case (`universidad_id`, `created_at`) y restricciones con prefijo `pk_`, `fk_`, `uq_`, `ck_`, `ux_` (índice único) o `ix_` (índice).
 
 El proyecto es ESM (`"type": "module"`): los imports relativos llevan extensión `.js` (por ejemplo, `import { AppService } from './app.service.js'`).
+
+### Horarios de secciones (GES-10)
+
+`GET` y `PUT /api/secciones/:id/horario` permiten al Administrativo editar todos los bloques semanales de una sección de su facultad. El guardado es atómico, archiva las filas anteriores y controla la versión para evitar sobrescribir cambios de otra sesión. El resumen aparece en el detalle del curso y es consultable por el Director. Ver [contrato y verificación de GES-10](../docs/ges-10-horarios-seccion.md).
