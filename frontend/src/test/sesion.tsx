@@ -65,11 +65,13 @@ export const json = (cuerpo: unknown, status = 200) =>
 // de /api/cursos).
 export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
 
-// Listas de gestión académica: vacías salvo que el test las simule.
+// Listas de gestión académica y del dashboard del profesor (ESP-01): vacías
+// salvo que el test las simule.
 const LISTAS_VACIAS: Record<string, RutaSimulada> = {
   '/api/carreras': () => [],
   '/api/periodos': () => [],
   '/api/cursos': () => [],
+  '/api/dashboard/mis-secciones': () => [],
 }
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh

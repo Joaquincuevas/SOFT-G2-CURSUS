@@ -52,6 +52,9 @@ function preparar(
         json(usuarioDePrueba(opciones.rol ?? 'ADMINISTRATIVO')),
       )
     if (opciones.responder) return opciones.responder(ruta, init)
+    // Dashboard del profesor (ESP-01), al que vuelve un rol sin acceso.
+    if (ruta === '/api/dashboard/mis-secciones')
+      return Promise.resolve(json([]))
     if (ruta === '/api/carreras') return Promise.resolve(json(CARRERAS))
     if (ruta === '/api/periodos') return Promise.resolve(json(PERIODOS))
     if (ruta.endsWith('/edicion')) return Promise.resolve(json(CURSO))
