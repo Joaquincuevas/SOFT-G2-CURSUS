@@ -154,6 +154,7 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    await bd.undoLastMigration() // AsignarProfesorSeccion.
     await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
 
     // CrearSeccion es ahora la última.

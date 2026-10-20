@@ -4,6 +4,7 @@ import type {
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
+  ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
 import {
@@ -38,36 +39,43 @@ const DESDE_CURSO = `
   JOIN universidad un ON un.id = c.universidad_id`
 
 // Secciones vigentes del curso (GES-08): la cantidad para el listado y la
-// lista ordenada por número para el detalle.
+// lista ordenada por número para el detalle, con el nombre del profesor a
+// cargo (GES-12).
 const CANTIDAD_SECCIONES = `
   (SELECT count(*)::int FROM seccion s
     WHERE s.curso_id = c.id AND s.archived_at IS NULL) AS secciones`
 const LISTA_SECCIONES = `
-  COALESCE((SELECT json_agg(json_build_object('id', s.id, 'numero', s.numero)
+  COALESCE((SELECT json_agg(json_build_object('id', s.id, 'numero', s.numero,
+                                              'profesor', u.nombre)
                             ORDER BY s.numero)
               FROM seccion s
+              LEFT JOIN usuario u ON u.id = s.profesor_id
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
 
-// Horario, profesor, ayudantes y alumnos llegan con GES-10, 12, 13 y 15.
+interface FilaSeccion {
+  id: string
+  numero: number
+  profesor?: string | null
+}
+
+// Horario, ayudantes y alumnos llegan con GES-10, 13 y 15.
 const seccionDetalle = ({
   id,
   numero,
-}: {
-  id: string
-  numero: number
-}): SeccionDetalle => ({
+  profesor = null,
+}: FilaSeccion): SeccionDetalle => ({
   id,
   numero,
   horario: null,
-  profesor: null,
+  profesor,
   ayudantes: [],
   alumnos: 0,
 })
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
-  secciones: { id: string; numero: number }[]
+  secciones: FilaSeccion[]
 }
 
 interface FilaListado {
@@ -229,6 +237,56 @@ export class GestionService {
       }
       throw error
     }
+  }
+
+  // GES-12. Profesores de la universidad de la sesión, no archivados, para
+  // elegir a quién asignar una sección. Incluye los de todas las facultades:
+  // la tarjeta pide los de la universidad.
+  async listarProfesores(
+    contexto: ContextoUniversidad,
+  ): Promise<ProfesorOpcion[]> {
+    return this.bd.consultarEnUniversidad<ProfesorOpcion>(
+      contexto,
+      `SELECT id, nombre FROM usuario
+        WHERE universidad_id = $1 AND rol = 'PROFESOR' AND archived_at IS NULL
+        ORDER BY nombre, id`,
+      [],
+    )
+  }
+
+  // GES-12. Asigna el profesor a cargo de la sección, en una sola consulta.
+  // Si ya tenía uno, lo reemplaza: la confirmación se pide en el frontend. La
+  // sección debe ser de un curso de la facultad del usuario, y ni ella ni su
+  // curso pueden estar archivados; el profesor debe ser de su universidad,
+  // con el rol PROFESOR y sin archivar. Si no, no cambia nada y responde 404.
+  async asignarProfesor(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+    profesorId: string,
+  ): Promise<SeccionDetalle> {
+    const [fila] = await this.bd.consultarEnUniversidad<FilaSeccion>(
+      contexto,
+      `WITH profesor AS (
+         SELECT id, nombre FROM usuario
+          WHERE universidad_id = $1 AND id = $3 AND rol = 'PROFESOR'
+            AND archived_at IS NULL
+       ), asignada AS (
+         UPDATE seccion s SET profesor_id = profesor.id
+           FROM profesor, curso c JOIN carrera ca ON ca.id = c.carrera_id
+          WHERE s.universidad_id = $1 AND s.id = $2 AND s.archived_at IS NULL
+            AND c.id = s.curso_id AND c.archived_at IS NULL
+            AND ca.facultad_id = ${facultadDe('$4')}
+         RETURNING s.id, s.numero
+       )
+       SELECT asignada.id, asignada.numero, profesor.nombre AS profesor
+         FROM asignada, profesor`,
+      [seccionId, profesorId, usuarioId],
+    )
+    if (!fila) {
+      throw new NotFoundException('La sección o el profesor no existen')
+    }
+    return seccionDetalle(fila)
   }
 
   // Inserta el curso en una sola consulta, solo si la carrera es de la

@@ -43,12 +43,13 @@ export interface CursoListado {
 }
 
 // Sección dentro del detalle de un curso (GES-08). Lo que todavía no se puede
-// asignar llega vacío: horario (GES-10), profesor y ayudantes (GES-12/13) y
-// alumnos (GES-15). El frontend lo muestra como "Sin asignar".
+// asignar llega vacío: horario (GES-10), ayudantes (GES-13) y alumnos
+// (GES-15). El frontend lo muestra como "Sin asignar".
 export interface SeccionDetalle {
   id: string
   numero: number
   horario: string | null
+  // Nombre del profesor a cargo (GES-12), o null si no tiene.
   profesor: string | null
   ayudantes: string[]
   alumnos: number
@@ -65,6 +66,17 @@ export interface CursoDetalle {
   universidadNombre?: string
   // Ordenadas por número, sin las archivadas.
   secciones: SeccionDetalle[]
+}
+
+// Opción de GET /api/profesores (GES-12): profesores de la universidad.
+export interface ProfesorOpcion {
+  id: string
+  nombre: string
+}
+
+// Cuerpo de PUT /api/secciones/:id/profesor (GES-12).
+export interface AsignarProfesor {
+  profesorId: string
 }
 
 // Opciones de GET /api/periodos; GET /api/carreras usa el tipo Carrera.
