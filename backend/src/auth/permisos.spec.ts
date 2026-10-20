@@ -57,18 +57,24 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Facultad: LECTURA,
     Carrera: LECTURA,
     Periodo: LECTURA,
+    // ESP-06: solo el espacio de sus secciones (además exige ser integrante).
+    Seccion: LECTURA,
   },
   AYUDANTE: {
     Universidad: LECTURA,
     Facultad: LECTURA,
     Carrera: LECTURA,
     Periodo: LECTURA,
+    // ESP-06: solo el espacio de sus secciones (además exige ser integrante).
+    Seccion: LECTURA,
   },
   ALUMNO: {
     Universidad: LECTURA,
     Facultad: LECTURA,
     Carrera: LECTURA,
     Periodo: LECTURA,
+    // ESP-06: solo el espacio de sus secciones (además exige ser integrante).
+    Seccion: LECTURA,
   },
 }
 
