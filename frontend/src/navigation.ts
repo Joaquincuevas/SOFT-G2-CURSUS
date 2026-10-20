@@ -23,13 +23,11 @@ export interface NavItem {
   label: string | ((user: SessionUser) => string)
   icon: NavIconName
   permiso: PermisoRuta
-  // false: la ruta existe (con su guard y su encabezado) pero no va en el
-  // Sidebar; se llega a ella desde otra página.
-  enMenu?: false
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
-  // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,
-  // al que se llega desde el encabezado).
+  // false para una ruta que no va en el menú lateral: existe, con su guard y
+  // su encabezado, pero se llega a ella desde otra página (por ejemplo, el
+  // perfil desde el encabezado o los alumnos de una sección desde el curso).
   enMenu?: boolean
   // Título y subtítulo del encabezado en esta ruta.
   title: (user: SessionUser) => string
