@@ -153,6 +153,7 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
     await bd.undoLastMigration() // NombreCarreraUnicoNormalizado.
 
     // CrearCurso es ahora la última.
