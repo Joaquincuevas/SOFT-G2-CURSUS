@@ -1,19 +1,25 @@
+import { randomBytes } from 'node:crypto'
 import type {
+  AlumnoAgregado,
   CursoCreado,
   CursoDetalle,
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
+  SeccionDetalle,
 } from '@cursus/shared'
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import { hash } from 'argon2'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
 
 // Código de PostgreSQL para una restricción única violada.
@@ -41,16 +47,62 @@ const DESDE_CURSO = `
 const CANTIDAD_SECCIONES = `
   (SELECT count(*)::int FROM seccion s
     WHERE s.curso_id = c.id AND s.archived_at IS NULL) AS secciones`
+// GES-15: alumnos es la cantidad de inscripciones activas de la sección.
 const LISTA_SECCIONES = `
-  COALESCE((SELECT json_agg(json_build_object('id', s.id, 'numero', s.numero)
-                            ORDER BY s.numero)
+  COALESCE((SELECT json_agg(json_build_object(
+                     'id', s.id, 'numero', s.numero,
+                     'alumnos', (SELECT count(*) FROM inscripcion i
+                                  WHERE i.seccion_id = s.id
+                                    AND i.archived_at IS NULL))
+                   ORDER BY s.numero)
               FROM seccion s
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
 
+// Horario, profesor y ayudantes llegan con GES-10, 12 y 13. Una sección
+// recién creada no tiene alumnos.
+const seccionDetalle = ({
+  id,
+  numero,
+  alumnos = 0,
+}: {
+  id: string
+  numero: number
+  alumnos?: number
+}): SeccionDetalle => ({
+  id,
+  numero,
+  horario: null,
+  profesor: null,
+  ayudantes: [],
+  alumnos,
+})
+
+// Contraseña provisoria de una cuenta creada por el administrativo (GES-15):
+// 16 caracteres sin los que se confunden al leerlos (0/O, 1/I). Son 32
+// símbolos, así que cada byte aleatorio elige uno sin sesgo (256 % 32 = 0).
+const SIMBOLOS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+export const generarPasswordProvisoria = () =>
+  Array.from(randomBytes(16), (byte) => SIMBOLOS[byte % SIMBOLOS.length]).join(
+    '',
+  )
+
+interface FilaSeccionInscripcion {
+  facultad_id: string
+  dominio_correo: string
+}
+
+interface FilaAlumno {
+  id: string
+  nombre: string
+  correo: string
+  rol: string
+  archived_at: string | null
+}
+
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
-  secciones: { id: string; numero: number }[]
+  secciones: { id: string; numero: number; alumnos: number }[]
 }
 
 interface FilaListado {
@@ -169,15 +221,152 @@ export class GestionService {
         semestre: fila.semestre,
       },
       ...(esDirector && { universidadNombre: fila.universidad_nombre }),
-      // Horario, profesor, ayudantes y alumnos llegan con GES-10, 12, 13 y 15.
-      secciones: fila.secciones.map(({ id, numero }) => ({
-        id,
-        numero,
-        horario: null,
-        profesor: null,
-        ayudantes: [],
-        alumnos: 0,
-      })),
+      secciones: fila.secciones.map(seccionDetalle),
+    }
+  }
+
+  // GES-09. Agrega la siguiente sección del curso, con el número correlativo.
+  // El curso debe ser de la facultad del usuario y no estar archivado (si no,
+  // 404). El FOR UPDATE sobre el curso serializa las creaciones simultáneas,
+  // así que dos no toman el mismo número; uq_seccion_curso_numero queda como
+  // última defensa (409). Las archivadas cuentan: su número no se reutiliza.
+  async crearSeccion(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<SeccionDetalle> {
+    try {
+      return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+        const parametros = [contexto.universidadId, cursoId]
+        const [curso] = await bd.query<{ id: string }>(
+          `SELECT c.id FROM curso c JOIN carrera ca ON ca.id = c.carrera_id
+            WHERE c.universidad_id = $1 AND c.id = $2
+              AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$3')}
+              FOR UPDATE OF c`,
+          [...parametros, usuarioId],
+        )
+        if (!curso) {
+          throw new NotFoundException('El curso no existe')
+        }
+        const [seccion] = await bd.query<{ id: string; numero: number }>(
+          `INSERT INTO seccion (universidad_id, curso_id, numero)
+           SELECT $1, $2, COALESCE(MAX(numero), 0) + 1
+             FROM seccion WHERE universidad_id = $1 AND curso_id = $2
+           RETURNING id, numero`,
+          parametros,
+        )
+        return seccionDetalle(seccion)
+      })
+    } catch (error) {
+      if ((error as { code?: string }).code === UNIQUE) {
+        throw new ConflictException('La sección ya existe, intenta de nuevo')
+      }
+      throw error
+    }
+  }
+
+  // GES-15. Inscribe a un alumno en una sección por su correo institucional,
+  // en una transacción. La sección (no archivada) debe ser de un curso vigente
+  // de la facultad del usuario; si no, 404. El correo debe ser del dominio de
+  // la universidad. Si el alumno no tiene cuenta, se crea con una contraseña
+  // provisoria, que solo va en esta respuesta (en la base queda su hash).
+  async agregarAlumno(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+    datos: AgregarAlumnoDto,
+  ): Promise<AlumnoAgregado> {
+    try {
+      return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+        const universidad = contexto.universidadId
+        const [seccion] = await bd.query<FilaSeccionInscripcion>(
+          `SELECT ca.facultad_id, un.dominio_correo
+             FROM seccion s
+             JOIN curso c ON c.id = s.curso_id
+             JOIN carrera ca ON ca.id = c.carrera_id
+             JOIN universidad un ON un.id = s.universidad_id
+            WHERE s.universidad_id = $1 AND s.id = $2
+              AND s.archived_at IS NULL AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$3')}`,
+          [universidad, seccionId, usuarioId],
+        )
+        if (!seccion) {
+          throw new NotFoundException('La sección no existe')
+        }
+        if (datos.correo.split('@')[1] !== seccion.dominio_correo) {
+          throw new BadRequestException(
+            `El correo debe ser @${seccion.dominio_correo}`,
+          )
+        }
+
+        let [alumno] = await bd.query<FilaAlumno>(
+          `SELECT id, nombre, correo, rol, archived_at FROM usuario
+            WHERE universidad_id = $1 AND lower(correo) = $2`,
+          [universidad, datos.correo],
+        )
+        if (alumno && alumno.rol !== 'ALUMNO') {
+          throw new ConflictException(
+            `Ese correo pertenece a un ${alumno.rol.toLowerCase()}`,
+          )
+        }
+        // Una cuenta archivada no se reactiva desde aquí.
+        if (alumno?.archived_at) {
+          throw new ConflictException('La cuenta de ese alumno está archivada')
+        }
+
+        let passwordProvisoria: string | undefined
+        if (!alumno) {
+          if (!datos.nombre) {
+            throw new BadRequestException('Ingresa el nombre del alumno')
+          }
+          passwordProvisoria = generarPasswordProvisoria()
+          ;[alumno] = await bd.query<FilaAlumno>(
+            `INSERT INTO usuario (universidad_id, facultad_id, nombre, correo, password_hash, rol)
+             VALUES ($1, $2, $3, $4, $5, 'ALUMNO')
+             RETURNING id, nombre, correo, rol, archived_at`,
+            [
+              universidad,
+              seccion.facultad_id,
+              datos.nombre,
+              datos.correo,
+              await hash(passwordProvisoria),
+            ],
+          )
+        }
+
+        await bd.query(
+          `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+           VALUES ($1, $2, $3)`,
+          [universidad, seccionId, alumno.id],
+        )
+        return {
+          alumno: {
+            id: alumno.id,
+            nombre: alumno.nombre,
+            correo: alumno.correo,
+          },
+          cuentaCreada: passwordProvisoria !== undefined,
+          ...(passwordProvisoria && { passwordProvisoria }),
+        }
+      })
+    } catch (error) {
+      const { code, constraint } = error as {
+        code?: string
+        constraint?: string
+      }
+      if (code === UNIQUE && constraint === 'ux_inscripcion_seccion_usuario') {
+        throw new ConflictException(
+          'El alumno ya está inscrito en esta sección',
+        )
+      }
+      // Otra petición creó la misma cuenta al mismo tiempo.
+      if (code === UNIQUE) {
+        throw new ConflictException(
+          'No se pudo agregar al alumno, intenta de nuevo',
+        )
+      }
+      throw error
     }
   }
 

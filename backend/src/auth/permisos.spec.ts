@@ -18,6 +18,7 @@ const SUJETOS: SujetoTabla[] = [
   'Usuario',
   'Curso',
   'Seccion',
+  'Inscripcion',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -39,6 +40,7 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Usuario: LECTURA,
     Curso: LECTURA,
     Seccion: LECTURA,
+    Inscripcion: LECTURA,
   },
   ADMINISTRATIVO: {
     Universidad: LECTURA,
@@ -48,6 +50,7 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Usuario: SIN_DELETE,
     Curso: SIN_DELETE,
     Seccion: SIN_DELETE,
+    Inscripcion: SIN_DELETE,
   },
   PROFESOR: {
     Universidad: LECTURA,

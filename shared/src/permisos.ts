@@ -25,6 +25,7 @@ export type SujetoTabla =
   | 'Usuario'
   | 'Curso'
   | 'Seccion'
+  | 'Inscripcion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -54,6 +55,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
         'Usuario',
         'Curso',
         'Seccion',
+        'Inscripcion',
       ])
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
@@ -62,7 +64,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       can('read', ['Universidad', 'Facultad'])
       can(
         ['create', 'read', 'update'],
-        ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Usuario'],
+        ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Inscripcion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
       break

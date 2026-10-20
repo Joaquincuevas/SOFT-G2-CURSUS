@@ -17,6 +17,7 @@ const TABLAS = [
   'carrera',
   'curso',
   'facultad',
+  'inscripcion',
   'limite_login',
   'periodo',
   'refresh_token',
@@ -154,9 +155,21 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearSeccion es la última.
+    // CrearInscripcion es la última.
     await bd.undoLastMigration()
-    const SIN_SECCION = TABLAS.filter((tabla) => tabla !== 'seccion')
+    const SIN_INSCRIPCION = TABLAS.filter((tabla) => tabla !== 'inscripcion')
+    expect(await tablasExistentes()).toEqual(SIN_INSCRIPCION)
+    const [{ restricciones }] = await bd.query<{ restricciones: string }[]>(
+      `SELECT count(*) AS restricciones FROM pg_constraint
+        WHERE conname IN ('uq_seccion_id_universidad', 'uq_usuario_id_universidad')`,
+    )
+    expect(Number(restricciones)).toBe(0)
+
+    await bd.undoLastMigration() // CodigoCursoUnicoNormalizado.
+
+    // CrearSeccion es ahora la última.
+    await bd.undoLastMigration()
+    const SIN_SECCION = SIN_INSCRIPCION.filter((tabla) => tabla !== 'seccion')
     expect(await tablasExistentes()).toEqual(SIN_SECCION)
 
     await bd.undoLastMigration() // NombreCarreraUnicoNormalizado.
@@ -250,13 +263,19 @@ describe('migraciones', () => {
        ORDER BY table_name`,
     )
     expect(filas).toEqual(
-      ['carrera', 'curso', 'facultad', 'seccion', 'universidad', 'usuario'].map(
-        (tabla) => ({
-          table_name: tabla,
-          data_type: 'timestamp with time zone',
-          is_nullable: 'YES',
-        }),
-      ),
+      [
+        'carrera',
+        'curso',
+        'facultad',
+        'inscripcion',
+        'seccion',
+        'universidad',
+        'usuario',
+      ].map((tabla) => ({
+        table_name: tabla,
+        data_type: 'timestamp with time zone',
+        is_nullable: 'YES',
+      })),
     )
   })
 
@@ -705,4 +724,69 @@ describe('seccion', () => {
         crearSeccion(q, { ...base, numero: 0 }),
       ).rejects.toMatchObject({ code: CHECK, constraint: 'ck_seccion_numero' })
     }))
+
+  describe('inscripcion', () => {
+    // Una sección y un alumno de la misma universidad.
+    async function crearBase(q: QueryRunner, dominio: string) {
+      const base = await crearCursoBase(q, dominio)
+      const seccionId = await crearSeccion(q, { ...base, numero: 1 })
+      const usuarioId = await crearUsuario(q, {
+        universidadId: base.universidadId,
+        correo: `alumno@${dominio}`,
+      })
+      return { universidadId: base.universidadId, seccionId, usuarioId }
+    }
+
+    const inscribir = (
+      q: QueryRunner,
+      datos: { universidadId: string; seccionId: string; usuarioId: string },
+    ) =>
+      insertar(
+        q,
+        'INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id) VALUES ($1, $2, $3)',
+        [datos.universidadId, datos.seccionId, datos.usuarioId],
+      )
+
+    it('rechaza una sección de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        await expect(
+          inscribir(q, { ...a, seccionId: b.seccionId }),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_seccion',
+        })
+      }))
+
+    it('rechaza un alumno de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        await expect(
+          inscribir(q, { ...a, usuarioId: b.usuarioId }),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_usuario',
+        })
+      }))
+
+    it('no inscribe dos veces al mismo alumno, salvo si la anterior está archivada', () =>
+      enTransaccion(async (q) => {
+        const base = await crearBase(q, 'a.cl')
+        const id = await inscribir(q, base)
+        // El savepoint deja seguir la transacción después del error.
+        await q.query('SAVEPOINT repetida')
+        await expect(inscribir(q, base)).rejects.toMatchObject({
+          code: UNIQUE,
+          constraint: 'ux_inscripcion_seccion_usuario',
+        })
+        await q.query('ROLLBACK TO SAVEPOINT repetida')
+        await q.query(
+          'UPDATE inscripcion SET archived_at = now() WHERE id = $1',
+          [id],
+        )
+        await expect(inscribir(q, base)).resolves.toEqual(expect.any(String))
+      }))
+  })
 })

@@ -24,6 +24,7 @@ Uno por tabla del schema. Deciden qué endpoints puede usar cada rol y qué acci
 | Usuario     | read     | create, read, update | —        | —        | —      |
 | Curso       | read     | create, read, update | —        | —        | —      |
 | Seccion     | read     | create, read, update | —        | —        | —      |
+| Inscripcion | read     | create, read, update | —        | —        | —      |
 
 ### Sujetos de sección
 

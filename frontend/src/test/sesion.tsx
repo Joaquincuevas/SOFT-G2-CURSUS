@@ -59,7 +59,8 @@ export const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status })
 
 // Respuesta simulada de una ruta de la API: un Response, o un cuerpo JSON que
-// responde 200. Recibe la URL completa, con su query (por ejemplo, los filtros
+// responde 200 (o una promesa de cualquiera de los dos, para una respuesta que
+// tarda). Recibe la URL completa, con su query (por ejemplo, los filtros
 // de /api/cursos).
 export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
 
@@ -83,8 +84,7 @@ export function simularBackend(
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     const ruta = url.split('?')[0]
     if (ruta in simuladas) {
-      const respuesta = simuladas[ruta](init, url)
-      return Promise.resolve(
+      return Promise.resolve(simuladas[ruta](init, url)).then((respuesta) =>
         respuesta instanceof Response ? respuesta : json(respuesta),
       )
     }

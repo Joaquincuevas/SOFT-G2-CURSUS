@@ -181,3 +181,41 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+
+/* Diálogo para agregar un alumno a una sección (GES-15). */
+.cursos__dialogo {
+  width: min(32rem, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-6);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  box-shadow: var(--shadow-card);
+}
+
+.cursos__dialogo::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+
+.cursos__dialogo,
+.cursos__formulario {
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cursos__dialogo[open],
+.cursos__formulario {
+  display: flex;
+}
+
+.cursos__titulo-dialogo {
+  margin: 0;
+  font: var(--font-h3);
+  color: var(--color-text-primary);
+}
+
+.cursos__password {
+  margin: 0;
+  font: var(--font-h3);
+  letter-spacing: 0.1em;
+  user-select: all;
+}
