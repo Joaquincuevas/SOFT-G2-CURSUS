@@ -67,8 +67,8 @@ describe('detalle de un curso', () => {
       'Acciones',
     ])
     // Lo que todavía no se asigna aparece como "Sin asignar", y la columna
-    // Acciones tiene los botones de GES-12, GES-15 y GES-13.
-    const ACCIONES = 'Asignar profesorAgregar alumnoAsignar ayudantes'
+    // Acciones tiene los botones de GES-12, GES-15, GES-16 y GES-13.
+    const ACCIONES = 'Asignar profesorAgregar alumnoCargar CSVAsignar ayudantes'
     expect(filasDe(tabla)).toEqual([
       ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
       ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],

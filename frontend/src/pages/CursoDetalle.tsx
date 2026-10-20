@@ -13,6 +13,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
+import { CargarAlumnosCsvDialogo } from './CargarAlumnosCsv'
 import { AsignarAyudantesDialogo } from './AsignarAyudantes'
 import {
   QuitarAsignacionDialogo,
@@ -33,6 +34,7 @@ function FilaSeccion({
   verAlumnos,
   onAsignar,
   onAgregarAlumno,
+  onCargarCsv,
   onAsignarAyudantes,
   onQuitar,
 }: {
@@ -40,6 +42,7 @@ function FilaSeccion({
   verAlumnos: boolean
   onAsignar?: () => void
   onAgregarAlumno?: () => void
+  onCargarCsv?: () => void
   onAsignarAyudantes?: () => void
   onQuitar?: (tipo: TipoAsignacion) => void
 }) {
@@ -97,6 +100,16 @@ function FilaSeccion({
                 onClick={onAgregarAlumno}
               >
                 Agregar alumno
+              </button>
+            )}
+            {onCargarCsv && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Cargar CSV en la sección ${seccion.numero}`}
+                onClick={onCargarCsv}
+              >
+                Cargar CSV
               </button>
             )}
             {onAsignarAyudantes && (
@@ -297,6 +310,7 @@ function Detalle({ id }: { id: string }) {
   const { user } = useSession()
   const puedeVerAlumnos = usePuede('read', 'Inscripcion')
   const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
+  const [csvEn, setCsvEn] = useState<SeccionDetalle | null>(null)
   const [agregados, setAgregados] = useState<Record<string, number>>({})
   const puedeAsignarAyudantes = usePuede('update', 'Seccion')
   const [asignarEn, setAsignarEn] = useState<SeccionDetalle | null>(null)
@@ -489,6 +503,9 @@ function Detalle({ id }: { id: string }) {
                     puedeAsignar ? () => abrirAsignacion(seccion) : undefined
                   }
                   verAlumnos={verAlumnos}
+                  onCargarCsv={
+                    puedeInscribir ? () => setCsvEn(seccion) : undefined
+                  }
                   onAgregarAlumno={
                     puedeInscribir
                       ? () => {
@@ -577,6 +594,23 @@ function Detalle({ id }: { id: string }) {
             })
           }}
           onCerrar={() => setInscribirEn(null)}
+        />
+      )}
+      {csvEn && (
+        <CargarAlumnosCsvDialogo
+          seccionId={csvEn.id}
+          numero={csvEn.numero}
+          onCargados={(cantidad) => {
+            setAgregados((anteriores) => ({
+              ...anteriores,
+              [csvEn.id]: (anteriores[csvEn.id] ?? 0) + cantidad,
+            }))
+            setAviso({
+              exito: true,
+              texto: `${cantidad} alumnos cargados a la sección ${csvEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setCsvEn(null)}
         />
       )}
     </section>
