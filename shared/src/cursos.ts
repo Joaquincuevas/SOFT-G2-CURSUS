@@ -57,10 +57,8 @@ export interface CursoListado {
   universidadNombre?: string
 }
 
-// Sección dentro del detalle de un curso (GES-08). Lo que todavía no se puede
-// asignar llega vacío: horario (GES-10), que el frontend muestra como "Sin
-// asignar". Profesor (GES-12), ayudantes (GES-13) y alumnos (GES-15) vienen de
-// sus asignaciones activas.
+// Sección dentro del detalle del curso. Horario, profesor, ayudantes y
+// alumnos consideran sus asignaciones activas. Sin horario llega null.
 export interface SeccionDetalle {
   id: string
   numero: number
