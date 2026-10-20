@@ -17,6 +17,7 @@ import type { CookieOptions, Request, Response } from 'express'
 import { AuthService, type TokensSesion } from './auth.service.js'
 import { LoginDto } from './login.dto.js'
 import { CambiarPasswordDto } from './cambiar-password.dto.js'
+import { PermitidaConProvisoria } from './credencial-provisoria.decorator.js'
 import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
@@ -147,8 +148,10 @@ export class AuthController {
 
   // PER-02. Cambia la contraseña del usuario de la sesión, también la del
   // Director, y cierra sus demás sesiones. Una contraseña actual incorrecta
-  // cuenta para el mismo límite de intentos por cuenta del login.
+  // cuenta para el mismo límite de intentos por cuenta del login. Es la única
+  // ruta, junto a /auth/yo, que acepta una contraseña provisoria (PER-03).
   @SoloSesion()
+  @PermitidaConProvisoria()
   @Put('password')
   @HttpCode(204)
   async cambiarPassword(
@@ -183,6 +186,7 @@ export class AuthController {
   // Usuario de la sesión. 401 si el usuario del token ya no existe en la
   // universidad del token.
   @SoloSesion()
+  @PermitidaConProvisoria()
   @Get('yo')
   async yo(
     @Req() req: RequestConUsuario,
