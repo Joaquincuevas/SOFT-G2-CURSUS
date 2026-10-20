@@ -23,7 +23,7 @@ Solo el Administrativo con permiso `update` sobre `Seccion` usa el editor. Se va
 - Una versión desactualizada responde 409. El bloqueo de la sección y el curso serializa los guardados simultáneos; uno no sobrescribe silenciosamente al otro.
 - `GET /api/cursos/:id` mantiene `secciones[].horario` como resumen de texto, o null si no tiene bloques. El contrato existente del detalle se conserva.
 
-La ocupación de la misma sala por **otras secciones** corresponde a GES-11. Esta tarjeta registra el día, intervalo y sala para permitir implementar ese aviso después.
+La ocupación de la misma sala por **otras secciones** se valida en [GES-11](ges-11-sala-ocupada.md): un choque en la misma universidad, período y día rechaza el guardado con 409 e informa el curso y sección que la ocupan.
 
 ## Datos y migración
 

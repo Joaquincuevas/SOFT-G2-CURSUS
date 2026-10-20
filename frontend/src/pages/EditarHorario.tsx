@@ -1,8 +1,10 @@
 import {
+  CODIGO_SALA_OCUPADA,
   DIAS_SEMANA,
   LARGO_SALA,
   MAX_BLOQUES_HORARIO,
   type BloqueHorario,
+  type ChoqueSala,
   type DiaSemana,
   type GuardarHorario,
   type HorarioSeccion,
@@ -108,6 +110,7 @@ function FormularioHorario({
   const [bloques, setBloques] = useState(() => datos.bloques.map(paraEditar))
   const [error, setError] = useState<string | null>(null)
   const [conflicto, setConflicto] = useState(false)
+  const [choques, setChoques] = useState<ChoqueSala[]>([])
   const sinCambios =
     JSON.stringify(sinClaves(bloques)) === JSON.stringify(datos.bloques)
 
@@ -116,11 +119,12 @@ function FormularioHorario({
       actuales.map((b) => (b.clave === clave ? { ...b, ...cambio } : b)),
     )
     if (!conflicto) setError(null)
+    setChoques([])
   }
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (guardando || conflicto || sinCambios) return
+    if (guardando || conflicto || sinCambios || choques.length > 0) return
     const entrada = sinClaves(bloques)
     if (entrada.some((b) => b.inicio >= b.termino)) {
       setError('La hora de término debe ser posterior al inicio.')
@@ -128,6 +132,7 @@ function FormularioHorario({
     }
     setGuardando(true)
     setError(null)
+    setChoques([])
     try {
       const cuerpo: GuardarHorario = {
         version: datos.version,
@@ -147,8 +152,13 @@ function FormularioHorario({
       } else {
         const detalle = (await respuesta.json().catch(() => ({}))) as {
           message?: unknown
+          code?: string
+          choques?: ChoqueSala[]
         }
-        setConflicto(respuesta.status === 409)
+        const salaOcupada =
+          respuesta.status === 409 && detalle.code === CODIGO_SALA_OCUPADA
+        setConflicto(respuesta.status === 409 && !salaOcupada)
+        if (salaOcupada) setChoques(detalle.choques ?? [])
         setError(
           typeof detalle.message === 'string' && respuesta.status < 500
             ? detalle.message
@@ -244,11 +254,13 @@ function FormularioHorario({
               type="button"
               className="cursos__boton cursos__boton--secundario"
               aria-label={`Quitar bloque ${i + 1}`}
-              onClick={() =>
+              onClick={() => {
+                setChoques([])
+                if (!conflicto) setError(null)
                 setBloques((actuales) =>
                   actuales.filter((b) => b.clave !== bloque.clave),
                 )
-              }
+              }}
             >
               Quitar bloque
             </button>
@@ -258,20 +270,33 @@ function FormularioHorario({
           className="cursos__boton cursos__boton--secundario"
           type="button"
           disabled={bloques.length >= MAX_BLOQUES_HORARIO}
-          onClick={() =>
+          onClick={() => {
+            setChoques([])
+            if (!conflicto) setError(null)
             setBloques((actuales) => [
               ...actuales,
               paraEditar({ dia: 1, inicio: '', termino: '', sala: '' }),
             ])
-          }
+          }}
         >
           Agregar bloque
         </button>
       </fieldset>
       {error && (
-        <p className="cursos__error" role="alert">
-          {error}
-        </p>
+        <div className="cursos__error" role="alert">
+          <p>{error}</p>
+          {choques.length > 0 && (
+            <ul aria-label="Salas ocupadas">
+              {choques.map((choque, indice) => (
+                <li key={indice}>
+                  {choque.sala} · {DIAS_SEMANA[choque.dia - 1]} {choque.inicio}–
+                  {choque.termino}: {choque.cursoCodigo} · {choque.cursoNombre},
+                  sección {choque.seccionNumero}.
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
       {conflicto && (
         <div>
@@ -299,7 +324,7 @@ function FormularioHorario({
         <button
           className="cursos__boton"
           type="submit"
-          disabled={guardando || sinCambios || conflicto}
+          disabled={guardando || sinCambios || conflicto || choques.length > 0}
         >
           {guardando ? 'Guardando…' : 'Guardar horario'}
         </button>
