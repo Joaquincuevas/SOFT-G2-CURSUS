@@ -53,6 +53,8 @@ Una fila exitosa contiene `{ fila, correo, estado: "cargado", alumno, cuentaCrea
 
 ## Preparación y pasos de revisión
 
+La branch integra `develop` mediante merge, incluida GES-13. En el detalle se conservan Agregar alumno, Cargar CSV y Asignar ayudantes, con los permisos respectivos.
+
 ```bash
 git fetch origin
 git switch feature/gestion-carga-alumnos-csv

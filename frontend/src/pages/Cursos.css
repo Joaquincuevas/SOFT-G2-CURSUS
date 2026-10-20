@@ -242,3 +242,29 @@
   letter-spacing: 0.1em;
   user-select: all;
 }
+
+.cursos__opciones-ayudantes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.cursos__opcion-ayudante {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+.cursos__correo-ayudante {
+  display: block;
+  overflow-wrap: anywhere;
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}

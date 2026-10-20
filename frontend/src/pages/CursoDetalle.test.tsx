@@ -74,7 +74,7 @@ describe('detalle de un curso', () => {
         'Sin asignar',
         'Sin asignar',
         '0',
-        'Agregar alumnoCargar CSV',
+        'Agregar alumnoCargar CSVAsignar ayudantes',
       ],
       [
         '2',
@@ -82,7 +82,7 @@ describe('detalle de un curso', () => {
         'Sin asignar',
         'Sin asignar',
         '0',
-        'Agregar alumnoCargar CSV',
+        'Agregar alumnoCargar CSVAsignar ayudantes',
       ],
     ])
   })
@@ -116,6 +116,9 @@ describe('detalle de un curso', () => {
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
     expect(screen.queryByRole('button', { name: /Agregar alumno/ })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /Asignar ayudantes/ }),
+    ).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
   })
 
