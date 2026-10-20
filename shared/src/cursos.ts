@@ -157,3 +157,21 @@ export interface AlumnoQuitado {
   quitadoEn: string
   quitadoPor: { id: string; nombre: string }
 }
+
+// Roles de las cuentas que crea el administrativo en /docentes (GES-21).
+export const ROLES_DOCENTES = ['PROFESOR', 'AYUDANTE'] as const
+export type RolDocente = (typeof ROLES_DOCENTES)[number]
+
+// Cuerpo de POST /api/usuarios (GES-21).
+export interface CrearDocente {
+  nombre: string
+  correo: string
+  rol: RolDocente
+}
+
+// Respuesta de POST /api/usuarios. La contraseña provisoria solo va en esta
+// respuesta y no se puede volver a pedir.
+export interface DocenteCreado {
+  usuario: { id: string; nombre: string; correo: string; rol: RolDocente }
+  passwordProvisoria: string
+}

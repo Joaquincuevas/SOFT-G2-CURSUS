@@ -268,3 +268,25 @@
   font: var(--font-caption);
   color: var(--color-text-secondary);
 }
+
+/* Opciones de radio (rol en /docentes, GES-21). */
+.cursos__opciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.cursos__opciones legend {
+  margin-bottom: var(--space-2);
+}
+
+.cursos__opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
