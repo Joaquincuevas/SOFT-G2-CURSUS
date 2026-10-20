@@ -32,9 +32,9 @@ Las dos rutas nuevas piden `update` sobre `Seccion`, que hoy solo tiene el admin
 
 La migración `AsignarProfesorSeccion` agrega a `seccion` la columna `profesor_id`. Al ser una sola columna, "un solo profesor a cargo" lo garantiza la estructura, y reasignar reemplaza al anterior.
 
-La FK compuesta `fk_seccion_profesor`, sobre `(profesor_id, universidad_id)`, impide en la base que el profesor sea de otra universidad, igual que las de curso con carrera y período. Para eso la migración agrega `uq_usuario_id_universidad` a `usuario`. Que el usuario tenga el rol PROFESOR y no esté archivado lo verifica `GestionService.asignarProfesor`, en la misma consulta que actualiza la sección.
+La FK compuesta `fk_seccion_profesor`, sobre `(profesor_id, universidad_id)`, impide en la base que el profesor sea de otra universidad, igual que las de curso con carrera y período. Se apoya en `uq_usuario_id_universidad`, que agrega `CrearInscripcion` (GES-15). Que el usuario tenga el rol PROFESOR y no esté archivado lo verifica `GestionService.asignarProfesor`, en la misma consulta que actualiza la sección.
 
-El índice `ix_seccion_profesor` cubre la FK y las búsquedas futuras de las secciones de un profesor. La migración solo agrega una columna que admite `NULL`, una restricción y un índice, así que es compatible hacia atrás.
+El índice `ix_seccion_profesor` cubre la FK y las búsquedas futuras de las secciones de un profesor. La migración solo agrega una columna que admite `NULL`, su FK y un índice, así que es compatible hacia atrás.
 
 ## Preparación
 

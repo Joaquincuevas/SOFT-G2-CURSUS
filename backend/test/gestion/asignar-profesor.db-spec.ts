@@ -232,6 +232,23 @@ describe('PUT /api/secciones/:id/profesor', () => {
     expect(await profesorDe(seccionId)).toBe(segundo.id)
   })
 
+  it('la respuesta conserva la cantidad de alumnos inscritos (GES-15)', async () => {
+    const seccionId = await idSeccion('ICC201', 2)
+    await bd.query(
+      `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+       SELECT s.universidad_id, s.id, u.id FROM seccion s, usuario u
+        WHERE s.id = $1 AND u.correo = $2`,
+      [seccionId, ALUMNO_NORTE],
+    )
+
+    const seccion = await asignar(
+      ADMIN_INGENIERIA,
+      seccionId,
+      await idUsuario(PROFESOR_NORTE),
+    )
+    expect(seccion.alumnos).toBe(1)
+  })
+
   it('acepta un profesor de otra facultad de su universidad', async () => {
     const seccionId = await idSeccion('ICO101', 1)
     // Profesor Norte es de Ingeniería; la sección, de Economía.
