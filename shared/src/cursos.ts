@@ -78,6 +78,7 @@ export interface CursoDetalle {
   carreraNombre: string
   periodo: PeriodoResumen
   // Solo para el Director, que ve los cursos de todas las universidades.
+  universidadId?: string
   universidadNombre?: string
   // Ordenadas por número, sin las archivadas.
   secciones: SeccionDetalle[]
@@ -106,10 +107,29 @@ export interface AgregarAlumno {
   nombre?: string
 }
 
+// Alumno de una sección (GES-15 y GES-18).
+export interface AlumnoInscrito {
+  id: string
+  nombre: string
+  correo: string
+}
+
 // Respuesta de POST /api/secciones/:id/alumnos. passwordProvisoria viene solo
 // si se creó la cuenta, y no se puede volver a pedir.
 export interface AlumnoAgregado {
-  alumno: { id: string; nombre: string; correo: string }
+  alumno: AlumnoInscrito
   cuentaCreada: boolean
   passwordProvisoria?: string
+}
+
+// Respuesta de GET /api/secciones/:id/alumnos (GES-18): las inscripciones
+// activas, por nombre (orden alfabético en español) y después por correo.
+export interface AlumnosSeccion {
+  seccion: {
+    id: string
+    numero: number
+    curso: { id: string; codigo: string; nombre: string }
+  }
+  alumnos: AlumnoInscrito[]
+  total: number
 }

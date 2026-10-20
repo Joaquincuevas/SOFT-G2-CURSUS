@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type {
   AlumnoAgregado,
+  AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
   CursoListado,
@@ -35,7 +36,8 @@ const facultadDe = (parametro: string) =>
 // Columnas de un curso, comunes al listado y al detalle.
 const COLUMNAS_CURSO = `
   c.id, c.codigo, c.nombre, ca.nombre AS carrera_nombre,
-  p.id AS periodo_id, p.anio, p.semestre, un.nombre AS universidad_nombre`
+  p.id AS periodo_id, p.anio, p.semestre, un.id AS universidad_id,
+  un.nombre AS universidad_nombre`
 
 const DESDE_CURSO = `
   FROM curso c
@@ -95,6 +97,34 @@ export const generarPasswordProvisoria = () =>
     '',
   )
 
+// Sección vigente (ella y su curso sin archivar) de la universidad de la
+// sesión ($1 = universidad, $2 = sección), para agregar y listar alumnos. Le
+// sigue el filtro de facultad, salvo para el Director.
+const SECCION_VIGENTE = `
+  FROM seccion s
+  JOIN curso c ON c.id = s.curso_id
+  JOIN carrera ca ON ca.id = c.carrera_id
+ WHERE s.universidad_id = $1 AND s.id = $2
+   AND s.archived_at IS NULL AND c.archived_at IS NULL`
+
+// Alumnos con inscripción activa en la sección s, en orden alfabético en
+// español (la collation ICU ordena bien tildes y ñ) y después por correo.
+const ALUMNOS_SECCION = `
+  COALESCE((SELECT json_agg(json_build_object(
+                     'id', u.id, 'nombre', u.nombre, 'correo', u.correo)
+                   ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo)
+              FROM inscripcion i JOIN usuario u ON u.id = i.usuario_id
+             WHERE i.seccion_id = s.id AND i.archived_at IS NULL), '[]') AS alumnos`
+
+interface FilaAlumnosSeccion {
+  id: string
+  numero: number
+  curso_id: string
+  codigo: string
+  curso_nombre: string
+  alumnos: AlumnosSeccion['alumnos']
+}
+
 interface FilaSeccionInscripcion {
   facultad_id: string
   dominio_correo: string
@@ -120,6 +150,7 @@ interface FilaListado {
   periodo_id: string
   anio: number
   semestre: number
+  universidad_id: string
   universidad_nombre: string
   secciones: number
 }
@@ -227,7 +258,10 @@ export class GestionService {
         anio: fila.anio,
         semestre: fila.semestre,
       },
-      ...(esDirector && { universidadNombre: fila.universidad_nombre }),
+      ...(esDirector && {
+        universidadId: fila.universidad_id,
+        universidadNombre: fila.universidad_nombre,
+      }),
       secciones: fila.secciones.map(seccionDetalle),
     }
   }
@@ -326,6 +360,41 @@ export class GestionService {
     return seccionDetalle(fila)
   }
 
+  // GES-18. Alumnos inscritos en una sección vigente, con el mismo criterio
+  // que agregarAlumno: de la facultad del usuario (si no, 404). El Director
+  // ve las secciones de toda su universidad, pero no las de otras (404).
+  async listarAlumnos(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+  ): Promise<AlumnosSeccion> {
+    const esDirector = contexto.rol === 'DIRECTOR'
+    const [fila] = await this.bd.consultarEnUniversidad<FilaAlumnosSeccion>(
+      contexto,
+      `SELECT s.id, s.numero, c.id AS curso_id, c.codigo,
+              c.nombre AS curso_nombre, ${ALUMNOS_SECCION}
+         ${SECCION_VIGENTE}
+         ${esDirector ? '' : `AND ca.facultad_id = ${facultadDe('$3')}`}`,
+      esDirector ? [seccionId] : [seccionId, usuarioId],
+    )
+    if (!fila) {
+      throw new NotFoundException('La sección no existe')
+    }
+    return {
+      seccion: {
+        id: fila.id,
+        numero: fila.numero,
+        curso: {
+          id: fila.curso_id,
+          codigo: fila.codigo,
+          nombre: fila.curso_nombre,
+        },
+      },
+      alumnos: fila.alumnos,
+      total: fila.alumnos.length,
+    }
+  }
+
   // GES-15. Inscribe a un alumno en una sección por su correo institucional,
   // en una transacción. La sección (no archivada) debe ser de un curso vigente
   // de la facultad del usuario; si no, 404. El correo debe ser del dominio de
@@ -341,13 +410,9 @@ export class GestionService {
       return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
         const universidad = contexto.universidadId
         const [seccion] = await bd.query<FilaSeccionInscripcion>(
-          `SELECT ca.facultad_id, un.dominio_correo
-             FROM seccion s
-             JOIN curso c ON c.id = s.curso_id
-             JOIN carrera ca ON ca.id = c.carrera_id
-             JOIN universidad un ON un.id = s.universidad_id
-            WHERE s.universidad_id = $1 AND s.id = $2
-              AND s.archived_at IS NULL AND c.archived_at IS NULL
+          `SELECT ca.facultad_id,
+                  (SELECT dominio_correo FROM universidad WHERE id = $1) AS dominio_correo
+             ${SECCION_VIGENTE}
               AND ca.facultad_id = ${facultadDe('$3')}`,
           [universidad, seccionId, usuarioId],
         )
