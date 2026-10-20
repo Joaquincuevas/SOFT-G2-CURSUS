@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [GES-20: seed de una facultad completa y guía de revisión](ges-20-seed-facultad.md)
+
 - [GES-10: horarios de secciones y guía de revisión](ges-10-horarios-seccion.md)
 
 - [GES-16: carga de alumnos desde CSV y guía de revisión](ges-16-carga-alumnos-csv.md)

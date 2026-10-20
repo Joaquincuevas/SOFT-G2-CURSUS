@@ -142,6 +142,10 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 `POST /api/secciones/:id/alumnos/csv` recibe `{ csv }` y devuelve total, cargados, errores y detalle por fila. Solo el administrativo de la facultad/universidad de la sección puede cargar. Cada fila reutiliza el DTO y la transacción de GES-15; un fallo individual no revierte otras filas. Formato UTF-8 `correo,nombre`, hasta 100 alumnos y 48 KiB. La plantilla se descarga desde el diálogo de la sección. No requiere migraciones ni dependencias nuevas. Ver [formato, permisos, límites y pruebas](../docs/ges-16-carga-alumnos-csv.md).
 
+## Facultad completa de demo (GES-20)
+
+`npm run seed` y `npm run seed:prod` completan Ingeniería de Norte con tres carreras, quince cursos y treinta secciones con horario, sala y participantes. La carga es transaccional y se puede repetir sin duplicar ni restaurar asignaciones retiradas. Ver [datos y verificación de GES-20](../docs/ges-20-seed-facultad.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.
