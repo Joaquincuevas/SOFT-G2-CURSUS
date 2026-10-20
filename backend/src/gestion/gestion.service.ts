@@ -7,6 +7,7 @@ import type {
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
+  ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
 import {
@@ -45,14 +46,15 @@ const DESDE_CURSO = `
   JOIN universidad un ON un.id = c.universidad_id`
 
 // Secciones vigentes del curso (GES-08): la cantidad para el listado y la
-// lista ordenada por número para el detalle.
+// lista ordenada por número para el detalle, con el nombre del profesor a
+// cargo (GES-12).
 const CANTIDAD_SECCIONES = `
   (SELECT count(*)::int FROM seccion s
     WHERE s.curso_id = c.id AND s.archived_at IS NULL) AS secciones`
 // GES-15: alumnos es la cantidad de inscripciones activas de la sección.
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
-                     'id', s.id, 'numero', s.numero,
+                     'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
                      'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                                      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
                                     WHERE a.seccion_id = s.id AND a.archived_at IS NULL
@@ -62,27 +64,32 @@ const LISTA_SECCIONES = `
                                     AND i.archived_at IS NULL))
                    ORDER BY s.numero)
               FROM seccion s
+              LEFT JOIN usuario pr ON pr.id = s.profesor_id
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
 
-// Horario y profesor llegan con GES-10 y 12. Una sección
-// recién creada no tiene alumnos.
+interface FilaSeccion {
+  id: string
+  numero: number
+  profesor?: string | null
+  ayudantes?: string[]
+  alumnos?: number
+}
+
+// El horario llega con GES-10. Una sección recién creada no tiene profesor,
+// ayudantes ni alumnos.
 const seccionDetalle = ({
   id,
   numero,
-  alumnos = 0,
+  profesor = null,
   ayudantes = [],
-}: {
-  id: string
-  numero: number
-  alumnos?: number
-  ayudantes?: string[]
-}): SeccionDetalle => ({
+  alumnos = 0,
+}: FilaSeccion): SeccionDetalle => ({
   id,
   numero,
   horario: null,
-  profesor: null,
+  profesor,
   ayudantes,
   alumnos,
 })
@@ -138,12 +145,7 @@ interface FilaAlumno {
 }
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
-  secciones: {
-    id: string
-    numero: number
-    alumnos: number
-    ayudantes: string[]
-  }[]
+  secciones: FilaSeccion[]
 }
 
 interface FilaListado {
@@ -309,6 +311,63 @@ export class GestionService {
       }
       throw error
     }
+  }
+
+  // GES-12. Profesores de la universidad de la sesión, no archivados, para
+  // elegir a quién asignar una sección. Incluye los de todas las facultades:
+  // la tarjeta pide los de la universidad.
+  async listarProfesores(
+    contexto: ContextoUniversidad,
+  ): Promise<ProfesorOpcion[]> {
+    return this.bd.consultarEnUniversidad<ProfesorOpcion>(
+      contexto,
+      `SELECT id, nombre FROM usuario
+        WHERE universidad_id = $1 AND rol = 'PROFESOR' AND archived_at IS NULL
+        ORDER BY nombre, id`,
+      [],
+    )
+  }
+
+  // GES-12. Asigna el profesor a cargo de la sección, en una sola consulta.
+  // Si ya tenía uno, lo reemplaza: la confirmación se pide en el frontend. La
+  // sección debe ser de un curso de la facultad del usuario, y ni ella ni su
+  // curso pueden estar archivados; el profesor debe ser de su universidad,
+  // con el rol PROFESOR y sin archivar. Si no, no cambia nada y responde 404.
+  async asignarProfesor(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+    profesorId: string,
+  ): Promise<SeccionDetalle> {
+    const [fila] = await this.bd.consultarEnUniversidad<FilaSeccion>(
+      contexto,
+      `WITH profesor AS (
+         SELECT id, nombre FROM usuario
+          WHERE universidad_id = $1 AND id = $3 AND rol = 'PROFESOR'
+            AND archived_at IS NULL
+       ), asignada AS (
+         UPDATE seccion s SET profesor_id = profesor.id
+           FROM profesor, curso c JOIN carrera ca ON ca.id = c.carrera_id
+          WHERE s.universidad_id = $1 AND s.id = $2 AND s.archived_at IS NULL
+            AND c.id = s.curso_id AND c.archived_at IS NULL
+            AND ca.facultad_id = ${facultadDe('$4')}
+         RETURNING s.id, s.numero
+       )
+       SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
+              (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                 FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                WHERE a.seccion_id = asignada.id AND a.archived_at IS NULL
+                  AND u.archived_at IS NULL AND u.rol = 'AYUDANTE') AS ayudantes,
+              (SELECT count(*)::int FROM inscripcion i
+                WHERE i.seccion_id = asignada.id
+                  AND i.archived_at IS NULL) AS alumnos
+         FROM asignada, profesor`,
+      [seccionId, profesorId, usuarioId],
+    )
+    if (!fila) {
+      throw new NotFoundException('La sección o el profesor no existen')
+    }
+    return seccionDetalle(fila)
   }
 
   // GES-18. Alumnos inscritos en una sección vigente, con el mismo criterio
