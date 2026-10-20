@@ -68,8 +68,22 @@ describe('detalle de un curso', () => {
     ])
     // Lo que todavía no se asigna aparece como "Sin asignar".
     expect(filasDe(tabla)).toEqual([
-      ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', 'Agregar alumno'],
-      ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', 'Agregar alumno'],
+      [
+        '1',
+        'Sin asignar',
+        'Sin asignar',
+        'Sin asignar',
+        '0',
+        'Agregar alumnoAsignar ayudantes',
+      ],
+      [
+        '2',
+        'Sin asignar',
+        'Sin asignar',
+        'Sin asignar',
+        '0',
+        'Agregar alumnoAsignar ayudantes',
+      ],
     ])
   })
 
@@ -102,6 +116,9 @@ describe('detalle de un curso', () => {
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
     expect(screen.queryByRole('button', { name: /Agregar alumno/ })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /Asignar ayudantes/ }),
+    ).toBeNull()
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
   })
 

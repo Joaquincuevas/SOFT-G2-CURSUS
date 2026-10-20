@@ -58,8 +58,8 @@ export interface CursoListado {
 }
 
 // Sección dentro del detalle de un curso (GES-08). Lo que todavía no se puede
-// asignar llega vacío: horario (GES-10), profesor y ayudantes (GES-12/13) y
-// alumnos (GES-15, inscripciones activas). El frontend lo muestra como "Sin asignar".
+// asignar llega vacío: horario (GES-10) y profesor (GES-12).
+// Ayudantes (GES-13) y alumnos (GES-15) consideran las asociaciones activas.
 export interface SeccionDetalle {
   id: string
   numero: number
@@ -108,6 +108,22 @@ export interface AlumnoAgregado {
   alumno: AlumnoInscrito
   cuentaCreada: boolean
   passwordProvisoria?: string
+}
+
+// GES-13: usuarios disponibles para asignar a una sección.
+export interface AyudanteResumen {
+  id: string
+  nombre: string
+  correo: string
+}
+
+export interface AyudanteOpcion extends AyudanteResumen {
+  asignado: boolean
+}
+
+// Agrega asignaciones; no reemplaza ni quita las existentes (GES-14).
+export interface AsignarAyudantes {
+  ayudanteIds: string[]
 }
 
 // Respuesta de GET /api/secciones/:id/alumnos (GES-18): las inscripciones

@@ -53,6 +53,10 @@ const CANTIDAD_SECCIONES = `
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
                      'id', s.id, 'numero', s.numero,
+                     'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                                     FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                                    WHERE a.seccion_id = s.id AND a.archived_at IS NULL
+                                      AND u.archived_at IS NULL AND u.rol = 'AYUDANTE'),
                      'alumnos', (SELECT count(*) FROM inscripcion i
                                   WHERE i.seccion_id = s.id
                                     AND i.archived_at IS NULL))
@@ -62,22 +66,24 @@ const LISTA_SECCIONES = `
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
 
-// Horario, profesor y ayudantes llegan con GES-10, 12 y 13. Una sección
+// Horario y profesor llegan con GES-10 y 12. Una sección
 // recién creada no tiene alumnos.
 const seccionDetalle = ({
   id,
   numero,
   alumnos = 0,
+  ayudantes = [],
 }: {
   id: string
   numero: number
   alumnos?: number
+  ayudantes?: string[]
 }): SeccionDetalle => ({
   id,
   numero,
   horario: null,
   profesor: null,
-  ayudantes: [],
+  ayudantes,
   alumnos,
 })
 
@@ -132,7 +138,12 @@ interface FilaAlumno {
 }
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
-  secciones: { id: string; numero: number; alumnos: number }[]
+  secciones: {
+    id: string
+    numero: number
+    alumnos: number
+    ayudantes: string[]
+  }[]
 }
 
 interface FilaListado {
