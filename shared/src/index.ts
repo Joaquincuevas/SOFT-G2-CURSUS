@@ -34,6 +34,7 @@ export * from './periodos.js'
 export * from './perfil.js'
 export * from './horarios.js'
 export * from './carga-alumnos.js'
+export * from './dashboard.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

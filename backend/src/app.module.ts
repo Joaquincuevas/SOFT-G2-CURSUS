@@ -8,6 +8,7 @@ import { GestionModule } from './gestion/gestion.module.js'
 import { HealthModule } from './health/health.module.js'
 import { CarrerasModule } from './carreras/carreras.module.js'
 import { PerfilModule } from './perfil/perfil.module.js'
+import { DashboardModule } from './dashboard/dashboard.module.js'
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PerfilModule } from './perfil/perfil.module.js'
     CarrerasModule,
     PeriodosModule,
     PerfilModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
