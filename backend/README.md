@@ -52,6 +52,19 @@ Las reglas por rol viven en `shared/src/permisos.ts` (`definirAbilityPara`) y la
 
 Nada se elimina: los registros se archivan (archived_at). Por eso ningún rol tiene `delete` ni `manage`, y una ruta `@Puede('delete', ...)` responde `403` a todos.
 
+### Espacio de una sección (ESP-06)
+
+Las rutas con datos de una sección para sus integrantes van en `src/espacio/`, bajo `/api/espacio/secciones/:id`, con dos decoradores:
+
+```ts
+@Puede('read', 'Seccion')
+@IntegranteDeSeccion()
+@Get()
+obtener(@SeccionActual() seccion: SeccionEspacio) { ... }
+```
+
+`@IntegranteDeSeccion()` deja pasar al profesor de la sección, a sus ayudantes y alumnos activos, al Administrativo de la facultad del curso y al Director (en solo lectura). Un usuario de la misma universidad que no es integrante recibe `403`. Una sección inexistente, archivada o de otra universidad responde `404`. Ver [docs/esp-06-acceso-seccion.md](../docs/esp-06-acceso-seccion.md).
+
 ## Validación de entradas
 
 Un `ValidationPipe` global (en `src/config/configurar-app.ts`) valida cada body con su DTO. Un campo no declarado o un valor inválido responde `400`.
