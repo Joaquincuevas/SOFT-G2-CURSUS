@@ -25,8 +25,6 @@ const UNIQUE = '23505'
 const facultadDe = (parametro: string) =>
   `(SELECT facultad_id FROM usuario WHERE id = ${parametro} AND universidad_id = $1)`
 
-// Columnas comunes del listado de cursos. secciones va en 0 hasta que exista
-// la tabla de secciones (GES-09).
 // Columnas de un curso, comunes al listado y al detalle.
 const COLUMNAS_CURSO = `
   c.id, c.codigo, c.nombre, ca.nombre AS carrera_nombre,

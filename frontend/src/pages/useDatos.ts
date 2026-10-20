@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../auth/auth'
 
 // GET con la sesión: undefined mientras carga y null si falla; en ese caso
@@ -12,14 +12,10 @@ export function useDatos<T>(ruta: string | null) {
     status?: number
   }>({ datos: undefined })
   const [intento, setIntento] = useState(0)
-  // fetchConSesion cambia de identidad al navegar (useNavigate en
-  // BrowserRouter); fuera de las dependencias, solo se pide de nuevo cuando
-  // cambia la ruta o se reintenta.
-  const pedir = useEffectEvent((url: string) => fetchConSesion(url))
   useEffect(() => {
     if (ruta === null) return
     let vigente = true
-    void pedir(ruta)
+    void fetchConSesion(ruta)
       .then(async (respuesta) =>
         respuesta.ok
           ? { datos: (await respuesta.json()) as T }
@@ -32,7 +28,7 @@ export function useDatos<T>(ruta: string | null) {
     return () => {
       vigente = false
     }
-  }, [ruta, intento])
+  }, [fetchConSesion, ruta, intento])
   const recargar = () => {
     setResultado({ datos: undefined })
     setIntento((n) => n + 1)
