@@ -1,5 +1,10 @@
 import { hash } from 'argon2'
 import type { DataSource, EntityManager } from 'typeorm'
+import {
+  DOMINIO_DEMO,
+  FACULTAD_DEMO,
+  sembrarFacultadCompleta,
+} from './seed-facultad.js'
 
 // Datos simulados para desarrollo y la primera validación con el cliente. Imitan
 // su escenario: una universidad grande con varias facultades y otra pequeña de
@@ -403,6 +408,9 @@ export async function ejecutarSeed(
   bd: DataSource,
   password: string,
   env: NodeJS.ProcessEnv = process.env,
+  // El CLI carga la facultad completa. Las fixtures de otras historias
+  // conservan su escenario base para verificar secciones aún sin asignar.
+  opciones: { facultadCompleta?: boolean } = {},
 ) {
   verificarEntorno(env)
 
@@ -414,13 +422,25 @@ export async function ejecutarSeed(
 
   // Un solo hash para todos los usuarios: argon2 es lento a propósito.
   const passwordHash = await hash(password)
-  await bd.transaction(async (m) => {
+  return bd.transaction(async (m) => {
+    // Serializa también la primera carga en una base vacía. Dos INSERT
+    // concurrentes pueden chocar con otra clave única antes del upsert.
+    // El bloqueo se libera automáticamente al confirmar o revertir.
+    await m.query(`SELECT pg_advisory_xact_lock(hashtext('cursus:seed'))`)
     for (const [indice, universidad] of UNIVERSIDADES.entries()) {
       await sembrarUniversidad(
         m,
         universidad,
         usuariosDeDemo(indice),
         passwordHash,
+      )
+    }
+    if (opciones.facultadCompleta) {
+      return sembrarFacultadCompleta(
+        m,
+        usuariosDeDemo(0)
+          .filter((u) => u.facultad === FACULTAD_DEMO)
+          .map((u) => `${u.usuario}@${DOMINIO_DEMO}`),
       )
     }
   })
