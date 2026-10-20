@@ -47,6 +47,13 @@
   background: var(--color-surface);
 }
 
+/* Título de la tarjeta de cambio de contraseña (PER-02). */
+.perfil__titulo {
+  margin: 0;
+  font: var(--font-h3);
+  color: var(--color-text-primary);
+}
+
 .perfil__nota,
 .perfil__exito,
 .perfil__error {
