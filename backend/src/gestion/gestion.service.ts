@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import type {
   AlumnoAgregado,
   AlumnoQuitado,
+  BloqueHorario,
   AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
@@ -26,6 +27,8 @@ import {
 import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
 import type { CrearDocenteDto } from './crear-docente.dto.js'
+import { resumirHorario } from '@cursus/shared'
+import { BLOQUES_HORARIO } from './horarios.sql.js'
 
 // Código de PostgreSQL para una restricción única violada.
 const UNIQUE = '23505'
@@ -58,6 +61,7 @@ const CANTIDAD_SECCIONES = `
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
                      'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
+                     'bloquesHorario', ${BLOQUES_HORARIO},
                      'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                                      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
                                     WHERE a.seccion_id = s.id AND a.archived_at IS NULL
@@ -78,20 +82,21 @@ interface FilaSeccion {
   profesor?: string | null
   ayudantes?: string[]
   alumnos?: number
+  bloquesHorario?: BloqueHorario[]
 }
 
-// El horario llega con GES-10. Una sección recién creada no tiene profesor,
-// ayudantes ni alumnos.
+// Una sección nueva comienza sin horario, profesor, ayudantes ni alumnos.
 const seccionDetalle = ({
   id,
   numero,
   profesor = null,
   ayudantes = [],
   alumnos = 0,
+  bloquesHorario = [],
 }: FilaSeccion): SeccionDetalle => ({
   id,
   numero,
-  horario: null,
+  horario: resumirHorario(bloquesHorario),
   profesor,
   ayudantes,
   alumnos,
@@ -369,6 +374,7 @@ export class GestionService {
          RETURNING s.id, s.numero
        )
        SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
+              ${BLOQUES_HORARIO} AS "bloquesHorario",
               (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                  FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
                 WHERE a.seccion_id = asignada.id AND a.archived_at IS NULL
@@ -376,7 +382,7 @@ export class GestionService {
               (SELECT count(*)::int FROM inscripcion i
                 WHERE i.seccion_id = asignada.id
                   AND i.archived_at IS NULL) AS alumnos
-         FROM asignada, profesor`,
+         FROM asignada JOIN seccion s ON s.id = asignada.id CROSS JOIN profesor`,
       [seccionId, profesorId, usuarioId],
     )
     if (!fila) {
