@@ -8,13 +8,14 @@ export class CrearAyudanteSeccion1792490000000 implements MigrationInterface {
     // asociar una sección y un usuario de universidades distintas.
     await q.query(`
       CREATE TABLE ayudante_seccion (
-        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        id uuid NOT NULL DEFAULT gen_random_uuid(),
         universidad_id uuid NOT NULL,
         seccion_id uuid NOT NULL,
         usuario_id uuid NOT NULL,
         archived_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT pk_ayudante_seccion PRIMARY KEY (id),
         CONSTRAINT fk_ayudante_seccion_seccion FOREIGN KEY (seccion_id, universidad_id)
           REFERENCES seccion (id, universidad_id) ON DELETE RESTRICT,
         CONSTRAINT fk_ayudante_seccion_usuario FOREIGN KEY (usuario_id, universidad_id)

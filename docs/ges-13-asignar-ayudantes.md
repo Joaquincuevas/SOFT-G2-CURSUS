@@ -1,6 +1,6 @@
 # GES-13: asignar ayudantes a una sección
 
-Historia: **F2 · [GES-13] Administrativo asigna ayudantes a una sección**. Referencia: RN-05. Dependencia: GES-09, ya integrada en `develop`.
+Tarjeta: [F2 · GES-13 Administrativo asigna ayudantes a una sección](https://trello.com/c/xkMy15dq/100-f2-ges-13-administrativo-asigna-ayudantes-a-una-secci%C3%B3n). Referencia: RN-05. Dependencia: GES-09, ya integrada en `develop`.
 
 ## Comportamiento
 
@@ -19,7 +19,7 @@ En staging se usan los ayudantes del seed GES-22; las cuentas de producción se 
 - Ambos endpoints requieren `update` sobre `Seccion` (solo Administrativo). No se aceptan identificadores de universidad o facultad en el body.
 - El detalle existente `GET /api/cursos/:id` devuelve los nombres en `secciones[].ayudantes`.
 
-La migración `1792490000000-CrearAyudanteSeccion` crea `ayudante_seccion`, con claves foráneas compuestas por universidad, un índice único para asignaciones activas, fechas y `archived_at`. Reutiliza las claves compuestas incorporadas en GES-15, ya integrado. Las políticas RLS aíslan las universidades y permiten lectura consolidada al Director; solo el Administrativo escribe. No se otorga DELETE. La validación de usuarios y las inserciones se ejecutan en una transacción con bloqueos para evitar asignaciones parciales o duplicadas.
+La migración `1792490000000-CrearAyudanteSeccion` crea `ayudante_seccion`, con clave primaria `pk_ayudante_seccion`, claves foráneas compuestas por universidad, un índice único para asignaciones activas, fechas y `archived_at`. Reutiliza las claves compuestas incorporadas en GES-15, ya integrado. Las políticas RLS aíslan las universidades y permiten lectura consolidada al Director; solo el Administrativo escribe. No se otorga DELETE. La validación de usuarios y las inserciones se ejecutan en una transacción con bloqueos para evitar asignaciones parciales o duplicadas.
 
 ## Verificación
 
