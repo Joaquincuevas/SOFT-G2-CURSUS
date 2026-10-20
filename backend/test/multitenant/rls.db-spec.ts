@@ -23,6 +23,7 @@ const TABLAS = [
   ['usuario', 'universidad_id'],
   ['curso', 'universidad_id'],
   ['seccion', 'universidad_id'],
+  ['inscripcion', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -90,6 +91,17 @@ beforeAll(async () => {
     await bd.query(
       `INSERT INTO seccion (universidad_id, curso_id, numero)
        SELECT $1, id, 1 FROM curso WHERE universidad_id = $1 AND codigo = 'RLS101'`,
+      [id],
+    )
+    // Un alumno del seed inscrito en esa sección.
+    await bd.query(
+      `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+       SELECT $1, s.id, u.id
+         FROM seccion s
+         JOIN curso c ON c.id = s.curso_id AND c.codigo = 'RLS101'
+         JOIN LATERAL (SELECT id FROM usuario
+                        WHERE universidad_id = $1 AND rol = 'ALUMNO' LIMIT 1) u ON true
+        WHERE s.universidad_id = $1`,
       [id],
     )
   }

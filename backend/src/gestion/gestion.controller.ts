@@ -1,4 +1,5 @@
 import type {
+  AlumnoAgregado,
   CursoCreado,
   CursoDetalle,
   CursoListado,
@@ -8,6 +9,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Post,
@@ -18,6 +20,7 @@ import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
+import { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import { CrearCursoDto } from './crear-curso.dto.js'
 import { FiltroCursosDto } from './filtro-cursos.dto.js'
 import { GestionService } from './gestion.service.js'
@@ -68,5 +71,19 @@ export class GestionController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SeccionDetalle> {
     return this.gestion.crearSeccion(contexto, usuarioDe(req), id)
+  }
+
+  // La respuesta puede traer la contraseña provisoria: no se guarda en caché
+  // (también lo fija configurarApp para toda la API).
+  @Puede('create', 'Inscripcion')
+  @Post('secciones/:id/alumnos')
+  @Header('Cache-Control', 'no-store')
+  agregarAlumno(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() datos: AgregarAlumnoDto,
+  ): Promise<AlumnoAgregado> {
+    return this.gestion.agregarAlumno(contexto, usuarioDe(req), id, datos)
   }
 }
