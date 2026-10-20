@@ -25,9 +25,8 @@ export interface NavItem {
   permiso: PermisoRuta
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
-  // false para una ruta que no va en el menú lateral: existe, con su guard y
-  // su encabezado, pero se llega a ella desde otra página (por ejemplo, el
-  // perfil desde el encabezado o los alumnos de una sección desde el curso).
+  // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,
+  // al que se llega desde el encabezado).
   enMenu?: boolean
   // Título y subtítulo del encabezado en esta ruta.
   title: (user: SessionUser) => string
