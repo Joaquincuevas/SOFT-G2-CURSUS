@@ -175,6 +175,63 @@ describe('GES-10: editor del horario', () => {
     expect(resumenVisible()).toBe(EXISTENTE.resumen)
   })
 
+  test('cargar alumnos por CSV conserva el horario y editarlo conserva el conteo', async () => {
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => curso(EXISTENTE.resumen),
+      [RUTA]: (init) =>
+        init?.method === 'PUT' ? respuestaCorrecta(init) : EXISTENTE,
+      '/api/secciones/seccion-1/alumnos/csv': () => ({
+        total: 1,
+        cargados: 1,
+        errores: 0,
+        filas: [
+          {
+            fila: 2,
+            correo: 'ana@norte.cursus.test',
+            estado: 'cargado',
+            cuentaCreada: false,
+            alumno: {
+              id: 'alumno-3',
+              nombre: 'Ana',
+              correo: 'ana@norte.cursus.test',
+            },
+          },
+        ],
+      }),
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Cargar CSV en la sección 1' }),
+    )
+    const csv = 'correo,nombre\nana@norte.cursus.test,Ana'
+    const archivo = new File([csv], 'alumnos.csv', { type: 'text/csv' })
+    Object.defineProperty(archivo, 'arrayBuffer', {
+      value: () => Promise.resolve(new TextEncoder().encode(csv).buffer),
+    })
+    fireEvent.change(screen.getByLabelText('Archivo CSV'), {
+      target: { files: [archivo] },
+    })
+    fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
+    await screen.findByText('Se cargaron 1 de 1 alumnos. Filas con error: 0.')
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+    expect(resumenVisible()).toBe(EXISTENTE.resumen)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Editar horario de la sección 1' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Quitar bloque 2' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar bloque 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar horario' }))
+    await screen.findByText('Horario de la sección 1 guardado.')
+    expect(resumenVisible()).toBe('Sin asignar')
+    expect(
+      screen.getByRole('link', { name: 'Ver los 3 alumnos de la sección 1' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('table')).toHaveTextContent('Profesor Norte')
+    expect(screen.getByRole('table')).toHaveTextContent('Ana Ayudante')
+  })
+
   test('durante el guardado bloquea campos, Cancelar y Escape', async () => {
     let responder: (respuesta: Response) => void = () => {}
     const { dialogo } = await abrir(

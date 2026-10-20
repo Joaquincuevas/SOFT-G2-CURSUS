@@ -119,6 +119,10 @@ const SECCION_VIGENTE = `
  WHERE s.universidad_id = $1 AND s.id = $2
    AND s.archived_at IS NULL AND c.archived_at IS NULL`
 
+const SECCION_INSCRIBIBLE = `SELECT ca.facultad_id,
+  (SELECT dominio_correo FROM universidad WHERE id = $1) AS dominio_correo
+  ${SECCION_VIGENTE} AND ca.facultad_id = ${facultadDe('$3')}`
+
 // Alumnos con inscripción activa en la sección s, en orden alfabético en
 // español (la collation ICU ordena bien tildes y ñ) y después por correo.
 const ALUMNOS_SECCION = `
@@ -483,10 +487,7 @@ export class GestionService {
       return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
         const universidad = contexto.universidadId
         const [seccion] = await bd.query<FilaSeccionInscripcion>(
-          `SELECT ca.facultad_id,
-                  (SELECT dominio_correo FROM universidad WHERE id = $1) AS dominio_correo
-             ${SECCION_VIGENTE}
-              AND ca.facultad_id = ${facultadDe('$3')}`,
+          SECCION_INSCRIBIBLE,
           [universidad, seccionId, usuarioId],
         )
         if (!seccion) {
@@ -566,6 +567,18 @@ export class GestionService {
       }
       throw error
     }
+  }
+
+  async validarSeccionInscripcion(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+  ): Promise<void> {
+    await this.bd.obtenerEnUniversidad<FilaSeccionInscripcion>(
+      contexto,
+      SECCION_INSCRIBIBLE,
+      [seccionId, usuarioId],
+    )
   }
 
   // Inserta el curso en una sola consulta, solo si la carrera es de la

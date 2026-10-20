@@ -12,6 +12,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
+import { CargarAlumnosCsvDialogo } from './CargarAlumnosCsv'
 import { AsignarAyudantesDialogo } from './AsignarAyudantes'
 import { EditarHorarioDialogo } from './EditarHorario'
 import './Cursos.css'
@@ -22,12 +23,14 @@ const SIN_ASIGNAR = 'Sin asignar'
 // Lo que no está asignado se muestra como "Sin asignar". Con verAlumnos, el
 // número de alumnos enlaza a su lista (GES-18). Las acciones por sección
 // dependen de los permisos de la sesión: asignar o cambiar el profesor
-// (GES-12), agregar un alumno (GES-15) y asignar ayudantes (GES-13).
+// (GES-12), agregar alumnos (GES-15/16), asignar ayudantes (GES-13) y editar
+// el horario (GES-10).
 function FilaSeccion({
   seccion,
   verAlumnos,
   onAsignar,
   onAgregarAlumno,
+  onCargarCsv,
   onAsignarAyudantes,
   onHorario,
 }: {
@@ -35,6 +38,7 @@ function FilaSeccion({
   verAlumnos: boolean
   onAsignar?: () => void
   onAgregarAlumno?: () => void
+  onCargarCsv?: () => void
   onAsignarAyudantes?: () => void
   onHorario?: () => void
 }) {
@@ -61,7 +65,11 @@ function FilaSeccion({
           seccion.alumnos
         )}
       </td>
-      {(onAsignar || onAgregarAlumno || onAsignarAyudantes || onHorario) && (
+      {(onAsignar ||
+        onAgregarAlumno ||
+        onCargarCsv ||
+        onAsignarAyudantes ||
+        onHorario) && (
         <td>
           <div className="cursos__acciones">
             {onAsignar && (
@@ -82,6 +90,16 @@ function FilaSeccion({
                 onClick={onAgregarAlumno}
               >
                 Agregar alumno
+              </button>
+            )}
+            {onCargarCsv && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Cargar CSV en la sección ${seccion.numero}`}
+                onClick={onCargarCsv}
+              >
+                Cargar CSV
               </button>
             )}
             {onAsignarAyudantes && (
@@ -282,6 +300,7 @@ function Detalle({ id }: { id: string }) {
   const { user } = useSession()
   const puedeVerAlumnos = usePuede('read', 'Inscripcion')
   const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
+  const [csvEn, setCsvEn] = useState<SeccionDetalle | null>(null)
   const [agregados, setAgregados] = useState<Record<string, number>>({})
   const puedeAsignarAyudantes = usePuede('update', 'Seccion')
   const [asignarEn, setAsignarEn] = useState<SeccionDetalle | null>(null)
@@ -465,6 +484,9 @@ function Detalle({ id }: { id: string }) {
                     puedeAsignar ? () => abrirAsignacion(seccion) : undefined
                   }
                   verAlumnos={verAlumnos}
+                  onCargarCsv={
+                    puedeInscribir ? () => setCsvEn(seccion) : undefined
+                  }
                   onAgregarAlumno={
                     puedeInscribir
                       ? () => {
@@ -549,6 +571,23 @@ function Detalle({ id }: { id: string }) {
             })
           }}
           onCerrar={() => setInscribirEn(null)}
+        />
+      )}
+      {csvEn && (
+        <CargarAlumnosCsvDialogo
+          seccionId={csvEn.id}
+          numero={csvEn.numero}
+          onCargados={(cantidad) => {
+            setAgregados((anteriores) => ({
+              ...anteriores,
+              [csvEn.id]: (anteriores[csvEn.id] ?? 0) + cantidad,
+            }))
+            setAviso({
+              exito: true,
+              texto: `${cantidad} alumnos cargados a la sección ${csvEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setCsvEn(null)}
         />
       )}
     </section>

@@ -45,7 +45,7 @@ npm run build
 
 Las pruebas cubren varios bloques, modificación, quitar el último, persistencia, resumen en el detalle, asignación de profesor sin perder el horario, rechazo de superposiciones, validación de los campos, permisos, aislamiento entre universidades y facultades, secciones/cursos archivados, ediciones simultáneas y versiones antiguas. Una falla de escritura simulada después del archivado comprueba el rollback del conjunto completo. También se comprueban migraciones, RLS y la FK compuesta.
 
-En la interfaz se verifica el guardado, edición, eliminación de bloques, cancelación, bloqueo mientras se envía, error y reintento, conflicto y recarga, y lectura del Director.
+En la interfaz se verifica el guardado, edición, eliminación de bloques, cancelación, bloqueo mientras se envía, error y reintento, conflicto y recarga, y lectura del Director. La prueba de integración con GES-16 comprueba que cargar alumnos por CSV conserva el horario y que editarlo conserva el conteo de alumnos.
 
 ## Revisión manual
 
