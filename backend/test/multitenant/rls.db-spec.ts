@@ -24,6 +24,7 @@ const TABLAS = [
   ['curso', 'universidad_id'],
   ['seccion', 'universidad_id'],
   ['inscripcion', 'universidad_id'],
+  ['ayudante_seccion', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -102,6 +103,14 @@ beforeAll(async () => {
          JOIN LATERAL (SELECT id FROM usuario
                         WHERE universidad_id = $1 AND rol = 'ALUMNO' LIMIT 1) u ON true
         WHERE s.universidad_id = $1`,
+      [id],
+    )
+    await bd.query(
+      `INSERT INTO ayudante_seccion (universidad_id, seccion_id, usuario_id)
+      SELECT $1, s.id, u.id FROM seccion s
+        JOIN curso c ON c.id = s.curso_id AND c.codigo = 'RLS101'
+        JOIN LATERAL (SELECT id FROM usuario WHERE universidad_id = $1 AND rol = 'AYUDANTE' LIMIT 1) u ON true
+       WHERE s.universidad_id = $1`,
       [id],
     )
   }

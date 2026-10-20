@@ -69,6 +69,60 @@ describe('GET /api/cursos (e2e)', () => {
     },
   )
 
+  describe('ayudantes (GES-13)', () => {
+    const ruta = '/api/secciones/00000000-0000-4000-8000-000000000001/ayudantes'
+    it.each(['ALUMNO', 'PROFESOR', 'AYUDANTE', 'DIRECTOR'])(
+      '%s no puede consultar opciones ni asignar',
+      async (rol) => {
+        await request(app.getHttpServer())
+          .get(ruta)
+          .set('Authorization', sesionDe(rol))
+          .expect(403)
+        await request(app.getHttpServer())
+          .post(ruta)
+          .set('Authorization', sesionDe(rol))
+          .send({ ayudanteIds: ['00000000-0000-4000-8000-000000000001'] })
+          .expect(403)
+      },
+    )
+    it('exige sesión', async () => {
+      await request(app.getHttpServer()).get(ruta).expect(401)
+      await request(app.getHttpServer())
+        .post(ruta)
+        .send({ ayudanteIds: [] })
+        .expect(401)
+    })
+    it.each([
+      {},
+      { ayudanteIds: [] },
+      { ayudanteIds: 'abc' },
+      { ayudanteIds: ['abc'] },
+      {
+        ayudanteIds: ['00000000-0000-4000-8000-000000000001'],
+        rol: 'DIRECTOR',
+      },
+      { ayudanteIds: Array(2).fill('00000000-0000-4000-8000-000000000001') },
+      {
+        ayudanteIds: Array.from(
+          { length: 101 },
+          (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+        ),
+      },
+    ])('rechaza un body inválido %j', async (datos) => {
+      await request(app.getHttpServer())
+        .post(ruta)
+        .set('Authorization', sesionDe('ADMINISTRATIVO'))
+        .send(datos)
+        .expect(400)
+    })
+    it('valida el uuid de la sección', async () => {
+      await request(app.getHttpServer())
+        .get('/api/secciones/no-es-uuid/ayudantes')
+        .set('Authorization', sesionDe('ADMINISTRATIVO'))
+        .expect(400)
+    })
+  })
+
   describe('agregar un alumno (GES-15)', () => {
     const agregar = (rol: string, datos: object) =>
       request(app.getHttpServer())

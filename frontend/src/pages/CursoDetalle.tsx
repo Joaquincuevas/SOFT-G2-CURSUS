@@ -6,20 +6,21 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
+import { AsignarAyudantesDialogo } from './AsignarAyudantes'
 import './Cursos.css'
 import { useDatos } from './useDatos'
 
 const SIN_ASIGNAR = 'Sin asignar'
 
-// Horario (GES-10), profesor y ayudantes (GES-12/13) se muestran como "Sin
-// asignar" hasta que existan. Con onAgregarAlumno, la fila tiene el botón
-// "Agregar alumno" (GES-15).
+// Acciones por sección según los permisos de la sesión.
 function FilaSeccion({
   seccion,
   onAgregarAlumno,
+  onAsignarAyudantes,
 }: {
   seccion: SeccionDetalle
   onAgregarAlumno?: () => void
+  onAsignarAyudantes?: () => void
 }) {
   return (
     <tr>
@@ -32,16 +33,30 @@ function FilaSeccion({
           : SIN_ASIGNAR}
       </td>
       <td>{seccion.alumnos}</td>
-      {onAgregarAlumno && (
+      {(onAgregarAlumno || onAsignarAyudantes) && (
         <td>
-          <button
-            className="cursos__boton cursos__boton--secundario"
-            type="button"
-            aria-label={`Agregar alumno a la sección ${seccion.numero}`}
-            onClick={onAgregarAlumno}
-          >
-            Agregar alumno
-          </button>
+          <div className="cursos__acciones">
+            {onAgregarAlumno && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Agregar alumno a la sección ${seccion.numero}`}
+                onClick={onAgregarAlumno}
+              >
+                Agregar alumno
+              </button>
+            )}
+            {onAsignarAyudantes && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Asignar ayudantes a la sección ${seccion.numero}`}
+                onClick={onAsignarAyudantes}
+              >
+                Asignar ayudantes
+              </button>
+            )}
+          </div>
         </td>
       )}
     </tr>
@@ -78,6 +93,11 @@ function Detalle({ id }: { id: string }) {
   const puedeInscribir = usePuede('create', 'Inscripcion')
   const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
   const [agregados, setAgregados] = useState<Record<string, number>>({})
+  const puedeAsignarAyudantes = usePuede('update', 'Seccion')
+  const [asignarEn, setAsignarEn] = useState<SeccionDetalle | null>(null)
+  const [ayudantesAsignados, setAyudantesAsignados] = useState<
+    Record<string, string[]>
+  >({})
 
   async function crearSeccion() {
     setCreando(true)
@@ -125,6 +145,7 @@ function Detalle({ id }: { id: string }) {
   const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
     ...seccion,
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
+    ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
   }))
   const subtitulo = [
     curso.universidadNombre,
@@ -189,7 +210,9 @@ function Detalle({ id }: { id: string }) {
                 <th scope="col">Profesor</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
-                {puedeInscribir && <th scope="col">Acciones</th>}
+                {(puedeInscribir || puedeAsignarAyudantes) && (
+                  <th scope="col">Acciones</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -205,11 +228,36 @@ function Detalle({ id }: { id: string }) {
                         }
                       : undefined
                   }
+                  onAsignarAyudantes={
+                    puedeAsignarAyudantes
+                      ? () => {
+                          setAviso(undefined)
+                          setAsignarEn(seccion)
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+      {asignarEn && (
+        <AsignarAyudantesDialogo
+          seccionId={asignarEn.id}
+          numero={asignarEn.numero}
+          onAsignados={(ayudantes) => {
+            setAyudantesAsignados((anteriores) => ({
+              ...anteriores,
+              [asignarEn.id]: ayudantes.map((a) => a.nombre),
+            }))
+            setAviso({
+              exito: true,
+              texto: `Ayudantes asignados a la sección ${asignarEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setAsignarEn(null)}
+        />
       )}
       {inscribirEn && (
         <AgregarAlumnoDialogo
