@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'asignacion_cambio',
   'ayudante_seccion',
   'carrera',
   'curso',
@@ -158,16 +159,26 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // AgregarCredencialProvisoria: quita la columna de usuario.
+    // AgregarCredencialProvisoria es la última: quita la columna de usuario.
     await bd.undoLastMigration()
     const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
       `SELECT count(*) AS provisoria FROM information_schema.columns
         WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
     )
     expect(Number(provisoria)).toBe(0)
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    // CrearAsignacionCambio: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ASIGNACION_CAMBIO = TABLAS.filter(
+      (tabla) => tabla !== 'asignacion_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
 
     await bd.undoLastMigration() // CrearHorarioSeccion.
-    const SIN_HORARIO = TABLAS.filter((tabla) => tabla !== 'horario_seccion')
+    const SIN_HORARIO = SIN_ASIGNACION_CAMBIO.filter(
+      (tabla) => tabla !== 'horario_seccion',
+    )
     expect(await tablasExistentes()).toEqual(SIN_HORARIO)
 
     // ArchivarInscripcionConResponsable: quita la columna y sus restricciones.
@@ -283,7 +294,8 @@ describe('migraciones', () => {
         t !== 'refresh_token' &&
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
-        t !== 'curso_cambio',
+        t !== 'curso_cambio' &&
+        t !== 'asignacion_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(

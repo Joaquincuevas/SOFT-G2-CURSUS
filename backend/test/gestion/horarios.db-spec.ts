@@ -1,5 +1,6 @@
 import type {
   BloqueHorario,
+  ChoqueSala,
   CursoDetalle,
   HorarioSeccion,
 } from '@cursus/shared'
@@ -75,6 +76,15 @@ async function filas() {
   )
 }
 
+async function otraSeccion(codigo = 'ICC201') {
+  const [otra] = await bd.query<{ id: string; curso_id: string }[]>(
+    `SELECT s.id, s.curso_id FROM seccion s JOIN curso c ON c.id = s.curso_id
+      WHERE c.codigo = $1 AND s.numero = 1`,
+    [codigo],
+  )
+  return otra
+}
+
 beforeAll(async () => {
   admin = await new DataSource(opcionesDataSource()).initialize()
   await admin.query(`DROP DATABASE IF EXISTS "${BD_TEST}" WITH (FORCE)`)
@@ -93,6 +103,202 @@ beforeAll(async () => {
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
   configurarApp(app, { secretoOrigen: '' })
   await app.listen(0, '127.0.0.1')
+})
+
+describe('GES-11: ocupación de salas por período', () => {
+  it.each([
+    ['08:30', '09:20'],
+    ['08:00', '09:00'],
+    ['09:00', '10:00'],
+    ['08:40', '09:00'],
+    ['08:00', '10:00'],
+  ])(
+    'rechaza solapamiento %s–%s entre cursos del mismo período',
+    async (inicio, termino) => {
+      await guardar([BLOQUES[0]])
+      const otra = await otraSeccion()
+      const respuesta = await guardar(
+        [{ ...BLOQUES[0], inicio, termino }],
+        0,
+        409,
+        otra.id,
+      )
+      expect(respuesta.body).toMatchObject({
+        code: 'SALA_OCUPADA',
+        choques: [{ cursoCodigo: 'ICC101', seccionNumero: 1 }],
+      })
+      expect((await obtener(otra.id)).body).toMatchObject({
+        version: 0,
+        bloques: [],
+      })
+    },
+  )
+
+  it.each([
+    { inicio: '07:30', termino: '08:30' },
+    { inicio: '09:20', termino: '10:10' },
+    { dia: 2 as const },
+    { sala: 'Sala 202' },
+  ])('permite bloques consecutivos, otro día o sala: %j', async (cambio) => {
+    await guardar([BLOQUES[0]])
+    await guardar(
+      [{ ...BLOQUES[0], ...cambio }],
+      0,
+      200,
+      (await otraSeccion()).id,
+    )
+  })
+
+  it('normaliza mayúsculas y espacios también en salas guardadas previamente', async () => {
+    await guardar([BLOQUES[0]])
+    await bd.query("UPDATE horario_seccion SET sala = 'SALA   201'")
+    await guardar(
+      [{ ...BLOQUES[0], sala: '  sala   201 ' }],
+      0,
+      409,
+      (await otraSeccion()).id,
+    )
+  })
+
+  it('no considera sus propios bloques al reemplazar el horario', async () => {
+    await guardar(BLOQUES)
+    expect((await guardar(BLOQUES, 1)).body).toMatchObject({
+      version: 2,
+      bloques: BLOQUES,
+    })
+  })
+
+  it('un choque conserva todos los bloques anteriores y la versión, sin guardar los libres', async () => {
+    await guardar([BLOQUES[0]])
+    const otra = await otraSeccion()
+    const libres = [{ ...BLOQUES[0], sala: 'Sala libre' }]
+    await guardar(libres, 0, 200, otra.id)
+    const antes = await filas()
+    await guardar([BLOQUES[1], BLOQUES[0]], 1, 409, otra.id)
+    expect(await filas()).toEqual(antes)
+    expect((await obtener(otra.id)).body).toMatchObject({
+      version: 1,
+      bloques: libres,
+    })
+    await guardar([{ ...BLOQUES[0], sala: 'Sala corregida' }], 1, 200, otra.id)
+  })
+
+  it('permite la misma sala y horas en un período distinto', async () => {
+    const otra = await otraSeccion()
+    const [original] = await bd.query<{ periodo_id: string }[]>(
+      'SELECT periodo_id FROM curso WHERE id = $1',
+      [otra.curso_id],
+    )
+    const [periodo] = await bd.query<{ id: string }[]>(
+      `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
+       VALUES ($1, 2027, 1, '2027-03-01', '2027-07-01', false) RETURNING id`,
+      [seccion.universidad_id],
+    )
+    await bd.query('UPDATE curso SET periodo_id = $1 WHERE id = $2', [
+      periodo.id,
+      otra.curso_id,
+    ])
+    try {
+      await guardar([BLOQUES[0]])
+      await guardar([BLOQUES[0]], 0, 200, otra.id)
+    } finally {
+      await bd.query('UPDATE curso SET periodo_id = $1 WHERE id = $2', [
+        original.periodo_id,
+        otra.curso_id,
+      ])
+      await bd.query('DELETE FROM periodo WHERE id = $1', [periodo.id])
+    }
+  })
+
+  it('comprueba el mismo período aunque no sea el activo de la universidad', async () => {
+    const [periodo] = await bd.query<{ id: string }[]>(
+      'SELECT periodo_id AS id FROM curso WHERE id = $1',
+      [seccion.curso_id],
+    )
+    await bd.query('UPDATE periodo SET activo = false WHERE id = $1', [
+      periodo.id,
+    ])
+    try {
+      await guardar([BLOQUES[0]])
+      await guardar([BLOQUES[0]], 0, 409, (await otraSeccion()).id)
+    } finally {
+      await bd.query('UPDATE periodo SET activo = true WHERE id = $1', [
+        periodo.id,
+      ])
+    }
+  })
+
+  it.each(['horario_seccion', 'seccion', 'curso'])(
+    'ignora la ocupación con %s archivado',
+    async (tabla) => {
+      await guardar([BLOQUES[0]])
+      const id = tabla === 'curso' ? seccion.curso_id : seccion.id
+      const condicion = tabla === 'horario_seccion' ? 'seccion_id' : 'id'
+      await bd.query(
+        `UPDATE ${tabla} SET archived_at = now() WHERE ${condicion} = $1`,
+        [id],
+      )
+      try {
+        await guardar([BLOQUES[0]], 0, 200, (await otraSeccion()).id)
+      } finally {
+        await bd.query(
+          `UPDATE ${tabla} SET archived_at = NULL WHERE ${condicion} = $1`,
+          [id],
+        )
+      }
+    },
+  )
+
+  it('detecta ocupación en otra facultad de la misma universidad con datos mínimos del curso', async () => {
+    const otra = await otraSeccion('ICO101')
+    await guardar([BLOQUES[0]], 0, 200, otra.id, ECONOMIA)
+    const respuesta = await guardar([BLOQUES[0]], 0, 409)
+    expect((respuesta.body as { choques: ChoqueSala[] }).choques).toEqual([
+      {
+        ...BLOQUES[0],
+        cursoCodigo: 'ICO101',
+        cursoNombre: 'Introducción a la Economía',
+        seccionNumero: 1,
+      },
+    ])
+  })
+
+  it('no mezcla salas de universidades diferentes', async () => {
+    const [otra] = await bd.query<{ id: string; universidad_id: string }[]>(
+      'SELECT id, universidad_id FROM seccion WHERE universidad_id <> $1 LIMIT 1',
+      [seccion.universidad_id],
+    )
+    await bd.query(
+      `INSERT INTO horario_seccion (universidad_id, seccion_id, dia, inicio, termino, sala)
+      VALUES ($1, $2, 1, '08:30', '09:20', 'Sala 201')`,
+      [otra.universidad_id, otra.id],
+    )
+    await guardar([BLOQUES[0]])
+  })
+
+  it('dos cursos que reservan simultáneamente la misma sala no crean un choque', async () => {
+    const otra = await otraSeccion()
+    const token = await tokenDe()
+    const respuestas = await Promise.all(
+      [seccion.id, otra.id].map((id) =>
+        request(app.getHttpServer())
+          .put(`/api/secciones/${id}/horario`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ version: 0, bloques: [BLOQUES[0]] }),
+      ),
+    )
+    expect(respuestas.map((r) => r.status).sort()).toEqual([200, 409])
+    expect(respuestas.find((r) => r.status === 409)!.body).toMatchObject({
+      code: 'SALA_OCUPADA',
+    })
+    expect((await filas()).filter((f) => f.archived_at === null)).toHaveLength(
+      1,
+    )
+    const horarios = await Promise.all([obtener(), obtener(otra.id)])
+    expect(
+      horarios.map((r) => (r.body as HorarioSeccion).version).sort(),
+    ).toEqual([0, 1])
+  })
 })
 beforeEach(async () => {
   await bd.query('TRUNCATE horario_seccion')
@@ -275,16 +481,26 @@ describe('GES-10: horario semanal de una sección', () => {
     ).toBe(horario.resumen)
   })
 
-  it('no comprueba todavía ocupación de salas entre secciones (GES-11)', async () => {
+  it('GES-11: informa curso/sección que ocupa la sala y no guarda ningún bloque', async () => {
     const [{ id }] = await bd.query<{ id: string }[]>(
       'SELECT id FROM seccion WHERE curso_id = $1 AND numero = 2',
       [seccion.curso_id],
     )
     await guardar(BLOQUES)
-    await guardar(BLOQUES, 0, 200, id)
-    expect((await filas()).filter((f) => f.archived_at === null)).toHaveLength(
-      4,
-    )
+    const antes = await filas()
+    const respuesta = await guardar(BLOQUES, 0, 409, id)
+    expect(respuesta.body).toMatchObject({
+      statusCode: 409,
+      code: 'SALA_OCUPADA',
+      choques: BLOQUES.map((bloque) => ({
+        ...bloque,
+        cursoCodigo: 'ICC101',
+        cursoNombre: 'Introducción a la Programación',
+        seccionNumero: 1,
+      })),
+    })
+    expect(await filas()).toEqual(antes)
+    expect((await obtener(id)).body).toMatchObject({ version: 0, bloques: [] })
   })
 
   it.each([ECONOMIA, 'administrativo@sur.cursus.test'])(

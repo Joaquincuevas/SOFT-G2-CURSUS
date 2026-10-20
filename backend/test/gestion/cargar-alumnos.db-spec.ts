@@ -1,4 +1,10 @@
-import type { ResultadoCargaAlumnos, CursoDetalle } from '@cursus/shared'
+import {
+  csvDeErrores,
+  type CursoDetalle,
+  type FilaConError,
+  MAX_BYTES_ALUMNOS_CSV,
+  type ResultadoCargaAlumnos,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -284,5 +290,180 @@ describe('GES-16: carga CSV de alumnos', () => {
       [seccion, 'concurrente.csv@norte.cursus.test'],
     )
     expect(cantidad).toBe(1)
+  })
+})
+
+describe('GES-17: filas con error de la carga CSV', () => {
+  it('informa el número de fila y el motivo de cada error, y carga las válidas', async () => {
+    const seccion = await seccionDe('ICC201')
+    // Un alumno ya inscrito antes de la carga.
+    const yaInscrito = await cargar(
+      seccion,
+      'correo,nombre\nya.inscrito.csv@norte.cursus.test,Ya Inscrito',
+    )
+    expect((yaInscrito.body as ResultadoCargaAlumnos).cargados).toBe(1)
+
+    const csv = [
+      'correo,nombre',
+      'valido.ges17@norte.cursus.test,Válido Uno', // 2: válida
+      'no-es-correo,Ana', // 3
+      'externo@gmail.com,Externo', // 4
+      ' VALIDO.GES17@Norte.Cursus.Test ,Repetido', // 5: duplicado de la 2
+      'ya.inscrito.csv@norte.cursus.test,', // 6
+      'profesor@norte.cursus.test,Profesor', // 7
+      'sin.nombre.ges17@norte.cursus.test,', // 8
+      `nombre.largo@norte.cursus.test,${'N'.repeat(121)}`, // 9
+      'columnas@norte.cursus.test,Ana,extra', // 10
+      'otra.valida.ges17@norte.cursus.test,"Pérez, Ana"', // 11: válida
+    ].join('\n')
+    const respuesta = await cargar(seccion, csv)
+    expect(respuesta.status).toBe(200)
+    const resultado = respuesta.body as ResultadoCargaAlumnos
+    expect(resultado).toMatchObject({ total: 10, cargados: 2, errores: 8 })
+    expect(
+      resultado.filas.map((fila) =>
+        fila.estado === 'error'
+          ? [fila.fila, fila.motivo, fila.correo, fila.nombre]
+          : [fila.fila, 'cargado'],
+      ),
+    ).toEqual([
+      [2, 'cargado'],
+      [3, 'correo_invalido', 'no-es-correo', 'Ana'],
+      [4, 'dominio_distinto', 'externo@gmail.com', 'Externo'],
+      [5, 'duplicado_en_archivo', 'valido.ges17@norte.cursus.test', 'Repetido'],
+      [6, 'ya_inscrito', 'ya.inscrito.csv@norte.cursus.test', ''],
+      [7, 'rol_distinto', 'profesor@norte.cursus.test', 'Profesor'],
+      [8, 'falta_nombre', 'sin.nombre.ges17@norte.cursus.test', ''],
+      [9, 'nombre_invalido', 'nombre.largo@norte.cursus.test', 'N'.repeat(121)],
+      [10, 'formato', 'columnas@norte.cursus.test', 'Ana'],
+      [11, 'cargado'],
+    ])
+    // Los mensajes de GES-15 se mantienen donde existen.
+    expect(resultado.filas[2]).toMatchObject({
+      mensaje: 'El correo debe ser @norte.cursus.test',
+    })
+    expect(resultado.filas[4]).toMatchObject({
+      mensaje: 'El alumno ya está inscrito en esta sección',
+    })
+
+    // Las válidas quedan inscritas: las dos nuevas y la de antes.
+    const inscritos = await bd.query<{ correo: string }[]>(
+      `SELECT u.correo FROM inscripcion i JOIN usuario u ON u.id = i.usuario_id
+        WHERE i.seccion_id = $1 AND i.archived_at IS NULL ORDER BY u.correo`,
+      [seccion],
+    )
+    expect(inscritos.map((i) => i.correo)).toEqual([
+      'otra.valida.ges17@norte.cursus.test',
+      'valido.ges17@norte.cursus.test',
+      'ya.inscrito.csv@norte.cursus.test',
+    ])
+    // El duplicado no creó otra cuenta ni pisó el nombre.
+    expect(await usuariosCon('valido.ges17@norte.cursus.test')).toBe(1)
+  })
+
+  it('el CSV de errores corregido se vuelve a subir tal cual, con la columna motivo', async () => {
+    const seccion = await seccionDe('ICC201', 2)
+    const csv =
+      '﻿correo,nombre,motivo\r\n' +
+      'corregido.ges17@norte.cursus.test,"Rojas, Luis",Falta el nombre para crear la cuenta\r\n' +
+      'sin.motivo.ges17@norte.cursus.test,"Ana ""Anita"" Díaz"\r\n'
+    const resultado = (await cargar(seccion, csv)).body as ResultadoCargaAlumnos
+    expect(resultado).toMatchObject({ total: 2, cargados: 2, errores: 0 })
+    const [{ nombre }] = await bd.query<{ nombre: string }[]>(
+      'SELECT nombre FROM usuario WHERE correo = $1',
+      ['corregido.ges17@norte.cursus.test'],
+    )
+    expect(nombre).toBe('Rojas, Luis')
+  })
+
+  // Los dos casos de la revisión del #62: el CSV de errores se arma con
+  // csvDeErrores, la misma función que usa la descarga del navegador.
+  const erroresDe = (resultado: ResultadoCargaAlumnos) =>
+    csvDeErrores(
+      resultado.filas.filter(
+        (fila): fila is FilaConError => fila.estado === 'error',
+      ),
+    )
+
+  it('neutraliza fórmulas en el CSV de errores y las recupera al volver a subirlo', async () => {
+    const seccion = await seccionDe('ICO201')
+    const original = await cargar(
+      seccion,
+      'correo,nombre\ninvalido,=1+1\notro-invalido,@SUMA(A1)',
+      ADMIN_ECONOMIA,
+    )
+    const errores = erroresDe(original.body as ResultadoCargaAlumnos)
+    expect(errores).toBe(
+      '\uFEFFcorreo,nombre,motivo\r\n' +
+        "invalido,'=1+1,Correo inválido\r\n" +
+        "otro-invalido,'@SUMA(A1),Correo inválido\r\n",
+    )
+
+    const corregido = errores
+      .replace('invalido,', 'formula.uno@norte.cursus.test,')
+      .replace('otro-invalido,', 'formula.dos@norte.cursus.test,')
+    const resultado = (await cargar(seccion, corregido, ADMIN_ECONOMIA))
+      .body as ResultadoCargaAlumnos
+    expect(resultado).toMatchObject({ cargados: 2, errores: 0 })
+    const nombres = await bd.query<{ nombre: string }[]>(
+      `SELECT nombre FROM usuario WHERE correo LIKE 'formula.%' ORDER BY correo`,
+    )
+    expect(nombres.map((n) => n.nombre)).toEqual(['@SUMA(A1)', '=1+1'])
+  })
+
+  it('el CSV de errores de 95 alumnos ya inscritos se corrige y se vuelve a subir', async () => {
+    const seccion = await seccionDe('ICO201', 2)
+    // Caso de la revisión: 95 filas con nombres de 120 emojis (48 463 B).
+    const original = [
+      'correo,nombre',
+      ...Array.from(
+        { length: 95 },
+        (_, i) =>
+          `alumno.${String(i).padStart(3, '0')}@norte.cursus.test,${'😀'.repeat(120)}`,
+      ),
+    ].join('\n')
+    expect(Buffer.byteLength(original, 'utf8')).toBe(48_463)
+    expect(
+      (await cargar(seccion, original, ADMIN_ECONOMIA)).body,
+    ).toMatchObject({ cargados: 95, errores: 0 })
+
+    // Al subirlo de nuevo, los 95 ya están inscritos.
+    const repetida = (await cargar(seccion, original, ADMIN_ECONOMIA))
+      .body as ResultadoCargaAlumnos
+    expect(repetida).toMatchObject({ total: 95, cargados: 0, errores: 95 })
+    expect(
+      new Set(
+        repetida.filas.map((fila) => fila.estado === 'error' && fila.motivo),
+      ),
+    ).toEqual(new Set(['ya_inscrito']))
+    const errores = erroresDe(repetida)
+    expect(Buffer.byteLength(errores, 'utf8')).toBe(51_895)
+
+    const corregido = errores.replaceAll('alumno.', 'alumna.')
+    const respuesta = await cargar(seccion, corregido, ADMIN_ECONOMIA)
+    expect(respuesta.status).toBe(200)
+    expect(respuesta.body).toMatchObject({
+      total: 95,
+      cargados: 95,
+      errores: 0,
+    })
+    const [{ inscritos }] = await bd.query<{ inscritos: string }[]>(
+      `SELECT count(*) AS inscritos FROM usuario WHERE correo LIKE 'alumna.%@norte.cursus.test'`,
+    )
+    expect(Number(inscritos)).toBe(95)
+  }, 120_000)
+
+  it('sigue rechazando un CSV correo,nombre de contenido sobre 48 KiB', async () => {
+    const seccion = await seccionDe('ICO201')
+    const fila = `grande@norte.cursus.test,${'😀'.repeat(120)}`
+    const csv = ['correo,nombre', ...Array<string>(98).fill(fila)].join('\n')
+    expect(Buffer.byteLength(csv, 'utf8')).toBeGreaterThan(
+      MAX_BYTES_ALUMNOS_CSV,
+    )
+    const respuesta = await cargar(seccion, csv, ADMIN_ECONOMIA)
+    expect(respuesta.status).toBe(400)
+    expect(respuesta.body).toMatchObject({
+      message: 'El CSV supera el máximo de 48 KiB',
+    })
   })
 })

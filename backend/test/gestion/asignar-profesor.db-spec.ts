@@ -207,6 +207,7 @@ describe('PUT /api/secciones/:id/profesor', () => {
       numero: 1,
       horario: null,
       profesor: 'Profesor Norte',
+      profesorId,
       ayudantes: [],
       alumnos: 0,
     })

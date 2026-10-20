@@ -1,5 +1,5 @@
-import { resumirHorario } from '@cursus/shared'
-import type { BloqueHorario, HorarioSeccion } from '@cursus/shared'
+import { CODIGO_SALA_OCUPADA, resumirHorario } from '@cursus/shared'
+import type { BloqueHorario, ChoqueSala, HorarioSeccion } from '@cursus/shared'
 import {
   BadRequestException,
   ConflictException,
@@ -68,8 +68,14 @@ export class HorariosService {
     }
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
       const parametros = [contexto.universidadId, seccionId, usuarioId]
-      const [seccion] = await bd.query<{ version: number }>(
-        `SELECT s.horario_version AS version ${SECCION_VISIBLE} FOR UPDATE OF s, c`,
+      // Antes de bloquear sección/curso: serializa los guardados de horarios
+      // de una universidad, incluso entre facultades y cursos diferentes.
+      // La consulta siguiente usa un snapshot posterior a la espera (READ COMMITTED).
+      await bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+        `ocupacion-salas:${contexto.universidadId}`,
+      ])
+      const [seccion] = await bd.query<{ version: number; periodo: string }>(
+        `SELECT s.horario_version AS version, c.periodo_id AS periodo ${SECCION_VISIBLE} FOR UPDATE OF s, c`,
         parametros,
       )
       if (!seccion) throw new NotFoundException('La sección no existe')
@@ -77,6 +83,39 @@ export class HorariosService {
         throw new ConflictException(
           'El horario cambió. Vuelve a cargarlo antes de guardar.',
         )
+      }
+      if (bloques.length) {
+        const choques = await bd.query<ChoqueSala>(
+          `SELECT DISTINCT h.sala, h.dia,
+            to_char(h.inicio, 'HH24:MI') AS inicio,
+            to_char(h.termino, 'HH24:MI') AS termino,
+            c.codigo AS "cursoCodigo", c.nombre AS "cursoNombre",
+            s.numero AS "seccionNumero"
+          FROM horario_seccion h
+          JOIN seccion s ON s.id = h.seccion_id AND s.universidad_id = h.universidad_id
+          JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
+          JOIN jsonb_to_recordset($4::jsonb) AS b(dia smallint, inicio text, termino text, sala text)
+            ON h.dia = b.dia AND h.inicio < b.termino::time AND h.termino > b.inicio::time
+            AND lower(regexp_replace(btrim(h.sala), '\\s+', ' ', 'g')) = lower(b.sala)
+          WHERE h.universidad_id = $1 AND s.id <> $2 AND c.periodo_id = $3
+            AND h.archived_at IS NULL AND s.archived_at IS NULL AND c.archived_at IS NULL
+          ORDER BY h.dia, inicio, c.codigo, s.numero, h.sala, termino, c.nombre`,
+          [
+            contexto.universidadId,
+            seccionId,
+            seccion.periodo,
+            JSON.stringify(bloques),
+          ],
+        )
+        if (choques.length) {
+          throw new ConflictException({
+            statusCode: 409,
+            code: CODIGO_SALA_OCUPADA,
+            message:
+              'La sala ya está ocupada. Cambia la sala, el día o las horas antes de guardar.',
+            choques,
+          })
+        }
       }
       // Reemplazo completo y atómico: se conservan las filas anteriores
       // archivadas, incluso al modificar o quitar el último bloque.

@@ -6,8 +6,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // debe ser la única columna de usuario con ese nombre (test de contraseñas).
 // Con DEFAULT false las cuentas existentes no cambian, y el código anterior
 // sigue funcionando si el deploy vuelve atrás.
-export class AgregarCredencialProvisoria1792520000000 implements MigrationInterface {
-  name = 'AgregarCredencialProvisoria1792520000000'
+export class AgregarCredencialProvisoria1792530000000 implements MigrationInterface {
+  name = 'AgregarCredencialProvisoria1792530000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
