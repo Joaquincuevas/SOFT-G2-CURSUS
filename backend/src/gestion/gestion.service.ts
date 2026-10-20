@@ -4,6 +4,7 @@ import type {
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
+  SeccionDetalle,
 } from '@cursus/shared'
 import {
   ConflictException,
@@ -48,6 +49,22 @@ const LISTA_SECCIONES = `
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
+
+// Horario, profesor, ayudantes y alumnos llegan con GES-10, 12, 13 y 15.
+const seccionDetalle = ({
+  id,
+  numero,
+}: {
+  id: string
+  numero: number
+}): SeccionDetalle => ({
+  id,
+  numero,
+  horario: null,
+  profesor: null,
+  ayudantes: [],
+  alumnos: 0,
+})
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
   secciones: { id: string; numero: number }[]
@@ -169,15 +186,48 @@ export class GestionService {
         semestre: fila.semestre,
       },
       ...(esDirector && { universidadNombre: fila.universidad_nombre }),
-      // Horario, profesor, ayudantes y alumnos llegan con GES-10, 12, 13 y 15.
-      secciones: fila.secciones.map(({ id, numero }) => ({
-        id,
-        numero,
-        horario: null,
-        profesor: null,
-        ayudantes: [],
-        alumnos: 0,
-      })),
+      secciones: fila.secciones.map(seccionDetalle),
+    }
+  }
+
+  // GES-09. Agrega la siguiente sección del curso, con el número correlativo.
+  // El curso debe ser de la facultad del usuario y no estar archivado (si no,
+  // 404). El FOR UPDATE sobre el curso serializa las creaciones simultáneas,
+  // así que dos no toman el mismo número; uq_seccion_curso_numero queda como
+  // última defensa (409). Las archivadas cuentan: su número no se reutiliza.
+  async crearSeccion(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<SeccionDetalle> {
+    try {
+      return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+        const parametros = [contexto.universidadId, cursoId]
+        const [curso] = await bd.query<{ id: string }>(
+          `SELECT c.id FROM curso c JOIN carrera ca ON ca.id = c.carrera_id
+            WHERE c.universidad_id = $1 AND c.id = $2
+              AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$3')}
+              FOR UPDATE OF c`,
+          [...parametros, usuarioId],
+        )
+        if (!curso) {
+          throw new NotFoundException('El curso no existe')
+        }
+        const [seccion] = await bd.query<{ id: string; numero: number }>(
+          `INSERT INTO seccion (universidad_id, curso_id, numero)
+           SELECT $1, $2, COALESCE(MAX(numero), 0) + 1
+             FROM seccion WHERE universidad_id = $1 AND curso_id = $2
+           RETURNING id, numero`,
+          parametros,
+        )
+        return seccionDetalle(seccion)
+      })
+    } catch (error) {
+      if ((error as { code?: string }).code === UNIQUE) {
+        throw new ConflictException('La sección ya existe, intenta de nuevo')
+      }
+      throw error
     }
   }
 
