@@ -162,6 +162,15 @@ describe('migraciones', () => {
     const SIN_HORARIO = TABLAS.filter((tabla) => tabla !== 'horario_seccion')
     expect(await tablasExistentes()).toEqual(SIN_HORARIO)
 
+    // ArchivarInscripcionConResponsable: quita la columna y sus restricciones.
+    await bd.undoLastMigration()
+    const [{ columnas }] = await bd.query<{ columnas: string }[]>(
+      `SELECT count(*) AS columnas FROM information_schema.columns
+        WHERE table_name = 'inscripcion' AND column_name = 'archivada_por'`,
+    )
+    expect(Number(columnas)).toBe(0)
+    expect(await tablasExistentes()).toEqual(SIN_HORARIO)
+
     await bd.undoLastMigration() // AsignarProfesorSeccion.
 
     // La asignación de ayudantes se revierte antes de sus claves foráneas.
@@ -810,10 +819,46 @@ describe('seccion', () => {
         })
         await q.query('ROLLBACK TO SAVEPOINT repetida')
         await q.query(
-          'UPDATE inscripcion SET archived_at = now() WHERE id = $1',
+          'UPDATE inscripcion SET archived_at = now(), archivada_por = usuario_id WHERE id = $1',
           [id],
         )
         await expect(inscribir(q, base)).resolves.toEqual(expect.any(String))
+      }))
+
+    // GES-19: quitar a un alumno archiva la inscripción con su responsable.
+    it('exige archived_at y archivada_por juntos', () =>
+      enTransaccion(async (q) => {
+        const base = await crearBase(q, 'a.cl')
+        const id = await inscribir(q, base)
+        for (const cambio of [
+          'archived_at = now()',
+          'archivada_por = usuario_id',
+        ]) {
+          await q.query('SAVEPOINT a_medias')
+          await expect(
+            q.query(`UPDATE inscripcion SET ${cambio} WHERE id = $1`, [id]),
+          ).rejects.toMatchObject({
+            code: CHECK,
+            constraint: 'ck_inscripcion_archivada_por',
+          })
+          await q.query('ROLLBACK TO SAVEPOINT a_medias')
+        }
+      }))
+
+    it('rechaza un responsable de otra universidad', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const b = await crearBase(q, 'b.cl')
+        const id = await inscribir(q, a)
+        await expect(
+          q.query(
+            'UPDATE inscripcion SET archived_at = now(), archivada_por = $2 WHERE id = $1',
+            [id, b.usuarioId],
+          ),
+        ).rejects.toMatchObject({
+          code: FOREIGN_KEY,
+          constraint: 'fk_inscripcion_archivada_por',
+        })
       }))
   })
 })

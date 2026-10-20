@@ -7,11 +7,13 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { ROL_LABEL } from '../session/roles'
 import { useSession } from '../session/session'
+import { CambiarPassword } from './CambiarPassword'
 import './Perfil.css'
 
 // Perfil del usuario (PER-01). El Figma no tiene esta pantalla: sigue el
 // estilo de las tarjetas y campos de gestión de cursos. Solo el nombre se
-// edita; el Director lo ve en solo lectura (ADR 0001).
+// edita; el Director lo ve en solo lectura (ADR 0001). Debajo, todos los roles
+// pueden cambiar su contraseña (PER-02).
 export function Perfil() {
   const { user, actualizarNombre } = useSession()
   const { fetchConSesion } = useAuth()
@@ -112,7 +114,7 @@ export function Perfil() {
           </p>
         ) : (
           <p className="perfil__nota">
-            Como Director, tu perfil es de solo lectura.
+            Como Director, tus datos son de solo lectura.
           </p>
         )}
 
@@ -139,6 +141,7 @@ export function Perfil() {
           </div>
         )}
       </form>
+      <CambiarPassword />
     </section>
   )
 }

@@ -108,7 +108,7 @@ describe('perfil (PER-01)', () => {
       screen.queryByRole('button', { name: 'Guardar cambios' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByText('Como Director, tu perfil es de solo lectura.'),
+      screen.getByText('Como Director, tus datos son de solo lectura.'),
     ).toBeInTheDocument()
   })
 })
