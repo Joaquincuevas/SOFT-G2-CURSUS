@@ -1,5 +1,6 @@
 import {
   type CrearDocente,
+  LARGO_NOMBRE_USUARIO,
   ROLES_DOCENTES,
   type RolDocente,
 } from '@cursus/shared'
@@ -17,7 +18,7 @@ export class CrearDocenteDto implements CrearDocente {
   @Transform(sinEspacios)
   @IsString()
   @IsNotEmpty({ message: 'Ingresa el nombre' })
-  @MaxLength(120)
+  @MaxLength(LARGO_NOMBRE_USUARIO)
   nombre!: string
 
   @Transform(enMinusculas)

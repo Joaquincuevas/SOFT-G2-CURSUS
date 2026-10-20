@@ -1,4 +1,9 @@
-import type { CrearDocente, DocenteCreado, RolDocente } from '@cursus/shared'
+import {
+  type CrearDocente,
+  type DocenteCreado,
+  LARGO_NOMBRE_USUARIO,
+  type RolDocente,
+} from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
 import './Cursos.css'
@@ -75,7 +80,7 @@ export function Docentes() {
               className="cursos__input"
               name="nombre"
               required
-              maxLength={120}
+              maxLength={LARGO_NOMBRE_USUARIO}
               autoComplete="off"
             />
           </label>
