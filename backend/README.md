@@ -130,6 +130,10 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 `PeriodosController` concentra `GET /api/periodos` (incluye fechas y conserva los campos usados por Cursos), `POST /api/periodos` y `PATCH /api/periodos/:id/activar`. El administrativo crea períodos y cambia el activo de su universidad con RLS y una transacción serializada por universidad. Crear un duplicado responde 409 y revierte la desactivación anterior. Se reutilizan las restricciones existentes, sin nueva migración. Ver [contrato y pruebas de GES-02](../docs/ges-02-periodos-academicos.md).
 
+## Edición de cursos (GES-07)
+
+`GET /api/cursos/:id/edicion`, `PATCH /api/cursos/:id` y `GET /api/cursos/:id/historial` permiten al administrativo editar cursos de su facultad con las validaciones de creación. Curso e historial se guardan en una transacción con bloqueo del curso y RLS; una falla revierte ambos. La migración `CrearHistorialCurso1792480000000` agrega el historial de solo adición, con fecha de BD, responsable y snapshots anterior/nuevo. La interfaz exige revisar y confirmar antes de enviar el PATCH. Ver [contrato y pasos de revisión](../docs/ges-07-editar-curso.md).
+
 ## Sesión
 
 - `POST /api/auth/login` devuelve el JWT de acceso (`JWT_EXPIRES_IN`, 15 min por defecto) y setea la cookie `refresh`: `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` y `Secure` con `NODE_ENV=production`.

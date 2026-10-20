@@ -16,6 +16,7 @@ const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'carrera',
   'curso',
+  'curso_cambio',
   'facultad',
   'inscripcion',
   'limite_login',
@@ -155,9 +156,14 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    await bd.undoLastMigration() // CrearHistorialCurso.
+    const SIN_HISTORIAL = TABLAS.filter((tabla) => tabla !== 'curso_cambio')
+    expect(await tablasExistentes()).toEqual(SIN_HISTORIAL)
     // CrearInscripcion es la última.
     await bd.undoLastMigration()
-    const SIN_INSCRIPCION = TABLAS.filter((tabla) => tabla !== 'inscripcion')
+    const SIN_INSCRIPCION = SIN_HISTORIAL.filter(
+      (tabla) => tabla !== 'inscripcion',
+    )
     expect(await tablasExistentes()).toEqual(SIN_INSCRIPCION)
     const [{ restricciones }] = await bd.query<{ restricciones: string }[]>(
       `SELECT count(*) AS restricciones FROM pg_constraint
@@ -241,7 +247,10 @@ describe('migraciones', () => {
     // salvo revocado_en.
     for (const tabla of TABLAS.filter(
       (t) =>
-        t !== 'refresh_token' && t !== 'sesion_auth' && t !== 'limite_login',
+        t !== 'refresh_token' &&
+        t !== 'sesion_auth' &&
+        t !== 'limite_login' &&
+        t !== 'curso_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(

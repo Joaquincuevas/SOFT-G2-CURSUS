@@ -11,22 +11,6 @@ import { useDatos } from './useDatos'
 
 const SIN_ASIGNAR = 'Sin asignar'
 
-// Botón de una acción que llega en otra tarjeta: deshabilitado, con el tooltip
-// "Próximamente". aria-disabled en vez de disabled, para que se pueda enfocar
-// y el tooltip se vea en todos los navegadores.
-function Proximamente({ texto }: { texto: string }) {
-  return (
-    <button
-      className="cursos__boton cursos__boton--secundario"
-      type="button"
-      aria-disabled="true"
-      title="Próximamente"
-    >
-      {texto}
-    </button>
-  )
-}
-
 // Horario (GES-10), profesor y ayudantes (GES-12/13) se muestran como "Sin
 // asignar" hasta que existan. Con onAgregarAlumno, la fila tiene el botón
 // "Agregar alumno" (GES-15).
@@ -161,7 +145,14 @@ function Detalle({ id }: { id: string }) {
       </div>
       {(puedeEditar || puedeCrearSeccion) && (
         <div className="cursos__acciones">
-          {puedeEditar && <Proximamente texto="Editar curso" />}
+          {puedeEditar && (
+            <Link
+              className="cursos__boton cursos__boton--secundario"
+              to={`/cursos/${id}/editar`}
+            >
+              Editar curso
+            </Link>
+          )}
           {puedeCrearSeccion && (
             <button
               className="cursos__boton"

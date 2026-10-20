@@ -14,6 +14,21 @@ export interface CrearCurso {
   periodoId: string
 }
 
+// Snapshot usado por la edición y su historial (GES-07).
+export interface CursoEditable extends CrearCurso {
+  id: string
+  carreraNombre: string
+  periodo: PeriodoResumen
+}
+
+export interface CambioCurso {
+  id: string
+  fecha: string
+  responsable: { id: string; nombre: string }
+  anterior: CursoEditable
+  nuevo: CursoEditable
+}
+
 // Respuesta de POST /api/cursos.
 export interface CursoCreado {
   id: string
