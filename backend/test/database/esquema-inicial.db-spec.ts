@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'ayudante_seccion',
   'carrera',
   'curso',
   'curso_cambio',
@@ -158,8 +159,14 @@ describe('migraciones', () => {
 
     await bd.undoLastMigration() // AsignarProfesorSeccion.
 
+    // La asignación de ayudantes se revierte antes de sus claves foráneas.
+    await bd.undoLastMigration()
+    const SIN_AYUDANTES = TABLAS.filter((tabla) => tabla !== 'ayudante_seccion')
+    expect(await tablasExistentes()).toEqual(SIN_AYUDANTES)
     await bd.undoLastMigration() // CrearHistorialCurso.
-    const SIN_HISTORIAL = TABLAS.filter((tabla) => tabla !== 'curso_cambio')
+    const SIN_HISTORIAL = SIN_AYUDANTES.filter(
+      (tabla) => tabla !== 'curso_cambio',
+    )
     expect(await tablasExistentes()).toEqual(SIN_HISTORIAL)
     // CrearInscripcion es ahora la última.
     await bd.undoLastMigration()
@@ -275,6 +282,7 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'ayudante_seccion',
         'carrera',
         'curso',
         'facultad',

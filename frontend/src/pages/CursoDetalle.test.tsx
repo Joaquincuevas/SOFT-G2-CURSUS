@@ -67,8 +67,8 @@ describe('detalle de un curso', () => {
       'Acciones',
     ])
     // Lo que todavía no se asigna aparece como "Sin asignar", y la columna
-    // Acciones tiene los botones de GES-12 y GES-15.
-    const ACCIONES = 'Asignar profesorAgregar alumno'
+    // Acciones tiene los botones de GES-12, GES-15 y GES-13.
+    const ACCIONES = 'Asignar profesorAgregar alumnoAsignar ayudantes'
     expect(filasDe(tabla)).toEqual([
       ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
       ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
@@ -103,10 +103,13 @@ describe('detalle de un curso', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
-    // Sin la columna Acciones (GES-12 y GES-15).
+    // Sin la columna Acciones (GES-12, GES-13 y GES-15).
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
     expect(screen.queryByRole('button', { name: /profesor/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Agregar alumno/ })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /Asignar ayudantes/ }),
+    ).toBeNull()
   })
 
   test('sin secciones muestra el estado vacío', async () => {

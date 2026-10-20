@@ -11,26 +11,28 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
+import { AsignarAyudantesDialogo } from './AsignarAyudantes'
 import './Cursos.css'
 import { useDatos } from './useDatos'
 
 const SIN_ASIGNAR = 'Sin asignar'
 
-// Horario (GES-10) y ayudantes (GES-13) se muestran como "Sin asignar" hasta
-// que existan. Con verAlumnos, el número de alumnos enlaza a su lista
-// (GES-18). Con onAsignar u onAgregarAlumno, la fila tiene la columna de
-// acciones: asignar o cambiar el profesor (GES-12) y agregar un alumno
-// (GES-15).
+// Lo que no está asignado se muestra como "Sin asignar". Con verAlumnos, el
+// número de alumnos enlaza a su lista (GES-18). Las acciones por sección
+// dependen de los permisos de la sesión: asignar o cambiar el profesor
+// (GES-12), agregar un alumno (GES-15) y asignar ayudantes (GES-13).
 function FilaSeccion({
   seccion,
   verAlumnos,
   onAsignar,
   onAgregarAlumno,
+  onAsignarAyudantes,
 }: {
   seccion: SeccionDetalle
   verAlumnos: boolean
   onAsignar?: () => void
   onAgregarAlumno?: () => void
+  onAsignarAyudantes?: () => void
 }) {
   return (
     <tr>
@@ -55,7 +57,7 @@ function FilaSeccion({
           seccion.alumnos
         )}
       </td>
-      {(onAsignar || onAgregarAlumno) && (
+      {(onAsignar || onAgregarAlumno || onAsignarAyudantes) && (
         <td>
           <div className="cursos__acciones">
             {onAsignar && (
@@ -76,6 +78,16 @@ function FilaSeccion({
                 onClick={onAgregarAlumno}
               >
                 Agregar alumno
+              </button>
+            )}
+            {onAsignarAyudantes && (
+              <button
+                className="cursos__boton cursos__boton--secundario"
+                type="button"
+                aria-label={`Asignar ayudantes a la sección ${seccion.numero}`}
+                onClick={onAsignarAyudantes}
+              >
+                Asignar ayudantes
               </button>
             )}
           </div>
@@ -257,6 +269,11 @@ function Detalle({ id }: { id: string }) {
   const puedeVerAlumnos = usePuede('read', 'Inscripcion')
   const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
   const [agregados, setAgregados] = useState<Record<string, number>>({})
+  const puedeAsignarAyudantes = usePuede('update', 'Seccion')
+  const [asignarEn, setAsignarEn] = useState<SeccionDetalle | null>(null)
+  const [ayudantesAsignados, setAyudantesAsignados] = useState<
+    Record<string, string[]>
+  >({})
   // GES-12: sección cuyo profesor se está asignando, y profesores asignados
   // aquí (id de sección → nombre), que reemplazan al de la tabla sin volver a
   // pedir el curso. La lista de profesores se pide al abrir el formulario.
@@ -271,6 +288,7 @@ function Detalle({ id }: { id: string }) {
     setPedirProfesores(true)
     setAviso(undefined)
     setInscribirEn(null)
+    setAsignarEn(null)
     setAsignando(seccion)
   }
 
@@ -336,6 +354,7 @@ function Detalle({ id }: { id: string }) {
     ...seccion,
     profesor: asignados[seccion.id] ?? seccion.profesor,
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
+    ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
   }))
   const subtitulo = [
     curso.universidadNombre,
@@ -400,7 +419,7 @@ function Detalle({ id }: { id: string }) {
                 <th scope="col">Profesor</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
-                {(puedeAsignar || puedeInscribir) && (
+                {(puedeAsignar || puedeInscribir || puedeAsignarAyudantes) && (
                   <th scope="col">Acciones</th>
                 )}
               </tr>
@@ -423,6 +442,15 @@ function Detalle({ id }: { id: string }) {
                         }
                       : undefined
                   }
+                  onAsignarAyudantes={
+                    puedeAsignarAyudantes
+                      ? () => {
+                          setAviso(undefined)
+                          setAsignando(undefined)
+                          setAsignarEn(seccion)
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </tbody>
@@ -438,6 +466,23 @@ function Detalle({ id }: { id: string }) {
           onReintentar={recargarProfesores}
           onAsignada={asignada}
           onCancelar={() => setAsignando(undefined)}
+        />
+      )}
+      {asignarEn && (
+        <AsignarAyudantesDialogo
+          seccionId={asignarEn.id}
+          numero={asignarEn.numero}
+          onAsignados={(ayudantes) => {
+            setAyudantesAsignados((anteriores) => ({
+              ...anteriores,
+              [asignarEn.id]: ayudantes.map((a) => a.nombre),
+            }))
+            setAviso({
+              exito: true,
+              texto: `Ayudantes asignados a la sección ${asignarEn.numero}.`,
+            })
+          }}
+          onCerrar={() => setAsignarEn(null)}
         />
       )}
       {inscribirEn && (

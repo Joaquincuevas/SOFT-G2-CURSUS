@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common'
 import { GestionController } from './gestion.controller.js'
 import { GestionService } from './gestion.service.js'
 import { EdicionCursoService } from './edicion-curso.service.js'
+import { AyudantesController } from './ayudantes.controller.js'
+import { AyudantesService } from './ayudantes.service.js'
 
 @Module({
-  controllers: [GestionController],
-  providers: [GestionService, EdicionCursoService],
+  controllers: [GestionController, AyudantesController],
+  providers: [GestionService, EdicionCursoService, AyudantesService],
 })
 export class GestionModule {}

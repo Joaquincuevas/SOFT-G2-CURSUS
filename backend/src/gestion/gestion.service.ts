@@ -54,13 +54,17 @@ const CANTIDAD_SECCIONES = `
 // GES-15: alumnos es la cantidad de inscripciones activas de la sección.
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
-                     'id', s.id, 'numero', s.numero, 'profesor', u.nombre,
+                     'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
+                     'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                                     FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                                    WHERE a.seccion_id = s.id AND a.archived_at IS NULL
+                                      AND u.archived_at IS NULL AND u.rol = 'AYUDANTE'),
                      'alumnos', (SELECT count(*) FROM inscripcion i
                                   WHERE i.seccion_id = s.id
                                     AND i.archived_at IS NULL))
                    ORDER BY s.numero)
               FROM seccion s
-              LEFT JOIN usuario u ON u.id = s.profesor_id
+              LEFT JOIN usuario pr ON pr.id = s.profesor_id
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
@@ -69,22 +73,24 @@ interface FilaSeccion {
   id: string
   numero: number
   profesor?: string | null
+  ayudantes?: string[]
   alumnos?: number
 }
 
-// Horario y ayudantes llegan con GES-10 y 13. Una sección recién creada no
-// tiene profesor ni alumnos.
+// El horario llega con GES-10. Una sección recién creada no tiene profesor,
+// ayudantes ni alumnos.
 const seccionDetalle = ({
   id,
   numero,
   profesor = null,
+  ayudantes = [],
   alumnos = 0,
 }: FilaSeccion): SeccionDetalle => ({
   id,
   numero,
   horario: null,
   profesor,
-  ayudantes: [],
+  ayudantes,
   alumnos,
 })
 
@@ -348,6 +354,10 @@ export class GestionService {
          RETURNING s.id, s.numero
        )
        SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
+              (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                 FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                WHERE a.seccion_id = asignada.id AND a.archived_at IS NULL
+                  AND u.archived_at IS NULL AND u.rol = 'AYUDANTE') AS ayudantes,
               (SELECT count(*)::int FROM inscripcion i
                 WHERE i.seccion_id = asignada.id
                   AND i.archived_at IS NULL) AS alumnos
