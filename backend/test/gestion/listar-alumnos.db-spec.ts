@@ -182,9 +182,10 @@ describe('GET /api/secciones/:id/alumnos', () => {
       'Bruno Archivado',
       'Carla Activa',
     ])
-    await bd.query('UPDATE inscripcion SET archived_at = now() WHERE id = $1', [
-      archivada,
-    ])
+    await bd.query(
+      'UPDATE inscripcion SET archived_at = now(), archivada_por = usuario_id WHERE id = $1',
+      [archivada],
+    )
     const respuesta = await alumnos(ADMIN_INGENIERIA, seccion)
     expect(respuesta.alumnos.map((a) => a.nombre)).toEqual(['Carla Activa'])
     expect(respuesta.total).toBe(1)

@@ -1,5 +1,11 @@
 import type { FilaCargaAlumnos, ResultadoCargaAlumnos } from '@cursus/shared'
-import { ForbiddenException, HttpException, Injectable } from '@nestjs/common'
+import { LARGO_NOMBRE_USUARIO } from '@cursus/shared'
+import {
+  ForbiddenException,
+  HttpException,
+  Injectable,
+  Logger,
+} from '@nestjs/common'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
@@ -9,6 +15,8 @@ import { GestionService } from './gestion.service.js'
 
 @Injectable()
 export class CargaAlumnosService {
+  private readonly logger = new Logger(CargaAlumnosService.name)
+
   constructor(private readonly gestion: GestionService) {}
 
   async cargar(
@@ -36,7 +44,7 @@ export class CargaAlumnosService {
           mensaje:
             celdas.length !== 2
               ? 'La fila debe tener dos columnas: correo,nombre'
-              : 'Revisa el correo y el nombre (máximo 120 caracteres)',
+              : `Revisa el correo y el nombre (máximo ${LARGO_NOMBRE_USUARIO} caracteres)`,
         })
         continue
       }
@@ -50,6 +58,18 @@ export class CargaAlumnosService {
         )
         resultados.push({ fila, correo, estado: 'cargado', ...alumno })
       } catch (error) {
+        const estado = error instanceof HttpException ? error.getStatus() : 500
+        if (estado >= 500) {
+          // No pasar la excepción: los mensajes/consultas de BD pueden contener
+          // correos o contraseñas. El contexto permite ubicar la fila afectada.
+          this.logger.error({
+            mensaje: 'Error interno al cargar una fila del CSV',
+            fila,
+            seccionId: seccion,
+            universidadId: contexto.universidadId,
+            estado,
+          })
+        }
         const respuesta =
           error instanceof HttpException ? error.getResponse() : null
         const mensaje =

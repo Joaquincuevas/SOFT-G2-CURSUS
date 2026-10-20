@@ -43,7 +43,7 @@ Mientras procesa se bloquean otra carga y el cierre con botones/Escape. Ante un 
 
 `POST /api/secciones/:id/alumnos/csv` recibe JSON `{ "csv": "correo,nombre\n..." }`: el navegador lee el archivo y envía su contenido, sin almacenar el archivo original en el servidor. La respuesta HTTP 200 incluye `{ total, cargados, errores, filas }`, también cuando todas las filas son rechazadas por reglas individuales.
 
-Una fila exitosa contiene `{ fila, correo, estado: "cargado", alumno, cuentaCreada, passwordProvisoria? }`. Una fallida contiene `{ fila, correo, estado: "error", mensaje }`. Los fallos internos de una fila usan un mensaje genérico, sin detalles de BD, y se conservan los resultados ya obtenidos.
+Una fila exitosa contiene `{ fila, correo, estado: "cargado", alumno, cuentaCreada, passwordProvisoria? }`. Una fallida contiene `{ fila, correo, estado: "error", mensaje }`. Los fallos internos de una fila usan un mensaje genérico, sin detalles de BD, y se conservan los resultados ya obtenidos. Los errores 500 o superiores y las excepciones inesperadas se registran con `Logger` de Nest: número de fila original, sección, universidad y estado HTTP (500 para errores inesperados). No se registra la excepción original, su mensaje/consulta, el correo, el CSV ni contraseñas. Los errores de validación y reglas de inscripción (4xx) no generan este log de error interno.
 
 - Requiere sesión y permiso `create Inscripcion`; el servicio también exige rol administrativo. Sin sesión: 401; otros roles: 403.
 - La sección debe pertenecer a la universidad y facultad del usuario, y estar vigente junto con su curso. El ámbito y las reglas se reutilizan de GES-15, comprobándose también en cada inscripción.
@@ -53,7 +53,7 @@ Una fila exitosa contiene `{ fila, correo, estado: "cargado", alumno, cuentaCrea
 
 ## Preparación y pasos de revisión
 
-La branch integra `develop` mediante merge, incluida GES-13. En el detalle se conservan Agregar alumno, Cargar CSV y Asignar ayudantes, con los permisos respectivos.
+La branch integra `develop` mediante merge, incluidos los PR #53, #55 y #56. En el detalle se conservan Asignar profesor, Agregar alumno, Cargar CSV y Asignar ayudantes, con los permisos respectivos, además de quitar alumnos y cambiar la contraseña del perfil.
 
 ```bash
 git fetch origin
@@ -79,6 +79,16 @@ npm run dev:front
 9. Mientras carga, no debe permitir otra carga ni cerrar el diálogo con Cancelar/Escape. Probar fallo de red y revisar el aviso sobre posibles filas ya confirmadas. No debe inventar un conteo exitoso. Verificar pantalla angosta y desplazamiento del resultado si hay muchas filas.
 10. Ejecutar las suites de abajo y revisar especialmente duplicados/concurrencia, aislamiento, validación compartida, resultados parciales y contraseñas. Aprobar con CI verde.
 
+## Prueba pendiente en staging después del merge
+
+La carga es secuencial y síncrona. Un archivo de 100 cuentas nuevas requiere 100 hashes de contraseña; falta comprobar su duración real frente al corte de API Gateway a los 30 segundos.
+
+1. Tras el merge y despliegue, usar una sección de prueba y 100 correos institucionales nuevos, con nombre y sin cuentas previas. Registrar el conteo inicial y la hora de inicio.
+2. Cargar el archivo completo desde la interfaz. Medir la duración del POST en Network y revisar los logs del servidor. Se espera HTTP 200 antes de los 30 segundos, resumen de 100 cargados/0 errores y aumento de 100 alumnos, también después de recargar.
+3. No adjuntar al PR el CSV real, la respuesta con contraseñas ni capturas que las expongan. Registrar duración, estado HTTP y conteos; manejar las credenciales solo en el entorno de prueba.
+4. Si hay timeout, revisar inscripciones y logs antes de reintentar: algunas filas pueden haberse confirmado. Documentar duración, cantidad persistida y resultado de la interfaz. Si alcanza o supera el límite, esta comprobación falla y se requiere ajustar el procesamiento antes de dar por validada la carga máxima.
+5. Archivar las inscripciones y cuentas de prueba según el procedimiento del equipo al terminar.
+
 ## Validación y evidencia
 
 ```bash
@@ -89,7 +99,7 @@ npm run test:e2e --workspace=backend
 npm run build
 ```
 
-El parser tiene pruebas de BOM, comillas, escapes, saltos, encabezado y límites. El servicio tiene una prueba de conservación de éxitos ante un fallo interno posterior. `backend/test/gestion/cargar-alumnos.db-spec.ts` usa PostgreSQL real en una base propia creada/eliminada por la suite, junto con las regresiones de GES-15. La interfaz cubre plantilla, envío con sesión, resumen, errores, contraseñas, conteo, cierre y espera.
+El parser tiene pruebas de BOM, comillas, escapes, saltos, encabezado y límites. El servicio prueba la conservación de éxitos ante errores inesperados/500, el registro de la fila sin datos personales y la ausencia de ese log ante errores 4xx o de validación. `backend/test/gestion/cargar-alumnos.db-spec.ts` usa PostgreSQL real en una base propia creada/eliminada por la suite, junto con las regresiones de GES-15. La interfaz cubre plantilla, envío con sesión, resumen, errores, contraseñas, conteo, cierre y espera.
 
 Se unifica la propiedad `enMenu` duplicada que llegó en `develop`, conservando `enMenu?: boolean` y el comportamiento del perfil/lista de alumnos, para permitir compilar la integración. No cambia los permisos ni los elementos del menú.
 

@@ -1,5 +1,6 @@
 import type {
   AlumnoAgregado,
+  AlumnoQuitado,
   ResultadoCargaAlumnos,
   AlumnosSeccion,
   CursoCreado,
@@ -7,6 +8,7 @@ import type {
   CursoEditable,
   CambioCurso,
   CursoListado,
+  ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
 import {
@@ -19,6 +21,7 @@ import {
   Patch,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
 } from '@nestjs/common'
@@ -27,6 +30,7 @@ import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
 import { AgregarAlumnoDto } from './agregar-alumno.dto.js'
+import { AsignarProfesorDto } from './asignar-profesor.dto.js'
 import { CrearCursoDto } from './crear-curso.dto.js'
 import { FiltroCursosDto } from './filtro-cursos.dto.js'
 import { GestionService } from './gestion.service.js'
@@ -140,6 +144,23 @@ export class GestionController {
     return this.gestion.listarAlumnos(contexto, usuarioDe(req), id)
   }
 
+  // Quitar archiva la inscripción (nada se elimina): por eso PATCH y no DELETE.
+  @Puede('update', 'Inscripcion')
+  @Patch('secciones/:seccionId/alumnos/:usuarioId/quitar')
+  quitarAlumno(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('seccionId', ParseUUIDPipe) seccionId: string,
+    @Param('usuarioId', ParseUUIDPipe) usuarioId: string,
+  ): Promise<AlumnoQuitado> {
+    return this.gestion.quitarAlumno(
+      contexto,
+      usuarioDe(req),
+      seccionId,
+      usuarioId,
+    )
+  }
+
   // La respuesta puede traer la contraseña provisoria: no se guarda en caché
   // (también lo fija configurarApp para toda la API).
   @Puede('create', 'Inscripcion')
@@ -152,5 +173,32 @@ export class GestionController {
     @Body() datos: AgregarAlumnoDto,
   ): Promise<AlumnoAgregado> {
     return this.gestion.agregarAlumno(contexto, usuarioDe(req), id, datos)
+  }
+
+  // GES-12. Las dos rutas piden el mismo permiso: la lista existe para
+  // asignar, así que solo la ve quien puede hacerlo.
+  @Puede('update', 'Seccion')
+  @Get('profesores')
+  listarProfesores(
+    @UniversidadActual() contexto: ContextoUniversidad,
+  ): Promise<ProfesorOpcion[]> {
+    return this.gestion.listarProfesores(contexto)
+  }
+
+  // Asigna o reemplaza al profesor a cargo de la sección.
+  @Puede('update', 'Seccion')
+  @Put('secciones/:id/profesor')
+  asignarProfesor(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() datos: AsignarProfesorDto,
+  ): Promise<SeccionDetalle> {
+    return this.gestion.asignarProfesor(
+      contexto,
+      usuarioDe(req),
+      id,
+      datos.profesorId,
+    )
   }
 }

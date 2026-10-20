@@ -1,12 +1,14 @@
 import { randomBytes } from 'node:crypto'
 import type {
   AlumnoAgregado,
+  AlumnoQuitado,
   AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
   CursoListado,
   FiltroCursos,
   OpcionPeriodo,
+  ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
 import {
@@ -45,14 +47,15 @@ const DESDE_CURSO = `
   JOIN universidad un ON un.id = c.universidad_id`
 
 // Secciones vigentes del curso (GES-08): la cantidad para el listado y la
-// lista ordenada por número para el detalle.
+// lista ordenada por número para el detalle, con el nombre del profesor a
+// cargo (GES-12).
 const CANTIDAD_SECCIONES = `
   (SELECT count(*)::int FROM seccion s
     WHERE s.curso_id = c.id AND s.archived_at IS NULL) AS secciones`
 // GES-15: alumnos es la cantidad de inscripciones activas de la sección.
 const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
-                     'id', s.id, 'numero', s.numero,
+                     'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
                      'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                                      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
                                     WHERE a.seccion_id = s.id AND a.archived_at IS NULL
@@ -62,27 +65,32 @@ const LISTA_SECCIONES = `
                                     AND i.archived_at IS NULL))
                    ORDER BY s.numero)
               FROM seccion s
+              LEFT JOIN usuario pr ON pr.id = s.profesor_id
              WHERE s.curso_id = c.id AND s.archived_at IS NULL), '[]') AS secciones`
 
 const COLUMNAS_LISTADO = `${COLUMNAS_CURSO}, ${CANTIDAD_SECCIONES} ${DESDE_CURSO}`
 
-// Horario y profesor llegan con GES-10 y 12. Una sección
-// recién creada no tiene alumnos.
+interface FilaSeccion {
+  id: string
+  numero: number
+  profesor?: string | null
+  ayudantes?: string[]
+  alumnos?: number
+}
+
+// El horario llega con GES-10. Una sección recién creada no tiene profesor,
+// ayudantes ni alumnos.
 const seccionDetalle = ({
   id,
   numero,
-  alumnos = 0,
+  profesor = null,
   ayudantes = [],
-}: {
-  id: string
-  numero: number
-  alumnos?: number
-  ayudantes?: string[]
-}): SeccionDetalle => ({
+  alumnos = 0,
+}: FilaSeccion): SeccionDetalle => ({
   id,
   numero,
   horario: null,
-  profesor: null,
+  profesor,
   ayudantes,
   alumnos,
 })
@@ -142,12 +150,7 @@ interface FilaAlumno {
 }
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
-  secciones: {
-    id: string
-    numero: number
-    alumnos: number
-    ayudantes: string[]
-  }[]
+  secciones: FilaSeccion[]
 }
 
 interface FilaListado {
@@ -315,6 +318,63 @@ export class GestionService {
     }
   }
 
+  // GES-12. Profesores de la universidad de la sesión, no archivados, para
+  // elegir a quién asignar una sección. Incluye los de todas las facultades:
+  // la tarjeta pide los de la universidad.
+  async listarProfesores(
+    contexto: ContextoUniversidad,
+  ): Promise<ProfesorOpcion[]> {
+    return this.bd.consultarEnUniversidad<ProfesorOpcion>(
+      contexto,
+      `SELECT id, nombre FROM usuario
+        WHERE universidad_id = $1 AND rol = 'PROFESOR' AND archived_at IS NULL
+        ORDER BY nombre, id`,
+      [],
+    )
+  }
+
+  // GES-12. Asigna el profesor a cargo de la sección, en una sola consulta.
+  // Si ya tenía uno, lo reemplaza: la confirmación se pide en el frontend. La
+  // sección debe ser de un curso de la facultad del usuario, y ni ella ni su
+  // curso pueden estar archivados; el profesor debe ser de su universidad,
+  // con el rol PROFESOR y sin archivar. Si no, no cambia nada y responde 404.
+  async asignarProfesor(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccionId: string,
+    profesorId: string,
+  ): Promise<SeccionDetalle> {
+    const [fila] = await this.bd.consultarEnUniversidad<FilaSeccion>(
+      contexto,
+      `WITH profesor AS (
+         SELECT id, nombre FROM usuario
+          WHERE universidad_id = $1 AND id = $3 AND rol = 'PROFESOR'
+            AND archived_at IS NULL
+       ), asignada AS (
+         UPDATE seccion s SET profesor_id = profesor.id
+           FROM profesor, curso c JOIN carrera ca ON ca.id = c.carrera_id
+          WHERE s.universidad_id = $1 AND s.id = $2 AND s.archived_at IS NULL
+            AND c.id = s.curso_id AND c.archived_at IS NULL
+            AND ca.facultad_id = ${facultadDe('$4')}
+         RETURNING s.id, s.numero
+       )
+       SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
+              (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                 FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                WHERE a.seccion_id = asignada.id AND a.archived_at IS NULL
+                  AND u.archived_at IS NULL AND u.rol = 'AYUDANTE') AS ayudantes,
+              (SELECT count(*)::int FROM inscripcion i
+                WHERE i.seccion_id = asignada.id
+                  AND i.archived_at IS NULL) AS alumnos
+         FROM asignada, profesor`,
+      [seccionId, profesorId, usuarioId],
+    )
+    if (!fila) {
+      throw new NotFoundException('La sección o el profesor no existen')
+    }
+    return seccionDetalle(fila)
+  }
+
   // GES-18. Alumnos inscritos en una sección vigente, con el mismo criterio
   // que agregarAlumno: de la facultad del usuario (si no, 404). El Director
   // ve las secciones de toda su universidad, pero no las de otras (404).
@@ -348,6 +408,62 @@ export class GestionService {
       alumnos: fila.alumnos,
       total: fila.alumnos.length,
     }
+  }
+
+  // GES-19. Quita a un alumno de una sección archivando su inscripción, con
+  // la fecha y el usuario de la sesión como responsable; su cuenta no cambia.
+  // Mismo criterio de sección que agregarAlumno y listarAlumnos (si no, 404).
+  // Un alumno que no está inscrito (o ya se quitó) también responde 404. El
+  // índice único parcial deja volver a inscribirlo.
+  async quitarAlumno(
+    contexto: ContextoUniversidad,
+    responsableId: string,
+    seccionId: string,
+    alumnoId: string,
+  ): Promise<AlumnoQuitado> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const universidad = contexto.universidadId
+      const [seccion] = await bd.query<{ id: string }>(
+        `SELECT s.id ${SECCION_VIGENTE}
+            AND ca.facultad_id = ${facultadDe('$3')}`,
+        [universidad, seccionId, responsableId],
+      )
+      if (!seccion) {
+        throw new NotFoundException('La sección no existe')
+      }
+      const [fila] = await bd.query<{
+        id: string
+        nombre: string
+        correo: string
+        quitado_en: Date
+        por_id: string
+        por_nombre: string
+      }>(
+        `WITH quitada AS (
+           UPDATE inscripcion
+              SET archived_at = now(), archivada_por = $4
+            WHERE universidad_id = $1 AND seccion_id = $2 AND usuario_id = $3
+              AND archived_at IS NULL
+           RETURNING usuario_id, archived_at, archivada_por
+         )
+         SELECT u.id, u.nombre, u.correo, q.archived_at AS quitado_en,
+                r.id AS por_id, r.nombre AS por_nombre
+           FROM quitada q
+           JOIN usuario u ON u.id = q.usuario_id
+           JOIN usuario r ON r.id = q.archivada_por`,
+        [universidad, seccionId, alumnoId, responsableId],
+      )
+      if (!fila) {
+        throw new NotFoundException(
+          'El alumno no está inscrito en esta sección',
+        )
+      }
+      return {
+        alumno: { id: fila.id, nombre: fila.nombre, correo: fila.correo },
+        quitadoEn: fila.quitado_en.toISOString(),
+        quitadoPor: { id: fila.por_id, nombre: fila.por_nombre },
+      }
+    })
   }
 
   // GES-15. Inscribe a un alumno en una sección por su correo institucional,

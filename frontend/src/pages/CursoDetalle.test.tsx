@@ -1,4 +1,4 @@
-import type { CursoDetalle, CursoListado } from '@cursus/shared'
+import type { CursoDetalle, CursoListado, ProfesorOpcion } from '@cursus/shared'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
@@ -66,24 +66,12 @@ describe('detalle de un curso', () => {
       'Alumnos',
       'Acciones',
     ])
-    // Lo que todavía no se asigna aparece como "Sin asignar".
+    // Lo que todavía no se asigna aparece como "Sin asignar", y la columna
+    // Acciones tiene los botones de GES-12, GES-15, GES-16 y GES-13.
+    const ACCIONES = 'Asignar profesorAgregar alumnoCargar CSVAsignar ayudantes'
     expect(filasDe(tabla)).toEqual([
-      [
-        '1',
-        'Sin asignar',
-        'Sin asignar',
-        'Sin asignar',
-        '0',
-        'Agregar alumnoCargar CSVAsignar ayudantes',
-      ],
-      [
-        '2',
-        'Sin asignar',
-        'Sin asignar',
-        'Sin asignar',
-        '0',
-        'Agregar alumnoCargar CSVAsignar ayudantes',
-      ],
+      ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
+      ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', ACCIONES],
     ])
   })
 
@@ -115,11 +103,13 @@ describe('detalle de un curso', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
+    // Sin la columna Acciones (GES-12, GES-13 y GES-15).
+    expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /profesor/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Agregar alumno/ })).toBeNull()
     expect(
       screen.queryByRole('button', { name: /Asignar ayudantes/ }),
     ).toBeNull()
-    expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
   })
 
   test('sin secciones muestra el estado vacío', async () => {
@@ -244,6 +234,219 @@ describe('crear una sección (GES-09)', () => {
       filasDe(screen.getByRole('table', { name: 'Secciones' })),
     ).toHaveLength(2)
     expect(screen.queryByRole('status')).toBeNull()
+  })
+})
+
+describe('asignar el profesor de una sección (GES-12)', () => {
+  const PROFESORES: ProfesorOpcion[] = [
+    { id: 'profesor-1', nombre: 'Camila Rojas' },
+    { id: 'profesor-2', nombre: 'Matías Muñoz' },
+  ]
+  const CON_PROFESOR: CursoDetalle = {
+    ...CURSO,
+    secciones: [
+      { id: 'seccion-1', numero: 1, ...SECCION, profesor: 'Camila Rojas' },
+      { id: 'seccion-2', numero: 2, ...SECCION },
+    ],
+  }
+
+  // Rutas del detalle, la lista de profesores y el PUT de la sección 1.
+  const rutas = (
+    asignar: RutaSimulada,
+    curso: CursoDetalle = CURSO,
+  ): Record<string, RutaSimulada> => ({
+    '/api/cursos/curso-1': () => curso,
+    '/api/profesores': () => PROFESORES,
+    '/api/secciones/seccion-1/profesor': asignar,
+  })
+
+  const elegir = async (nombre: string) =>
+    fireEvent.change(await screen.findByLabelText('Profesor'), {
+      target: { value: PROFESORES.find((p) => p.nombre === nombre)?.id },
+    })
+
+  test('el detalle muestra al profesor asignado', async () => {
+    await renderConSesion('DIRECTOR', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => CON_PROFESOR,
+    })
+
+    const tabla = await screen.findByRole('table', { name: 'Secciones' })
+    expect(filasDe(tabla).map((fila) => fila[2])).toEqual([
+      'Camila Rojas',
+      'Sin asignar',
+    ])
+  })
+
+  test('asigna el profesor y lo muestra en la tabla con un aviso', async () => {
+    const enviados: { metodo?: string; cuerpo: unknown }[] = []
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      rutas((init) => {
+        enviados.push({
+          metodo: init?.method,
+          cuerpo: JSON.parse(String(init?.body)),
+        })
+        return {
+          id: 'seccion-1',
+          numero: 1,
+          ...SECCION,
+          profesor: 'Matías Muñoz',
+        }
+      }),
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Asignar profesor de la sección 1',
+      }),
+    )
+    // La lista solo trae a los profesores que entrega la API.
+    expect(
+      within(await screen.findByLabelText('Profesor'))
+        .getAllByRole('option')
+        .map((opcion) => opcion.textContent),
+    ).toEqual(['Selecciona un profesor', 'Camila Rojas', 'Matías Muñoz'])
+    await elegir('Matías Muñoz')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Matías Muñoz quedó a cargo de la sección 1.',
+    )
+    expect(enviados).toEqual([
+      { metodo: 'PUT', cuerpo: { profesorId: 'profesor-2' } },
+    ])
+    const tabla = screen.getByRole('table', { name: 'Secciones' })
+    expect(filasDe(tabla)[0][2]).toBe('Matías Muñoz')
+    expect(
+      screen.getByRole('button', { name: 'Cambiar profesor de la sección 1' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('form', { name: 'Profesor de la sección 1' }),
+    ).toBeNull()
+  })
+
+  test('reasignar pide confirmación antes de guardar', async () => {
+    let pedidos = 0
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      rutas(() => {
+        pedidos++
+        return {
+          id: 'seccion-1',
+          numero: 1,
+          ...SECCION,
+          profesor: 'Matías Muñoz',
+        }
+      }, CON_PROFESOR),
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Cambiar profesor de la sección 1',
+      }),
+    )
+    await elegir('Matías Muñoz')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    // Primero confirma, sin guardar todavía.
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'La sección 1 ya tiene a Camila Rojas como profesor a cargo. ¿Reemplazarlo por Matías Muñoz?',
+    )
+    expect(pedidos).toBe(0)
+
+    // Volver deja todo como estaba.
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(pedidos).toBe(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reemplazar' }))
+    expect(
+      await screen.findByText('Matías Muñoz quedó a cargo de la sección 1.'),
+    ).toHaveAttribute('role', 'status')
+    expect(pedidos).toBe(1)
+    expect(
+      filasDe(screen.getByRole('table', { name: 'Secciones' }))[0][2],
+    ).toBe('Matías Muñoz')
+  })
+
+  test('cancelar cierra el formulario sin guardar', async () => {
+    let pedidos = 0
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      rutas(() => {
+        pedidos++
+        return {}
+      }),
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Asignar profesor de la sección 1',
+      }),
+    )
+    await elegir('Camila Rojas')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(
+      screen.queryByRole('form', { name: 'Profesor de la sección 1' }),
+    ).toBeNull()
+    expect(pedidos).toBe(0)
+  })
+
+  test('si la API responde 404, muestra su mensaje y no cambia la tabla', async () => {
+    await renderConSesion(
+      'ADMINISTRATIVO',
+      '/cursos/curso-1',
+      rutas(() =>
+        json(
+          {
+            statusCode: 404,
+            message: 'La sección o el profesor no existen',
+          },
+          404,
+        ),
+      ),
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Asignar profesor de la sección 1',
+      }),
+    )
+    await elegir('Camila Rojas')
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'La sección o el profesor no existen',
+    )
+    expect(
+      filasDe(screen.getByRole('table', { name: 'Secciones' }))[0][2],
+    ).toBe('Sin asignar')
+  })
+
+  test('si la lista de profesores no carga, muestra el error y reintenta', async () => {
+    let fallar = true
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => CURSO,
+      '/api/profesores': () =>
+        fallar ? new Response(null, { status: 500 }) : PROFESORES,
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Asignar profesor de la sección 1',
+      }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudieron cargar los profesores.',
+    )
+    fallar = false
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByLabelText('Profesor')).toBeInTheDocument()
   })
 })
 

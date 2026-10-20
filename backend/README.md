@@ -150,6 +150,7 @@ Además del filtro en la consulta, PostgreSQL aísla las universidades con Row-L
 
 - `GET /api/auth/yo` entrega los datos del perfil: nombre, correo, rol, universidad y facultad.
 - `PATCH /api/perfil` (`{ nombre }`, PER-01) cambia el nombre del usuario de la sesión: el id sale del JWT, nunca de la petición. Cualquier otro campo responde `400`. El Director recibe `403`: ve su perfil en solo lectura ([ADR 0001](../docs/adr/0001-acceso-del-director-entre-universidades.md)).
+- `PUT /api/auth/password` (`{ passwordActual, passwordNueva }`, PER-02) cambia la contraseña del usuario de la sesión, también la del Director. La nueva debe tener al menos 8 caracteres y ser distinta de la actual; si no, o si la actual no es correcta, responde `400`. Responde `204` y cierra las demás sesiones del usuario; la actual sigue abierta. Una contraseña actual incorrecta cuenta para el mismo límite por cuenta del login (`429` con `Retry-After`).
 
 ## Variables de entorno
 

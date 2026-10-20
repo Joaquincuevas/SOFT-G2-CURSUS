@@ -1,5 +1,6 @@
 import type { UsuarioSesion } from '@cursus/shared'
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,6 +8,7 @@ import {
   HttpException,
   HttpStatus,
   Post,
+  Put,
   Req,
   Res,
   UnauthorizedException,
@@ -14,6 +16,7 @@ import {
 import type { CookieOptions, Request, Response } from 'express'
 import { AuthService, type TokensSesion } from './auth.service.js'
 import { LoginDto } from './login.dto.js'
+import { CambiarPasswordDto } from './cambiar-password.dto.js'
 import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
@@ -54,6 +57,20 @@ export function leerCookie(req: Request, nombre: string): string | undefined {
   return undefined
 }
 
+// 429 del login y del cambio de contraseña, con el header Retry-After.
+function demasiadosIntentos(res: Response, retryAfter: number): never {
+  res.setHeader('Retry-After', retryAfter.toString())
+  throw new HttpException(
+    {
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      message:
+        'Demasiados intentos fallidos. Espera antes de volver a intentar.',
+      retryAfter,
+    },
+    HttpStatus.TOO_MANY_REQUESTS,
+  )
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -70,22 +87,13 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaLogin> {
-    const { tokens, retryAfter } = await this.limiteLogin.intentar(
+    const { resultado: tokens, retryAfter } = await this.limiteLogin.intentar(
       correo,
       ipLogin(req),
       (bd) => this.auth.iniciarSesion(correo, password, bd),
     )
     if (retryAfter) {
-      res.setHeader('Retry-After', retryAfter.toString())
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message:
-            'Demasiados intentos fallidos. Espera antes de volver a intentar.',
-          retryAfter,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      )
+      demasiadosIntentos(res, retryAfter)
     }
 
     // Mismo mensaje si el correo no existe o la contraseña no calza.
@@ -135,6 +143,41 @@ export class AuthController {
       maxAge: this.auth.segundosRefresh * 1000,
     })
     return { accessToken: tokens.accessToken }
+  }
+
+  // PER-02. Cambia la contraseña del usuario de la sesión, también la del
+  // Director, y cierra sus demás sesiones. Una contraseña actual incorrecta
+  // cuenta para el mismo límite de intentos por cuenta del login.
+  @SoloSesion()
+  @Put('password')
+  @HttpCode(204)
+  async cambiarPassword(
+    @Body() { passwordActual, passwordNueva }: CambiarPasswordDto,
+    @Req() req: RequestConUsuario,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const { sub, sid } = req.usuario ?? {}
+    const correo = sub && (await this.auth.correoDe(sub))
+    if (!sub || !sid || !correo) {
+      throw new UnauthorizedException()
+    }
+    const { resultado, retryAfter } = await this.limiteLogin.intentar(
+      correo,
+      null,
+      (bd) =>
+        this.auth.cambiarPassword(sub, sid, passwordActual, passwordNueva, bd),
+    )
+    if (retryAfter) {
+      demasiadosIntentos(res, retryAfter)
+    }
+    if (!resultado) {
+      throw new BadRequestException('La contraseña actual no es correcta')
+    }
+    if (resultado === 'igual') {
+      throw new BadRequestException(
+        'La contraseña nueva debe ser distinta de la actual',
+      )
+    }
   }
 
   // Usuario de la sesión. 401 si el usuario del token ya no existe en la
