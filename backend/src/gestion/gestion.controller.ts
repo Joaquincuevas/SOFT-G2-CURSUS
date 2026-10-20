@@ -1,5 +1,6 @@
 import type {
   AlumnoAgregado,
+  ResultadoCargaAlumnos,
   AlumnosSeccion,
   CursoCreado,
   CursoDetalle,
@@ -13,6 +14,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Patch,
   ParseUUIDPipe,
@@ -29,6 +31,8 @@ import { CrearCursoDto } from './crear-curso.dto.js'
 import { FiltroCursosDto } from './filtro-cursos.dto.js'
 import { GestionService } from './gestion.service.js'
 import { EdicionCursoService } from './edicion-curso.service.js'
+import { CargaAlumnosService } from './carga-alumnos.service.js'
+import { CargarAlumnosDto } from './cargar-alumnos.dto.js'
 
 // Usuario de la sesión: el JwtAuthGuard global ya lo validó.
 const usuarioDe = (req: RequestConUsuario) => req.usuario?.sub as string
@@ -38,7 +42,21 @@ export class GestionController {
   constructor(
     private readonly gestion: GestionService,
     private readonly edicion: EdicionCursoService,
+    private readonly carga: CargaAlumnosService,
   ) {}
+
+  @Puede('create', 'Inscripcion')
+  @Post('secciones/:id/alumnos/csv')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  cargarAlumnosCsv(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() datos: CargarAlumnosDto,
+  ): Promise<ResultadoCargaAlumnos> {
+    return this.carga.cargar(contexto, usuarioDe(req), id, datos.csv)
+  }
 
   @Puede('update', 'Curso')
   @Get('cursos/:id/edicion')

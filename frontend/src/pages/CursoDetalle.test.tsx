@@ -68,8 +68,22 @@ describe('detalle de un curso', () => {
     ])
     // Lo que todavía no se asigna aparece como "Sin asignar".
     expect(filasDe(tabla)).toEqual([
-      ['1', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', 'Agregar alumno'],
-      ['2', 'Sin asignar', 'Sin asignar', 'Sin asignar', '0', 'Agregar alumno'],
+      [
+        '1',
+        'Sin asignar',
+        'Sin asignar',
+        'Sin asignar',
+        '0',
+        'Agregar alumnoCargar CSV',
+      ],
+      [
+        '2',
+        'Sin asignar',
+        'Sin asignar',
+        'Sin asignar',
+        '0',
+        'Agregar alumnoCargar CSV',
+      ],
     ])
   })
 

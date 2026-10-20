@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [GES-16: carga de alumnos desde CSV y guía de revisión](ges-16-carga-alumnos-csv.md)
+
 - [GES-01: carreras por facultad y guía de revisión](ges-01-carreras-facultad.md)
 - [GES-02: períodos académicos y guía de revisión](ges-02-periodos-academicos.md)
 - [GES-06: código de curso único por período y guía de revisión](ges-06-codigo-curso-unico.md)

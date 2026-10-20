@@ -23,9 +23,6 @@ export interface NavItem {
   label: string | ((user: SessionUser) => string)
   icon: NavIconName
   permiso: PermisoRuta
-  // false: la ruta existe (con su guard y su encabezado) pero no va en el
-  // Sidebar; se llega a ella desde otra página.
-  enMenu?: false
   // Página de la ruta. Sin página, la ruta muestra solo el App Shell.
   page?: ComponentType
   // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,

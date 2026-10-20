@@ -48,6 +48,17 @@
   box-shadow: var(--shadow-card);
 }
 
+.cursos__dialogo--csv {
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+.cursos__resultado-csv {
+  display: grid;
+  gap: var(--space-4);
+  padding-left: var(--space-6);
+  overflow-wrap: anywhere;
+}
+
 .cursos [hidden] {
   display: none;
 }
