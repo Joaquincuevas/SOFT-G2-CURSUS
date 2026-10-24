@@ -1,4 +1,4 @@
-import type { Rol, SeccionDashboard } from '@cursus/shared'
+import type { Rol, SeccionAyudante, SeccionDashboard } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
@@ -164,4 +164,77 @@ describe('dashboard del profesor (ESP-01)', () => {
       expect(pedidas).toBe(0)
     },
   )
+})
+
+const RUTA_AYUDANTE = '/api/dashboard/secciones-ayudante'
+
+const SECCIONES_AYUDANTE: SeccionAyudante[] = [
+  {
+    id: 'seccion-icc101-1',
+    numero: 1,
+    curso: {
+      id: 'curso-icc101',
+      codigo: 'ICC101',
+      nombre: 'Introducción a la Programación',
+    },
+    profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  },
+  {
+    id: 'seccion-icc201-2',
+    numero: 2,
+    curso: {
+      id: 'curso-icc201',
+      codigo: 'ICC201',
+      nombre: 'Estructuras de Datos',
+    },
+    profesor: null,
+  },
+]
+
+describe('dashboard del ayudante (ESP-02)', () => {
+  test('muestra una tarjeta por sección con curso, sección y profesor a cargo', async () => {
+    await renderConSesion('AYUDANTE', '/', {
+      [RUTA_AYUDANTE]: () => SECCIONES_AYUDANTE,
+    })
+
+    const [icc101, icc201] = await tarjetas()
+    expect(
+      screen.getByRole('heading', { name: 'Mis secciones del período' }),
+    ).toBeInTheDocument()
+
+    const primera = within(icc101)
+    expect(primera.getByText('ICC101')).toBeInTheDocument()
+    expect(
+      primera.getByRole('heading', { name: 'Introducción a la Programación' }),
+    ).toBeInTheDocument()
+    expect(primera.getByText('Sección 1')).toBeInTheDocument()
+    expect(
+      primera.getByText('Profesor a cargo: Camila Rojas'),
+    ).toBeInTheDocument()
+
+    const segunda = within(icc201)
+    expect(segunda.getByText('Sección 2')).toBeInTheDocument()
+    expect(segunda.getByText('Sin profesor asignado')).toBeInTheDocument()
+  })
+
+  test('cada tarjeta abre la vista del curso', async () => {
+    await renderConSesion('AYUDANTE', '/', {
+      [RUTA_AYUDANTE]: () => SECCIONES_AYUDANTE,
+    })
+
+    expect((await tarjetas()).map((t) => t.getAttribute('href'))).toEqual([
+      '/mis-cursos/secciones/seccion-icc101-1',
+      '/mis-cursos/secciones/seccion-icc201-2',
+    ])
+  })
+
+  test('sin secciones muestra el estado vacío', async () => {
+    await renderConSesion('AYUDANTE', '/', { [RUTA_AYUDANTE]: () => [] })
+
+    expect(
+      await screen.findByText(
+        'No eres ayudante de ninguna sección en el período activo.',
+      ),
+    ).toBeInTheDocument()
+  })
 })
