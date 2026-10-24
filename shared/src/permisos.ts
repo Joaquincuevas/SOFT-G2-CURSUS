@@ -71,8 +71,11 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
     case 'PROFESOR':
     case 'AYUDANTE':
     case 'ALUMNO':
-      // Sin permisos sobre Curso por ahora: sus cursos llegan con las secciones.
       can('read', ['Universidad', 'Facultad', 'Carrera', 'Periodo'])
+      // ESP-06: read Seccion solo habilita los endpoints del espacio de la
+      // sección, que además exigen ser integrante (IntegranteSeccionGuard).
+      // Los endpoints de gestión piden otros permisos y siguen cerrados.
+      can('read', 'Seccion')
       can('read', 'MisCursos')
       break
     // Un rol desconocido no recibe ningún permiso.
