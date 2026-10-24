@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [ESP-01: el profesor ve sus secciones del período en su dashboard](esp-01-dashboard-profesor.md)
+
 - [ESP-06: solo los integrantes de una sección acceden a ella](esp-06-acceso-seccion.md)
 
 - [GES-20: seed de una facultad completa y guía de revisión](ges-20-seed-facultad.md)
