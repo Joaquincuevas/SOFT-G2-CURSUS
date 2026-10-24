@@ -1,22 +1,46 @@
-import type { SeccionDashboard } from '@cursus/shared'
-import { Link, useParams } from 'react-router'
+import type { SeccionResumen } from '@cursus/shared'
+import { Link, useNavigate, useParams } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
+import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
-import { RUTA_MIS_SECCIONES, textoAlumnos } from './misSecciones'
+import './VistaSeccion.css'
+import { textoBloque } from './misSecciones'
 import { useDatos } from './useDatos'
 
-// Vista del curso que abre una tarjeta del dashboard (ESP-01). Muestra el
-// curso y la sección con los mismos datos del dashboard, así que también
-// funciona al recargar. ESP-04 la completa con horario, sala y equipo docente.
-export function VistaSeccion() {
-  const { id } = useParams()
-  const [secciones, recargar] = useDatos<SeccionDashboard[]>(RUTA_MIS_SECCIONES)
+// Pestañas del espacio de la sección que agrega la Fase 4.
+const PESTANAS = ['Notas', 'Material', 'Anuncios', 'Asistencia']
 
-  if (secciones === undefined) {
+// ESP-04 (RE-04): vista general de una sección, la misma para profesor,
+// ayudante y alumno. Hoy no hay acciones por rol: llegan en la Fase 4 con
+// las pestañas.
+export function VistaSeccion() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const [seccion, recargar, status] = useDatos<SeccionResumen>(
+    `/api/espacio/secciones/${id}/resumen`,
+  )
+
+  if (seccion === undefined) {
     return <Cargando />
   }
-  if (secciones === null) {
+  if (seccion === null) {
+    // 403: no es integrante; 404 (o 400, id inválido): no existe o está
+    // archivada. Reintentar no cambia nada, así que se vuelve al dashboard.
+    if (status === 403 || status === 404 || status === 400) {
+      return (
+        <ErrorEstado
+          titulo={status === 403 ? 'Sin acceso' : 'Sección no encontrada'}
+          mensaje={
+            status === 403
+              ? 'No eres integrante de esta sección.'
+              : 'La sección no existe o ya no está disponible.'
+          }
+          textoBoton="Volver al Dashboard"
+          onReintentar={() => void navigate('/')}
+        />
+      )
+    }
     return (
       <ErrorEstado
         mensaje="No pudimos cargar la sección."
@@ -24,23 +48,60 @@ export function VistaSeccion() {
       />
     )
   }
-  const seccion = secciones.find((s) => s.id === id)
+  const { curso, numero, rol, horario, profesor, ayudantes } = seccion
   return (
     <section className="dashboard" aria-label="Vista del curso">
-      {seccion ? (
-        <>
-          <span className="dashboard__codigo">{seccion.curso.codigo}</span>
-          <h2 className="dashboard__titulo">{seccion.curso.nombre}</h2>
-          <p className="dashboard__seccion">Sección {seccion.numero}</p>
-          <p className="dashboard__texto">
-            Profesor a cargo · {textoAlumnos(seccion.alumnos)}
-          </p>
-        </>
+      <span className="dashboard__codigo">{curso.codigo}</span>
+      <h2 className="dashboard__titulo">{curso.nombre}</h2>
+      <p className="dashboard__seccion">Sección {numero}</p>
+      <p className="dashboard__texto">Entras como {ROL_LABEL[rol]}</p>
+
+      <div
+        className="vista-seccion__pestanas"
+        role="tablist"
+        aria-label="Pestañas de la sección"
+      >
+        {PESTANAS.map((pestana) => (
+          <button
+            key={pestana}
+            type="button"
+            role="tab"
+            aria-selected={false}
+            className="vista-seccion__pestana"
+            disabled
+          >
+            {pestana}
+          </button>
+        ))}
+      </div>
+
+      <h3 className="vista-seccion__subtitulo">Horario y sala</h3>
+      {horario.length === 0 ? (
+        <p className="dashboard__texto">Sin horario asignado</p>
       ) : (
-        <p className="dashboard__texto">
-          Esta sección no está entre tus secciones del período activo.
-        </p>
+        <ul className="dashboard__horario" aria-label="Horario">
+          {horario.map((bloque) => (
+            <li key={`${bloque.dia}-${bloque.inicio}`}>
+              {textoBloque(bloque)}
+            </li>
+          ))}
+        </ul>
       )}
+
+      <h3 className="vista-seccion__subtitulo">Equipo docente</h3>
+      <dl className="vista-seccion__equipo">
+        <dt>Profesor</dt>
+        <dd>{profesor?.nombre ?? 'Sin profesor asignado'}</dd>
+        <dt>Ayudantes</dt>
+        {ayudantes.length === 0 ? (
+          <dd>Sin ayudantes asignados</dd>
+        ) : (
+          ayudantes.map((ayudante) => (
+            <dd key={ayudante.id}>{ayudante.nombre}</dd>
+          ))
+        )}
+      </dl>
+
       <Link to="/">Volver al Dashboard</Link>
     </section>
   )
