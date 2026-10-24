@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- ESP-02: `GET /api/dashboard/secciones-ayudante` devuelve las secciones del período activo donde el usuario es ayudante (`SeccionAyudante[]`), con curso, número y profesor a cargo; para otro rol, `[]`.
+
 - [ESP-01: el profesor ve sus secciones del período en su dashboard](esp-01-dashboard-profesor.md)
 
 - [ESP-06: solo los integrantes de una sección acceden a ella](esp-06-acceso-seccion.md)
