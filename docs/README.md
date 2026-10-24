@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [ESP-06: solo los integrantes de una sección acceden a ella](esp-06-acceso-seccion.md)
+
 - [GES-20: seed de una facultad completa y guía de revisión](ges-20-seed-facultad.md)
 
 - [GES-11: aviso de sala ocupada y guía de revisión](ges-11-sala-ocupada.md)
