@@ -1,4 +1,5 @@
 import type { AlumnosEspacio, SeccionResumen } from '@cursus/shared'
+import { useId } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
@@ -102,7 +103,9 @@ export function VistaSeccion() {
         )}
       </dl>
 
-      {rol === 'PROFESOR' && <AlumnosDeLaSeccion seccionId={id} />}
+      {/* key: al cambiar de sección la lista vuelve a cargar, sin mostrar
+          la de la sección anterior. */}
+      {rol === 'PROFESOR' && <AlumnosDeLaSeccion key={id} seccionId={id} />}
 
       <Link to="/">Volver al Dashboard</Link>
     </section>
@@ -116,13 +119,11 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
   const [datos, recargar] = useDatos<AlumnosEspacio>(
     `/api/espacio/secciones/${seccionId}/alumnos`,
   )
+  const tituloId = useId()
 
   return (
-    <section
-      className="vista-seccion__alumnos"
-      aria-labelledby="alumnos-titulo"
-    >
-      <h3 id="alumnos-titulo" className="vista-seccion__subtitulo">
+    <section className="vista-seccion__alumnos" aria-labelledby={tituloId}>
+      <h3 id={tituloId} className="vista-seccion__subtitulo">
         {datos ? `Alumnos (${datos.total})` : 'Alumnos'}
       </h3>
       {datos === undefined ? (
