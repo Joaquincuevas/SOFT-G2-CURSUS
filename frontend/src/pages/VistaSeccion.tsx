@@ -1,4 +1,4 @@
-import type { SeccionResumen } from '@cursus/shared'
+import type { AlumnosEspacio, SeccionResumen } from '@cursus/shared'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
@@ -102,7 +102,48 @@ export function VistaSeccion() {
         )}
       </dl>
 
+      {rol === 'PROFESOR' && <AlumnosDeLaSeccion seccionId={id} />}
+
       <Link to="/">Volver al Dashboard</Link>
+    </section>
+  )
+}
+
+// ESP-05 (RN-06): alumnos inscritos, solo para el profesor de la sección y en
+// solo lectura. Agregar o quitar alumnos es del Administrativo (GES-15 y
+// GES-19). El backend los entrega ordenados por nombre.
+function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
+  const [datos, recargar] = useDatos<AlumnosEspacio>(
+    `/api/espacio/secciones/${seccionId}/alumnos`,
+  )
+
+  return (
+    <section
+      className="vista-seccion__alumnos"
+      aria-labelledby="alumnos-titulo"
+    >
+      <h3 id="alumnos-titulo" className="vista-seccion__subtitulo">
+        {datos ? `Alumnos (${datos.total})` : 'Alumnos'}
+      </h3>
+      {datos === undefined ? (
+        <Cargando texto="Cargando alumnos…" />
+      ) : datos === null ? (
+        <ErrorEstado
+          mensaje="No pudimos cargar los alumnos."
+          onReintentar={recargar}
+        />
+      ) : datos.alumnos.length === 0 ? (
+        <p className="dashboard__texto">Aún no hay alumnos inscritos</p>
+      ) : (
+        <ul className="vista-seccion__lista" aria-label="Alumnos inscritos">
+          {datos.alumnos.map((alumno) => (
+            <li key={alumno.id}>
+              <span className="vista-seccion__nombre">{alumno.nombre}</span>
+              <span>{alumno.correo}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
