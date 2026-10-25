@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- ESP-05: `GET /api/espacio/secciones/:id/alumnos` devuelve `AlumnosEspacio` (`total` y `alumnos` con id, nombre y correo, por nombre) con las inscripciones activas de la sección, solo a su profesor y en solo lectura; a los demás integrantes (ayudante, alumno), al Administrativo y al Director, 403. Reutiliza la consulta de GES-18 (`backend/src/gestion/alumnos.sql.ts`).
+
 - ESP-04: `GET /api/espacio/secciones/:id/resumen` devuelve `SeccionResumen` (curso, sección, horario con sala, profesor, ayudantes activos y el rol del usuario) a los integrantes de la sección, al Administrativo de su facultad y al Director; al resto, 403 (guard de ESP-06).
 
 - ESP-02: `GET /api/dashboard/secciones-ayudante` devuelve las secciones del período activo donde el usuario es ayudante (`SeccionAyudante[]`), con curso, número y profesor a cargo; para otro rol, `[]`.
