@@ -30,6 +30,7 @@ import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
 import type { CrearDocenteDto } from './crear-docente.dto.js'
 import { resumirHorario } from '@cursus/shared'
+import { ALUMNOS_SECCION } from './alumnos.sql.js'
 import { BLOQUES_HORARIO } from './horarios.sql.js'
 
 // Código de PostgreSQL para una restricción única violada.
@@ -152,15 +153,6 @@ const SECCION_VIGENTE = `
 const SECCION_INSCRIBIBLE = `SELECT ca.facultad_id,
   (SELECT dominio_correo FROM universidad WHERE id = $1) AS dominio_correo
   ${SECCION_VIGENTE} AND ca.facultad_id = ${facultadDe('$3')}`
-
-// Alumnos con inscripción activa en la sección s, en orden alfabético en
-// español (la collation ICU ordena bien tildes y ñ) y después por correo.
-const ALUMNOS_SECCION = `
-  COALESCE((SELECT json_agg(json_build_object(
-                     'id', u.id, 'nombre', u.nombre, 'correo', u.correo)
-                   ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo)
-              FROM inscripcion i JOIN usuario u ON u.id = i.usuario_id
-             WHERE i.seccion_id = s.id AND i.archived_at IS NULL), '[]') AS alumnos`
 
 interface FilaAlumnosSeccion {
   id: string
