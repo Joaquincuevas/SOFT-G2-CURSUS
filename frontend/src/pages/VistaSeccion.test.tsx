@@ -1,5 +1,5 @@
-import type { Rol, SeccionResumen } from '@cursus/shared'
-import { screen, within } from '@testing-library/react'
+import type { AlumnosEspacio, Rol, SeccionResumen } from '@cursus/shared'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
@@ -128,4 +128,115 @@ describe('vista de la sección (ESP-04)', () => {
       screen.queryByRole('region', { name: 'Vista del curso' }),
     ).not.toBeInTheDocument()
   })
+})
+
+describe('alumnos de la sección (ESP-05)', () => {
+  const ALUMNOS = '/api/espacio/secciones/seccion-1/alumnos'
+  const LISTA: AlumnosEspacio = {
+    total: 3,
+    // El backend ya los entrega ordenados por nombre.
+    alumnos: [
+      {
+        id: 'alumno-1',
+        nombre: 'Ángela Mora',
+        correo: 'angela.mora@norte.cursus.test',
+      },
+      {
+        id: 'alumno-2',
+        nombre: 'Nadia León',
+        correo: 'nadia.leon@norte.cursus.test',
+      },
+      {
+        id: 'alumno-3',
+        nombre: 'Ñandú Pérez',
+        correo: 'nandu.perez@norte.cursus.test',
+      },
+    ],
+  }
+  const comoProfesor = { ...RESUMEN, rol: 'PROFESOR' as const }
+  const seccionAlumnos = async (nombre: string | RegExp) =>
+    within(await screen.findByRole('region', { name: nombre }))
+
+  test('el profesor ve el total y la lista con nombre y correo, en orden', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RUTA]: () => comoProfesor,
+      [ALUMNOS]: () => LISTA,
+    })
+
+    const alumnos = await seccionAlumnos('Alumnos (3)')
+    expect(
+      within(alumnos.getByRole('list', { name: 'Alumnos inscritos' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      'Ángela Moraangela.mora@norte.cursus.test',
+      'Nadia Leónnadia.leon@norte.cursus.test',
+      'Ñandú Péreznandu.perez@norte.cursus.test',
+    ])
+  })
+
+  test('la lista es de solo lectura: sin botones ni enlaces', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RUTA]: () => comoProfesor,
+      [ALUMNOS]: () => LISTA,
+    })
+
+    const alumnos = await seccionAlumnos('Alumnos (3)')
+    expect(alumnos.queryAllByRole('button')).toEqual([])
+    expect(alumnos.queryAllByRole('link')).toEqual([])
+    expect(
+      screen.queryByRole('button', { name: /agregar|quitar|cargar/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('sin alumnos inscritos muestra el estado vacío', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RUTA]: () => comoProfesor,
+      [ALUMNOS]: () => ({ total: 0, alumnos: [] }),
+    })
+
+    const alumnos = await seccionAlumnos('Alumnos (0)')
+    expect(
+      alumnos.getByText('Aún no hay alumnos inscritos'),
+    ).toBeInTheDocument()
+  })
+
+  test('si falla la carga permite reintentar', async () => {
+    let intentos = 0
+    await renderConSesion('PROFESOR', VISTA, {
+      [RUTA]: () => comoProfesor,
+      [ALUMNOS]: () => (++intentos === 1 ? json({}, 500) : LISTA),
+    })
+
+    const alumnos = await seccionAlumnos('Alumnos')
+    expect(
+      await alumnos.findByText('No pudimos cargar los alumnos.'),
+    ).toBeInTheDocument()
+    fireEvent.click(alumnos.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await seccionAlumnos('Alumnos (3)')).toBeTruthy()
+  })
+
+  test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
+    '%s no ve la sección de alumnos ni la pide',
+    async (rol) => {
+      let pedidas = 0
+      await renderConSesion(rol, VISTA, {
+        [RUTA]: () => ({ ...RESUMEN, rol }),
+        [ALUMNOS]: () => {
+          pedidas++
+          return LISTA
+        },
+      })
+
+      await vista()
+      expect(
+        screen.queryByRole('region', { name: /^Alumnos/ }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('angela.mora@norte.cursus.test'),
+      ).not.toBeInTheDocument()
+      expect(pedidas).toBe(0)
+    },
+  )
 })

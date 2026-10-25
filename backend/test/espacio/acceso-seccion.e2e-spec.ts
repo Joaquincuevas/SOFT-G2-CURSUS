@@ -122,3 +122,18 @@ describe('GET /api/espacio/secciones/:id sin llegar a la base', () => {
       .expect(403)
   })
 })
+
+describe('GET /api/espacio/secciones/:id/alumnos sin llegar a la base (ESP-05)', () => {
+  it('responde 401 sin sesión', async () => {
+    await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${SECCION}/alumnos`)
+      .expect(401)
+  })
+
+  it('responde 400 si el id no es un UUID', async () => {
+    await request(app.getHttpServer())
+      .get('/api/espacio/secciones/no-es-uuid/alumnos')
+      .set('Authorization', sesion('PROFESOR'))
+      .expect(400)
+  })
+})
