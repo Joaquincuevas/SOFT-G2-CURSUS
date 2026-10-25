@@ -1,4 +1,9 @@
-import type { Rol, SeccionAyudante, SeccionDashboard } from '@cursus/shared'
+import type {
+  Rol,
+  SeccionAyudante,
+  SeccionDashboard,
+  SeccionResumen,
+} from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
@@ -32,6 +37,22 @@ const SECCIONES: SeccionDashboard[] = [
     alumnos: 1,
   },
 ]
+
+// Resumen que pide la vista del curso (ESP-04) para una de estas secciones.
+const resumen = (
+  seccion: SeccionDashboard,
+): Record<string, () => SeccionResumen> => ({
+  [`/api/espacio/secciones/${seccion.id}/resumen`]: () => ({
+    id: seccion.id,
+    numero: seccion.numero,
+    curso: seccion.curso,
+    periodo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
+    rol: 'PROFESOR',
+    horario: seccion.horario,
+    profesor: { id: 'profesor-1', nombre: 'Profesor Norte' },
+    ayudantes: [],
+  }),
+})
 
 const tarjetas = async () =>
   within(
@@ -70,7 +91,10 @@ describe('dashboard del profesor (ESP-01)', () => {
   })
 
   test('al hacer clic en una tarjeta se abre la vista del curso', async () => {
-    await renderConSesion('PROFESOR', '/', { [RUTA]: () => SECCIONES })
+    await renderConSesion('PROFESOR', '/', {
+      [RUTA]: () => SECCIONES,
+      ...resumen(SECCIONES[0]),
+    })
 
     const [icc101] = await tarjetas()
     expect(icc101).toHaveAttribute(
@@ -87,7 +111,8 @@ describe('dashboard del profesor (ESP-01)', () => {
     ).toBeInTheDocument()
     expect(vista.getByText('ICC101')).toBeInTheDocument()
     expect(vista.getByText('Sección 1')).toBeInTheDocument()
-    expect(vista.getByText('Profesor a cargo · 32 alumnos')).toBeInTheDocument()
+    // ESP-04: la vista trae el resumen de la sección y el rol del usuario.
+    expect(vista.getByText('Entras como Profesor')).toBeInTheDocument()
     // Sin textos de trabajo pendiente en la UI.
     expect(document.body).not.toHaveTextContent(/TODO|pendiente|próximamente/i)
   })
@@ -98,6 +123,7 @@ describe('dashboard del profesor (ESP-01)', () => {
       '/mis-cursos/secciones/seccion-icc201-2',
       {
         [RUTA]: () => SECCIONES,
+        ...resumen(SECCIONES[1]),
       },
     )
 
@@ -113,14 +139,14 @@ describe('dashboard del profesor (ESP-01)', () => {
   test('una sección que no es suya muestra un mensaje neutro', async () => {
     await renderConSesion('PROFESOR', '/mis-cursos/secciones/otra', {
       [RUTA]: () => SECCIONES,
+      // ESP-04: la API responde 403 a quien no es integrante.
+      '/api/espacio/secciones/otra/resumen': () => json({}, 403),
     })
 
     expect(
-      await screen.findByText(
-        'Esta sección no está entre tus secciones del período activo.',
-      ),
+      await screen.findByText('No eres integrante de esta sección.'),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('link', { name: 'Volver al Dashboard' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Volver al Dashboard' }))
     expect(await tarjetas()).toHaveLength(2)
   })
 
