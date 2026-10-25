@@ -10,16 +10,18 @@ import {
   textoAlumnos,
   textoBloque,
 } from './misSecciones'
+import { SeccionesAyudante } from './SeccionesAyudante'
 import { useDatos } from './useDatos'
 
 // Dashboard de cada rol. El título del Figma ("Visión del Directorio" o
-// "Bienvenido/a, <nombre>") lo muestra el Header. Por ahora solo el profesor
-// tiene contenido (ESP-01): sus secciones del período activo.
+// "Bienvenido/a, <nombre>") lo muestra el Header. El profesor (ESP-01) y el
+// ayudante (ESP-02) ven sus secciones del período activo.
 export function Dashboard() {
   const { user } = useSession()
   return (
     <section aria-label="Dashboard" className="dashboard">
       {user.rol === 'PROFESOR' && <SeccionesProfesor />}
+      {user.rol === 'AYUDANTE' && <SeccionesAyudante />}
     </section>
   )
 }

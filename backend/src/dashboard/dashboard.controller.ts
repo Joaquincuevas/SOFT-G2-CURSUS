@@ -1,4 +1,4 @@
-import type { SeccionDashboard } from '@cursus/shared'
+import type { SeccionAyudante, SeccionDashboard } from '@cursus/shared'
 import { Controller, Get, Req } from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { SoloSesion } from '../auth/permisos.decorator.js'
@@ -19,5 +19,18 @@ export class DashboardController {
     @Req() req: RequestConUsuario,
   ): Promise<SeccionDashboard[]> {
     return this.dashboard.misSecciones(contexto, req.usuario?.sub as string)
+  }
+
+  // ESP-02: igual que mis-secciones, filtra por el usuario de la sesión.
+  @SoloSesion()
+  @Get('secciones-ayudante')
+  seccionesAyudante(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+  ): Promise<SeccionAyudante[]> {
+    return this.dashboard.seccionesAyudante(
+      contexto,
+      req.usuario?.sub as string,
+    )
   }
 }
