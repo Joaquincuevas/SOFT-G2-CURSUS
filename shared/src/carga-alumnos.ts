@@ -72,13 +72,14 @@ export const quitarNeutralizacion = (valor: string) =>
 const bytesUtf8 = (texto: string) => new TextEncoder().encode(texto).length
 
 // MAX_BYTES_ALUMNOS_CSV (48 KiB) limita el contenido: el backend lo mide tras
-// leer el archivo, como correo,nombre con LF, sin BOM, sin apóstrofos ni
-// motivo (bytesContenidoCsv). MAX_BYTES_ARCHIVO_CSV limita el archivo tal como
+// leer el archivo, como correo,nombre con LF y el escape RFC 4180, sin BOM,
+// sin apóstrofos ni motivo (bytesContenidoCsv). MAX_BYTES_ARCHIVO_CSV limita el archivo tal como
 // llega y cubre lo que el CSV de errores agrega a un contenido de 48 KiB:
 // - BOM (3 B) y ",motivo" en la cabecera (7 B);
 // - CRLF en vez de LF: +1 B por línea (cabecera + 100 filas);
 // - por fila, la coma y el mensaje más largo de MENSAJES_MOTIVO_CSV (52 B);
-// - por celda (correo y nombre), dos comillas y el apóstrofo (3 B).
+// - por celda (correo y nombre), dos comillas y el apóstrofo (3 B). Las
+//   comillas internas que se duplican ya cuentan en el contenido.
 // Con 100 filas (MAX_FILAS_ALUMNOS_CSV): 49 152 + 6 011 = 55 163 B.
 export const MAX_BYTES_ARCHIVO_CSV =
   MAX_BYTES_ALUMNOS_CSV +
@@ -94,12 +95,16 @@ export const MAX_BYTES_ARCHIVO_CSV =
       2 * 3)
 
 // Bytes del contenido normalizado: cabecera correo,nombre y una línea
-// correo,nombre por fila, con LF.
+// correo,nombre por fila, con LF. Las celdas se miden escapadas, como las
+// escribe el CSV de errores.
 export const bytesContenidoCsv = (filas: string[][]) =>
   bytesUtf8(
     [
       'correo,nombre',
-      ...filas.map(([correo = '', nombre = '']) => `${correo},${nombre}`),
+      ...filas.map(
+        ([correo = '', nombre = '']) =>
+          `${celdaCsv(correo)},${celdaCsv(nombre)}`,
+      ),
     ]
       .map((linea) => `${linea}\n`)
       .join(''),

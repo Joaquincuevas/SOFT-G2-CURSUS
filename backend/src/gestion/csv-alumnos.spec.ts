@@ -147,35 +147,59 @@ describe('CSV de alumnos', () => {
       ).toEqual(["'Ana", "O'Higgins"])
     })
 
-    it('el límite bruto cubre el peor caso del CSV de errores', () => {
-      // 100 filas con el mensaje más largo, cada celda entre comillas y con
-      // apóstrofo, y contenido de exactamente 48 KiB.
-      const largo = 'El correo pertenece a una cuenta que no es de alumno'
-      const nombre = (n: number) => '=' + 'x'.repeat(n) + ','
-      const contenidoSinNombres =
-        'correo,nombre\n'.length + 100 * '=a,\n'.length
-      const resto = MAX_BYTES_ALUMNOS_CSV - contenidoSinNombres
-      const filas = Array.from({ length: 100 }, (_, i) =>
-        nombre(Math.floor(resto / 100) - 2 + (i < resto % 100 ? 1 : 0)),
+    it('el límite bruto cubre el peor caso del CSV de errores, con comillas internas', () => {
+      // 100 filas con el mensaje más largo, celdas con apóstrofo y comillas
+      // internas, y contenido de exactamente 48 KiB.
+      const nombre = (n: number) => '="' + '"'.repeat(99) + 'x'.repeat(n)
+      const base = bytesContenidoCsv(
+        Array.from({ length: 100 }, () => ['=a', nombre(0)]),
       )
+      const resto = MAX_BYTES_ALUMNOS_CSV - base
+      const filas = Array.from({ length: 100 }, (_, i) => [
+        '=a',
+        nombre(Math.floor(resto / 100) + (i < resto % 100 ? 1 : 0)),
+      ])
+      expect(bytesContenidoCsv(filas)).toBe(MAX_BYTES_ALUMNOS_CSV)
       const csv = csvDeErrores(
-        filas.map((nombre, i) => ({
+        filas.map(([correo, nombre], i) => ({
           fila: i + 2,
-          correo: '=a',
+          correo,
           nombre,
           estado: 'error',
           motivo: 'rol_distinto',
           mensaje: '',
         })),
       )
-      expect(csv).toContain(largo)
-      expect(bytesContenidoCsv(filas.map((n) => ['=a', n]))).toBe(
-        MAX_BYTES_ALUMNOS_CSV,
+      expect(csv).toContain(
+        'El correo pertenece a una cuenta que no es de alumno',
       )
       expect(Buffer.byteLength(csv, 'utf8')).toBeLessThanOrEqual(
         MAX_BYTES_ARCHIVO_CSV,
       )
-      expect(leerCsvAlumnos(csv)).toHaveLength(100)
+      // Ida y vuelta: se vuelve a subir y da los mismos valores.
+      expect(leerCsvAlumnos(csv).map((fila) => fila.celdas)).toEqual(filas)
+    })
+
+    it('mide el contenido con las comillas internas escapadas (revisión del #62)', () => {
+      // Caso de matiasghff: 100 filas con nombres de 25 comillas y 95 emojis.
+      // Sin contar el escape, el contenido (48 914 B) cabía en 48 KiB y su CSV
+      // de errores (57 025 B) superaba el límite bruto al volver a subirlo.
+      const original = [
+        'correo,nombre',
+        ...Array.from(
+          { length: 100 },
+          (_, i) =>
+            `${String(i).padStart(3, '0')}${'x'.repeat(61)}@norte.cursus.test,` +
+            `"${'""'.repeat(25)}${'😀'.repeat(95)}"`,
+        ),
+      ].join('\n')
+      expect(Buffer.byteLength(original, 'utf8')).toBe(51_613)
+      expect(Buffer.byteLength(original, 'utf8')).toBeLessThanOrEqual(
+        MAX_BYTES_ARCHIVO_CSV,
+      )
+      expect(() => leerCsvAlumnos(original)).toThrow(
+        'El CSV supera el máximo de 48 KiB',
+      )
     })
 
     it('rechaza un contenido sobre 48 KiB aunque el archivo bruto quepa', () => {

@@ -2,6 +2,18 @@
 
 Documentación del proyecto:
 
+- [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)
+
+- ESP-05: `GET /api/espacio/secciones/:id/alumnos` devuelve `AlumnosEspacio` (`total` y `alumnos` con id, nombre y correo, por nombre) con las inscripciones activas de la sección, solo a su profesor y en solo lectura; a los demás integrantes (ayudante, alumno), al Administrativo y al Director, 403. Reutiliza la consulta de GES-18 (`backend/src/gestion/alumnos.sql.ts`).
+
+- ESP-04: `GET /api/espacio/secciones/:id/resumen` devuelve `SeccionResumen` (curso, sección, horario con sala, profesor, ayudantes activos y el rol del usuario) a los integrantes de la sección, al Administrativo de su facultad y al Director; al resto, 403 (guard de ESP-06).
+
+- ESP-02: `GET /api/dashboard/secciones-ayudante` devuelve las secciones del período activo donde el usuario es ayudante (`SeccionAyudante[]`), con curso, número y profesor a cargo; para otro rol, `[]`.
+
+- [ESP-01: el profesor ve sus secciones del período en su dashboard](esp-01-dashboard-profesor.md)
+
+- [ESP-06: solo los integrantes de una sección acceden a ella](esp-06-acceso-seccion.md)
+
 - [GES-20: seed de una facultad completa y guía de revisión](ges-20-seed-facultad.md)
 
 - [GES-11: aviso de sala ocupada y guía de revisión](ges-11-sala-ocupada.md)

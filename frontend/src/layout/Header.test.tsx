@@ -112,15 +112,15 @@ describe('título por ruta', () => {
 })
 
 test('sin período activo, el subtítulo muestra solo la universidad', async () => {
-  const fetch = simularBackend('ALUMNO')
-  fetch.mockImplementation(() =>
-    Promise.resolve(
-      new Response(
-        JSON.stringify({ ...usuarioDePrueba('ALUMNO'), periodoActivo: null }),
-      ),
-    ),
-  )
+  simularBackend('ALUMNO', {
+    '/api/auth/yo': () => ({
+      ...usuarioDePrueba('ALUMNO'),
+      periodoActivo: null,
+    }),
+  })
   renderSinEsperar('/', 'jwt-de-prueba')
+
+  await screen.findByText('No tienes inscripciones en el período activo.')
 
   const header = within(await screen.findByRole('banner'))
   expect(header.getByText('Universidad Demo Norte')).toBeInTheDocument()
@@ -128,13 +128,12 @@ test('sin período activo, el subtítulo muestra solo la universidad', async () 
 
 test('un nombre con HTML se muestra como texto y no crea un <script>', async () => {
   const nombre = '<script>alert(1)</script>'
-  const fetch = simularBackend('ALUMNO')
-  fetch.mockImplementation(() =>
-    Promise.resolve(
-      new Response(JSON.stringify({ ...usuarioDePrueba('ALUMNO'), nombre })),
-    ),
-  )
+  simularBackend('ALUMNO', {
+    '/api/auth/yo': () => ({ ...usuarioDePrueba('ALUMNO'), nombre }),
+  })
   renderSinEsperar('/', 'jwt-de-prueba')
+
+  await screen.findByText('No tienes inscripciones en el período activo.')
 
   const banner = await screen.findByRole('banner')
   expect(within(banner).getByRole('heading', { level: 1 })).toHaveTextContent(

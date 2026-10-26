@@ -23,7 +23,7 @@ Uno por tabla del schema. Deciden qué endpoints puede usar cada rol y qué acci
 | Periodo     | read     | create, read, update | read     | read     | read   |
 | Usuario     | read     | create, read, update | —        | —        | —      |
 | Curso       | read     | create, read, update | —        | —        | —      |
-| Seccion     | read     | create, read, update | —        | —        | —      |
+| Seccion     | read     | create, read, update | read¹    | read¹    | read¹  |
 | Inscripcion | read     | create, read, update | —        | —        | —      |
 
 ### Sujetos de sección
@@ -39,4 +39,5 @@ No son tablas: son las secciones del menú del frontend, que dependen del rol y 
 - El Director solo lee (ADR 0001), igual que en la RLS de MT-02.
 - Nada se elimina: los registros se archivan (archived_at). Ningún rol tiene `delete` ni `manage` sobre ningún sujeto.
 - Todavía no hay condiciones por universidad: llegan con MT-01.
+- ¹ ESP-06: `read Seccion` solo abre el espacio de la sección (`/api/espacio/secciones/:id`), que además exige ser integrante. Los endpoints de gestión piden otros permisos.
 - Si cambias la matriz, actualiza también `backend/src/auth/permisos.spec.ts`.

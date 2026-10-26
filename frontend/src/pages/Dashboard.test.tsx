@@ -1,0 +1,266 @@
+import type {
+  Rol,
+  SeccionAyudante,
+  SeccionDashboard,
+  SeccionResumen,
+} from '@cursus/shared'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { describe, expect, test } from 'vitest'
+import { json, renderConSesion } from '../test/sesion'
+
+const RUTA = '/api/dashboard/mis-secciones'
+
+const SECCIONES: SeccionDashboard[] = [
+  {
+    id: 'seccion-icc101-1',
+    numero: 1,
+    curso: {
+      id: 'curso-icc101',
+      codigo: 'ICC101',
+      nombre: 'Introducción a la Programación',
+    },
+    horario: [
+      { dia: 1, inicio: '08:30', termino: '10:00', sala: 'Sala A-101' },
+      { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
+    ],
+    alumnos: 32,
+  },
+  {
+    id: 'seccion-icc201-2',
+    numero: 2,
+    curso: {
+      id: 'curso-icc201',
+      codigo: 'ICC201',
+      nombre: 'Estructuras de Datos',
+    },
+    horario: [],
+    alumnos: 1,
+  },
+]
+
+// Resumen que pide la vista del curso (ESP-04) para una de estas secciones.
+const resumen = (
+  seccion: SeccionDashboard,
+): Record<string, () => SeccionResumen> => ({
+  [`/api/espacio/secciones/${seccion.id}/resumen`]: () => ({
+    id: seccion.id,
+    numero: seccion.numero,
+    curso: seccion.curso,
+    periodo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
+    rol: 'PROFESOR',
+    horario: seccion.horario,
+    profesor: { id: 'profesor-1', nombre: 'Profesor Norte' },
+    ayudantes: [],
+  }),
+})
+
+const tarjetas = async () =>
+  within(
+    await screen.findByRole('region', { name: 'Dashboard' }),
+  ).findAllByRole('link')
+
+describe('dashboard del profesor (ESP-01)', () => {
+  test('muestra una tarjeta por sección con curso, sección, horario y alumnos', async () => {
+    await renderConSesion('PROFESOR', '/', { [RUTA]: () => SECCIONES })
+
+    const [icc101, icc201] = await tarjetas()
+    expect(
+      screen.getByRole('heading', { name: 'Mis secciones del período' }),
+    ).toBeInTheDocument()
+
+    const primera = within(icc101)
+    expect(primera.getByText('ICC101')).toBeInTheDocument()
+    expect(
+      primera.getByRole('heading', { name: 'Introducción a la Programación' }),
+    ).toBeInTheDocument()
+    expect(primera.getByText('Sección 1')).toBeInTheDocument()
+    expect(
+      within(primera.getByRole('list', { name: 'Horario' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      'Lunes 08:30–10:00 · Sala A-101',
+      'Miércoles 10:00–11:30 · Sala B-202',
+    ])
+    expect(primera.getByText('32 alumnos')).toBeInTheDocument()
+
+    const segunda = within(icc201)
+    expect(segunda.getByText('Sección 2')).toBeInTheDocument()
+    expect(segunda.getByText('Sin horario asignado')).toBeInTheDocument()
+    expect(segunda.getByText('1 alumno')).toBeInTheDocument()
+  })
+
+  test('al hacer clic en una tarjeta se abre la vista del curso', async () => {
+    await renderConSesion('PROFESOR', '/', {
+      [RUTA]: () => SECCIONES,
+      ...resumen(SECCIONES[0]),
+    })
+
+    const [icc101] = await tarjetas()
+    expect(icc101).toHaveAttribute(
+      'href',
+      '/mis-cursos/secciones/seccion-icc101-1',
+    )
+    fireEvent.click(icc101)
+
+    const vista = within(
+      await screen.findByRole('region', { name: 'Vista del curso' }),
+    )
+    expect(
+      vista.getByRole('heading', { name: 'Introducción a la Programación' }),
+    ).toBeInTheDocument()
+    expect(vista.getByText('ICC101')).toBeInTheDocument()
+    expect(vista.getByText('Sección 1')).toBeInTheDocument()
+    // ESP-04: la vista trae el resumen de la sección y el rol del usuario.
+    expect(vista.getByText('Entras como Profesor')).toBeInTheDocument()
+    // Sin textos de trabajo pendiente en la UI.
+    expect(document.body).not.toHaveTextContent(/TODO|pendiente|próximamente/i)
+  })
+
+  test('la vista del curso también carga al entrar directo por la URL', async () => {
+    await renderConSesion(
+      'PROFESOR',
+      '/mis-cursos/secciones/seccion-icc201-2',
+      {
+        [RUTA]: () => SECCIONES,
+        ...resumen(SECCIONES[1]),
+      },
+    )
+
+    const vista = within(
+      await screen.findByRole('region', { name: 'Vista del curso' }),
+    )
+    expect(
+      vista.getByRole('heading', { name: 'Estructuras de Datos' }),
+    ).toBeInTheDocument()
+    expect(vista.getByText('Sección 2')).toBeInTheDocument()
+  })
+
+  test('una sección que no es suya muestra un mensaje neutro', async () => {
+    await renderConSesion('PROFESOR', '/mis-cursos/secciones/otra', {
+      [RUTA]: () => SECCIONES,
+      // ESP-04: la API responde 403 a quien no es integrante.
+      '/api/espacio/secciones/otra/resumen': () => json({}, 403),
+    })
+
+    expect(
+      await screen.findByText('No eres integrante de esta sección.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Volver al Dashboard' }))
+    expect(await tarjetas()).toHaveLength(2)
+  })
+
+  test('sin secciones muestra el estado vacío', async () => {
+    await renderConSesion('PROFESOR', '/', { [RUTA]: () => [] })
+
+    expect(
+      await screen.findByText(
+        'No tienes secciones a tu cargo en el período activo.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  test('si falla la carga permite reintentar', async () => {
+    let intentos = 0
+    await renderConSesion('PROFESOR', '/', {
+      [RUTA]: () => (++intentos === 1 ? json({}, 500) : SECCIONES),
+    })
+
+    expect(
+      await screen.findByText('No pudimos cargar tus secciones.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await tarjetas()).toHaveLength(2)
+  })
+
+  test.each<Rol>(['DIRECTOR', 'ADMINISTRATIVO', 'AYUDANTE', 'ALUMNO'])(
+    '%s no ve tarjetas ni pide las secciones del profesor',
+    async (rol) => {
+      let pedidas = 0
+      await renderConSesion(rol, '/', {
+        [RUTA]: () => {
+          pedidas++
+          return SECCIONES
+        },
+      })
+
+      const dashboard = await screen.findByRole('region', { name: 'Dashboard' })
+      expect(within(dashboard).queryByRole('link')).not.toBeInTheDocument()
+      expect(pedidas).toBe(0)
+    },
+  )
+})
+
+const RUTA_AYUDANTE = '/api/dashboard/secciones-ayudante'
+
+const SECCIONES_AYUDANTE: SeccionAyudante[] = [
+  {
+    id: 'seccion-icc101-1',
+    numero: 1,
+    curso: {
+      id: 'curso-icc101',
+      codigo: 'ICC101',
+      nombre: 'Introducción a la Programación',
+    },
+    profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  },
+  {
+    id: 'seccion-icc201-2',
+    numero: 2,
+    curso: {
+      id: 'curso-icc201',
+      codigo: 'ICC201',
+      nombre: 'Estructuras de Datos',
+    },
+    profesor: null,
+  },
+]
+
+describe('dashboard del ayudante (ESP-02)', () => {
+  test('muestra una tarjeta por sección con curso, sección y profesor a cargo', async () => {
+    await renderConSesion('AYUDANTE', '/', {
+      [RUTA_AYUDANTE]: () => SECCIONES_AYUDANTE,
+    })
+
+    const [icc101, icc201] = await tarjetas()
+    expect(
+      screen.getByRole('heading', { name: 'Mis secciones del período' }),
+    ).toBeInTheDocument()
+
+    const primera = within(icc101)
+    expect(primera.getByText('ICC101')).toBeInTheDocument()
+    expect(
+      primera.getByRole('heading', { name: 'Introducción a la Programación' }),
+    ).toBeInTheDocument()
+    expect(primera.getByText('Sección 1')).toBeInTheDocument()
+    expect(
+      primera.getByText('Profesor a cargo: Camila Rojas'),
+    ).toBeInTheDocument()
+
+    const segunda = within(icc201)
+    expect(segunda.getByText('Sección 2')).toBeInTheDocument()
+    expect(segunda.getByText('Sin profesor asignado')).toBeInTheDocument()
+  })
+
+  test('cada tarjeta abre la vista del curso', async () => {
+    await renderConSesion('AYUDANTE', '/', {
+      [RUTA_AYUDANTE]: () => SECCIONES_AYUDANTE,
+    })
+
+    expect((await tarjetas()).map((t) => t.getAttribute('href'))).toEqual([
+      '/mis-cursos/secciones/seccion-icc101-1',
+      '/mis-cursos/secciones/seccion-icc201-2',
+    ])
+  })
+
+  test('sin secciones muestra el estado vacío', async () => {
+    await renderConSesion('AYUDANTE', '/', { [RUTA_AYUDANTE]: () => [] })
+
+    expect(
+      await screen.findByText(
+        'No eres ayudante de ninguna sección en el período activo.',
+      ),
+    ).toBeInTheDocument()
+  })
+})

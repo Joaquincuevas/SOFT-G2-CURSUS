@@ -52,6 +52,14 @@ function preparar(
         json(usuarioDePrueba(opciones.rol ?? 'ADMINISTRATIVO')),
       )
     if (opciones.responder) return opciones.responder(ruta, init)
+    // Dashboards del profesor, ayudante y alumno, a los que vuelve
+    // un rol sin acceso.
+    if (
+      ruta === '/api/dashboard/mis-secciones' ||
+      ruta === '/api/dashboard/secciones-ayudante' ||
+      ruta === '/api/dashboard/secciones-alumno'
+    )
+      return Promise.resolve(json([]))
     if (ruta === '/api/carreras') return Promise.resolve(json(CARRERAS))
     if (ruta === '/api/periodos') return Promise.resolve(json(PERIODOS))
     if (ruta.endsWith('/edicion')) return Promise.resolve(json(CURSO))
@@ -276,6 +284,9 @@ test.each<Rol>(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
         screen.queryByRole('form', { name: 'Datos del curso' }),
       ).not.toBeInTheDocument(),
     )
+    if (rol === 'ALUMNO') {
+      await screen.findByText('No tienes inscripciones en el período activo.')
+    }
     expect(
       fetch.mock.calls.some(
         ([ruta]) => ruta.endsWith('/edicion') || ruta.endsWith('/historial'),

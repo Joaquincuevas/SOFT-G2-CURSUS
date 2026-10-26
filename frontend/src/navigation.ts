@@ -5,6 +5,7 @@ import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { Dashboard } from './pages/Dashboard'
+import { MisCursos } from './pages/MisCursos'
 import { Carreras } from './pages/Carreras'
 import { Perfil } from './pages/Perfil'
 import type { SessionUser } from './session/session'
@@ -122,6 +123,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Mis Cursos',
     icon: 'book',
     permiso: { accion: 'read', sujeto: 'MisCursos' },
+    page: MisCursos,
     title: () => 'Mis Cursos',
     subtitle: universidadYSemestre,
   },

@@ -65,12 +65,26 @@ export const json = (cuerpo: unknown, status = 200) =>
 // de /api/cursos).
 export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
 
-// Listas de gestión académica: vacías salvo que el test las simule.
+// Listas de gestión académica y del dashboard del profesor (ESP-01) y del
+// ayudante (ESP-02): vacías salvo que el test las simule.
 const LISTAS_VACIAS: Record<string, RutaSimulada> = {
   '/api/carreras': () => [],
   '/api/periodos': () => [],
   '/api/cursos': () => [],
+  '/api/dashboard/mis-secciones': () => [],
+  '/api/dashboard/secciones-ayudante': () => [],
+  '/api/dashboard/secciones-alumno': () => [],
 }
+
+// Rutas con un id en el medio, que no se pueden comparar exactas. Lista de
+// alumnos de una sección para su profesor (ESP-05): vacía salvo que el test
+// la simule.
+const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
+    () => ({ total: 0, alumnos: [] }),
+  ],
+]
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh
 // responde 401 (no hay cookie), /api/auth/logout 204, cada ruta de `rutas`
@@ -84,8 +98,11 @@ export function simularBackend(
   const simuladas = { ...LISTAS_VACIAS, ...rutas }
   const fetch = vi.fn((url: string, init?: RequestInit) => {
     const ruta = url.split('?')[0]
-    if (ruta in simuladas) {
-      return Promise.resolve(simuladas[ruta](init, url)).then((respuesta) =>
+    const simulada =
+      simuladas[ruta] ??
+      RUTAS_VACIAS_CON_ID.find(([patron]) => patron.test(ruta))?.[1]
+    if (simulada) {
+      return Promise.resolve(simulada(init, url)).then((respuesta) =>
         respuesta instanceof Response ? respuesta : json(respuesta),
       )
     }

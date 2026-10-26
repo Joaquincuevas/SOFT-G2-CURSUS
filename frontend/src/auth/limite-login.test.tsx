@@ -62,7 +62,9 @@ test('un login exitoso posterior elimina el aviso y permite entrar', async () =>
         JSON.stringify(
           url === '/api/auth/login'
             ? { accessToken: 'jwt' }
-            : usuarioDePrueba('PROFESOR'),
+            : url === '/api/dashboard/mis-secciones'
+              ? []
+              : usuarioDePrueba('PROFESOR'),
         ),
       ),
     ),
