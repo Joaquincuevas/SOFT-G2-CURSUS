@@ -106,6 +106,12 @@ describe('pestaña Notas (NOT-01)', () => {
     expect(await panel.findByText('Examen')).toBeInTheDocument()
     expect(panel.getByText('100 %')).toBeInTheDocument()
     expect(panel.getByLabelText('Nombre')).toHaveValue('')
+
+    // Al empezar la siguiente evaluación se borra el aviso.
+    fireEvent.change(panel.getByLabelText('Nombre'), {
+      target: { value: 'Otra' },
+    })
+    expect(panel.queryByText('Evaluación creada')).not.toBeInTheDocument()
   })
 
   test('un 400 del backend muestra su mensaje', async () => {

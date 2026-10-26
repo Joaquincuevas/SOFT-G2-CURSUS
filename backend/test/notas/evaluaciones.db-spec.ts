@@ -268,6 +268,7 @@ describe('POST /api/espacio/secciones/:id/evaluaciones (NOT-01)', () => {
       ['fecha con otro formato', { fecha: '15/09/2026' }],
       ['fecha inexistente', { fecha: '2026-02-30' }],
       ['un campo no esperado', { seccionId: secciones.s2 }],
+      ['nombre con un carácter de control', { nombre: 'Control\u0000' }],
     ])('%s', async (_caso, cambio) => {
       await crear(PROFESOR, secciones.s1, { ...valida(), ...cambio }, 400)
     })
