@@ -1,4 +1,8 @@
-import type { SeccionAyudante, SeccionDashboard } from '@cursus/shared'
+import type {
+  SeccionAlumno,
+  SeccionAyudante,
+  SeccionDashboard,
+} from '@cursus/shared'
 import { Injectable } from '@nestjs/common'
 import {
   BaseDeDatos,
@@ -29,6 +33,32 @@ interface FilaSeccionAyudante {
 @Injectable()
 export class DashboardService {
   constructor(private readonly bd: BaseDeDatos) {}
+
+  // ESP-03: el usuario y la universidad provienen de la sesión, no del cliente.
+  async seccionesAlumno(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+  ): Promise<SeccionAlumno[]> {
+    if (contexto.rol !== 'ALUMNO') return []
+    return this.bd.consultarEnUniversidad<SeccionAlumno>(
+      contexto,
+      `SELECT s.id, s.numero,
+              json_build_object('id', c.id, 'codigo', c.codigo, 'nombre', c.nombre) AS curso,
+              ${BLOQUES_HORARIO} AS horario,
+              CASE WHEN pr.id IS NULL THEN NULL
+                ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor
+       FROM inscripcion i
+       JOIN seccion s ON s.id = i.seccion_id AND s.universidad_id = i.universidad_id
+       JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
+       JOIN periodo p ON p.id = c.periodo_id AND p.universidad_id = c.universidad_id
+       LEFT JOIN usuario pr ON pr.id = s.profesor_id AND pr.universidad_id = s.universidad_id
+         AND pr.archived_at IS NULL AND pr.rol = 'PROFESOR'
+       WHERE i.universidad_id = $1 AND i.usuario_id = $2 AND p.activo
+         AND i.archived_at IS NULL AND s.archived_at IS NULL AND c.archived_at IS NULL
+       ORDER BY c.codigo, s.numero, s.id`,
+      [usuarioId],
+    )
+  }
 
   // ESP-01: secciones vigentes a cargo del profesor ($2) en el período activo
   // de su universidad, por código de curso y número. Sin período activo, o

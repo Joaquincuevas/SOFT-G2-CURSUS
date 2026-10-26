@@ -73,6 +73,7 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
   '/api/cursos': () => [],
   '/api/dashboard/mis-secciones': () => [],
   '/api/dashboard/secciones-ayudante': () => [],
+  '/api/dashboard/secciones-alumno': () => [],
 }
 
 // Rutas con un id en el medio, que no se pueden comparar exactas. Lista de
