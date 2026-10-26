@@ -17,6 +17,7 @@ const TABLAS = [
   'asignacion_cambio',
   'ayudante_seccion',
   'carrera',
+  'clase',
   'curso',
   'curso_cambio',
   'facultad',
@@ -159,18 +160,23 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // AgregarCredencialProvisoria es la última: quita la columna de usuario.
+    // CrearClase (ASI-01): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_CLASE = TABLAS.filter((tabla) => tabla !== 'clase')
+    expect(await tablasExistentes()).toEqual(SIN_CLASE)
+
+    // AgregarCredencialProvisoria: quita la columna de usuario.
     await bd.undoLastMigration()
     const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
       `SELECT count(*) AS provisoria FROM information_schema.columns
         WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
     )
     expect(Number(provisoria)).toBe(0)
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CLASE)
 
     // CrearAsignacionCambio: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ASIGNACION_CAMBIO = TABLAS.filter(
+    const SIN_ASIGNACION_CAMBIO = SIN_CLASE.filter(
       (tabla) => tabla !== 'asignacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
@@ -320,6 +326,7 @@ describe('migraciones', () => {
       [
         'ayudante_seccion',
         'carrera',
+        'clase',
         'curso',
         'facultad',
         'horario_seccion',
