@@ -26,6 +26,7 @@ export type SujetoTabla =
   | 'Curso'
   | 'Seccion'
   | 'Inscripcion'
+  | 'Clase'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -38,6 +39,8 @@ export type SujetoSeccion = 'PanelDirectorio' | 'GestionAcademica' | 'MisCursos'
 export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
+
+const LEEN_CLASES: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 
 // Recibe el usuario y no solo el rol para que MT-01 pueda agregar condiciones
 // por universidad_id sin cambiar la firma.
@@ -80,6 +83,13 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       break
     // Un rol desconocido no recibe ningún permiso.
   }
+
+  // ASI-01 (RN-13): clases de una sección. Las registra el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante y el Director, este en solo lectura. El alumno ve su propia
+  // asistencia en ASI-06. Nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Clase')
+  if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Clase')
 
   return build()
 }
