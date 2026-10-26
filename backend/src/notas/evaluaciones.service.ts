@@ -3,7 +3,11 @@ import type {
   EvaluacionesSeccion,
   SeccionEspacio,
 } from '@cursus/shared'
-import { BadRequestException, Injectable } from '@nestjs/common'
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
@@ -64,6 +68,7 @@ export class EvaluacionesService {
            JOIN curso c ON c.id = s.curso_id
            JOIN periodo p ON p.id = c.periodo_id
           WHERE s.universidad_id = $1 AND s.id = $2
+            AND s.archived_at IS NULL AND c.archived_at IS NULL
             AND $4::date BETWEEN p.fecha_inicio AND p.fecha_termino
          RETURNING id, nombre, to_char(fecha, 'YYYY-MM-DD') AS fecha, ponderacion`,
         [
@@ -84,9 +89,14 @@ export class EvaluacionesService {
            FROM seccion s
            JOIN curso c ON c.id = s.curso_id
            JOIN periodo p ON p.id = c.periodo_id
-          WHERE s.universidad_id = $1 AND s.id = $2`,
+          WHERE s.universidad_id = $1 AND s.id = $2
+            AND s.archived_at IS NULL AND c.archived_at IS NULL`,
         [contexto.universidadId, seccion.id],
       )
+      // La sección se archivó después de que el guard la verificara.
+      if (!periodo) {
+        throw new NotFoundException('La sección no existe')
+      }
       throw new BadRequestException(
         `La fecha debe estar dentro del período del curso (del ${periodo.inicio} al ${periodo.termino})`,
       )

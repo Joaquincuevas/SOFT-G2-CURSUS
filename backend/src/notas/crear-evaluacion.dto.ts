@@ -24,6 +24,10 @@ export class CrearEvaluacionDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(LARGO_NOMBRE_EVALUACION)
+  // Sin caracteres de control: PostgreSQL rechaza el NUL y respondería 500.
+  @Matches(/^\P{Cc}+$/u, {
+    message: 'nombre no puede tener caracteres de control',
+  })
   nombre!: string
 
   @IsDateString({ strict: true })

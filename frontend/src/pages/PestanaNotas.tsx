@@ -123,8 +123,11 @@ function FormularioEvaluacion({
   }
 
   const cambiar =
-    (campo: keyof typeof VACIO) => (event: { target: { value: string } }) =>
+    (campo: keyof typeof VACIO) => (event: { target: { value: string } }) => {
+      // El aviso de éxito se borra al empezar la siguiente evaluación.
+      setAviso(null)
       setCampos((actuales) => ({ ...actuales, [campo]: event.target.value }))
+    }
 
   return (
     <form
