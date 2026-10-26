@@ -5,6 +5,7 @@ import type {
 } from '@cursus/shared'
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -69,6 +70,7 @@ export class EvaluacionesService {
            JOIN periodo p ON p.id = c.periodo_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL
+            AND s.profesor_id = $6
             AND $4::date BETWEEN p.fecha_inicio AND p.fecha_termino
          RETURNING id, nombre, to_char(fecha, 'YYYY-MM-DD') AS fecha, ponderacion`,
         [
@@ -83,19 +85,30 @@ export class EvaluacionesService {
       if (creada) {
         return creada
       }
-      const [periodo] = await bd.query<{ inicio: string; termino: string }>(
-        `SELECT to_char(p.fecha_inicio, 'YYYY-MM-DD') AS inicio,
+      const [periodo] = await bd.query<{
+        inicio: string
+        termino: string
+        es_profesor: boolean
+      }>(
+        `SELECT s.profesor_id = $3 AS es_profesor,
+                to_char(p.fecha_inicio, 'YYYY-MM-DD') AS inicio,
                 to_char(p.fecha_termino, 'YYYY-MM-DD') AS termino
            FROM seccion s
            JOIN curso c ON c.id = s.curso_id
            JOIN periodo p ON p.id = c.periodo_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL`,
-        [contexto.universidadId, seccion.id],
+        [contexto.universidadId, seccion.id, usuarioId],
       )
-      // La sección se archivó después de que el guard la verificara.
+      // La sección se archivó, o el profesor se reasignó, después de que el
+      // guard la verificara.
       if (!periodo) {
         throw new NotFoundException('La sección no existe')
+      }
+      if (!periodo.es_profesor) {
+        throw new ForbiddenException(
+          'Solo el profesor de la sección crea evaluaciones',
+        )
       }
       throw new BadRequestException(
         `La fecha debe estar dentro del período del curso (del ${periodo.inicio} al ${periodo.termino})`,
