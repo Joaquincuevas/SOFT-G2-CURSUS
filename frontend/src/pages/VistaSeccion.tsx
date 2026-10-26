@@ -1,5 +1,5 @@
 import type { AlumnosEspacio, SeccionResumen } from '@cursus/shared'
-import { useId } from 'react'
+import { useId, useState, type ComponentType } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
@@ -7,10 +7,22 @@ import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
 import { textoBloque } from './misSecciones'
+import { PestanaNotas } from './PestanaNotas'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
-const PESTANAS = ['Notas', 'Material', 'Anuncios', 'Asistencia']
+const PESTANAS = ['Notas', 'Material', 'Anuncios', 'Asistencia'] as const
+type Pestana = (typeof PESTANAS)[number]
+
+export interface PropsPestana {
+  seccionId: string
+  rol: SeccionResumen['rol']
+}
+
+// Contenido de cada pestaña ya implementada; las demás siguen deshabilitadas.
+const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
+  Notas: PestanaNotas,
+}
 
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,
 // ayudante y alumno. Hoy no hay acciones por rol: llegan en la Fase 4 con
@@ -18,6 +30,7 @@ const PESTANAS = ['Notas', 'Material', 'Anuncios', 'Asistencia']
 export function VistaSeccion() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const [activa, setActiva] = useState<Pestana | null>(null)
   const [seccion, recargar, status] = useDatos<SeccionResumen>(
     `/api/espacio/secciones/${id}/resumen`,
   )
@@ -50,6 +63,7 @@ export function VistaSeccion() {
     )
   }
   const { curso, numero, rol, horario, profesor, ayudantes } = seccion
+  const Contenido = activa && CONTENIDO[activa]
   return (
     <section className="dashboard" aria-label="Vista del curso">
       <span className="dashboard__codigo">{curso.codigo}</span>
@@ -67,14 +81,20 @@ export function VistaSeccion() {
             key={pestana}
             type="button"
             role="tab"
-            aria-selected={false}
+            aria-selected={activa === pestana}
             className="vista-seccion__pestana"
-            disabled
+            disabled={!CONTENIDO[pestana]}
+            onClick={() => setActiva(activa === pestana ? null : pestana)}
           >
             {pestana}
           </button>
         ))}
       </div>
+      {Contenido && (
+        <div role="tabpanel" aria-label={activa ?? undefined}>
+          <Contenido key={id} seccionId={id} rol={rol} />
+        </div>
+      )}
 
       <h3 className="vista-seccion__subtitulo">Horario y sala</h3>
       {horario.length === 0 ? (
