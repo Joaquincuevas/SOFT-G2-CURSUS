@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- NOT-01: `GET /api/espacio/secciones/:id/evaluaciones` devuelve `EvaluacionesSeccion` (evaluaciones activas de la sección por fecha, con nombre, fecha y ponderación entera, y `sumaPonderaciones`) al profesor, a los ayudantes y alumnos de la sección y al Director (solo lectura); al Administrativo y a quien no es integrante, 403. `POST` con `{ nombre, fecha, ponderacion }` crea una evaluación y responde 201: solo el profesor de la sección (al resto, 403); ponderación entera de 1 a 100 (DTO y CHECK) y fecha dentro del período del curso (si no, 400). La evaluación es de la sección, no del curso. Sin DELETE: se archiva (`archived_at`).
+
 - [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)
 
 - ESP-05: `GET /api/espacio/secciones/:id/alumnos` devuelve `AlumnosEspacio` (`total` y `alumnos` con id, nombre y correo, por nombre) con las inscripciones activas de la sección, solo a su profesor y en solo lectura; a los demás integrantes (ayudante, alumno), al Administrativo y al Director, 403. Reutiliza la consulta de GES-18 (`backend/src/gestion/alumnos.sql.ts`).
