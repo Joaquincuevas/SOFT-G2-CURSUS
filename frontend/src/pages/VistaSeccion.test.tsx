@@ -82,7 +82,7 @@ describe('vista de la sección (ESP-04)', () => {
     },
   )
 
-  test('muestra las pestañas de la Fase 4 deshabilitadas', async () => {
+  test('muestra las pestañas de la Fase 4; solo las implementadas se habilitan', async () => {
     await renderConSesion('ALUMNO', VISTA, { [RUTA]: () => RESUMEN })
 
     const pestanas = within(
@@ -94,7 +94,16 @@ describe('vista de la sección (ESP-04)', () => {
       'Anuncios',
       'Asistencia',
     ])
-    for (const pestana of pestanas) expect(pestana).toBeDisabled()
+    // Implementadas: Notas (NOT-01). Las demás siguen deshabilitadas.
+    const HABILITADAS = ['Notas']
+    for (const pestana of pestanas) {
+      if (HABILITADAS.includes(pestana.textContent ?? '')) {
+        expect(pestana).toBeEnabled()
+      } else {
+        expect(pestana).toBeDisabled()
+      }
+      expect(pestana).toHaveAttribute('aria-selected', 'false')
+    }
     // Sin textos de trabajo pendiente en la UI.
     expect(document.body).not.toHaveTextContent(/TODO|pendiente|próximamente/i)
   })
