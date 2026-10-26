@@ -4,6 +4,8 @@ API de CURSUS: **NestJS + TypeScript + Node.js** (ESM), sobre PostgreSQL (con Ro
 
 ## Scripts
 
+ESP-03 agrega `GET /api/dashboard/secciones-alumno`: inscripciones propias del alumno en el período activo, con curso, sección, horario y profesor. Filtra por sesión y RLS; sin sesión responde 401 y para otros roles devuelve una lista vacía. Ver [contrato y revisión](../docs/esp-03-dashboard-alumno.md).
+
 Desde la raíz del repo (`npm run <script> --workspace=backend`) o dentro de `backend/`:
 
 | Script                       | Qué hace                                                    |
