@@ -20,7 +20,7 @@ export class DashboardController {
     @UniversidadActual() contexto: ContextoUniversidad,
     @Req() req: RequestConUsuario,
   ): Promise<SeccionAlumno[]> {
-    return this.dashboard.seccionesAlumno(contexto, req.usuario!.sub)
+    return this.dashboard.seccionesAlumno(contexto, req.usuario?.sub as string)
   }
 
   // Solo sesión: la consulta filtra siempre por el usuario de la sesión, así
