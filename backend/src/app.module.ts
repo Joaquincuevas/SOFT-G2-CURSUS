@@ -10,6 +10,7 @@ import { CarrerasModule } from './carreras/carreras.module.js'
 import { PerfilModule } from './perfil/perfil.module.js'
 import { EspacioModule } from './espacio/espacio.module.js'
 import { DashboardModule } from './dashboard/dashboard.module.js'
+import { AsistenciaModule } from './asistencia/asistencia.module.js'
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js'
     PerfilModule,
     EspacioModule,
     DashboardModule,
+    AsistenciaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
