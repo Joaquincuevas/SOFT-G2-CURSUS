@@ -6,7 +6,7 @@ import type {
   SeccionResumen,
 } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const VISTA = '/mis-cursos/secciones/seccion-1'
@@ -144,6 +144,60 @@ describe('pestaña Asistencia (ASI-01)', () => {
 
     expect(await panel.findByText('Clase registrada')).toBeInTheDocument()
     expect(enviados).toEqual([{ fecha: LUNES, inicio: '10:15' }])
+  })
+
+  test('si pasa la medianoche con el formulario abierto, envía la fecha que muestra', async () => {
+    // Solo se falsea Date: los timers de React siguen reales. 02:00 UTC del
+    // 15 es el 14 a las 23:00 en Santiago (UTC-3 en septiembre).
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-15T02:00:00Z'))
+      const enviados: unknown[] = []
+      const panel = await abrirAsistencia(
+        'PROFESOR',
+        (init) => {
+          if (init?.method === 'POST') {
+            enviados.push(JSON.parse(init.body as string))
+            return json(LISTA[0], 201)
+          }
+          return LISTA
+        },
+        { horario: UNO_POR_DIA },
+      )
+      await panel.findByRole('form', { name: 'Nueva clase' })
+      expect(panel.getByLabelText('Fecha')).toHaveValue(LUNES)
+
+      // Ya es el 15 en Santiago, pero el formulario sigue mostrando el 14.
+      vi.setSystemTime(new Date('2026-09-15T04:00:00Z'))
+      fireEvent.click(panel.getByRole('button', { name: 'Registrar clase' }))
+
+      expect(await panel.findByText('Clase registrada')).toBeInTheDocument()
+      expect(enviados).toEqual([{ fecha: LUNES, inicio: '08:30' }])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('si falla la carga del horario lo indica y permite reintentar', async () => {
+    // La vista pide el resumen primero (responde bien); el formulario lo pide
+    // de nuevo: esa vez falla y al reintentar responde bien.
+    let pedidos = 0
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () =>
+        ++pedidos === 2 ? json({}, 500) : { ...RESUMEN, rol: 'PROFESOR' },
+      [CLASES]: () => LISTA,
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+
+    expect(
+      await panel.findByText('No pudimos cargar el horario de la sección.'),
+    ).toBeInTheDocument()
+    expect(panel.queryByText(/aún no tiene horario/)).not.toBeInTheDocument()
+    fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await panel.findByRole('form', { name: 'Nueva clase' }),
+    ).toBeInTheDocument()
   })
 
   test('una clase repetida (409) muestra el mensaje del backend', async () => {
