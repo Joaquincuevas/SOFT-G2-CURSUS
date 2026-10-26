@@ -32,6 +32,8 @@ Usuario y universidad provienen exclusivamente de la sesión; agregar parámetro
 
 No entrega correos, contraseñas ni información de otros alumnos. El resumen vuelve a verificar la inscripción: un enlace deja de dar acceso si esta se retira. El alumno no consulta la lista de compañeros de ESP-05. Se reutilizan bloques, estilos y vista existentes; no hay migraciones, dependencias ni cambios de permisos o seed.
 
+Nota de consistencia: ESP-03 oculta profesores archivados o que ya no tienen rol PROFESOR. El endpoint de ESP-02 todavía no aplica ese filtro y puede mostrar el nombre al ayudante. Se conserva el criterio de ESP-03 y queda documentada la alineación pendiente de ESP-02.
+
 ## Preparación y pasos de revisión
 
 ```bash
@@ -70,6 +72,8 @@ npm run build
 Las 17 pruebas de `secciones-alumno.db-spec.ts` usan PostgreSQL real: campos/orden del contrato, inscripciones propias, secciones distintas del mismo curso, horario archivado, aislamiento entre usuarios/universidades, inscripciones/secciones/cursos archivados, profesor archivado, período activo/ausente/distinto, roles, sesión y acceso/revocación al resumen.
 
 `SeccionesAlumno.test.tsx` cubre tarjetas por sección, horario/profesor y textos alternativos, clic y URL directa, vacío/carga/error/reintento, acceso retirado y ausencia de consultas por otros roles. Se conservan las regresiones del profesor y ayudante.
+
+Los tests de Header personalizan el usuario solamente en `/api/auth/yo` y dejan las demás rutas en el comportamiento por defecto de `simularBackend`. Tanto esos tests como el de redirección desde EditarCurso esperan a que termine la consulta del dashboard del alumno. La comprobación de revisión ejecuta la suite frontend completa con 100 ms antes de cada cleanup; esa espera se retira después y no forma parte del código final.
 
 ## Evidencia
 
