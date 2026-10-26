@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- ASI-01: `GET /api/espacio/secciones/:id/clases` devuelve `Clase[]` (clases activas de la sección por fecha y bloque, con fecha, inicio, término y sala) al profesor y a los ayudantes de la sección y al Director (solo lectura); al alumno (ve su asistencia en ASI-06), al Administrativo y a quien no es integrante, 403. `POST` con `{ fecha?, inicio }` registra una clase y responde 201: solo el profesor de la sección (al resto, 403). Sin fecha, el backend usa hoy en America/Santiago; la fecha debe estar dentro del período del curso, e `inicio` debe ser un bloque activo del horario (GES-10) en ese día de la semana: la clase copia ese bloque (inicio, término y sala). Sin bloque ese día, o sin horario, 400; misma sección, fecha y bloque, 409. Sin DELETE: se archiva (`archived_at`).
+
 - [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)
 
 - ESP-05: `GET /api/espacio/secciones/:id/alumnos` devuelve `AlumnosEspacio` (`total` y `alumnos` con id, nombre y correo, por nombre) con las inscripciones activas de la sección, solo a su profesor y en solo lectura; a los demás integrantes (ayudante, alumno), al Administrativo y al Director, 403. Reutiliza la consulta de GES-18 (`backend/src/gestion/alumnos.sql.ts`).
