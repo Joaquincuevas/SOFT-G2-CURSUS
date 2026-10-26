@@ -97,7 +97,7 @@ function FormularioClase({
   alCrear: () => void
 }) {
   const { fetchConSesion } = useAuth()
-  const [seccion] = useDatos<SeccionResumen>(
+  const [seccion, recargarSeccion] = useDatos<SeccionResumen>(
     `/api/espacio/secciones/${seccionId}/resumen`,
   )
   const [inicial] = useState(hoy)
@@ -110,7 +110,15 @@ function FormularioClase({
   if (seccion === undefined) {
     return <Cargando texto="Cargando horario…" />
   }
-  const horario: BloqueHorario[] = seccion?.horario ?? []
+  if (seccion === null) {
+    return (
+      <ErrorEstado
+        mensaje="No pudimos cargar el horario de la sección."
+        onReintentar={recargarSeccion}
+      />
+    )
+  }
+  const horario: BloqueHorario[] = seccion.horario
   if (horario.length === 0) {
     return (
       <p className="dashboard__texto">
@@ -129,7 +137,10 @@ function FormularioClase({
     setError(null)
     setAviso(null)
     // Sin cambiar la fecha, el backend usa hoy en la zona de la universidad.
-    const datos: CrearClase = fecha === inicial ? { inicio } : { fecha, inicio }
+    // Si pasó la medianoche con el formulario abierto, se envía la fecha que
+    // se muestra.
+    const datos: CrearClase =
+      fecha === inicial && inicial === hoy() ? { inicio } : { fecha, inicio }
     try {
       const res = await fetchConSesion(ruta, {
         method: 'POST',

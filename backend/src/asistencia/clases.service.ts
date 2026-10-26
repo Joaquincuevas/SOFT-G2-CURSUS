@@ -7,7 +7,9 @@ import {
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common'
 import {
   BaseDeDatos,
@@ -25,6 +27,7 @@ const COLUMNAS = `c.id, to_char(c.fecha, 'YYYY-MM-DD') AS fecha,
   c.sala`
 
 interface Validacion {
+  es_profesor: boolean
   fecha: string
   dia: number
   en_periodo: boolean
@@ -78,7 +81,8 @@ export class ClasesService {
         `WITH f AS (
            SELECT COALESCE($3::date, (now() AT TIME ZONE $5)::date) AS fecha
          )
-         SELECT to_char(f.fecha, 'YYYY-MM-DD') AS fecha,
+         SELECT s.profesor_id = $6 AS es_profesor,
+                to_char(f.fecha, 'YYYY-MM-DD') AS fecha,
                 EXTRACT(ISODOW FROM f.fecha)::int AS dia,
                 f.fecha BETWEEN p.fecha_inicio AND p.fecha_termino AS en_periodo,
                 to_char(p.fecha_inicio, 'YYYY-MM-DD') AS periodo_inicio,
@@ -98,15 +102,29 @@ export class ClasesService {
            FROM f, seccion s
            JOIN curso c ON c.id = s.curso_id
            JOIN periodo p ON p.id = c.periodo_id
-          WHERE s.universidad_id = $1 AND s.id = $2`,
+          WHERE s.universidad_id = $1 AND s.id = $2
+            AND s.archived_at IS NULL AND c.archived_at IS NULL
+            FOR SHARE OF s`,
         [
           contexto.universidadId,
           seccion.id,
           datos.fecha ?? null,
           datos.inicio,
           ZONA_HORARIA_UNIVERSIDAD,
+          usuarioId,
         ],
       )
+      // La sección se archivó, o el profesor se reasignó, después de que el
+      // guard la verificara. FOR SHARE la fija hasta el final de la
+      // transacción.
+      if (!v) {
+        throw new NotFoundException('La sección no existe')
+      }
+      if (!v.es_profesor) {
+        throw new ForbiddenException(
+          'Solo el profesor de la sección registra clases',
+        )
+      }
       if (!v.en_periodo) {
         throw new BadRequestException(
           `La fecha debe estar dentro del período del curso (del ${v.periodo_inicio} al ${v.periodo_termino})`,
