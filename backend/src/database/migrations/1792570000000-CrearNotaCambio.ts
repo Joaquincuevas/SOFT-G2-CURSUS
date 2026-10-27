@@ -4,6 +4,9 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // devolución y recorrección queda como un evento que no se modifica ni se
 // borra (solo adición), igual que curso_cambio y asignacion_cambio.
 //
+// Columnas con la convención de las otras auditorías: responsable_id (quién
+// hizo la acción) y fecha (cuándo).
+//
 // PROPUESTA y RECORRECCION son de la nota de un alumno; ENVIO, APROBACION y
 // DEVOLUCION, de toda la evaluación (alumno_id nulo). El historial de una
 // nota (NOT-16) une los eventos del alumno con los de su evaluación.
@@ -28,14 +31,14 @@ export class CrearNotaCambio1792570000000 implements MigrationInterface {
         nota_anterior numeric(2,1),
         nota_nueva numeric(2,1),
         motivo text,
-        usuario_id uuid NOT NULL,
-        created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+        responsable_id uuid NOT NULL,
+        fecha timestamptz NOT NULL DEFAULT clock_timestamp(),
         CONSTRAINT pk_nota_cambio PRIMARY KEY (id),
         CONSTRAINT fk_nota_cambio_evaluacion FOREIGN KEY (evaluacion_id, universidad_id)
           REFERENCES evaluacion (id, universidad_id) ON DELETE RESTRICT,
         CONSTRAINT fk_nota_cambio_alumno FOREIGN KEY (alumno_id, universidad_id)
           REFERENCES usuario (id, universidad_id) ON DELETE RESTRICT,
-        CONSTRAINT fk_nota_cambio_usuario FOREIGN KEY (usuario_id, universidad_id)
+        CONSTRAINT fk_nota_cambio_responsable FOREIGN KEY (responsable_id, universidad_id)
           REFERENCES usuario (id, universidad_id) ON DELETE RESTRICT,
         CONSTRAINT ck_nota_cambio_tipo CHECK (
           tipo IN ('PROPUESTA', 'ENVIO', 'APROBACION', 'DEVOLUCION', 'RECORRECCION')
@@ -64,16 +67,17 @@ export class CrearNotaCambio1792570000000 implements MigrationInterface {
       )
     `)
     // Historial de una nota (NOT-16): sus eventos y los de su evaluación,
-    // en orden cronológico.
+    // en orden cronológico (el id desempata eventos de la misma fecha).
     await q.query(`
-      CREATE INDEX ix_nota_cambio_evaluacion_alumno
-        ON nota_cambio (evaluacion_id, alumno_id, created_at)
+      CREATE INDEX ix_nota_cambio_evaluacion_alumno_fecha
+        ON nota_cambio (evaluacion_id, alumno_id, fecha, id)
     `)
     await q.query(`
       CREATE INDEX ix_nota_cambio_alumno ON nota_cambio (alumno_id, universidad_id)
     `)
     await q.query(`
-      CREATE INDEX ix_nota_cambio_usuario ON nota_cambio (usuario_id, universidad_id)
+      CREATE INDEX ix_nota_cambio_responsable
+        ON nota_cambio (responsable_id, universidad_id)
     `)
 
     // Defensa adicional al GRANT: ni siquiera el dueño de la tabla modifica
@@ -94,16 +98,22 @@ export class CrearNotaCambio1792570000000 implements MigrationInterface {
         FOR EACH ROW EXECUTE FUNCTION nota_cambio_inmutable()
     `)
 
-    // Solo adición: sin UPDATE ni DELETE para la API. Cada universidad lee sus
-    // eventos y el Director los de todas, en solo lectura (ADR 0001). Insertan
-    // el profesor y el ayudante de la universidad; qué rol registra cada tipo
-    // lo valida cada tarjeta (NOT-05, NOT-08, NOT-11, NOT-12 y NOT-15).
+    // Solo adición: sin UPDATE ni DELETE para la API. Leen los eventos solo el
+    // profesor y el ayudante de la universidad, y el Director los de todas
+    // (solo lectura, ADR 0001): guardan propuestas de notas aún no publicadas,
+    // que un alumno no debe ver ni a nivel de base. Igual que curso_cambio y
+    // asignacion_cambio, la lectura se restringe por rol. El profesor y el
+    // ayudante deben poder leer: registrar() hace INSERT ... RETURNING, y la
+    // fila debe pasar también la política de SELECT. Insertan los mismos; qué
+    // rol registra cada tipo lo valida cada tarjeta (NOT-05, 08, 11, 12 y 15).
     await q.query(`GRANT SELECT, INSERT ON nota_cambio TO cursus_app`)
     await q.query(`ALTER TABLE nota_cambio ENABLE ROW LEVEL SECURITY`)
     await q.query(`
       CREATE POLICY pol_nota_cambio_lectura ON nota_cambio
         FOR SELECT TO cursus_app
-        USING (universidad_id = universidad_actual() OR rol_actual() = 'DIRECTOR')
+        USING ((universidad_id = universidad_actual()
+                AND rol_actual() IN ('PROFESOR', 'AYUDANTE'))
+               OR rol_actual() = 'DIRECTOR')
     `)
     await q.query(`
       CREATE POLICY pol_nota_cambio_insercion ON nota_cambio
