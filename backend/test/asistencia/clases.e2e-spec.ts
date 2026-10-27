@@ -94,9 +94,9 @@ describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
     ],
   }
 
-  it('GET y PUT responden 401 sin sesión', async () => {
+  it('GET y POST responden 401 sin sesión', async () => {
     await request(app.getHttpServer()).get(ASISTENCIA).expect(401)
-    await request(app.getHttpServer()).put(ASISTENCIA).send(MARCAS).expect(401)
+    await request(app.getHttpServer()).post(ASISTENCIA).send(MARCAS).expect(401)
   })
 
   it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO'])(
@@ -113,17 +113,21 @@ describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
     '%s no tiene permiso CASL para guardar: 403',
     async (rol) => {
       await request(app.getHttpServer())
-        .put(ASISTENCIA)
+        .post(ASISTENCIA)
         .set('Authorization', sesion(rol))
         .send(MARCAS)
         .expect(403)
     },
   )
 
-  it('no hay ruta DELETE', async () => {
-    await request(app.getHttpServer())
-      .delete(ASISTENCIA)
-      .set('Authorization', sesion('PROFESOR'))
-      .expect(404)
-  })
+  it.each(['put', 'patch', 'delete'] as const)(
+    'no hay ruta %s (corregir marcas es ASI-04)',
+    async (metodo) => {
+      await request(app.getHttpServer())
+        [metodo](ASISTENCIA)
+        .set('Authorization', sesion('PROFESOR'))
+        .send(MARCAS)
+        .expect(404)
+    },
+  )
 })

@@ -86,7 +86,7 @@ describe('asistencia de una clase (ASI-02)', () => {
     const enviados: unknown[] = []
     let guardada = false
     const panel = await abrir('PROFESOR', (init) => {
-      if (init?.method === 'PUT') {
+      if (init?.method === 'POST') {
         enviados.push(JSON.parse(init.body as string))
         guardada = true
         return json(REGISTRADA, 201)
@@ -178,7 +178,7 @@ describe('asistencia de una clase (ASI-02)', () => {
     const mensaje =
       'La asistencia de esta clase ya está registrada; corregirla es otra acción'
     const panel = await abrir('PROFESOR', (init) =>
-      init?.method === 'PUT'
+      init?.method === 'POST'
         ? json({ statusCode: 409, message: mensaje }, 409)
         : PENDIENTE,
     )
@@ -194,7 +194,7 @@ describe('asistencia de una clase (ASI-02)', () => {
   test('tras un 400 (la lista cambió) permite volver a cargarla', async () => {
     let cambio = false
     const panel = await abrir('PROFESOR', (init) => {
-      if (init?.method === 'PUT') {
+      if (init?.method === 'POST') {
         cambio = true
         return json(
           {
@@ -240,7 +240,7 @@ describe('asistencia de una clase (ASI-02)', () => {
     let puts = 0
     let terminarRecarga!: (valor: unknown) => void
     const panel = await abrir('PROFESOR', (init) => {
-      if (init?.method === 'PUT') {
+      if (init?.method === 'POST') {
         puts++
         return json(REGISTRADA, 201)
       }

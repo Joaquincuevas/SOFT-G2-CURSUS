@@ -89,7 +89,7 @@ async function guardar(
 ) {
   const token = await tokenDe(correo)
   const respuesta = await request(app.getHttpServer())
-    .put(ruta(seccionId, claseId))
+    .post(ruta(seccionId, claseId))
     .set('Authorization', `Bearer ${token}`)
     .send(cuerpo as object)
     .expect(estado)
@@ -322,7 +322,7 @@ describe('GET .../clases/:claseId/asistencia (ASI-02)', () => {
   })
 })
 
-describe('PUT .../clases/:claseId/asistencia (ASI-02)', () => {
+describe('POST .../clases/:claseId/asistencia (ASI-02)', () => {
   it('el profesor registra la asistencia: con fecha y profesor', async () => {
     const guardada = await guardar(
       PROFESOR,
@@ -497,7 +497,7 @@ describe('PUT .../clases/:claseId/asistencia (ASI-02)', () => {
     const token = await tokenDe(PROFESOR)
     const enviar = () =>
       request(app.getHttpServer())
-        .put(ruta(secciones.s1, clase))
+        .post(ruta(secciones.s1, clase))
         .set('Authorization', `Bearer ${token}`)
         .send(marcasDe())
     const estados = (await Promise.all([enviar(), enviar()]))
