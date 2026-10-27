@@ -482,6 +482,35 @@ describe('PUT .../clases/:claseId/asistencia (ASI-02)', () => {
     })
   })
 
+  it('acepta los UUID en mayúsculas', async () => {
+    const clase = await crearClase(secciones.s1, 6)
+    const cuerpo = marcasDe()
+    cuerpo.marcas = cuerpo.marcas.map((m) => ({
+      ...m,
+      alumnoId: m.alumnoId.toUpperCase(),
+    }))
+    await guardar(PROFESOR, clase, cuerpo, 201)
+  })
+
+  it('dos guardados simultáneos de la misma clase: uno 201 y el otro 409', async () => {
+    const clase = await crearClase(secciones.s1, 7)
+    const token = await tokenDe(PROFESOR)
+    const enviar = () =>
+      request(app.getHttpServer())
+        .put(ruta(secciones.s1, clase))
+        .set('Authorization', `Bearer ${token}`)
+        .send(marcasDe())
+    const estados = (await Promise.all([enviar(), enviar()]))
+      .map((r) => r.status)
+      .sort()
+    expect(estados).toEqual([201, 409])
+    const [{ n }] = await bd.query<{ n: string }[]>(
+      'SELECT count(*) AS n FROM asistencia WHERE clase_id = $1',
+      [clase],
+    )
+    expect(Number(n)).toBe(3)
+  })
+
   it('una clase registrada sigue mostrando las filas guardadas aunque un alumno se retire', async () => {
     await guardar(PROFESOR, clases.c4, marcasDe([alumnos.base]), 201)
     // El alumno base deja la sección después de registrar.
@@ -508,6 +537,11 @@ describe('PUT .../clases/:claseId/asistencia (ASI-02)', () => {
 
 describe('RLS y sin DELETE (ASI-02)', () => {
   it('desde otra universidad no se ve la asistencia de Norte', async () => {
+    // Hay asistencia guardada en Norte (si no, el test no probaría nada).
+    const [{ n }] = await bd.query<{ n: string }[]>(
+      'SELECT count(*) AS n FROM asistencia',
+    )
+    expect(Number(n)).toBeGreaterThan(0)
     await comoApp(
       {
         universidadId: await universidadDe('sur.cursus.test'),
@@ -529,6 +563,10 @@ describe('RLS y sin DELETE (ASI-02)', () => {
          VALUES ($1, $2, $3, true, $4)`,
         [norte, clases.c3, alumnos.ana, profesor],
       )
+    // Control positivo: el profesor de Norte sí puede insertar.
+    await comoApp({ universidadId: norte, rol: 'PROFESOR' }, async (q) => {
+      await expect(insertar(q)).resolves.toBeDefined()
+    })
     for (const sesion of [
       { universidadId: sur, rol: 'PROFESOR' as const },
       { universidadId: norte, rol: 'AYUDANTE' as const },

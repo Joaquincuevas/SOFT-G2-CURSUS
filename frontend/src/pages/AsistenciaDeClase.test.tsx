@@ -4,7 +4,7 @@ import type {
   Rol,
   SeccionResumen,
 } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
@@ -189,6 +189,84 @@ describe('asistencia de una clase (ASI-02)', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Guardar asistencia' }))
 
     expect(await panel.findByRole('alert')).toHaveTextContent(mensaje)
+  })
+
+  test('tras un 400 (la lista cambió) permite volver a cargarla', async () => {
+    let cambio = false
+    const panel = await abrir('PROFESOR', (init) => {
+      if (init?.method === 'PUT') {
+        cambio = true
+        return json(
+          {
+            statusCode: 400,
+            message:
+              'La lista debe tener exactamente una marca por cada alumno inscrito',
+            faltantes: ['a4'],
+            sobrantes: [],
+            repetidos: [],
+          },
+          400,
+        )
+      }
+      // Después del 400 la sección tiene un alumno más.
+      return cambio
+        ? {
+            ...PENDIENTE,
+            alumnos: [
+              ...PENDIENTE.alumnos,
+              { id: 'a4', nombre: 'Nuevo Alumno', presente: null },
+            ],
+          }
+        : PENDIENTE
+    })
+    await panel.findByRole('form', { name: 'Marcar asistencia' })
+    for (const alumno of ['Ana Ávila', 'Bruno Díaz', 'Zoe Ruiz']) {
+      marcar(panel, alumno, 'Presente')
+    }
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar asistencia' }))
+    const alerta = await panel.findByRole('alert')
+
+    fireEvent.click(
+      within(alerta).getByRole('button', { name: 'Volver a cargar' }),
+    )
+    expect(
+      await panel.findByRole('group', { name: 'Nuevo Alumno' }),
+    ).toBeInTheDocument()
+    expect(panel.queryByRole('alert')).not.toBeInTheDocument()
+    expect(panel.getByText('Faltan 1 por marcar.')).toBeInTheDocument()
+  })
+
+  test('después de guardar, Guardar queda deshabilitado mientras recarga', async () => {
+    let puts = 0
+    let terminarRecarga!: (valor: unknown) => void
+    const panel = await abrir('PROFESOR', (init) => {
+      if (init?.method === 'PUT') {
+        puts++
+        return json(REGISTRADA, 201)
+      }
+      // La recarga posterior al guardado queda pendiente.
+      return puts === 0
+        ? PENDIENTE
+        : new Promise((resolve) => {
+            terminarRecarga = resolve
+          })
+    })
+    await panel.findByRole('form', { name: 'Marcar asistencia' })
+    for (const alumno of ['Ana Ávila', 'Bruno Díaz', 'Zoe Ruiz']) {
+      marcar(panel, alumno, 'Presente')
+    }
+    const guardar = panel.getByRole('button', { name: 'Guardar asistencia' })
+    fireEvent.click(guardar)
+
+    await waitFor(() => expect(puts).toBe(1))
+    await waitFor(() => expect(guardar).toBeDisabled())
+    fireEvent.click(guardar)
+    expect(puts).toBe(1)
+
+    terminarRecarga(REGISTRADA)
+    expect(
+      await panel.findByRole('table', { name: 'Asistencia registrada' }),
+    ).toBeInTheDocument()
   })
 
   test('si falla la carga permite reintentar', async () => {
