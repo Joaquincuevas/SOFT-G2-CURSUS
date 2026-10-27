@@ -2,8 +2,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 
 // NULL conserva los anuncios de ANU-01 para todo el curso. La FK compuesta
 // impide dirigir un anuncio a una sección de otro curso o universidad.
-export class DirigirAnuncioSeccion1792570000000 implements MigrationInterface {
-  name = 'DirigirAnuncioSeccion1792570000000'
+export class DirigirAnuncioSeccion1792600000000 implements MigrationInterface {
+  name = 'DirigirAnuncioSeccion1792600000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE seccion ADD CONSTRAINT

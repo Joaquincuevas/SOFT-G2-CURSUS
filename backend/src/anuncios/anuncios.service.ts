@@ -39,6 +39,9 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
 
 // ANU-01/02 (RN-09): el guard verifica el acceso y el listado filtra el
 // destinatario antes de devolver cualquier título o cuerpo.
+// IMPORTANTE para ANU-03/04: RLS solo aísla universidades. Tanto la vista
+// como el conteo de anuncios nuevos deben reutilizar el filtro de destinatario
+// de listar(); consultar anuncio directamente puede revelar anuncios privados.
 @Injectable()
 export class AnunciosService {
   constructor(private readonly bd: BaseDeDatos) {}

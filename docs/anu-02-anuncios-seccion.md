@@ -12,6 +12,8 @@ Cada tarjeta indica **Todo el curso** o **Sección N**, además de autor, fecha 
 
 Los anuncios de sección solo los reciben su profesor, ayudantes activos y alumnos con inscripción activa. Un profesor de otra sección del mismo curso no los recibe. El Director conserva su lectura de anuncios generales de ANU-01; los dirigidos a sección quedan reservados a sus integrantes. El Administrativo sigue sin acceso a anuncios. Se mantienen el aislamiento por universidad y los controles del guard de ESP-06.
 
+Decisiones a validar con el cliente: el Director no ve anuncios dirigidos pese a su vista consolidada en otras áreas; y el selector ofrece Todo el curso o la sección abierta, debiendo navegar a otra sección a cargo para publicar allí. Se mantiene la interpretación estricta de “solo los integrantes” de ANU-02.
+
 ## API y persistencia
 
 Se extienden las rutas de ANU-01:
@@ -21,7 +23,7 @@ Se extienden las rutas de ANU-01:
 - `GET /api/espacio/secciones/:id/anuncios`: lista ya filtrada en el servidor. Cada `Anuncio` agrega `seccion: { id, numero } | null`; `null` identifica un anuncio general.
 - Se conservan los 401, 403 y 404 y la validación de título y cuerpo de ANU-01. El INSERT vuelve a verificar profesor y vigencia de sección y curso.
 
-La migración nueva `1792570000000-DirigirAnuncioSeccion` agrega `anuncio.seccion_id` nullable y un índice parcial para los anuncios de sección. La FK compuesta `fk_anuncio_seccion` exige que sección, curso y universidad coincidan. Los anuncios existentes conservan `NULL` y su visibilidad general. RLS conserva el aislamiento institucional; el guard y el filtro SQL aplican la pertenencia a la sección, como el resto del espacio.
+La migración nueva `1792600000000-DirigirAnuncioSeccion` agrega `anuncio.seccion_id` nullable y un índice parcial para los anuncios de sección. La FK compuesta `fk_anuncio_seccion` exige que sección, curso y universidad coincidan. Los anuncios existentes conservan `NULL` y su visibilidad general. RLS conserva el aislamiento institucional; el guard y el filtro SQL aplican la pertenencia a la sección, como el resto del espacio.
 
 Al revertir, los anuncios dirigidos se archivan antes de quitar la columna para evitar que su contenido pase a ser público para todo el curso. No se elimina su contenido. Los generales se conservan activos.
 
