@@ -10,10 +10,17 @@ import { textoBloque } from './misSecciones'
 import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
+import { PestanaEntregas } from './PestanaEntregas'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
-const PESTANAS = ['Notas', 'Material', 'Anuncios', 'Asistencia'] as const
+const PESTANAS = [
+  'Notas',
+  'Material',
+  'Anuncios',
+  'Asistencia',
+  'Entregas',
+] as const
 type Pestana = (typeof PESTANAS)[number]
 
 export interface PropsPestana {
@@ -26,6 +33,7 @@ const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
   Asistencia: PestanaAsistencia,
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,
+  Entregas: PestanaEntregas,
 }
 
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,
