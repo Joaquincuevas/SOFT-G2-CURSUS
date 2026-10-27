@@ -1,0 +1,111 @@
+/* ANU-01: anuncios del curso (pestaña Anuncios). */
+.anuncios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.anuncios__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 40rem;
+}
+
+.anuncios__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.anuncios__campo input,
+.anuncios__campo textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.anuncios__campo input {
+  height: var(--control-size);
+  padding-block: 0;
+}
+
+.anuncios__campo textarea {
+  resize: vertical;
+}
+
+.anuncios__ayuda {
+  margin: 0;
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.anuncios__boton {
+  align-self: flex-start;
+  height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  font: var(--font-button);
+  color: var(--color-background);
+  cursor: pointer;
+}
+
+.anuncios__boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.anuncios__error,
+.anuncios__aviso {
+  margin: 0;
+  font: var(--font-body);
+}
+
+.anuncios__error {
+  color: var(--color-error);
+}
+
+.anuncios__aviso {
+  color: var(--color-success);
+}
+
+.anuncios__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.anuncios__anuncio {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.anuncios__titulo {
+  margin: 0;
+  font: var(--font-button);
+  color: var(--color-text-primary);
+}
+
+.anuncios__meta {
+  margin: var(--space-1) 0 var(--space-2);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+/* Respeta los saltos de línea del mensaje. */
+.anuncios__cuerpo {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
