@@ -1,0 +1,79 @@
+/* NOT-01: evaluaciones de la sección (pestaña Notas). */
+.notas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.notas__formulario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.notas__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.notas__campo input {
+  height: var(--control-size);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.notas__boton {
+  height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  font: var(--font-button);
+  color: var(--color-background);
+  cursor: pointer;
+}
+
+.notas__boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.notas__error,
+.notas__aviso {
+  flex-basis: 100%;
+  margin: 0;
+  font: var(--font-body);
+}
+
+.notas__error {
+  color: var(--color-error);
+}
+
+.notas__aviso {
+  color: var(--color-success);
+}
+
+.notas__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
+
+.notas__tabla th,
+.notas__tabla td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.notas__tabla tfoot th,
+.notas__tabla tfoot td {
+  font: var(--font-button);
+}

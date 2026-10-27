@@ -39,6 +39,8 @@ export * from './dashboard.js'
 export * from './seccion-resumen.js'
 export * from './dashboard-ayudante.js'
 export * from './asistencia.js'
+export * from './anuncios.js'
+export * from './notas.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

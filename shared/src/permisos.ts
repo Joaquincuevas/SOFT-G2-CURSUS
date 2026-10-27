@@ -27,6 +27,8 @@ export type SujetoTabla =
   | 'Seccion'
   | 'Inscripcion'
   | 'Clase'
+  | 'Anuncio'
+  | 'Evaluacion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -41,6 +43,18 @@ export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
 
 const LEEN_CLASES: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
+const LEEN_ANUNCIOS: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
+const LEEN_EVALUACIONES: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
 
 // Recibe el usuario y no solo el rol para que MT-01 pueda agregar condiciones
 // por universidad_id sin cambiar la firma.
@@ -90,6 +104,20 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // asistencia en ASI-06. Nadie las borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Clase')
   if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Clase')
+
+  // ANU-01 (RN-09): anuncios de un curso. Los publica el profesor (el
+  // controlador exige además que sea el profesor de la sección desde la que
+  // publica) y los leen el ayudante, el alumno y el Director, este en solo
+  // lectura. El Administrativo no recibe nada. Nadie los borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Anuncio')
+  if (LEEN_ANUNCIOS.includes(usuario.rol)) can('read', 'Anuncio')
+
+  // NOT-01 (RN-10): evaluaciones de una sección. Las crea el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante, el alumno y el Director, este en solo lectura. Editar es
+  // NOT-03; nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Evaluacion')
+  if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
 
   return build()
 }

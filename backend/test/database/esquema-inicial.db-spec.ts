@@ -14,12 +14,14 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'anuncio',
   'asignacion_cambio',
   'ayudante_seccion',
   'carrera',
   'clase',
   'curso',
   'curso_cambio',
+  'evaluacion',
   'facultad',
   'horario_seccion',
   'inscripcion',
@@ -160,23 +162,34 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearAnuncio es la última: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
+    expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
+
     // CrearClase (ASI-01): solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_CLASE = TABLAS.filter((tabla) => tabla !== 'clase')
+    const SIN_CLASE = SIN_ANUNCIO.filter((tabla) => tabla !== 'clase')
     expect(await tablasExistentes()).toEqual(SIN_CLASE)
 
-    // AgregarCredencialProvisoria: quita la columna de usuario.
+    // CrearEvaluacion (NOT-01): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_EVALUACION = SIN_CLASE.filter((tabla) => tabla !== 'evaluacion')
+    expect(await tablasExistentes()).toEqual(SIN_EVALUACION)
+
+    // AgregarCredencialProvisoria es ahora la última: quita la columna de
+    // usuario.
     await bd.undoLastMigration()
     const [{ provisoria }] = await bd.query<{ provisoria: string }[]>(
       `SELECT count(*) AS provisoria FROM information_schema.columns
         WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
     )
     expect(Number(provisoria)).toBe(0)
-    expect(await tablasExistentes()).toEqual(SIN_CLASE)
+    expect(await tablasExistentes()).toEqual(SIN_EVALUACION)
 
     // CrearAsignacionCambio: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ASIGNACION_CAMBIO = SIN_CLASE.filter(
+    const SIN_ASIGNACION_CAMBIO = SIN_EVALUACION.filter(
       (tabla) => tabla !== 'asignacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
@@ -324,10 +337,12 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'anuncio',
         'ayudante_seccion',
         'carrera',
         'clase',
         'curso',
+        'evaluacion',
         'facultad',
         'horario_seccion',
         'inscripcion',
