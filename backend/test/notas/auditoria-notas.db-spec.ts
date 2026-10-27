@@ -69,7 +69,7 @@ const registrar = (rol: Rol, evento: Partial<EventoNota>) =>
     auditoria.registrar(tx, {
       universidadId: ids.norte,
       evaluacionId: ids.evaluacion,
-      usuarioId: rol === 'AYUDANTE' ? ids.ayudante : ids.profesor,
+      responsableId: rol === 'AYUDANTE' ? ids.ayudante : ids.profesor,
       tipo: 'ENVIO',
       ...evento,
     }),
@@ -84,11 +84,11 @@ const eventoDe = async (id: string) =>
         nota_anterior: string | null
         nota_nueva: string | null
         motivo: string | null
-        usuario_id: string
+        responsable_id: string
         universidad_id: string
       }[]
     >(
-      `SELECT tipo, alumno_id, nota_anterior, nota_nueva, motivo, usuario_id,
+      `SELECT tipo, alumno_id, nota_anterior, nota_nueva, motivo, responsable_id,
               universidad_id
          FROM nota_cambio WHERE id = $1`,
       [id],
@@ -108,7 +108,7 @@ const insertarDirecto = (columnas: Record<string, unknown>) => {
   const fila = {
     universidad_id: ids.norte,
     evaluacion_id: ids.evaluacion,
-    usuario_id: ids.profesor,
+    responsable_id: ids.profesor,
     ...columnas,
   }
   const nombres = Object.keys(fila)
@@ -194,7 +194,7 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
       nota_anterior: null,
       nota_nueva: '5.5',
       motivo: null,
-      usuario_id: ids.ayudante,
+      responsable_id: ids.ayudante,
       universidad_id: ids.norte,
     })
   })
@@ -233,7 +233,7 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
       nota_anterior: '5.5',
       nota_nueva: '6.1',
       motivo: 'Error de suma',
-      usuario_id: ids.profesor,
+      responsable_id: ids.profesor,
     })
   })
 
@@ -299,6 +299,98 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
     ).rejects.toMatchObject({ driverError: { code: CHECK } })
   })
 
+  it('guarda el motivo sin los espacios de los extremos', async () => {
+    const id = await registrar('PROFESOR', {
+      tipo: 'DEVOLUCION',
+      motivo: '  Revisa la pregunta 3 \n',
+    })
+
+    expect(await eventoDe(id as string)).toMatchObject({
+      motivo: 'Revisa la pregunta 3',
+    })
+  })
+
+  it.each([
+    ['vacío', 'DEVOLUCION', ''],
+    ['de solo espacios', 'DEVOLUCION', '   '],
+    ['de más de 500 caracteres', 'DEVOLUCION', 'x'.repeat(501)],
+    ['faltante en una DEVOLUCION', 'DEVOLUCION', undefined],
+    ['faltante en una RECORRECCION', 'RECORRECCION', undefined],
+    ['vacío en un ENVIO', 'ENVIO', ' '],
+  ] as const)(
+    'rechaza un motivo %s antes de tocar la base',
+    async (_caso, tipo, motivo) => {
+      const antes = await cantidad()
+      await expect(
+        registrar('PROFESOR', {
+          tipo,
+          motivo,
+          ...(tipo === 'RECORRECCION' && {
+            alumnoId: ids.alumno,
+            notaAnterior: 5.5,
+            notaNueva: 6.1,
+          }),
+        }),
+      ).rejects.toBeInstanceOf(RangeError)
+      expect(await cantidad()).toBe(antes)
+    },
+  )
+
+  it('acepta un motivo de 500 caracteres', async () => {
+    const id = await registrar('PROFESOR', {
+      tipo: 'DEVOLUCION',
+      motivo: `  ${'x'.repeat(500)}  `,
+    })
+
+    expect((await eventoDe(id as string)).motivo).toHaveLength(500)
+  })
+
+  it('cuenta caracteres como PostgreSQL: 500 emojis son 500 caracteres', async () => {
+    const id = await registrar('PROFESOR', {
+      tipo: 'DEVOLUCION',
+      motivo: '📝'.repeat(500),
+    })
+
+    expect(
+      (
+        await bd.query<{ largo: number }[]>(
+          'SELECT length(motivo) AS largo FROM nota_cambio WHERE id = $1',
+          [id],
+        )
+      )[0].largo,
+    ).toBe(500)
+    await expect(
+      registrar('PROFESOR', { tipo: 'DEVOLUCION', motivo: '📝'.repeat(501) }),
+    ).rejects.toBeInstanceOf(RangeError)
+  })
+
+  it('un RangeError no aborta la transacción de quien llama', async () => {
+    const id = await base.enTransaccionEnUniversidad(
+      contexto('PROFESOR'),
+      async (tx) => {
+        await expect(
+          auditoria.registrar(tx, {
+            universidadId: ids.norte,
+            evaluacionId: ids.evaluacion,
+            tipo: 'DEVOLUCION',
+            motivo: ' ',
+            responsableId: ids.profesor,
+          }),
+        ).rejects.toBeInstanceOf(RangeError)
+        // La misma transacción sigue usable.
+        return auditoria.registrar(tx, {
+          universidadId: ids.norte,
+          evaluacionId: ids.evaluacion,
+          tipo: 'DEVOLUCION',
+          motivo: 'Revisa la pregunta 3',
+          responsableId: ids.profesor,
+        })
+      },
+    )
+
+    expect(id).toEqual(expect.any(String))
+  })
+
   it('dentro de una transacción que se revierte, el evento no queda', async () => {
     const antes = await cantidad()
 
@@ -308,7 +400,7 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
           universidadId: ids.norte,
           evaluacionId: ids.evaluacion,
           tipo: 'APROBACION',
-          usuarioId: ids.profesor,
+          responsableId: ids.profesor,
         })
         // Falla lo que viene después (por ejemplo, guardar la nota).
         throw new Error('falla la nota')
@@ -440,6 +532,29 @@ describe('RLS de nota_cambio (NOT-04)', () => {
     })
   })
 
+  it.each<Rol>(['PROFESOR', 'AYUDANTE'])(
+    'el %s de la universidad los lee',
+    async (rol) => {
+      await comoApp(contexto(rol), async (q) => {
+        const filas = await q.query<{ id: string }[]>(
+          'SELECT id FROM nota_cambio',
+        )
+        expect(filas.length).toBe(await cantidad())
+      })
+    },
+  )
+
+  // Guardan propuestas de notas aún no publicadas.
+  it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO'])(
+    'el %s de la misma universidad no ve ningún evento',
+    async (rol) => {
+      expect(await cantidad()).toBeGreaterThan(0)
+      await comoApp(contexto(rol), async (q) => {
+        expect(await q.query('SELECT id FROM nota_cambio')).toEqual([])
+      })
+    },
+  )
+
   it('el Director los lee en cualquier universidad', async () => {
     await comoApp(contexto('DIRECTOR', ids.sur), async (q) => {
       const filas = await q.query<{ id: string }[]>(
@@ -462,7 +577,7 @@ describe('RLS de nota_cambio (NOT-04)', () => {
             universidadId: ids.norte,
             evaluacionId: ids.evaluacion,
             tipo: 'ENVIO',
-            usuarioId: ids.profesor,
+            responsableId: ids.profesor,
           }),
         ),
       ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
