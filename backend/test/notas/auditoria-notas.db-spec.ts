@@ -262,6 +262,43 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
     expect(await cantidad()).toBe(antes + 1)
   })
 
+  it('compara las notas normalizadas: el string de un numeric de PostgreSQL cuenta como el mismo número', async () => {
+    const antes = await cantidad()
+    expect(
+      await registrar('AYUDANTE', {
+        tipo: 'PROPUESTA',
+        alumnoId: ids.alumno,
+        notaAnterior: '5.5',
+        notaNueva: 5.5,
+      }),
+    ).toBeNull()
+    expect(await cantidad()).toBe(antes)
+  })
+
+  it.each([
+    ['más de un decimal (la base la redondearía)', 5.54],
+    ['bajo 1,0 aunque redondee a 1,0', 0.95],
+    ['sobre 7,0 aunque redondee a 7,0', 7.04],
+    ['no numérica', Number.NaN],
+  ])('rechaza una nota con %s antes de tocar la base', async (_caso, nota) => {
+    const antes = await cantidad()
+    await expect(
+      registrar('AYUDANTE', {
+        tipo: 'PROPUESTA',
+        alumnoId: ids.alumno,
+        notaAnterior: 5.5,
+        notaNueva: nota,
+      }),
+    ).rejects.toBeInstanceOf(RangeError)
+    expect(await cantidad()).toBe(antes)
+  })
+
+  it('una PROPUESTA sin nota nueva es un error, no se descarta en silencio', async () => {
+    await expect(
+      registrar('AYUDANTE', { tipo: 'PROPUESTA', alumnoId: ids.alumno }),
+    ).rejects.toMatchObject({ driverError: { code: CHECK } })
+  })
+
   it('dentro de una transacción que se revierte, el evento no queda', async () => {
     const antes = await cantidad()
 
@@ -391,6 +428,11 @@ describe('solo adición (NOT-04)', () => {
 })
 
 describe('RLS de nota_cambio (NOT-04)', () => {
+  // Un evento propio de este bloque: no depende de los anteriores.
+  beforeAll(async () => {
+    await insertarDirecto({ tipo: 'ENVIO' })
+  })
+
   it('desde otra universidad no se ven los eventos de Norte', async () => {
     expect(await cantidad()).toBeGreaterThan(0)
     await comoApp(contexto('PROFESOR', ids.sur), async (q) => {
