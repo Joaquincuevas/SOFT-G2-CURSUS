@@ -84,6 +84,8 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
     () => ({ total: 0, alumnos: [] }),
   ],
+  // Clases de la sección (ASI-01).
+  [/^\/api\/espacio\/secciones\/[^/]+\/clases$/, () => []],
   // Evaluaciones de la sección (NOT-01).
   [
     /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones$/,

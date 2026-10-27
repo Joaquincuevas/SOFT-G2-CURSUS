@@ -26,6 +26,7 @@ export type SujetoTabla =
   | 'Curso'
   | 'Seccion'
   | 'Inscripcion'
+  | 'Clase'
   | 'Anuncio'
   | 'Evaluacion'
 
@@ -41,6 +42,7 @@ export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
 
+const LEEN_CLASES: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 const LEEN_ANUNCIOS: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
@@ -95,6 +97,13 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       break
     // Un rol desconocido no recibe ningún permiso.
   }
+
+  // ASI-01 (RN-13): clases de una sección. Las registra el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante y el Director, este en solo lectura. El alumno ve su propia
+  // asistencia en ASI-06. Nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Clase')
+  if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Clase')
 
   // ANU-01 (RN-09): anuncios de un curso. Los publica el profesor (el
   // controlador exige además que sea el profesor de la sección desde la que

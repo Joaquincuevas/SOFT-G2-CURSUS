@@ -7,6 +7,7 @@ import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
 import { textoBloque } from './misSecciones'
+import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { useDatos } from './useDatos'
@@ -22,6 +23,7 @@ export interface PropsPestana {
 
 // Contenido de cada pestaña ya implementada; las demás siguen deshabilitadas.
 const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
+  Asistencia: PestanaAsistencia,
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,
 }

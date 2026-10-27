@@ -18,6 +18,7 @@ const TABLAS = [
   'asignacion_cambio',
   'ayudante_seccion',
   'carrera',
+  'clase',
   'curso',
   'curso_cambio',
   'evaluacion',
@@ -166,9 +167,14 @@ describe('migraciones', () => {
     const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
+    // CrearClase (ASI-01): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_CLASE = SIN_ANUNCIO.filter((tabla) => tabla !== 'clase')
+    expect(await tablasExistentes()).toEqual(SIN_CLASE)
+
     // CrearEvaluacion (NOT-01): solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_EVALUACION = SIN_ANUNCIO.filter((tabla) => tabla !== 'evaluacion')
+    const SIN_EVALUACION = SIN_CLASE.filter((tabla) => tabla !== 'evaluacion')
     expect(await tablasExistentes()).toEqual(SIN_EVALUACION)
 
     // AgregarCredencialProvisoria es ahora la última: quita la columna de
@@ -334,6 +340,7 @@ describe('migraciones', () => {
         'anuncio',
         'ayudante_seccion',
         'carrera',
+        'clase',
         'curso',
         'evaluacion',
         'facultad',

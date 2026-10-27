@@ -94,8 +94,8 @@ describe('vista de la sección (ESP-04)', () => {
       'Anuncios',
       'Asistencia',
     ])
-    // Implementadas: Notas (NOT-01) y Anuncios (ANU-01).
-    const HABILITADAS = ['Notas', 'Anuncios']
+    // Implementadas: Notas (NOT-01), Anuncios (ANU-01) y Asistencia (ASI-01).
+    const HABILITADAS = ['Notas', 'Anuncios', 'Asistencia']
     for (const pestana of pestanas) {
       if (HABILITADAS.includes(pestana.textContent ?? '')) {
         expect(pestana).toBeEnabled()

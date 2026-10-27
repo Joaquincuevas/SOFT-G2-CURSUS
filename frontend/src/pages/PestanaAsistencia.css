@@ -1,0 +1,85 @@
+/* ASI-01: clases de la sección (pestaña Asistencia). */
+.asistencia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.asistencia__formulario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.asistencia__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.asistencia__campo input,
+.asistencia__campo select {
+  height: var(--control-size);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.asistencia__boton {
+  height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  font: var(--font-button);
+  color: var(--color-background);
+  cursor: pointer;
+}
+
+.asistencia__boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.asistencia__error,
+.asistencia__aviso {
+  flex-basis: 100%;
+  margin: 0;
+  font: var(--font-body);
+}
+
+.asistencia__error {
+  color: var(--color-error);
+}
+
+.asistencia__aviso {
+  color: var(--color-success);
+}
+
+.asistencia__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
+
+.asistencia__tabla th,
+.asistencia__tabla td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.asistencia__tabla tfoot th,
+.asistencia__tabla tfoot td {
+  font: var(--font-button);
+}
+
+.asistencia__nota {
+  flex-basis: 100%;
+  margin: 0;
+}
