@@ -38,6 +38,7 @@ registrar(bd, evento): Promise<string | null>
 
 - `bd` es la conexión de la **transacción en curso** (la que entrega `BaseDeDatos.enTransaccionEnUniversidad`). Así el evento queda junto con el cambio de la nota: si la transacción se revierte, el evento tampoco queda.
 - **Una `PROPUESTA` solo se registra si la nota cambia** (`notaAnterior` distinta de `notaNueva`). Guardar varias veces el mismo borrador (NOT-07) no llena la auditoría de filas iguales; en ese caso devuelve `null` y no inserta nada. La base lo vuelve a exigir con un CHECK.
+- Las notas se aceptan como número o como el string que PostgreSQL devuelve para un `numeric`, y se comparan ya normalizadas. Una nota que no va de 1,0 a 7,0 con un decimal (por ejemplo 5,54 o 0,95, que la columna `numeric(2,1)` redondearía) lanza `RangeError` antes de tocar la base, para no abortar la transacción de quien llama con un error de CHECK.
 - Devuelve el id del evento registrado.
 
 Los tipos (`TipoEventoNota`, `TIPOS_EVENTO_NOTA`) y el rango de las notas (`NOTA_MINIMA`, `NOTA_MAXIMA`) están en `@cursus/shared`.
