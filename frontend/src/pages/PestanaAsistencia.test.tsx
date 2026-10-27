@@ -83,9 +83,9 @@ describe('pestaña Asistencia (ASI-01)', () => {
     ).toBeInTheDocument()
     const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
     expect(filas).toEqual([
-      'FechaBloqueSala',
-      '2026-09-0708:30–10:00Sala 1',
-      `${LUNES}10:15–11:45Sala A-102`,
+      'FechaBloqueSalaAsistencia',
+      '2026-09-0708:30–10:00Sala 1Ver',
+      `${LUNES}10:15–11:45Sala A-102Ver`,
     ])
   })
 
@@ -235,7 +235,14 @@ describe('pestaña Asistencia (ASI-01)', () => {
     expect(
       panel.queryByRole('form', { name: 'Nueva clase' }),
     ).not.toBeInTheDocument()
-    expect(panel.queryByRole('button')).not.toBeInTheDocument()
+    // Solo los botones para ver la asistencia de cada clase (ASI-02).
+    expect(
+      panel.queryByRole('button', { name: 'Registrar clase' }),
+    ).not.toBeInTheDocument()
+    expect(panel.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Ver',
+      'Ver',
+    ])
   })
 
   test('el alumno no ve las clases ni las pide (su asistencia es ASI-06)', async () => {
