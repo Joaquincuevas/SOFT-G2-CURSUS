@@ -16,6 +16,7 @@ const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'anuncio',
   'asignacion_cambio',
+  'asistencia',
   'ayudante_seccion',
   'carrera',
   'clase',
@@ -162,9 +163,22 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAnuncio es la última: solo quita su tabla.
+    // CrearAsistencia (ASI-02) es la última: quita su tabla y la clave
+    // (id, universidad_id) de clase.
     await bd.undoLastMigration()
-    const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
+    const SIN_ASISTENCIA = TABLAS.filter((tabla) => tabla !== 'asistencia')
+    expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
+    const [{ restosAsistencia }] = await bd.query<
+      { restosAsistencia: string }[]
+    >(
+      `SELECT count(*) AS "restosAsistencia" FROM pg_constraint
+        WHERE conname = 'uq_clase_id_universidad'`,
+    )
+    expect(Number(restosAsistencia)).toBe(0)
+
+    // CrearAnuncio: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ANUNCIO = SIN_ASISTENCIA.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
     // CrearClase (ASI-01): solo quita su tabla.
@@ -338,6 +352,7 @@ describe('migraciones', () => {
     expect(filas).toEqual(
       [
         'anuncio',
+        'asistencia',
         'ayudante_seccion',
         'carrera',
         'clase',

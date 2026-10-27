@@ -85,3 +85,45 @@ describe('clases de una sección (ASI-01)', () => {
       .expect(404)
   })
 })
+
+describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
+  const ASISTENCIA = `${RUTA}/00000000-0000-4000-8000-000000000020/asistencia`
+  const MARCAS = {
+    marcas: [
+      { alumnoId: '00000000-0000-4000-8000-000000000030', presente: true },
+    ],
+  }
+
+  it('GET y PUT responden 401 sin sesión', async () => {
+    await request(app.getHttpServer()).get(ASISTENCIA).expect(401)
+    await request(app.getHttpServer()).put(ASISTENCIA).send(MARCAS).expect(401)
+  })
+
+  it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO'])(
+    '%s no tiene permiso CASL para leer: 403',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get(ASISTENCIA)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    },
+  )
+
+  it.each<Rol>(['AYUDANTE', 'ALUMNO', 'ADMINISTRATIVO', 'DIRECTOR'])(
+    '%s no tiene permiso CASL para guardar: 403',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .put(ASISTENCIA)
+        .set('Authorization', sesion(rol))
+        .send(MARCAS)
+        .expect(403)
+    },
+  )
+
+  it('no hay ruta DELETE', async () => {
+    await request(app.getHttpServer())
+      .delete(ASISTENCIA)
+      .set('Authorization', sesion('PROFESOR'))
+      .expect(404)
+  })
+})

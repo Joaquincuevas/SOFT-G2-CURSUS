@@ -20,6 +20,7 @@ const SUJETOS: SujetoTabla[] = [
   'Seccion',
   'Inscripcion',
   'Clase',
+  'Asistencia',
   'Evaluacion',
   'Anuncio',
 ]
@@ -92,6 +93,9 @@ const CLASE: Record<Rol, AccionConcreta[]> = {
   ALUMNO: [],
 }
 for (const rol of ROLES) MATRIZ[rol].Clase = CLASE[rol]
+// ASI-02 (RN-13): asistencia de una clase. La registra el profesor; la leen
+// el ayudante y el Director. El alumno ve la suya en ASI-06.
+for (const rol of ROLES) MATRIZ[rol].Asistencia = CLASE[rol]
 
 // NOT-01 (RN-10): evaluaciones de una sección. Crea el profesor; leen el
 // ayudante, el alumno y el Director. El Administrativo no recibe nada.
