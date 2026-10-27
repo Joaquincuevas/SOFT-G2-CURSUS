@@ -16,6 +16,15 @@
   color: var(--color-text-secondary);
 }
 
+.vista-seccion__pestana[aria-selected='true'] {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.vista-seccion__pestana:enabled {
+  cursor: pointer;
+}
+
 .vista-seccion__pestana:disabled {
   cursor: not-allowed;
   opacity: 0.6;

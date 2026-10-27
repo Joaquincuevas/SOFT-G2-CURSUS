@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [ANU-01: anuncios para todo el curso y guía de revisión](anu-01-anuncios-curso.md)
+
 - [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)
 
 - ESP-05: `GET /api/espacio/secciones/:id/alumnos` devuelve `AlumnosEspacio` (`total` y `alumnos` con id, nombre y correo, por nombre) con las inscripciones activas de la sección, solo a su profesor y en solo lectura; a los demás integrantes (ayudante, alumno), al Administrativo y al Director, 403. Reutiliza la consulta de GES-18 (`backend/src/gestion/alumnos.sql.ts`).
