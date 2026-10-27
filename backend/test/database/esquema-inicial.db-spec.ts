@@ -26,6 +26,7 @@ const TABLAS = [
   'horario_seccion',
   'inscripcion',
   'limite_login',
+  'nota_cambio',
   'periodo',
   'refresh_token',
   'seccion',
@@ -162,9 +163,15 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAnuncio es la última: solo quita su tabla.
+    // CrearNotaCambio (NOT-04) es la última: quita su tabla, su función y la
+    // clave (id, universidad_id) de evaluacion.
     await bd.undoLastMigration()
-    const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
+    const SIN_NOTA_CAMBIO = TABLAS.filter((tabla) => tabla !== 'nota_cambio')
+    expect(await tablasExistentes()).toEqual(SIN_NOTA_CAMBIO)
+
+    // CrearAnuncio: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ANUNCIO = SIN_NOTA_CAMBIO.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
     // CrearClase (ASI-01): solo quita su tabla.
@@ -314,7 +321,8 @@ describe('migraciones', () => {
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
-        t !== 'asignacion_cambio',
+        t !== 'asignacion_cambio' &&
+        t !== 'nota_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
