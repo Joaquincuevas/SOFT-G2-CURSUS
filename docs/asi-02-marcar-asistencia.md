@@ -28,14 +28,16 @@ La lista **no incluye correos**: también la lee el ayudante, que no ve correos 
 | Método | Ruta                                                    | Cuerpo                                 | Resultado                       |
 | ------ | ------------------------------------------------------- | -------------------------------------- | ------------------------------- |
 | GET    | `/api/espacio/secciones/:id/clases/:claseId/asistencia` | Ninguno                                | 200, `AsistenciaClase`          |
-| PUT    | `/api/espacio/secciones/:id/clases/:claseId/asistencia` | `{ marcas: [{ alumnoId, presente }] }` | 201, `AsistenciaClase` guardada |
+| POST   | `/api/espacio/secciones/:id/clases/:claseId/asistencia` | `{ marcas: [{ alumnoId, presente }] }` | 201, `AsistenciaClase` guardada |
 
 `AsistenciaClase` (`@cursus/shared`) es `{ clase, registrada: { por: { id, nombre }, en } | null, alumnos: { id, nombre, presente }[] }`:
 
 - Sin asistencia: los alumnos **activos** de la sección (reutiliza `ALUMNOS_SECCION` de GES-18, sin el correo) con `presente: null`.
 - Con asistencia: las **filas guardadas**, aunque un alumno ya no esté inscrito. La lista de una clase registrada no cambia cuando cambia la sección.
 
-El PUT:
+Guardar es `POST`, como crear una clase, un anuncio o una evaluación: crea la asistencia una sola vez y, si se repite, responde 409, así que no es idempotente como un `PUT`. `PUT` y `PATCH` quedan libres para corregir marcas (ASI-04); hoy responden 404.
+
+El POST:
 
 - 404 si la clase no existe, está archivada o es de otra sección.
 - 403 si quien guarda no es el profesor de la sección (lo vuelve a comprobar dentro de la transacción, con la sección y la clase fijadas con `FOR SHARE`).
@@ -75,5 +77,5 @@ npm run build
 1. Ejecutar las migraciones y el seed de facultad completa. Levantar backend y frontend.
 2. Ingresar con `camila.rojas@norte.cursus.test` y la contraseña `SEED_PASSWORD` del `.env`. Abrir una sección, la pestaña **Asistencia**, registrar una clase y pulsar **Ver**.
 3. Marcar a algunos alumnos: **Guardar asistencia** sigue deshabilitado. Marcar a todos y guardar: la vista pasa a solo lectura con "Registrada por Camila Rojas…".
-4. Volver a abrir la clase: sigue en solo lectura. Un PUT directo responde 409.
+4. Volver a abrir la clase: sigue en solo lectura. Un POST directo responde 409.
 5. Ingresar como un ayudante de esa sección: ve la asistencia registrada, pero no puede marcar una clase sin asistencia.
