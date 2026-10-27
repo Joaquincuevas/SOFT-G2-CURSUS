@@ -162,7 +162,11 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAnuncio es la última: solo quita su tabla.
+    // ANU-02 quita el destinatario, manteniendo las tablas.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    // CrearAnuncio: solo quita su tabla.
     await bd.undoLastMigration()
     const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
