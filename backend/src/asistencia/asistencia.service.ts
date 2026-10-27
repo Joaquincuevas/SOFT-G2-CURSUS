@@ -116,6 +116,7 @@ export class AsistenciaService {
 
   // Todo en una transacción: revalida la clase y al profesor (con la sección
   // y la clase fijadas), exige que la lista coincida con los alumnos activos
+  // (con sus inscripciones fijadas: quitar a un alumno espera a que termine)
   // y guarda una fila por alumno. Una clase con asistencia responde 409:
   // corregir una marca es ASI-04.
   async guardar(
@@ -149,12 +150,28 @@ export class AsistenciaService {
           'La asistencia de esta clase ya está registrada; corregirla es otra acción',
         )
       }
-      if (fila.alumnos.length === 0) {
+      // Los alumnos activos se leen con sus inscripciones fijadas (FOR
+      // SHARE): gestión no bloquea la sección, así que quitar a un alumno
+      // (GES-19) espera a que esta transacción termine. Un alumno inscrito
+      // después queda sin marca en esta clase.
+      const inscritos = await bd.query<{ id: string }>(
+        `SELECT i.usuario_id AS id FROM inscripcion i
+          WHERE i.universidad_id = $1 AND i.seccion_id = $2
+            AND i.archived_at IS NULL
+            FOR SHARE`,
+        [contexto.universidadId, seccion.id],
+      )
+      if (inscritos.length === 0) {
         throw new BadRequestException('La sección no tiene alumnos inscritos')
       }
 
-      const enviados = datos.marcas.map((m) => m.alumnoId)
-      const activos = new Set(fila.alumnos.map((a) => a.id))
+      // Los UUID se comparan en minúsculas, como los devuelve PostgreSQL.
+      const marcas = datos.marcas.map((m) => ({
+        alumnoId: m.alumnoId.toLowerCase(),
+        presente: m.presente,
+      }))
+      const enviados = marcas.map((m) => m.alumnoId)
+      const activos = new Set(inscritos.map((a) => a.id))
       const recibidos = new Set(enviados)
       const error: ErrorListaAsistencia = {
         statusCode: 400,
@@ -177,12 +194,7 @@ export class AsistenciaService {
           `INSERT INTO asistencia (universidad_id, clase_id, alumno_id, presente, registrada_por)
            SELECT $1, $2, m."alumnoId", m.presente, $3
              FROM jsonb_to_recordset($4::jsonb) AS m("alumnoId" uuid, presente boolean)`,
-          [
-            contexto.universidadId,
-            claseId,
-            usuarioId,
-            JSON.stringify(datos.marcas),
-          ],
+          [contexto.universidadId, claseId, usuarioId, JSON.stringify(marcas)],
         )
       } catch (e) {
         const { code, constraint } = e as { code?: string; constraint?: string }

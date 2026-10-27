@@ -68,6 +68,7 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
           ruta={ruta}
           alumnos={alumnos}
           alGuardar={recargar}
+          recargar={recargar}
         />
       ) : (
         <p className="dashboard__texto">
@@ -103,10 +104,12 @@ function FormularioAsistencia({
   ruta,
   alumnos,
   alGuardar,
+  recargar,
 }: {
   ruta: string
   alumnos: AlumnoAsistencia[]
   alGuardar: () => void
+  recargar: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const [marcas, setMarcas] = useState<Record<string, boolean>>({})
@@ -136,17 +139,19 @@ function FormularioAsistencia({
         setError(
           (res.status === 400 || res.status === 409) &&
             typeof cuerpo?.message === 'string'
-            ? `${cuerpo.message}. Vuelve a cargar la asistencia.`
+            ? `${cuerpo.message}.`
             : 'No pudimos guardar la asistencia. Inténtalo nuevamente.',
         )
+        setGuardando(false)
         return
       }
+      // Guardar sigue deshabilitado hasta que la recarga muestre la
+      // asistencia en solo lectura: un segundo clic no envía otro PUT.
       alGuardar()
     } catch {
       setError(
         'No pudimos guardar la asistencia. Comprueba tu conexión e inténtalo nuevamente.',
       )
-    } finally {
       setGuardando(false)
     }
   }
@@ -191,9 +196,19 @@ function FormularioAsistencia({
         Guardar asistencia
       </button>
       {error && (
-        <p className="asistencia__error" role="alert">
-          {error}
-        </p>
+        <div className="asistencia__error" role="alert">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="asistencia__enlace"
+            onClick={() => {
+              setError(null)
+              recargar()
+            }}
+          >
+            Volver a cargar
+          </button>
+        </div>
       )}
     </form>
   )
