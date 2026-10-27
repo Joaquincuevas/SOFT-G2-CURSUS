@@ -3,6 +3,7 @@
 Documentación del proyecto:
 
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
+- [ASI-02: marcar presente o ausente a cada alumno de una clase y guía de revisión](asi-02-marcar-asistencia.md)
 - [NOT-04: auditoría de las notas (tabla `nota_cambio`, solo adición) y guía de revisión](not-04-auditoria-notas.md)
 
 - ASI-01: `GET /api/espacio/secciones/:id/clases` devuelve `Clase[]` (clases activas de la sección por fecha y bloque, con fecha, inicio, término y sala) al profesor y a los ayudantes de la sección y al Director (solo lectura); al alumno (ve su asistencia en ASI-06), al Administrativo y a quien no es integrante, 403. `POST` con `{ fecha?, inicio }` registra una clase y responde 201: solo el profesor de la sección (al resto, 403). Sin fecha, el backend usa hoy en America/Santiago; la fecha debe estar dentro del período del curso, e `inicio` debe ser un bloque activo del horario (GES-10) en ese día de la semana: la clase copia ese bloque (inicio, término y sala). Sin bloque ese día, o sin horario, 400; misma sección, fecha y bloque, 409. Sin DELETE: se archiva (`archived_at`).

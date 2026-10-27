@@ -16,6 +16,7 @@ const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'anuncio',
   'asignacion_cambio',
+  'asistencia',
   'ayudante_seccion',
   'carrera',
   'clase',
@@ -176,10 +177,25 @@ describe('migraciones', () => {
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearNotaCambio (NOT-04): quita su tabla, su función y la
-    // clave (id, universidad_id) de evaluacion.
+    // CrearAsistencia (ASI-02): quita su tabla y la clave
+    // (id, universidad_id) de clase.
     await bd.undoLastMigration()
-    const SIN_NOTA_CAMBIO = TABLAS.filter((tabla) => tabla !== 'nota_cambio')
+    const SIN_ASISTENCIA = TABLAS.filter((tabla) => tabla !== 'asistencia')
+    expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
+    const [{ restosAsistencia }] = await bd.query<
+      { restosAsistencia: string }[]
+    >(
+      `SELECT count(*) AS "restosAsistencia" FROM pg_constraint
+        WHERE conname = 'uq_clase_id_universidad'`,
+    )
+    expect(Number(restosAsistencia)).toBe(0)
+
+    // CrearNotaCambio (NOT-04): quita su tabla, su función y la clave
+    // (id, universidad_id) de evaluacion.
+    await bd.undoLastMigration()
+    const SIN_NOTA_CAMBIO = SIN_ASISTENCIA.filter(
+      (tabla) => tabla !== 'nota_cambio',
+    )
     expect(await tablasExistentes()).toEqual(SIN_NOTA_CAMBIO)
     const [{ restosNotaCambio }] = await bd.query<
       { restosNotaCambio: string }[]
@@ -368,6 +384,7 @@ describe('migraciones', () => {
     expect(filas).toEqual(
       [
         'anuncio',
+        'asistencia',
         'ayudante_seccion',
         'carrera',
         'clase',

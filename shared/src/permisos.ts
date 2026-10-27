@@ -27,6 +27,7 @@ export type SujetoTabla =
   | 'Seccion'
   | 'Inscripcion'
   | 'Clase'
+  | 'Asistencia'
   | 'Anuncio'
   | 'Evaluacion'
 
@@ -104,6 +105,12 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // asistencia en ASI-06. Nadie las borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Clase')
   if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Clase')
+
+  // ASI-02 (RN-13): asistencia de una clase. La registra el profesor (el
+  // controlador exige además que sea el de esa sección) y la leen los mismos
+  // que las clases. El alumno ve la suya en ASI-06. Corregirla es ASI-04.
+  if (usuario.rol === 'PROFESOR') can('create', 'Asistencia')
+  if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Asistencia')
 
   // ANU-01 (RN-09): anuncios de un curso. Los publica el profesor (el
   // controlador exige además que sea el profesor de la sección desde la que

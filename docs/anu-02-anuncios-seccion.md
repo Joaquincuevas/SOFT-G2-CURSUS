@@ -25,7 +25,7 @@ Se extienden las rutas de ANU-01:
 
 La migración nueva `1792600000000-DirigirAnuncioSeccion` agrega `anuncio.seccion_id` nullable y un índice parcial para los anuncios de sección. La FK compuesta `fk_anuncio_seccion` exige que sección, curso y universidad coincidan. Los anuncios existentes conservan `NULL` y su visibilidad general. RLS conserva el aislamiento institucional; el guard y el filtro SQL aplican la pertenencia a la sección, como el resto del espacio.
 
-Se integra `develop` mediante merge y se conserva `1792570000000-CrearNotaCambio` (NOT-04). ANU-02 usa `1792600000000` para evitar esa colisión y los timestamps reservados por ASI-02 y MAT-08. En el estado actual, el rollback revierte primero ANU-02, después NOT-04 y luego ANU-01. Las futuras lecturas y los conteos de ANU-03/04 deben reutilizar el predicado de destinatario de `AnunciosService.listar`: RLS por sí sola solo filtra la universidad.
+Se integra `develop` mediante merge y se conservan `1792570000000-CrearNotaCambio` (NOT-04) y `1792580000000-CrearAsistencia` (ASI-02). ANU-02 usa `1792600000000` para evitar esas colisiones y el timestamp reservado por MAT-08. En el estado actual, el rollback revierte ANU-02, ASI-02, NOT-04 y ANU-01, en ese orden. Las futuras lecturas y los conteos de ANU-03/04 deben reutilizar el predicado de destinatario de `AnunciosService.listar`: RLS por sí sola solo filtra la universidad.
 
 Al revertir, los anuncios dirigidos se archivan antes de quitar la columna para evitar que su contenido pase a ser público para todo el curso. No se elimina su contenido. Los generales se conservan activos.
 

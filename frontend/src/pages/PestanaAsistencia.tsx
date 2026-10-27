@@ -10,6 +10,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
+import { AsistenciaDeClase } from './AsistenciaDeClase'
 import './PestanaAsistencia.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -19,7 +20,8 @@ import type { PropsPestana } from './VistaSeccion'
 const LEEN = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 
 // ASI-01 (RN-13): clases de la sección, por fecha. Solo el profesor de la
-// sección las registra; el ayudante ve la lista.
+// sección las registra; el ayudante ve la lista. Al elegir una clase se
+// muestra su asistencia (ASI-02).
 export function PestanaAsistencia({ seccionId, rol }: PropsPestana) {
   if (!LEEN.includes(rol)) {
     return (
@@ -34,6 +36,7 @@ export function PestanaAsistencia({ seccionId, rol }: PropsPestana) {
 function ClasesSeccion({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases`
   const [clases, recargar] = useDatos<Clase[]>(ruta)
+  const [elegida, setElegida] = useState<string | null>(null)
 
   return (
     <section className="asistencia" aria-label="Clases">
@@ -57,6 +60,7 @@ function ClasesSeccion({ seccionId, rol }: PropsPestana) {
               <th scope="col">Fecha</th>
               <th scope="col">Bloque</th>
               <th scope="col">Sala</th>
+              <th scope="col">Asistencia</th>
             </tr>
           </thead>
           <tbody>
@@ -67,10 +71,31 @@ function ClasesSeccion({ seccionId, rol }: PropsPestana) {
                   {clase.inicio}–{clase.termino}
                 </td>
                 <td>{clase.sala}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="asistencia__enlace"
+                    aria-pressed={elegida === clase.id}
+                    aria-label={`Asistencia del ${clase.fecha} a las ${clase.inicio}`}
+                    onClick={() =>
+                      setElegida(elegida === clase.id ? null : clase.id)
+                    }
+                  >
+                    {elegida === clase.id ? 'Ocultar' : 'Ver'}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+      {elegida && (
+        <AsistenciaDeClase
+          key={elegida}
+          seccionId={seccionId}
+          claseId={elegida}
+          rol={rol}
+        />
       )}
     </section>
   )
