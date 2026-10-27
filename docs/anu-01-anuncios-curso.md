@@ -1,6 +1,6 @@
 # ANU-01: el profesor publica un anuncio para todo el curso
 
-Tarjeta: [F4 · ANU-01](PEGAR_URL_DE_TRELLO). Referencia: RN-09. Sin dependencias dentro de la fase.
+Tarjeta: [F4 · ANU-01 Profesor publica un anuncio para todo el curso](https://trello.com/c/ZeitK1tr). Referencia: RN-09. Sin dependencias dentro de la fase.
 
 ## Comportamiento
 
