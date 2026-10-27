@@ -33,7 +33,7 @@ export interface AlumnoAsistencia {
   presente: boolean | null
 }
 
-// GET y respuesta del PUT. Con asistencia registrada, `alumnos` son las filas
+// GET y respuesta del POST. Con asistencia registrada, `alumnos` son las filas
 // guardadas (aunque un alumno ya no esté inscrito); sin ella, los alumnos
 // activos de la sección.
 export interface AsistenciaClase {
@@ -47,7 +47,7 @@ export interface MarcaAsistencia {
   presente: boolean
 }
 
-// Body del PUT: una marca por cada alumno activo de la sección.
+// Body del POST: una marca por cada alumno activo de la sección.
 export interface GuardarAsistencia {
   marcas: MarcaAsistencia[]
 }

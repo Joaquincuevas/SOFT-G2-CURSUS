@@ -21,7 +21,7 @@ interface Props {
 const fechaHora = (iso: string) =>
   new Date(iso).toLocaleString('es-CL', {
     timeZone: ZONA_HORARIA_UNIVERSIDAD,
-    dateStyle: 'short',
+    dateStyle: 'medium',
     timeStyle: 'short',
   })
 
@@ -126,7 +126,7 @@ function FormularioAsistencia({
     }
     try {
       const res = await fetchConSesion(ruta, {
-        method: 'PUT',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datos),
       })
@@ -146,7 +146,7 @@ function FormularioAsistencia({
         return
       }
       // Guardar sigue deshabilitado hasta que la recarga muestre la
-      // asistencia en solo lectura: un segundo clic no envía otro PUT.
+      // asistencia en solo lectura: un segundo clic no envía otro POST.
       alGuardar()
     } catch {
       setError(

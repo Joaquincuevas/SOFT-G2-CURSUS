@@ -4,10 +4,9 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  HttpCode,
   Param,
   ParseUUIDPipe,
-  Put,
+  Post,
   Req,
 } from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
@@ -50,8 +49,9 @@ export class AsistenciaController {
   // Administrativo y el Director reciben 403.
   @Puede('create', 'Asistencia')
   @IntegranteDeSeccion()
-  @Put()
-  @HttpCode(201)
+  // POST y no PUT: crea la asistencia una sola vez (409 si se repite). PUT o
+  // PATCH quedan para corregir marcas (ASI-04).
+  @Post()
   guardar(
     @UniversidadActual() contexto: ContextoUniversidad,
     @Req() req: RequestConUsuario,
