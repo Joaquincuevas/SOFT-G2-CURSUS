@@ -89,6 +89,8 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones$/,
     () => ({ evaluaciones: [], sumaPonderaciones: 0 }),
   ],
+  // Anuncios del curso de la sección (ANU-01).
+  [/^\/api\/espacio\/secciones\/[^/]+\/anuncios$/, () => []],
 ]
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh

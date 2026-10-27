@@ -3,6 +3,7 @@
 Documentación del proyecto:
 
 - NOT-01: `GET /api/espacio/secciones/:id/evaluaciones` devuelve `EvaluacionesSeccion` (evaluaciones activas de la sección por fecha, con nombre, fecha y ponderación entera, y `sumaPonderaciones`) al profesor, a los ayudantes y alumnos de la sección y al Director (solo lectura); al Administrativo y a quien no es integrante, 403. `POST` con `{ nombre, fecha, ponderacion }` crea una evaluación y responde 201: solo el profesor de la sección (al resto, 403); ponderación entera de 1 a 100 (DTO y CHECK) y fecha dentro del período del curso (si no, 400). La evaluación es de la sección, no del curso. Sin DELETE: se archiva (`archived_at`).
+- [ANU-01: anuncios para todo el curso y guía de revisión](anu-01-anuncios-curso.md)
 
 - [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)
 

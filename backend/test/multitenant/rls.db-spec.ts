@@ -347,6 +347,8 @@ describe('contrato del schema', () => {
         ...TABLAS.map(([tabla]) => tabla),
         'curso_cambio',
         'asignacion_cambio',
+        // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
+        'anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
         'evaluacion',
       ].sort(),

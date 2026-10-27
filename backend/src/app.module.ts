@@ -11,6 +11,7 @@ import { PerfilModule } from './perfil/perfil.module.js'
 import { EspacioModule } from './espacio/espacio.module.js'
 import { DashboardModule } from './dashboard/dashboard.module.js'
 import { NotasModule } from './notas/notas.module.js'
+import { AnunciosModule } from './anuncios/anuncios.module.js'
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { NotasModule } from './notas/notas.module.js'
     EspacioModule,
     DashboardModule,
     NotasModule,
+    AnunciosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
