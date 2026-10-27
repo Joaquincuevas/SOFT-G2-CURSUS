@@ -86,6 +86,21 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
   ],
   // Clases de la sección (ASI-01).
   [/^\/api\/espacio\/secciones\/[^/]+\/clases$/, () => []],
+  // Asistencia de una clase (ASI-02): sin registrar y sin alumnos.
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/clases\/[^/]+\/asistencia$/,
+    () => ({
+      clase: {
+        id: 'clase',
+        fecha: '2026-09-14',
+        inicio: '08:30',
+        termino: '10:00',
+        sala: 'Sala',
+      },
+      registrada: null,
+      alumnos: [],
+    }),
+  ],
   // Evaluaciones de la sección (NOT-01).
   [
     /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones$/,
