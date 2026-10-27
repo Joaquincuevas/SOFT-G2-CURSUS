@@ -20,7 +20,13 @@ Leen los anuncios, en el espacio de su sección:
 
 Quién entra al espacio de una sección lo decide el guard de ESP-06; ver [ESP-06](esp-06-acceso-seccion.md). El Administrativo pasa ese guard, pero, igual que en NOT-01 y ASI-01, no recibe permisos sobre los anuncios: la tarjeta no los pide para él.
 
-Frontend: pendiente. La pestaña **Anuncios** de la vista de la sección (ESP-04) se habilita cuando se mergee la primera pestaña de la Fase 4 (NOT-01 o ASI-01), para usar la misma forma de activarlas.
+## Pantalla
+
+La pestaña **Anuncios** de la vista de la sección (ESP-04) queda habilitada (`PestanaAnuncios`). Muestra los anuncios del curso, del más nuevo al más antiguo, cada uno con título, autor, fecha y hora de publicación (en la hora local) y el mensaje con sus saltos de línea. Sin anuncios, dice "Aún no hay anuncios".
+
+El profesor de la sección ve además el formulario **Nuevo anuncio**, con Título y Mensaje obligatorios y el aviso de que lo verán todas las secciones del curso. Al publicar, se limpia el formulario, aparece "Anuncio publicado para todas las secciones del curso" y la lista se actualiza. Un 400 muestra el mensaje de la API (por ejemplo, "Ingresa el cuerpo del anuncio") y conserva lo escrito.
+
+La pestaña usa el mecanismo de NOT-01 (`CONTENIDO` en `VistaSeccion.tsx`, con `PropsPestana`), copiado tal cual para que al integrar NOT-01 y ASI-01 solo se sumen las entradas de cada pestaña.
 
 ## API
 
@@ -51,11 +57,14 @@ La migración `CrearAnuncio` (`1792560000000`, después de NOT-01 y ASI-01) crea
 
 ## Revisión en local
 
-1. `npm run migration:run --workspace=backend` y `npm run seed --workspace=backend`. Levantar el backend.
-2. Como Administrativo de Ingeniería Norte, asignar dos profesores distintos a las secciones 1 y 2 de un mismo curso, e inscribir un alumno en cada una.
-3. Con el token del profesor de la sección 1, `POST /api/espacio/secciones/<sección 1>/anuncios` con `{ "titulo": "Cambio de sala", "cuerpo": "El jueves es en la B-201" }`: 201 con autor y `publicadoEn`.
-4. Con el token del alumno de la sección 2, `GET /api/espacio/secciones/<sección 2>/anuncios`: aparece el anuncio.
-5. Con el token del alumno, `POST` a su sección: 403. Sin título: 400.
+Con los datos del seed (GES-20), el curso ICC101 de Ingeniería Norte tiene dos secciones con profesores distintos. La contraseña de todos es `SEED_PASSWORD` de `.env` (`cursus_demo` con el ejemplo).
+
+1. `docker compose up -d --wait`, `npm run migration:run --workspace=backend` y `npm run seed --workspace=backend`. En dos terminales, `npm run dev:back` y `npm run dev:front`, y abrir `http://localhost:5173`.
+2. Ingresar con `camila.rojas@norte.cursus.test` (profesora de ICC101 sección 1). En el Dashboard, abrir ICC101 sección 1 y la pestaña **Anuncios**.
+3. Publicar sin mensaje: el navegador lo pide. Publicar con título y un mensaje de dos líneas: aparece el aviso y el anuncio queda arriba, con autor, fecha y los dos renglones.
+4. Cerrar sesión e ingresar con `constanza.castro@norte.cursus.test` (alumna de la sección 2, con otro profesor). En ICC101 sección 2, pestaña **Anuncios**: aparece el anuncio de Camila, sin formulario.
+5. Repetir con `sofia.contreras@norte.cursus.test` (ayudante de la sección 2): lo ve, sin formulario.
+6. Ingresar con `matias.munoz@norte.cursus.test` (profesor de la sección 2) y publicar otro desde su sección: en la sección 1 se ven los dos, el suyo primero. En ICC201 sección 1, otro curso de Matías, no aparece ninguno.
 
 ## Pruebas automáticas
 
@@ -76,4 +85,5 @@ npm run build
   - los 400 de título y cuerpo (incluido el NUL), los 403 y 404 de quién no publica ni lee, y el 403 si el profesor dejó la sección;
   - en la base: RLS aísla los anuncios por universidad e impide insertar a un alumno, `fk_anuncio_autor` rechaza un autor de otra universidad, y los CHECK rechazan título o cuerpo vacíos.
 - `backend/test/anuncios/anuncios.e2e-spec.ts`: 403 al publicar por rol, 403 al leer para el Administrativo, 401 sin sesión y 400 con un id inválido.
+- `frontend/src/pages/PestanaAnuncios.test.tsx`: la lista con autor, fecha y saltos de línea; el formulario solo para el profesor; publicar, el aviso y la recarga; el mensaje del 400; el 403; el estado vacío y el error de carga. `VistaSeccion.test.tsx` comprueba que Anuncios es la única pestaña habilitada.
 - `src/auth/permisos.spec.ts` incluye `Anuncio` en la matriz; `esquema-inicial.db-spec.ts` revierte la migración nueva, y `rls.db-spec.ts` agrega la tabla al contrato del schema.
