@@ -28,3 +28,23 @@ export interface CrearEvaluacion {
   fecha: string
   ponderacion: number
 }
+
+// NOT-04 (RN-12): tipos de evento de la auditoría de notas (tabla
+// nota_cambio). PROPUESTA y RECORRECCION son de la nota de un alumno; ENVIO,
+// APROBACION y DEVOLUCION, de toda la evaluación.
+export const TIPOS_EVENTO_NOTA = [
+  'PROPUESTA',
+  'ENVIO',
+  'APROBACION',
+  'DEVOLUCION',
+  'RECORRECCION',
+] as const
+
+export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
+
+// Motivo de una devolución o una recorrección (NOT-12 y NOT-15).
+export const LARGO_MOTIVO_NOTA = 500
+
+// Notas de 1,0 a 7,0 con un decimal (NOT-06).
+export const NOTA_MINIMA = 1
+export const NOTA_MAXIMA = 7

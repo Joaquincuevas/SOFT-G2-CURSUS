@@ -26,6 +26,7 @@ import { AgregarCredencialProvisoria1792530000000 } from './migrations/179253000
 import { CrearClase1792550000000 } from './migrations/1792550000000-CrearClase.js'
 import { CrearEvaluacion1792540000000 } from './migrations/1792540000000-CrearEvaluacion.js'
 import { CrearAnuncio1792560000000 } from './migrations/1792560000000-CrearAnuncio.js'
+import { CrearNotaCambio1792570000000 } from './migrations/1792570000000-CrearNotaCambio.js'
 import { CrearAsistencia1792580000000 } from './migrations/1792580000000-CrearAsistencia.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
@@ -74,6 +75,7 @@ export function opcionesDataSource(
       CrearEvaluacion1792540000000,
       CrearClase1792550000000,
       CrearAnuncio1792560000000,
+      CrearNotaCambio1792570000000,
       CrearAsistencia1792580000000,
     ],
     migrationsTableName: 'migraciones',
