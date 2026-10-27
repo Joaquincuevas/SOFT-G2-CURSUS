@@ -161,10 +161,23 @@ afterAll(async () => {
 })
 
 describe('migraciones', () => {
+  it('tienen timestamps únicos y están registradas en orden cronológico', () => {
+    const timestamps = bd.migrations.map((migracion) =>
+      Number((migracion.name ?? migracion.constructor.name).slice(-13)),
+    )
+    expect(timestamps.every(Number.isInteger)).toBe(true)
+    expect(new Set(timestamps).size).toBe(timestamps.length)
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
+  })
+
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAsistencia (ASI-02) es la última: quita su tabla y la clave
+    // ANU-02 quita el destinatario, manteniendo las tablas.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
+    // CrearAsistencia (ASI-02): quita su tabla y la clave
     // (id, universidad_id) de clase.
     await bd.undoLastMigration()
     const SIN_ASISTENCIA = TABLAS.filter((tabla) => tabla !== 'asistencia')

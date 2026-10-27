@@ -23,7 +23,7 @@ import { PublicarAnuncioDto } from './publicar-anuncio.dto.js'
 // pase IntegranteSeccionGuard por ser de la facultad del curso).
 const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO', 'DIRECTOR']
 
-// ANU-01 (RN-09): anuncios del curso, desde el espacio de una de sus
+// ANU-01/02 (RN-09): anuncios del curso o sección, desde el espacio de una de sus
 // secciones. Cada ruta exige además ser integrante (ESP-06); el rol que se
 // revisa es el de la sección (@SeccionActual), no solo el de la cuenta.
 @Controller('espacio/secciones/:id/anuncios')

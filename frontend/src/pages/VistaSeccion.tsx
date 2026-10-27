@@ -18,6 +18,7 @@ type Pestana = (typeof PESTANAS)[number]
 
 export interface PropsPestana {
   seccionId: string
+  numeroSeccion?: number
   rol: SeccionResumen['rol']
 }
 
@@ -96,7 +97,7 @@ export function VistaSeccion() {
       </div>
       {Contenido && (
         <div role="tabpanel" aria-label={activa ?? undefined}>
-          <Contenido key={id} seccionId={id} rol={rol} />
+          <Contenido key={id} seccionId={id} numeroSeccion={numero} rol={rol} />
         </div>
       )}
 

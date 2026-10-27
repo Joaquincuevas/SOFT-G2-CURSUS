@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
 - [ASI-02: marcar presente o ausente a cada alumno de una clase y guía de revisión](asi-02-marcar-asistencia.md)
 - [NOT-04: auditoría de las notas (tabla `nota_cambio`, solo adición) y guía de revisión](not-04-auditoria-notas.md)
 
