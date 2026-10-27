@@ -27,6 +27,7 @@ export type SujetoTabla =
   | 'Seccion'
   | 'Inscripcion'
   | 'Anuncio'
+  | 'Evaluacion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -41,6 +42,12 @@ export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
 
 const LEEN_ANUNCIOS: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
+const LEEN_EVALUACIONES: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
   'ALUMNO',
@@ -95,6 +102,13 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // lectura. El Administrativo no recibe nada. Nadie los borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Anuncio')
   if (LEEN_ANUNCIOS.includes(usuario.rol)) can('read', 'Anuncio')
+
+  // NOT-01 (RN-10): evaluaciones de una sección. Las crea el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante, el alumno y el Director, este en solo lectura. Editar es
+  // NOT-03; nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Evaluacion')
+  if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
 
   return build()
 }

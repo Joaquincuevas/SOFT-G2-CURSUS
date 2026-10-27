@@ -10,6 +10,7 @@ import { CarrerasModule } from './carreras/carreras.module.js'
 import { PerfilModule } from './perfil/perfil.module.js'
 import { EspacioModule } from './espacio/espacio.module.js'
 import { DashboardModule } from './dashboard/dashboard.module.js'
+import { NotasModule } from './notas/notas.module.js'
 import { AnunciosModule } from './anuncios/anuncios.module.js'
 
 @Module({
@@ -23,6 +24,7 @@ import { AnunciosModule } from './anuncios/anuncios.module.js'
     PerfilModule,
     EspacioModule,
     DashboardModule,
+    NotasModule,
     AnunciosModule,
   ],
   controllers: [AppController],

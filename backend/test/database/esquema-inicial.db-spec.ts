@@ -20,6 +20,7 @@ const TABLAS = [
   'carrera',
   'curso',
   'curso_cambio',
+  'evaluacion',
   'facultad',
   'horario_seccion',
   'inscripcion',
@@ -165,6 +166,11 @@ describe('migraciones', () => {
     const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
+    // CrearEvaluacion (NOT-01): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_EVALUACION = SIN_ANUNCIO.filter((tabla) => tabla !== 'evaluacion')
+    expect(await tablasExistentes()).toEqual(SIN_EVALUACION)
+
     // AgregarCredencialProvisoria es ahora la última: quita la columna de
     // usuario.
     await bd.undoLastMigration()
@@ -173,11 +179,11 @@ describe('migraciones', () => {
         WHERE table_name = 'usuario' AND column_name = 'credencial_provisoria'`,
     )
     expect(Number(provisoria)).toBe(0)
-    expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
+    expect(await tablasExistentes()).toEqual(SIN_EVALUACION)
 
     // CrearAsignacionCambio: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ASIGNACION_CAMBIO = SIN_ANUNCIO.filter(
+    const SIN_ASIGNACION_CAMBIO = SIN_EVALUACION.filter(
       (tabla) => tabla !== 'asignacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_ASIGNACION_CAMBIO)
@@ -329,6 +335,7 @@ describe('migraciones', () => {
         'ayudante_seccion',
         'carrera',
         'curso',
+        'evaluacion',
         'facultad',
         'horario_seccion',
         'inscripcion',
