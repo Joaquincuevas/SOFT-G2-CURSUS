@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'actividad',
   'anuncio',
   'asignacion_cambio',
   'ayudante_seccion',
@@ -162,9 +163,14 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearAnuncio es la última: solo quita su tabla.
+    // CrearActividad (MAT-08) es la última: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
+    const SIN_ACTIVIDAD = TABLAS.filter((tabla) => tabla !== 'actividad')
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
+
+    // CrearAnuncio: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ANUNCIO = SIN_ACTIVIDAD.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
     // CrearClase (ASI-01): solo quita su tabla.
@@ -337,6 +343,7 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'actividad',
         'anuncio',
         'ayudante_seccion',
         'carrera',

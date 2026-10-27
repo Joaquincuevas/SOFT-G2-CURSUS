@@ -26,6 +26,7 @@ import { AgregarCredencialProvisoria1792530000000 } from './migrations/179253000
 import { CrearClase1792550000000 } from './migrations/1792550000000-CrearClase.js'
 import { CrearEvaluacion1792540000000 } from './migrations/1792540000000-CrearEvaluacion.js'
 import { CrearAnuncio1792560000000 } from './migrations/1792560000000-CrearAnuncio.js'
+import { CrearActividad1792590000000 } from './migrations/1792590000000-CrearActividad.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -73,6 +74,7 @@ export function opcionesDataSource(
       CrearEvaluacion1792540000000,
       CrearClase1792550000000,
       CrearAnuncio1792560000000,
+      CrearActividad1792590000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
