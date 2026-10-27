@@ -42,6 +42,7 @@ El PUT:
 - **409** si la clase ya tiene asistencia: corregirla es ASI-04. También si dos guardados llegan a la vez (índice único).
 - **400** si la sección no tiene alumnos inscritos, o si la lista no coincide exactamente con los alumnos activos: responde `{ message, faltantes, sobrantes, repetidos }` con los ids de cada caso.
 - 400 por un cuerpo mal formado (sin `marcas`, `presente` no booleano, `alumnoId` que no es UUID o campos extra).
+- La lista se valida contra las inscripciones activas **fijadas** con `FOR SHARE`: si el Administrativo quita a un alumno (GES-19) mientras se guarda, su acción espera a que termine el guardado. Un alumno inscrito después queda sin marca en esa clase. Los UUID se comparan en minúsculas.
 - Todo se guarda en una sola transacción: una fila por alumno.
 
 ## Datos
