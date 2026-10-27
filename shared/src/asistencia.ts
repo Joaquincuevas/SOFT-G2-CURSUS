@@ -21,3 +21,44 @@ export interface CrearClase {
   fecha?: string
   inicio: string
 }
+
+// ASI-02 (RN-13): asistencia de una clase
+// (/api/espacio/secciones/:id/clases/:claseId/asistencia).
+
+// Un alumno con su marca: null mientras la clase no tiene asistencia. Sin
+// correo: la lista también la lee el ayudante (RE-10).
+export interface AlumnoAsistencia {
+  id: string
+  nombre: string
+  presente: boolean | null
+}
+
+// GET y respuesta del PUT. Con asistencia registrada, `alumnos` son las filas
+// guardadas (aunque un alumno ya no esté inscrito); sin ella, los alumnos
+// activos de la sección.
+export interface AsistenciaClase {
+  clase: Clase
+  registrada: { por: { id: string; nombre: string }; en: string } | null
+  alumnos: AlumnoAsistencia[]
+}
+
+export interface MarcaAsistencia {
+  alumnoId: string
+  presente: boolean
+}
+
+// Body del PUT: una marca por cada alumno activo de la sección.
+export interface GuardarAsistencia {
+  marcas: MarcaAsistencia[]
+}
+
+export const MAX_MARCAS_ASISTENCIA = 1000
+
+// 400 cuando la lista no coincide con los alumnos activos de la sección.
+export interface ErrorListaAsistencia {
+  statusCode: 400
+  message: string
+  faltantes: string[]
+  sobrantes: string[]
+  repetidos: string[]
+}
