@@ -25,6 +25,8 @@ Se extienden las rutas de ANU-01:
 
 La migración nueva `1792600000000-DirigirAnuncioSeccion` agrega `anuncio.seccion_id` nullable y un índice parcial para los anuncios de sección. La FK compuesta `fk_anuncio_seccion` exige que sección, curso y universidad coincidan. Los anuncios existentes conservan `NULL` y su visibilidad general. RLS conserva el aislamiento institucional; el guard y el filtro SQL aplican la pertenencia a la sección, como el resto del espacio.
 
+Se integra `develop` mediante merge y se conserva `1792570000000-CrearNotaCambio` (NOT-04). ANU-02 usa `1792600000000` para evitar esa colisión y los timestamps reservados por ASI-02 y MAT-08. En el estado actual, el rollback revierte primero ANU-02, después NOT-04 y luego ANU-01. Las futuras lecturas y los conteos de ANU-03/04 deben reutilizar el predicado de destinatario de `AnunciosService.listar`: RLS por sí sola solo filtra la universidad.
+
 Al revertir, los anuncios dirigidos se archivan antes de quitar la columna para evitar que su contenido pase a ser público para todo el curso. No se elimina su contenido. Los generales se conservan activos.
 
 ## Revisión local
@@ -57,7 +59,7 @@ npm run dev:front
 
 Se comprueba también la lectura de destinatario como alumno/ayudante, el bloqueo mientras se envía, la ausencia de un segundo POST y la conservación de campos ante un fallo.
 
-`anuncios.db-spec.ts` prueba la persistencia del destinatario, la lectura de profesor/ayudante/alumno, la exclusión de la otra sección y del Director, el retiro de una inscripción, anuncios archivados, `null` para curso completo, destinatarios inválidos y la FK de curso/sección. `esquema-inicial.db-spec.ts` incluye la reversión de la migración.
+`anuncios.db-spec.ts` prueba la persistencia del destinatario, la lectura de profesor/ayudante/alumno, la exclusión de la otra sección y del Director, el retiro de una inscripción, anuncios archivados, `null` para curso completo, destinatarios inválidos y la FK de curso/sección. `esquema-inicial.db-spec.ts` incluye la reversión de las migraciones y verifica que sus timestamps sean únicos y estén registrados en orden cronológico.
 
 ```bash
 npm run lint

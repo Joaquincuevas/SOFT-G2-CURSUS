@@ -26,6 +26,7 @@ const TABLAS = [
   'horario_seccion',
   'inscripcion',
   'limite_login',
+  'nota_cambio',
   'periodo',
   'refresh_token',
   'seccion',
@@ -159,6 +160,15 @@ afterAll(async () => {
 })
 
 describe('migraciones', () => {
+  it('tienen timestamps únicos y están registradas en orden cronológico', () => {
+    const timestamps = bd.migrations.map((migracion) =>
+      Number((migracion.name ?? migracion.constructor.name).slice(-13)),
+    )
+    expect(timestamps.every(Number.isInteger)).toBe(true)
+    expect(new Set(timestamps).size).toBe(timestamps.length)
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
+  })
+
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
@@ -166,9 +176,24 @@ describe('migraciones', () => {
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearNotaCambio (NOT-04): quita su tabla, su función y la
+    // clave (id, universidad_id) de evaluacion.
+    await bd.undoLastMigration()
+    const SIN_NOTA_CAMBIO = TABLAS.filter((tabla) => tabla !== 'nota_cambio')
+    expect(await tablasExistentes()).toEqual(SIN_NOTA_CAMBIO)
+    const [{ restosNotaCambio }] = await bd.query<
+      { restosNotaCambio: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_constraint
+                WHERE conname = 'uq_evaluacion_id_universidad')
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname = 'nota_cambio_inmutable') AS "restosNotaCambio"`,
+    )
+    expect(Number(restosNotaCambio)).toBe(0)
+
     // CrearAnuncio: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ANUNCIO = TABLAS.filter((tabla) => tabla !== 'anuncio')
+    const SIN_ANUNCIO = SIN_NOTA_CAMBIO.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
     // CrearClase (ASI-01): solo quita su tabla.
@@ -318,7 +343,8 @@ describe('migraciones', () => {
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
-        t !== 'asignacion_cambio',
+        t !== 'asignacion_cambio' &&
+        t !== 'nota_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
