@@ -93,10 +93,12 @@ function FormularioNotas({
   )
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Solo se envían los campos con un valor distinto del guardado. Un campo
-  // vacío no borra la nota: nada se elimina.
+  // Solo se envían los campos con un valor distinto del guardado, comparados
+  // como número: "5.50" sobre un 5,5 no es un cambio (la recarga traería las
+  // mismas notas y el formulario no se reiniciaría). Un campo vacío no borra
+  // la nota: nada se elimina.
   const cambios = alumnos.filter(
-    (a) => valores[a.id].trim() !== '' && valores[a.id] !== textoDe(a.nota),
+    (a) => valores[a.id].trim() !== '' && Number(valores[a.id]) !== a.nota,
   )
 
   async function guardar(event: FormEvent<HTMLFormElement>) {

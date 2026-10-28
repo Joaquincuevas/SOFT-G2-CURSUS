@@ -181,6 +181,25 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     terminarRecarga(SIN_NOTAS)
   })
 
+  test('la misma nota escrita de otra forma no es un cambio', async () => {
+    let puts = 0
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') puts++
+      return SIN_NOTAS
+    })
+    await abrirEvaluacion(panel)
+    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+
+    // Bruno ya tiene 5,5: guardarlo no cambiaría nada, y la recarga traería
+    // las mismas notas, así que Guardar quedaría deshabilitado sin salida.
+    escribir(panel, 'Bruno Díaz', '5.50')
+    expect(guardar).toBeDisabled()
+
+    escribir(panel, 'Ana Ávila', '6')
+    expect(guardar).toBeEnabled()
+    expect(puts).toBe(0)
+  })
+
   test('un 400 "Nota inválida" muestra el mensaje', async () => {
     const panel = await abrirNotas('AYUDANTE', (init) =>
       init?.method === 'PUT'
