@@ -55,17 +55,19 @@ class DirectorPruebaController {
     )
   }
 
-  // Crea una facultad en la universidad de la sesión. Usa @SoloSesion() y no
+  // Crea una carrera en la universidad de la sesión. Usa @SoloSesion() y no
   // @Puede('create', ...) a propósito: así se prueba que RLS frena al
   // Director aunque la API no lo hiciera. Con @Puede, la API ya le responde
-  // 403 (permisos.e2e-spec.ts).
+  // 403 (permisos.e2e-spec.ts). Una carrera y no una facultad: las facultades
+  // solo las crea el superadmin (GES-23).
   @SoloSesion()
-  @Post('facultades')
+  @Post('carreras')
   crear(@UniversidadActual() contexto: ContextoUniversidad) {
     return this.bd.consultarEnUniversidad(
       contexto,
-      `INSERT INTO facultad (universidad_id, nombre)
-       VALUES ($1, 'Facultad de prueba ' || gen_random_uuid())
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       SELECT $1, id, 'Carrera de prueba ' || gen_random_uuid()
+         FROM facultad WHERE universidad_id = $1 LIMIT 1
        RETURNING id`,
     )
   }
@@ -97,6 +99,9 @@ const todasLasFacultades = () =>
   bd.query<Facultad[]>(
     'SELECT id, nombre, universidad_id FROM facultad ORDER BY id',
   )
+
+const todasLasCarreras = () =>
+  bd.query<{ id: string }[]>('SELECT id FROM carrera ORDER BY id')
 
 beforeAll(async () => {
   admin = await new DataSource(opcionesDataSource()).initialize()
@@ -161,9 +166,9 @@ describe.each(UNIVERSIDADES.map((u) => u.dominio))(
     })
 
     it('RLS no le deja crear registros en su universidad', async () => {
-      const antes = await todasLasFacultades()
-      await pedir('post', '/api/prueba/facultades', token).expect(500)
-      expect(await todasLasFacultades()).toEqual(antes)
+      const antes = await todasLasCarreras()
+      await pedir('post', '/api/prueba/carreras', token).expect(500)
+      expect(await todasLasCarreras()).toEqual(antes)
     })
 
     it('/api/auth/yo sigue mostrando su universidad como "Directorio"', async () => {
@@ -199,7 +204,7 @@ describe('otros roles', () => {
 
   it('el Administrativo sí crea en su universidad (la ruta de prueba funciona)', async () => {
     const correo = `administrativo.ingenieria@${UNIVERSIDADES[0].dominio}`
-    await pedir('post', '/api/prueba/facultades', await tokenDe(correo)).expect(
+    await pedir('post', '/api/prueba/carreras', await tokenDe(correo)).expect(
       201,
     )
   })

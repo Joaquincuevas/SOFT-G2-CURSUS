@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router'
+import { ContextoSuperadmin } from './ContextoSuperadmin'
 import { Header } from './Header'
 import { MenuIcon } from './icons'
 import { Sidebar } from './Sidebar'
@@ -42,6 +43,7 @@ export function AppShell() {
       <main className="app-shell__main">
         <Header />
         <div className="app-shell__content">
+          <ContextoSuperadmin />
           <Outlet />
         </div>
       </main>

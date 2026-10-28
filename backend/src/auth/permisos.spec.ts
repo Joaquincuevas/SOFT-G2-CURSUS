@@ -62,7 +62,12 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Inscripcion: LECTURA,
   },
   ADMINISTRATIVO: { ...ADMINISTRATIVO },
-  SUPERADMIN: { ...ADMINISTRATIVO },
+  // GES-23: además crea y edita universidades y facultades.
+  SUPERADMIN: {
+    ...ADMINISTRATIVO,
+    Universidad: SIN_DELETE,
+    Facultad: SIN_DELETE,
+  },
   PROFESOR: {
     Universidad: LECTURA,
     Facultad: LECTURA,

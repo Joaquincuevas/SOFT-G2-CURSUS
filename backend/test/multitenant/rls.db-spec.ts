@@ -182,10 +182,13 @@ describe('RLS por universidad', () => {
       })
     })
 
+    // En carrera y no en facultad: universidad y facultad solo las escribe el
+    // superadmin (GES-23, test/gestion/universidades).
     it('permite crear un registro en su universidad', async () => {
       await comoApp(administrativo(), async (q) => {
         await q.query(
-          `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Nueva')`,
+          `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+           SELECT $1, id, 'Nueva' FROM facultad WHERE universidad_id = $1 LIMIT 1`,
           [universidades[NORTE]],
         )
       })

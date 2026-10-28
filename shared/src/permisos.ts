@@ -98,7 +98,12 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
         ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Inscripcion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
-      if (usuario.rol === 'SUPERADMIN') can('read', 'PanelSuperadmin')
+      // GES-23: desde su vista global crea y edita universidades y
+      // facultades (archivar es un update).
+      if (usuario.rol === 'SUPERADMIN') {
+        can('read', 'PanelSuperadmin')
+        can(['create', 'update'], ['Universidad', 'Facultad'])
+      }
       break
     case 'PROFESOR':
     case 'AYUDANTE':

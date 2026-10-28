@@ -1,0 +1,26 @@
+/* GES-23: el enlace para volver al Dashboard se ve como el botón secundario
+   de Carreras, cuyos estilos solo aplican a <button>. */
+.administrar-universidad__volver {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--button-height);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-button);
+  color: var(--color-primary);
+  background: var(--color-background);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.administrar-universidad__volver:hover {
+  border-color: var(--color-primary);
+}
+
+.administrar-universidad__volver:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

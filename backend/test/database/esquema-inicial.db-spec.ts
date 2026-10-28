@@ -176,8 +176,28 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // Las cuatro de MT-04 (superadmin) son las últimas. CrearSuperadminCambio
-    // quita su tabla, sus funciones y los triggers de auditoría.
+    // GestionarUniversidades (GES-23) es la última: no crea tablas. Quita el
+    // color, los índices de nombres, sus triggers y vuelve a las políticas de
+    // escritura de PermitirLecturaDirector.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ restosGestion }] = await bd.query<{ restosGestion: string }[]>(
+      `SELECT (SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'universidad' AND column_name = 'color')
+            + (SELECT count(*) FROM pg_class
+                WHERE relname IN ('ux_universidad_nombre_normalizado',
+                                  'ux_facultad_universidad_nombre_normalizado'))
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname IN ('validar_dominio_universidad',
+                                  'facultad_archivable'))
+            + (SELECT count(*) FROM pg_policies
+                WHERE tablename IN ('universidad', 'facultad')
+                  AND with_check LIKE '%SUPERADMIN%') AS "restosGestion"`,
+    )
+    expect(Number(restosGestion)).toBe(0)
+
+    // Las cuatro de MT-04 (superadmin). CrearSuperadminCambio quita su tabla,
+    // sus funciones y los triggers de auditoría.
     await bd.undoLastMigration()
     const SIN_SUPERADMIN = TABLAS.filter(
       (tabla) => tabla !== 'superadmin_cambio',

@@ -6,12 +6,12 @@ Tarjeta: [F4 · MT-04 Superadmin con acceso total a todas las universidades](htt
 
 1. Una persona crea el superadmin con un comando (ver "Crear el superadmin"). Tiene una contraseña provisoria.
 2. El superadmin inicia sesión con su correo, que no es de ninguna universidad, y debe cambiar la contraseña antes de seguir (PER-03).
-3. Elige una universidad y una facultad en "Universidad y facultad". Mientras no elija, cualquier ruta lo lleva a esa pantalla y la API le responde 403 con "Elige una universidad y una facultad para continuar".
+3. Llega al Dashboard, que muestra las universidades con sus facultades (la vista global). Elige una facultad y la app pasa a trabajar en ella. Mientras no elija, las demás vistas muestran el aviso "Elige una universidad primero" con un botón al Dashboard, sin redirigir, y la API le responde 403 con "Elige una universidad y una facultad para continuar". Su perfil no depende de la elección.
 4. Dentro de la facultad, trabaja con las mismas vistas y rutas del Administrativo: cursos, carreras, períodos, secciones, horarios, profesores, ayudantes y alumnos. En el espacio de una sección entra como Administrativo.
-5. Desde el menú puede cambiar de universidad o de facultad en cualquier momento. La elección vale para esa sesión: otra sesión del mismo superadmin elige la suya. Si la facultad o la universidad elegida se archiva, debe elegir otra.
+5. Una barra sobre el contenido muestra dónde está trabajando, con "Cambiar" (vuelve al Dashboard, que marca la facultad actual) y "Salir de la universidad" (vuelve a la vista global). La elección vale para esa sesión: otra sesión del mismo superadmin elige la suya. Si la facultad o la universidad elegida se archiva, debe elegir otra.
 6. Todo lo que crea o modifica queda en `superadmin_cambio`.
 
-Crear y editar universidades y facultades es GES-23, y crear usuarios de cualquier rol es GES-24.
+Crear y editar universidades y facultades es [GES-23](ges-23-universidades-facultades.md), que también agrega el Dashboard, la barra de contexto y salir de la universidad. Crear usuarios de cualquier rol es GES-24.
 
 ## API
 
@@ -19,6 +19,7 @@ Crear y editar universidades y facultades es GES-23, y crear usuarios de cualqui
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /api/superadmin/universidades` | `UniversidadElegible[]`: universidades vigentes, cada una con sus facultades vigentes. Solo el superadmin (`read PanelSuperadmin`); al resto, 403.                                                                    |
 | `PUT /api/superadmin/contexto`      | Body `{ universidadId, facultadId }` (UUID, si no 400). Guarda la elección en la sesión y responde el `UsuarioSesion` nuevo. 404 si la facultad no es de esa universidad o alguna está archivada. Solo el superadmin. |
+| `DELETE /api/superadmin/contexto`   | Salir de la universidad: quita la elección de la sesión (no borra datos) y responde el `UsuarioSesion` de la vista global. Solo el superadmin.                                                                        |
 | `GET /api/auth/yo`                  | Para el superadmin: `universidadId` y `facultadNombre` de la elección, o `null` y "CURSUS" mientras no elige.                                                                                                         |
 | `PATCH /api/perfil`                 | El superadmin edita su nombre aunque no haya elegido facultad.                                                                                                                                                        |
 | Rutas del Administrativo            | Con una facultad elegida, responden igual que al Administrativo de esa facultad. Sin elegir, 403.                                                                                                                     |
@@ -81,7 +82,7 @@ npm run build
 ```
 
 - `backend/test/multitenant/superadmin.db-spec.ts` (API):
-  - Login sin universidad, cambio obligatorio de la contraseña provisoria, lista de universidades y elección (404, 400 y la sesión nueva).
+  - Login sin universidad, cambio obligatorio de la contraseña provisoria, lista de universidades, elección (404, 400 y la sesión nueva) y salir de la universidad.
   - Las rutas del Administrativo responden lo mismo que al Administrativo de esa facultad.
   - Crear una carrera queda auditado, y el historial de un curso lo muestra como responsable.
   - Quitar un ayudante guarda el motivo en la auditoría.
@@ -94,11 +95,11 @@ npm run build
 - `backend/test/database/crear-superadmin.db-spec.ts`: el comando y sus validaciones.
 - `esquema-inicial.db-spec.ts` (restricciones y reversión de las migraciones) y `rls.db-spec.ts` (contrato de auditoría).
 - Tests unitarios: `universidad-actual.decorator.spec.ts`, `base-de-datos.service.spec.ts` y la matriz de `permisos.spec.ts`.
-- `frontend/src/pages/ElegirFacultad.test.tsx`: la redirección mientras no elige, las facultades de la universidad elegida, el envío, los errores, el cambio desde el menú y que otros roles no ven la opción.
+- `frontend/src/pages/PanelSuperadmin.test.tsx`: el Dashboard con las universidades, el aviso de las demás vistas mientras no elige (y el perfil sin aviso), la elección, la barra de contexto con "Cambiar" y "Salir de la universidad", los errores y que otros roles no ven la barra.
 
 ## Revisión
 
 1. Revisar las migraciones, en especial la política de `usuario`, el trigger del responsable y la auditoría.
 2. Revisar `contextoDeLaSesion` y que el superadmin no reciba nada fuera de la facultad elegida.
-3. Probar en local: crear el superadmin, entrar, cambiar la contraseña, elegir Ingeniería de Norte, crear una carrera y revisar `superadmin_cambio`, y cambiar a Salud de Sur.
+3. Probar en local: crear el superadmin, entrar, cambiar la contraseña, elegir Ingeniería de Norte en el Dashboard, crear una carrera y revisar `superadmin_cambio`, cambiar a Salud de Sur y salir de la universidad.
 4. Después del merge, en staging: aplicar `stack.sh staging`, crear el superadmin con `superadmin.sh staging` y confirmar que las migraciones corrieron en RDS.
