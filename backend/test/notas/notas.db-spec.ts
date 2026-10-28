@@ -907,6 +907,69 @@ describe('RLS de nota (NOT-05)', () => {
     })
   })
 
+  it('el AYUDANTE no puede insertar una nota PUBLICADA (RLS)', async () => {
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, estado, propuesta_por)
+           VALUES ($1, $2, $3, 4, 'PUBLICADA', $4)`,
+          [ids.norte, evaluacion, alumnos.carla, await idDe(AYUDANTE)],
+        ),
+      ).rejects.toMatchObject({
+        driverError: {
+          code: SIN_PERMISO,
+          message: expect.stringContaining('row-level security') as unknown,
+        },
+      })
+    })
+  })
+
+  it('el AYUDANTE no puede publicar una propuesta (RLS)', async () => {
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `UPDATE nota SET estado = 'PUBLICADA'
+            WHERE evaluacion_id = $1 AND alumno_id = $2`,
+          [evaluacion, alumnos.ana],
+        ),
+      ).rejects.toMatchObject({
+        driverError: {
+          code: SIN_PERMISO,
+          message: expect.stringContaining('row-level security') as unknown,
+        },
+      })
+    })
+  })
+
+  // Una fila que no pasa el USING de la política no se modifica: PostgreSQL
+  // la omite sin error, así que se verifica que el UPDATE no la alcanza.
+  it('el AYUDANTE no puede modificar una nota PUBLICADA: el UPDATE no la alcanza', async () => {
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      const [, modificadas] = await q.query<[unknown[], number]>(
+        `UPDATE nota SET valor = 2
+          WHERE evaluacion_id = $1 AND alumno_id = $2 RETURNING id`,
+        [evaluacion, alumnos.base],
+      )
+      expect(modificadas).toBe(0)
+      // Control positivo: la propuesta de la misma evaluación sí se modifica.
+      const [, propuestas] = await q.query<[unknown[], number]>(
+        `UPDATE nota SET valor = 2
+          WHERE evaluacion_id = $1 AND alumno_id = $2 RETURNING id`,
+        [evaluacion, alumnos.ana],
+      )
+      expect(propuestas).toBe(1)
+    })
+    expect(await filasDe(evaluacion)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          alumno_id: alumnos.base,
+          valor: '6.0',
+          estado: 'PUBLICADA',
+        }),
+      ]),
+    )
+  })
+
   it('el ALUMNO no puede modificar notas: el UPDATE no alcanza ninguna fila', async () => {
     await comoApp({ universidadId: ids.norte, rol: 'ALUMNO' }, async (q) => {
       const [, modificadas] = await q.query<[unknown[], number]>(

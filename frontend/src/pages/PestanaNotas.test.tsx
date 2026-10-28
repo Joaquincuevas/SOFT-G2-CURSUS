@@ -152,11 +152,17 @@ describe('pestaña Notas (NOT-01)', () => {
       expect(
         panel.queryByRole('button', { name: 'Crear evaluación' }),
       ).not.toBeInTheDocument()
-      // NOT-05: el ayudante solo tiene el botón para ingresar las notas.
-      expect(
-        panel.queryAllByRole('button').map((b) => b.getAttribute('aria-label')),
-      ).toEqual(
-        rol === 'AYUDANTE' ? ['Notas de Control 1', 'Notas de Solemne 1'] : [],
+      // NOT-05: el ayudante tiene exactamente un botón por evaluación para
+      // ingresar sus notas, y ningún otro; el alumno, ninguno.
+      const esperados =
+        rol === 'AYUDANTE' ? ['Notas de Control 1', 'Notas de Solemne 1'] : []
+      const botones = panel.queryAllByRole('button')
+      expect(botones).toHaveLength(esperados.length)
+      botones.forEach((boton, indice) =>
+        expect(boton).toHaveAccessibleName(esperados[indice]),
+      )
+      expect(botones.map((boton) => boton.textContent)).toEqual(
+        esperados.map(() => 'Ingresar notas'),
       )
     },
   )
