@@ -23,6 +23,18 @@ export interface Anuncio {
   seccion: { id: string; numero: number } | null
   // Presente en el GET del alumno; ausente en publicación y otros roles.
   nuevo?: boolean
+  // Ausente hasta la primera edición real. No reemplaza publicadoEn.
+  editadoEn?: string
+}
+
+export type EditarAnuncio = Pick<PublicarAnuncio, 'titulo' | 'cuerpo'>
+
+export interface CambioAnuncio {
+  id: string
+  titulo: string
+  cuerpo: string
+  fecha: string
+  responsable: { id: string; nombre: string }
 }
 
 // POST /api/espacio/secciones/:id/anuncios/lecturas. Solo IDs ya mostrados.

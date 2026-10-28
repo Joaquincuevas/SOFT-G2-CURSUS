@@ -131,6 +131,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // publica) y los leen el ayudante, el alumno y el Director, este en solo
   // lectura. El Administrativo no recibe nada. Nadie los borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Anuncio')
+  if (usuario.rol === 'PROFESOR') can('update', 'Anuncio')
   if (LEEN_ANUNCIOS.includes(usuario.rol)) can('read', 'Anuncio')
 
   // NOT-01 (RN-10): evaluaciones de una sección. Las crea el profesor (el
