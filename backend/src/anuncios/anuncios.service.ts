@@ -37,7 +37,7 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
     : null,
 })
 
-// ANU-01/02 (RN-09): el guard verifica el acceso y el listado filtra el
+// ANU-01/02/03 (RN-09): el guard verifica el acceso y el listado filtra el
 // destinatario antes de devolver cualquier título o cuerpo.
 // IMPORTANTE para ANU-03/04: RLS solo aísla universidades. Tanto la vista
 // como el conteo de anuncios nuevos deben reutilizar el filtro de destinatario
@@ -46,7 +46,8 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
 export class AnunciosService {
   constructor(private readonly bd: BaseDeDatos) {}
 
-  // Activos, del más nuevo al más antiguo. El Director lee solo los generales
+  // Activos, del más nuevo al más antiguo; id DESC desempata fechas iguales
+  // para mantener un orden estable entre lecturas. El Director lee solo los generales
   // en cualquier universidad, en una transacción READ ONLY.
   async listar(
     contexto: ContextoUniversidad,

@@ -13,7 +13,8 @@ import './PestanaAnuncios.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
 
-// La API entrega los anuncios generales y los dirigidos a esta sección.
+// ANU-03: la API filtra los destinatarios y ordena por fecha antes de responder.
+// Se conserva ese orden; no se consultan anuncios de otras secciones.
 export function PestanaAnuncios({
   seccionId,
   numeroSeccion,
@@ -25,6 +26,12 @@ export function PestanaAnuncios({
   return (
     <section className="anuncios" aria-label="Anuncios del curso">
       <h3 className="vista-seccion__subtitulo">Anuncios del curso</h3>
+      {rol === 'ALUMNO' && (
+        <p className="anuncios__ayuda">
+          Anuncios de todo el curso y de tu sección, del más reciente al más
+          antiguo.
+        </p>
+      )}
       {rol === 'PROFESOR' && (
         <FormularioAnuncio
           ruta={ruta}
@@ -43,7 +50,7 @@ export function PestanaAnuncios({
       ) : anuncios.length === 0 ? (
         <p className="dashboard__texto">Aún no hay anuncios</p>
       ) : (
-        <ul className="anuncios__lista" aria-label="Anuncios publicados">
+        <ol className="anuncios__lista" aria-label="Anuncios publicados">
           {anuncios.map((anuncio) => (
             <li key={anuncio.id} className="anuncios__anuncio">
               <article aria-labelledby={`anuncio-${anuncio.id}`}>
@@ -65,7 +72,7 @@ export function PestanaAnuncios({
               </article>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
     </section>
   )
