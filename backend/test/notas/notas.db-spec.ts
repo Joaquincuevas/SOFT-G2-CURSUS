@@ -715,7 +715,7 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     expect(await eventosDe(evaluacion)).toEqual([])
   })
 
-  it('una nota publicada en la lista rechaza todas, también las nuevas que van antes', async () => {
+  it('una nota publicada en la lista rechaza todas antes de escribir, también las nuevas que van antes', async () => {
     const evaluacion = await crearEvaluacion()
     await insertarDirecto(evaluacion, {
       alumno_id: alumnos.ana,
@@ -723,17 +723,38 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
       estado: 'PUBLICADA',
     })
 
-    await guardar(
-      AYUDANTE,
-      evaluacion,
-      notasDe([
-        [alumnos.bruno, 5],
-        [alumnos.ana, 3],
-      ]),
-      400,
-    )
+    // Un trigger que aborta cualquier escritura en nota o nota_cambio de esta
+    // evaluación: si el servicio escribiera la nota de Bruno antes de ver la
+    // publicada (aunque luego se revierta), respondería 500 y no 400.
+    await bd.query(`CREATE FUNCTION test_sin_escrituras_nota() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'escritura inesperada'; END $$`)
+    for (const tabla of ['nota', 'nota_cambio']) {
+      await bd.query(`CREATE TRIGGER test_sin_escrituras_nota
+        BEFORE INSERT OR UPDATE ON ${tabla}
+        FOR EACH ROW WHEN (NEW.evaluacion_id = '${evaluacion}')
+        EXECUTE FUNCTION test_sin_escrituras_nota()`)
+    }
+    try {
+      const respuesta = await guardar(
+        AYUDANTE,
+        evaluacion,
+        notasDe([
+          [alumnos.bruno, 5],
+          [alumnos.ana, 3],
+        ]),
+        400,
+      )
+      expect(respuesta.message).toBe(
+        'Una nota publicada no se cambia desde aquí',
+      )
+    } finally {
+      for (const tabla of ['nota', 'nota_cambio']) {
+        await bd.query(`DROP TRIGGER test_sin_escrituras_nota ON ${tabla}`)
+      }
+      await bd.query('DROP FUNCTION test_sin_escrituras_nota()')
+    }
 
-    // Ni la nota nueva de Bruno ni un evento.
+    // Ni la nota nueva de Bruno ni un evento; la publicada, intacta.
     expect(await filasDe(evaluacion)).toEqual([
       expect.objectContaining({
         alumno_id: alumnos.ana,
