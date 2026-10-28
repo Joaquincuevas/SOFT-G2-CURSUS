@@ -703,6 +703,68 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     expect(await eventosDe(evaluacion)).toEqual([])
   })
 
+  it('una nota publicada en la lista rechaza todas, también las nuevas que van antes', async () => {
+    const evaluacion = await crearEvaluacion()
+    await insertarDirecto(evaluacion, {
+      alumno_id: alumnos.ana,
+      valor: 6,
+      estado: 'PUBLICADA',
+    })
+
+    await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe([
+        [alumnos.bruno, 5],
+        [alumnos.ana, 3],
+      ]),
+      400,
+    )
+
+    // Ni la nota nueva de Bruno ni un evento.
+    expect(await filasDe(evaluacion)).toEqual([
+      expect.objectContaining({
+        alumno_id: alumnos.ana,
+        valor: '6.0',
+        estado: 'PUBLICADA',
+      }),
+    ])
+    expect(await eventosDe(evaluacion)).toEqual([])
+  })
+
+  it('si el UPDATE no modifica la nota no responde 200 ni deja cambios', async () => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 5]]), 200)
+    const filas = await filasDe(evaluacion)
+    const eventos = await eventosDe(evaluacion)
+
+    // Un trigger que omite el UPDATE de las notas de esta evaluación simula
+    // un UPDATE que no alcanza la fila (por la RLS u otra razón).
+    await bd.query(`CREATE FUNCTION test_omitir_update_nota() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$`)
+    await bd.query(`CREATE TRIGGER test_omitir_update_nota BEFORE UPDATE ON nota
+      FOR EACH ROW WHEN (OLD.evaluacion_id = '${evaluacion}')
+      EXECUTE FUNCTION test_omitir_update_nota()`)
+    try {
+      await guardar(
+        AYUDANTE,
+        evaluacion,
+        notasDe([
+          [alumnos.bruno, 4],
+          [alumnos.ana, 6],
+        ]),
+        500,
+      )
+    } finally {
+      await bd.query('DROP TRIGGER test_omitir_update_nota ON nota')
+      await bd.query('DROP FUNCTION test_omitir_update_nota()')
+    }
+
+    // Ni la nota nueva de Bruno, ni otro evento.
+    expect(await filasDe(evaluacion)).toEqual(filas)
+    expect(await eventosDe(evaluacion)).toEqual(eventos)
+  })
+
   it.each([
     ['el profesor de la sección', PROFESOR, 403],
     ['un alumno inscrito', ALUMNO, 403],

@@ -9,6 +9,8 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import {
@@ -58,6 +60,8 @@ function repetidos(ids: string[]): string[] {
 // quién guarda.
 @Injectable()
 export class NotasService {
+  private readonly logger = new Logger(NotasService.name)
+
   constructor(
     private readonly bd: BaseDeDatos,
     private readonly auditoria: AuditoriaNotasService,
@@ -187,15 +191,20 @@ export class NotasService {
         [contexto.universidadId, evaluacionId],
       )
       const anteriores = new Map(actuales.map((n) => [n.alumno_id, n]))
+      // Publicar (NOT-11) y recorregir (NOT-15) son otras tarjetas. Se revisa
+      // antes de escribir: si viene una nota publicada, no se guarda ninguna.
+      const publicada = notas.some(({ alumnoId }) => {
+        const estado = anteriores.get(alumnoId)?.estado
+        return estado !== undefined && estado !== 'PROPUESTA'
+      })
+      if (publicada) {
+        throw new BadRequestException(
+          'Una nota publicada no se cambia desde aquí',
+        )
+      }
 
       for (const { alumnoId, nota } of notas) {
         const anterior = anteriores.get(alumnoId)
-        // Publicar (NOT-11) y recorregir (NOT-15) son otras tarjetas.
-        if (anterior && anterior.estado !== 'PROPUESTA') {
-          throw new BadRequestException(
-            'Una nota publicada no se cambia desde aquí',
-          )
-        }
         const evento = await this.auditoria.registrar(bd, {
           universidadId: contexto.universidadId,
           evaluacionId,
@@ -209,12 +218,31 @@ export class NotasService {
         // fila.
         if (evento === null) continue
         if (anterior) {
-          await bd.query(
-            `UPDATE nota SET valor = $4, propuesta_por = $5
-              WHERE universidad_id = $1 AND evaluacion_id = $2
-                AND alumno_id = $3 AND archived_at IS NULL`,
+          // La RLS omite sin error una fila que no puede modificar: si el
+          // UPDATE no la alcanza, se aborta (con el evento ya registrado) en
+          // vez de responder 200 con la nota sin cambiar.
+          const [{ filas }] = await bd.query<{ filas: number }>(
+            `WITH modificada AS (
+               UPDATE nota SET valor = $4, propuesta_por = $5
+                WHERE universidad_id = $1 AND evaluacion_id = $2
+                  AND alumno_id = $3 AND archived_at IS NULL
+               RETURNING 1)
+             SELECT count(*)::int AS filas FROM modificada`,
             [contexto.universidadId, evaluacionId, alumnoId, nota, usuarioId],
           )
+          if (filas !== 1) {
+            // Sin datos personales: el contexto basta para ubicar el caso.
+            this.logger.error({
+              mensaje: 'El UPDATE de una nota no modificó la fila',
+              evaluacionId,
+              seccionId: seccion.id,
+              universidadId: contexto.universidadId,
+              filas,
+            })
+            throw new InternalServerErrorException(
+              'No se pudieron guardar las notas',
+            )
+          }
         } else {
           await bd.query(
             `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por)
