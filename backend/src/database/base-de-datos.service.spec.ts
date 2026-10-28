@@ -172,6 +172,49 @@ describe('BaseDeDatos.consultarComoSuperadmin (MT-04)', () => {
   })
 })
 
+describe('BaseDeDatos.escribirComoSuperadmin (GES-23)', () => {
+  it('fija el rol de la API, el rol de superadmin y su id antes de escribir', async () => {
+    const { bd, consultas, query } = crearBaseDeDatos()
+
+    await bd.escribirComoSuperadmin(
+      { id: SUPERADMIN, rol: 'SUPERADMIN' },
+      (tx) => tx.query('UPDATE universidad SET nombre = $1', ['Norte']),
+    )
+
+    expect(consultas.mock.calls).toEqual([
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [
+        expect.stringContaining("set_config('app.superadmin_id', $2, true)"),
+        ['SUPERADMIN', SUPERADMIN],
+      ],
+      ['UPDATE universidad SET nombre = $1', ['Norte']],
+    ])
+    // Escribe: no es de solo lectura, y no fija universidad.
+    expect(consultas.mock.calls.flat()).not.toContain(
+      'SET TRANSACTION READ ONLY',
+    )
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+    undefined,
+  ] as const)('responde 403 al rol %s', async (rol) => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await expect(
+      bd.escribirComoSuperadmin({ id: SUPERADMIN, rol }, (tx) =>
+        tx.query('SELECT 1'),
+      ),
+    ).rejects.toThrow(ForbiddenException)
+    expect(consultas).not.toHaveBeenCalled()
+  })
+})
+
 describe('fijarMotivo (MT-04)', () => {
   it('fija app.motivo solo para la transacción', async () => {
     const consultas = vi.fn(() => Promise.resolve([]))

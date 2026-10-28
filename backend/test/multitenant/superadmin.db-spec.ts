@@ -50,7 +50,7 @@ async function login(correo: string, password = PASSWORD): Promise<string> {
 }
 
 const pedir = (
-  metodo: 'get' | 'post' | 'put' | 'patch',
+  metodo: 'get' | 'post' | 'put' | 'patch' | 'delete',
   ruta: string,
   token: string,
 ) =>
@@ -195,6 +195,29 @@ describe('elegir universidad y facultad', () => {
   it('cada sesión tiene su propia elección', async () => {
     const otra = await loginSuperadmin()
     await pedir('get', '/api/cursos', otra).expect(403)
+  })
+
+  it('al salir de la universidad vuelve a la vista global, sin borrar datos', async () => {
+    const otra = await loginSuperadmin()
+    await elegir(otra, ingenieriaNorte).expect(200)
+    await pedir('get', '/api/cursos', otra).expect(200)
+
+    const respuesta = await pedir(
+      'delete',
+      '/api/superadmin/contexto',
+      otra,
+    ).expect(200)
+    expect(respuesta.body).toMatchObject({
+      rol: 'SUPERADMIN',
+      universidadId: null,
+      facultadNombre: null,
+      periodoActivo: null,
+    })
+    const yo = await pedir('get', '/api/auth/yo', otra).expect(200)
+    expect(yo.body).toEqual(respuesta.body)
+    await pedir('get', '/api/cursos', otra).expect(403)
+    // Solo cambia su sesión: la otra sigue en la facultad elegida.
+    await pedir('get', '/api/cursos', token).expect(200)
   })
 })
 
@@ -366,22 +389,27 @@ describe('dentro de la facultad elegida', () => {
   })
 
   it('si la facultad elegida se archiva, debe elegir otra', async () => {
-    const otra = await loginSuperadmin()
-    await elegir(otra, economiaNorte).expect(200)
-    await bd.query('UPDATE facultad SET archived_at = now() WHERE id = $1', [
-      economiaNorte.facultadId,
-    ])
-    try {
-      await pedir('get', '/api/cursos', otra).expect(403)
-      const yo = await pedir('get', '/api/auth/yo', otra).expect(200)
-      expect(yo.body).toMatchObject({ universidadId: null })
-      // Tampoco la puede volver a elegir.
-      await elegir(otra, economiaNorte).expect(404)
-    } finally {
-      await bd.query('UPDATE facultad SET archived_at = NULL WHERE id = $1', [
-        economiaNorte.facultadId,
-      ])
+    // Una facultad sin carreras ni usuarios: solo esas se archivan (GES-23).
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO facultad (universidad_id, nombre)
+       VALUES ($1, 'Facultad por archivar') RETURNING id`,
+      [ingenieriaNorte.universidadId],
+    )
+    const porArchivar = {
+      universidadId: ingenieriaNorte.universidadId,
+      facultadId: id,
     }
+    const otra = await loginSuperadmin()
+    await elegir(otra, porArchivar).expect(200)
+    await bd.query('UPDATE facultad SET archived_at = now() WHERE id = $1', [
+      id,
+    ])
+
+    await pedir('get', '/api/cursos', otra).expect(403)
+    const yo = await pedir('get', '/api/auth/yo', otra).expect(200)
+    expect(yo.body).toMatchObject({ universidadId: null })
+    // Tampoco la puede volver a elegir.
+    await elegir(otra, porArchivar).expect(404)
   })
 
   it('edita su propio nombre en el perfil', async () => {
@@ -406,6 +434,7 @@ describe('los demás roles mantienen su aislamiento', () => {
       const token = await login(correo)
       await pedir('get', '/api/superadmin/universidades', token).expect(403)
       await elegir(token, ingenieriaNorte).expect(403)
+      await pedir('delete', '/api/superadmin/contexto', token).expect(403)
     },
   )
 
