@@ -501,6 +501,96 @@ describe('ANU-02: anuncios para una sección', () => {
   })
 })
 
+describe('ANU-03: lectura cronológica del alumno', () => {
+  it('mezcla generales y propios por fecha, desempata de forma estable y excluye los demás', async () => {
+    const creados: Anuncio[] = []
+    const crear = async (
+      seccionId: string,
+      titulo: string,
+      fecha: string,
+      privado = false,
+    ) => {
+      const anuncio = await publicar(
+        seccionId === secciones.s2 ? demo.profesor2 : PROFESOR,
+        seccionId,
+        {
+          titulo,
+          cuerpo: `Contenido de ${titulo}\nSegunda línea.`,
+          ...(privado ? { seccionId } : {}),
+        },
+      )
+      creados.push(anuncio)
+      await bd.query('UPDATE anuncio SET created_at = $2 WHERE id = $1', [
+        anuncio.id,
+        fecha,
+      ])
+      return { ...anuncio, publicadoEn: fecha }
+    }
+
+    try {
+      // Se insertan fuera de orden cronológico y con dos fechas iguales. Las
+      // fechas futuras separan estos anuncios de los creados por ANU-01/02.
+      const reciente = await crear(
+        secciones.s2,
+        'ANU-03 general reciente',
+        '2090-10-03T12:00:00.000Z',
+      )
+      const antiguo = await crear(
+        secciones.s1,
+        'ANU-03 general antiguo',
+        '2090-10-01T12:00:00.000Z',
+      )
+      const propio = await crear(
+        secciones.s1,
+        'ANU-03 privado propio',
+        reciente.publicadoEn,
+        true,
+      )
+      const ajeno = await crear(
+        secciones.s2,
+        'ANU-03 privado ajeno',
+        '2090-10-04T12:00:00.000Z',
+        true,
+      )
+      const otroCurso = await crear(
+        secciones.otroCurso,
+        'ANU-03 otro curso',
+        '2090-10-05T12:00:00.000Z',
+      )
+      const archivado = await crear(
+        secciones.s1,
+        'ANU-03 archivado',
+        '2090-10-06T12:00:00.000Z',
+      )
+      await bd.query('UPDATE anuncio SET archived_at = now() WHERE id = $1', [
+        archivado.id,
+      ])
+
+      const empate = [reciente, propio].sort((a, b) => (a.id < b.id ? 1 : -1))
+      const esperado = [...empate, antiguo]
+      for (let lectura = 0; lectura < 2; lectura++) {
+        const lista = await listar(ALUMNO, secciones.s1)
+        // Compara también título, cuerpo multilínea, autor, fecha ISO y destino.
+        expect(lista.slice(0, 3)).toEqual(esperado)
+        for (const oculto of [ajeno, otroCurso, archivado]) {
+          expect(JSON.stringify(lista)).not.toContain(oculto.id)
+          expect(JSON.stringify(lista)).not.toContain(oculto.titulo)
+          expect(JSON.stringify(lista)).not.toContain(oculto.cuerpo)
+        }
+      }
+      // Otro alumno del mismo curso recibe los generales y su propio privado.
+      const otraSeccion = await listar(demo.alumno2, secciones.s2)
+      expect(otraSeccion.slice(0, 3)).toEqual([ajeno, reciente, antiguo])
+      expect(otraSeccion).not.toContainEqual(propio)
+    } finally {
+      await bd.query(
+        'UPDATE anuncio SET archived_at = now() WHERE id = ANY($1::uuid[])',
+        [creados.map((anuncio) => anuncio.id)],
+      )
+    }
+  })
+})
+
 describe('restricciones en la base de datos', () => {
   // Ejecuta la consulta con el rol de la API y la sesión dada (por defecto, la
   // universidad de Norte), dentro de una transacción que se revierte.
