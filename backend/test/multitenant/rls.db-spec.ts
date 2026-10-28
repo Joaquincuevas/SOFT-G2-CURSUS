@@ -358,6 +358,8 @@ describe('contrato del schema', () => {
         'nota_cambio',
         // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-02).
         'asistencia',
+        // Sin filas en el seed: su RLS la prueba test/materiales (MAT-08).
+        'actividad',
       ].sort(),
     )
     for (const tabla of tablas) {

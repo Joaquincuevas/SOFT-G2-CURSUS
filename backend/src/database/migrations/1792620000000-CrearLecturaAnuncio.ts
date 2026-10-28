@@ -2,8 +2,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 
 // ANU-04: la última visita se registra sobre los anuncios efectivamente
 // recibidos, no con un corte de reloj que pueda perder publicaciones concurrentes.
-export class CrearLecturaAnuncio1792610000000 implements MigrationInterface {
-  name = 'CrearLecturaAnuncio1792610000000'
+export class CrearLecturaAnuncio1792620000000 implements MigrationInterface {
+  name = 'CrearLecturaAnuncio1792620000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`ALTER TABLE anuncio ADD CONSTRAINT

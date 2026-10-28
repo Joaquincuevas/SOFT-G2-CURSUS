@@ -13,6 +13,7 @@ import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
 import { ROL_APP } from '../../src/database/base-de-datos.service.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
+import { DirigirAnuncioSeccion1792600000000 } from '../../src/database/migrations/1792600000000-DirigirAnuncioSeccion.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
 
 // ANU-01: base propia con el seed cargado, que se crea y se borra en cada
@@ -1060,9 +1061,12 @@ describe('reversión de ANU-02', () => {
       titulo: 'General al revertir',
       cuerpo: 'Todos los grupos',
     })
+    // Ejecuta el down y el up de la migración directamente: no es la última
+    // registrada (MAT-08 vino después), así que undoLastMigration no sirve.
+    const migracion = new DirigirAnuncioSeccion1792600000000()
+    const q = bd.createQueryRunner()
     try {
-      await bd.undoLastMigration() // ANU-04: quitar las lecturas antes de ANU-02.
-      await bd.undoLastMigration()
+      await migracion.down(q)
       const filas = await bd.query<{ id: string; archived_at: Date | null }[]>(
         'SELECT id, archived_at FROM anuncio WHERE id = ANY($1::uuid[])',
         [[privado.id, general.id]],
@@ -1072,7 +1076,8 @@ describe('reversión de ANU-02', () => {
       ).toBeInstanceOf(Date)
       expect(filas.find((a) => a.id === general.id)?.archived_at).toBeNull()
     } finally {
-      await bd.runMigrations()
+      await migracion.up(q)
+      await q.release()
     }
   })
 })

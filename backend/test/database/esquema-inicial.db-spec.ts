@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'actividad',
   'anuncio',
   'asignacion_cambio',
   'asistencia',
@@ -174,19 +175,28 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // ANU-04 quita solo el seguimiento de lectura, no los anuncios.
+    // CrearLecturaAnuncio (ANU-04) es la última: quita solo el seguimiento
+    // de lectura, no los anuncios.
     await bd.undoLastMigration()
     const SIN_LECTURA = TABLAS.filter((tabla) => tabla !== 'lectura_anuncio')
     expect(await tablasExistentes()).toEqual(SIN_LECTURA)
 
-    // ANU-02 quita el destinatario, manteniendo las tablas.
+    // CrearActividad (MAT-08): solo quita su tabla.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_LECTURA)
+    const SIN_ACTIVIDAD = SIN_LECTURA.filter((tabla) => tabla !== 'actividad')
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
+
+    // DirigirAnuncioSeccion (ANU-02) quita el destinatario, manteniendo las
+    // tablas.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
     // CrearAsistencia (ASI-02): quita su tabla y la clave
     // (id, universidad_id) de clase.
     await bd.undoLastMigration()
-    const SIN_ASISTENCIA = SIN_LECTURA.filter((tabla) => tabla !== 'asistencia')
+    const SIN_ASISTENCIA = SIN_ACTIVIDAD.filter(
+      (tabla) => tabla !== 'asistencia',
+    )
     expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
     const [{ restosAsistencia }] = await bd.query<
       { restosAsistencia: string }[]
@@ -390,6 +400,7 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'actividad',
         'anuncio',
         'asistencia',
         'ayudante_seccion',
