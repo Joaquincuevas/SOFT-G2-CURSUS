@@ -5,3 +5,7 @@ export const fechaAnuncio = (iso: string) =>
     dateStyle: 'long',
     timeStyle: 'short',
   })
+
+// Si el alumno navega antes de terminar el POST, el dashboard ya montado
+// vuelve a consultar cuando el servidor confirma una lectura.
+export const EVENTO_LECTURA_ANUNCIOS = 'cursus:lectura-anuncios'

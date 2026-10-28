@@ -8,6 +8,8 @@ Cada tarjeta del dashboard del alumno indica cuántos anuncios nuevos tiene su s
 
 Abrir el dashboard o el resumen del curso no registra una visita a Anuncios. Cuando el alumno abre la pestaña **Anuncios** y la lista carga correctamente, aparecen las etiquetas **Nuevo** según el estado anterior a esa visita y se registra automáticamente el conjunto recibido. Las etiquetas se mantienen durante esa lectura para que pueda distinguir qué acaba de llegar. Al volver al dashboard se consulta el contador actualizado; al volver a abrir la pestaña, los vistos ya no llevan etiqueta. Un anuncio posterior vuelve a aparecer como nuevo.
 
+Si se vuelve al dashboard mientras el registro todavía está pendiente, su confirmación notifica a la vista para volver a consultar el contador. Así no queda desactualizado por una respuesta lenta. Esto no altera las etiquetas del snapshot de Anuncios.
+
 Decisiones de esta tarjeta:
 
 - La primera visita considera nuevos todos los anuncios visibles existentes; no se inventan visitas anteriores al despliegue.

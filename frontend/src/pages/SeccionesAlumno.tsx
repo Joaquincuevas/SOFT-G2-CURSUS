@@ -1,14 +1,20 @@
 import type { SeccionAlumno } from '@cursus/shared'
+import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { rutaSeccion, textoBloque } from './misSecciones'
 import { useDatos } from './useDatos'
+import { EVENTO_LECTURA_ANUNCIOS } from './anuncios'
 
 export const RUTA_SECCIONES_ALUMNO = '/api/dashboard/secciones-alumno'
 
 export function SeccionesAlumno() {
   const [secciones, recargar] = useDatos<SeccionAlumno[]>(RUTA_SECCIONES_ALUMNO)
+  useEffect(() => {
+    window.addEventListener(EVENTO_LECTURA_ANUNCIOS, recargar)
+    return () => window.removeEventListener(EVENTO_LECTURA_ANUNCIOS, recargar)
+  }, [recargar])
   if (secciones === undefined) return <Cargando texto="Cargando tus cursos…" />
   if (secciones === null) {
     return (

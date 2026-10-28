@@ -37,6 +37,44 @@ const tarjetas = async () =>
   ).findAllByRole('link')
 
 describe('ESP-03: dashboard del alumno', () => {
+  test('si vuelve al dashboard con el registro pendiente, actualiza el contador cuando termina', async () => {
+    let leido = false
+    let registrar: (respuesta: Response) => void = () => {}
+    const pendiente = new Promise<Response>((resolve) => {
+      registrar = resolve
+    })
+    await renderConSesion('ALUMNO', '/', {
+      [RUTA_SECCIONES_ALUMNO]: () => [
+        { ...SECCIONES[0], anunciosNuevos: leido ? 0 : 1 },
+      ],
+      '/api/espacio/secciones/seccion-1/resumen': () => resumen,
+      '/api/espacio/secciones/seccion-1/anuncios': () => [
+        {
+          id: 'a',
+          titulo: 'Pendiente',
+          cuerpo: 'Mensaje',
+          autor: { id: 'p', nombre: 'Profesora' },
+          publicadoEn: '2026-10-27T15:00:00Z',
+          seccion: null,
+          nuevo: true,
+        },
+      ],
+      '/api/espacio/secciones/seccion-1/anuncios/lecturas': () => pendiente,
+    })
+    fireEvent.click((await tarjetas())[0])
+    fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
+    await screen.findByText('Nuevo')
+    fireEvent.click(screen.getByRole('link', { name: 'Volver al Dashboard' }))
+    expect((await tarjetas())[0]).toHaveTextContent('1 anuncio nuevo')
+    leido = true
+    registrar(new Response(null, { status: 204 }))
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: /ICC101/ })).toHaveTextContent(
+        '0 anuncios nuevos',
+      ),
+    )
+  })
+
   test('muestra el contador, abrir solo el curso lo conserva y abrir Anuncios lo actualiza al volver', async () => {
     let leido = false,
       marcas = 0

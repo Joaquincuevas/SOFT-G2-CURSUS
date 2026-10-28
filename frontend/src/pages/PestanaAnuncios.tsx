@@ -9,7 +9,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
-import { fechaAnuncio } from './anuncios'
+import { EVENTO_LECTURA_ANUNCIOS, fechaAnuncio } from './anuncios'
 import './PestanaAnuncios.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -112,6 +112,7 @@ function RegistrarLectura({
           }),
         })
         if (!respuesta.ok) throw new Error('No se registró la lectura')
+        window.dispatchEvent(new Event(EVENTO_LECTURA_ANUNCIOS))
         if (!vigente) return
       }
     }
