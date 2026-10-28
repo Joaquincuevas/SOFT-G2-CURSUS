@@ -1008,6 +1008,29 @@ describe('RLS de nota (NOT-05)', () => {
     })
   })
 
+  // Las FKs no miran la RLS: la condición universidad_id = universidad_actual()
+  // de la política es la única barrera de la base entre universidades.
+  it('un AYUDANTE no inserta notas de otra universidad ni mueve las suyas a otra', async () => {
+    await comoApp({ universidadId: ids.sur, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por)
+           VALUES ($1, $2, $3, 4, $4)`,
+          [ids.norte, evaluacion, alumnos.carla, await idDe(AYUDANTE)],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `UPDATE nota SET universidad_id = $1
+            WHERE evaluacion_id = $2 AND alumno_id = $3`,
+          [ids.sur, evaluacion, alumnos.ana],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
   it.each<Rol>(['ALUMNO', 'PROFESOR', 'ADMINISTRATIVO', 'DIRECTOR'])(
     'el %s no puede insertar',
     async (rol) => {
