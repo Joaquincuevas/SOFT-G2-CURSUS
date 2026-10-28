@@ -37,6 +37,13 @@ const USUARIOS: Record<
     universidadNombre: 'Universidad Demo Norte',
     facultadNombre: 'Facultad de Ingeniería',
   },
+  // MT-04: ya eligió Ingeniería de Norte. superadminSinElegir() lo deja sin
+  // elección, como queda después del login.
+  SUPERADMIN: {
+    nombre: 'Superadmin',
+    universidadNombre: 'Universidad Demo Norte',
+    facultadNombre: 'Facultad de Ingeniería',
+  },
 }
 
 export function usuarioDePrueba(rol: Rol): UsuarioSesion {
@@ -46,13 +53,26 @@ export function usuarioDePrueba(rol: Rol): UsuarioSesion {
     correo:
       rol === 'ADMINISTRATIVO'
         ? 'administrativo.ingenieria@norte.cursus.test'
-        : `${rol.toLowerCase()}@norte.cursus.test`,
+        : rol === 'SUPERADMIN'
+          ? 'superadmin@cursus.test'
+          : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
     debeCambiarPassword: false,
     // PERIODO del seed: año 2026, semestre 2.
     periodoActivo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
     ...USUARIOS[rol],
+  }
+}
+
+// MT-04: el superadmin recién llegado, sin universidad ni facultad elegidas.
+export function superadminSinElegir(): UsuarioSesion {
+  return {
+    ...usuarioDePrueba('SUPERADMIN'),
+    universidadId: null,
+    universidadNombre: 'CURSUS',
+    facultadNombre: null,
+    periodoActivo: null,
   }
 }
 
