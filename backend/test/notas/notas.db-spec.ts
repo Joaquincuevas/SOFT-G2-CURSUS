@@ -1,4 +1,9 @@
-import type { ErrorListaNotas, NotasEvaluacion, Rol } from '@cursus/shared'
+import {
+  type ErrorListaNotas,
+  MAX_NOTAS_GUARDADO,
+  type NotasEvaluacion,
+  type Rol,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -697,6 +702,32 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     const evaluacion = await crearEvaluacion()
     await guardar(AYUDANTE, evaluacion, cuerpo, 400)
     expect(await filasDe(evaluacion)).toEqual([])
+  })
+
+  it('una lista de más de 500 notas responde 400 antes de llegar al servicio', async () => {
+    const evaluacion = await crearEvaluacion()
+    const lista = (largo: number) =>
+      notasDe(
+        Array.from({ length: largo }, (): [string, unknown] => [NO_EXISTE, 5]),
+      )
+
+    // Con 500 la lista llega al servicio, que la rechaza por sus alumnos.
+    expect(
+      await guardar(AYUDANTE, evaluacion, lista(MAX_NOTAS_GUARDADO), 400),
+    ).toMatchObject({ sobrantes: [NO_EXISTE] })
+    // Con 501 la rechaza la validación del cuerpo (ArrayMaxSize).
+    const respuesta = await guardar(
+      AYUDANTE,
+      evaluacion,
+      lista(MAX_NOTAS_GUARDADO + 1),
+      400,
+    )
+    expect(respuesta.message).toEqual([
+      expect.stringContaining(String(MAX_NOTAS_GUARDADO)),
+    ])
+    expect(respuesta).not.toHaveProperty('sobrantes')
+    expect(await filasDe(evaluacion)).toEqual([])
+    expect(await eventosDe(evaluacion)).toEqual([])
   })
 
   it('una nota publicada no se cambia desde aquí', async () => {
