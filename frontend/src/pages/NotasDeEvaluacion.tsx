@@ -167,8 +167,10 @@ function FormularioNotas({
                   inputMode="decimal"
                   aria-label={`Nota de ${alumno.nombre}`}
                   value={valores[alumno.id]}
-                  // Una nota publicada la cambia el profesor (NOT-15).
-                  disabled={alumno.estado === 'PUBLICADA'}
+                  // Una nota publicada la cambia el profesor (NOT-15). Mientras
+                  // guarda tampoco: la recarga reinicia el formulario y
+                  // borraría lo escrito después de enviar.
+                  disabled={guardando || alumno.estado === 'PUBLICADA'}
                   onChange={(event) => {
                     alEditar()
                     setValores((actuales) => ({

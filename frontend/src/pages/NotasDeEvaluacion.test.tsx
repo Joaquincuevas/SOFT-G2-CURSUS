@@ -181,6 +181,31 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     terminarRecarga(SIN_NOTAS)
   })
 
+  test('mientras guarda no se puede escribir: la recarga borraría lo nuevo', async () => {
+    let terminarPut!: (valor: unknown) => void
+    const panel = await abrirNotas('AYUDANTE', (init) =>
+      init?.method === 'PUT'
+        ? new Promise((resolve) => {
+            terminarPut = resolve
+          })
+        : SIN_NOTAS,
+    )
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Zoe Ruiz', '4')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+
+    await waitFor(() =>
+      expect(panel.getByLabelText('Nota de Ana Ávila')).toBeDisabled(),
+    )
+    expect(panel.getByLabelText('Nota de Zoe Ruiz')).toBeDisabled()
+
+    terminarPut(json({}, 500))
+    // Si falla, se puede seguir editando.
+    await waitFor(() =>
+      expect(panel.getByLabelText('Nota de Ana Ávila')).toBeEnabled(),
+    )
+  })
+
   test('la misma nota escrita de otra forma no es un cambio', async () => {
     let puts = 0
     const panel = await abrirNotas('AYUDANTE', (init) => {
