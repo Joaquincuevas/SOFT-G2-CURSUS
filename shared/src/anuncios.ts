@@ -2,6 +2,7 @@
 
 export const LARGO_TITULO_ANUNCIO = 200
 export const LARGO_CUERPO_ANUNCIO = 5000
+export const MAX_ANUNCIOS_LECTURA = 100
 
 // Cuerpo de POST /api/espacio/secciones/:id/anuncios.
 export interface PublicarAnuncio {
@@ -20,4 +21,11 @@ export interface Anuncio {
   // Fecha ISO 8601 de publicación.
   publicadoEn: string
   seccion: { id: string; numero: number } | null
+  // Presente en el GET del alumno; ausente en publicación y otros roles.
+  nuevo?: boolean
+}
+
+// POST /api/espacio/secciones/:id/anuncios/lecturas. Solo IDs ya mostrados.
+export interface RegistrarLecturaAnuncios {
+  anuncioIds: string[]
 }

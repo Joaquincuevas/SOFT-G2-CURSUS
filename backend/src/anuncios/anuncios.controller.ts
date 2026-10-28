@@ -18,6 +18,7 @@ import {
 } from '../espacio/integrante-seccion.guard.js'
 import { AnunciosService } from './anuncios.service.js'
 import { PublicarAnuncioDto } from './publicar-anuncio.dto.js'
+import { RegistrarLecturaDto } from './registrar-lectura.dto.js'
 
 // Roles en la sección que leen sus anuncios. El Administrativo no (aunque
 // pase IntegranteSeccionGuard por ser de la facultad del curso).
@@ -36,11 +37,30 @@ export class AnunciosController {
   listar(
     @UniversidadActual() contexto: ContextoUniversidad,
     @SeccionActual() seccion: SeccionEspacio,
+    @Req() req: RequestConUsuario,
   ): Promise<Anuncio[]> {
     if (!LEEN.includes(seccion.rol)) {
       throw new ForbiddenException()
     }
-    return this.anuncios.listar(contexto, seccion)
+    return this.anuncios.listar(contexto, seccion, req.usuario?.sub as string)
+  }
+
+  @Puede('read', 'Anuncio')
+  @IntegranteDeSeccion()
+  @Post('lecturas')
+  @HttpCode(204)
+  registrarLectura(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Body() datos: RegistrarLecturaDto,
+  ): Promise<void> {
+    return this.anuncios.registrarLectura(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      datos.anuncioIds,
+    )
   }
 
   // Solo el profesor a cargo de la sección (cualquier profesor del curso

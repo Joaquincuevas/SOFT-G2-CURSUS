@@ -27,6 +27,7 @@ const TABLAS = [
   'facultad',
   'horario_seccion',
   'inscripcion',
+  'lectura_anuncio',
   'limite_login',
   'nota_cambio',
   'periodo',
@@ -174,12 +175,19 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearActividad (MAT-08) es la última: solo quita su tabla.
+    // CrearLecturaAnuncio (ANU-04) es la última: quita solo el seguimiento
+    // de lectura, no los anuncios.
     await bd.undoLastMigration()
-    const SIN_ACTIVIDAD = TABLAS.filter((tabla) => tabla !== 'actividad')
+    const SIN_LECTURA = TABLAS.filter((tabla) => tabla !== 'lectura_anuncio')
+    expect(await tablasExistentes()).toEqual(SIN_LECTURA)
+
+    // CrearActividad (MAT-08): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ACTIVIDAD = SIN_LECTURA.filter((tabla) => tabla !== 'actividad')
     expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
-    // ANU-02 quita el destinatario, manteniendo las tablas.
+    // DirigirAnuncioSeccion (ANU-02) quita el destinatario, manteniendo las
+    // tablas.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
@@ -368,7 +376,8 @@ describe('migraciones', () => {
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
         t !== 'asignacion_cambio' &&
-        t !== 'nota_cambio',
+        t !== 'nota_cambio' &&
+        t !== 'lectura_anuncio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(

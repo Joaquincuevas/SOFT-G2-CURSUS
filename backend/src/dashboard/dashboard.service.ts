@@ -9,6 +9,7 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 import { BLOQUES_HORARIO } from '../gestion/horarios.sql.js'
+import { anuncioPendiente, anunciosVisibles } from '../anuncios/anuncios.sql.js'
 
 interface FilaSeccion {
   id: string
@@ -46,7 +47,10 @@ export class DashboardService {
               json_build_object('id', c.id, 'codigo', c.codigo, 'nombre', c.nombre) AS curso,
               ${BLOQUES_HORARIO} AS horario,
               CASE WHEN pr.id IS NULL THEN NULL
-                ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor
+                ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor,
+              (SELECT count(*)::int FROM anuncio a
+                WHERE ${anunciosVisibles('c.id', 's.id')}
+                  AND ${anuncioPendiente('$2')}) AS "anunciosNuevos"
        FROM inscripcion i
        JOIN seccion s ON s.id = i.seccion_id AND s.universidad_id = i.universidad_id
        JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id

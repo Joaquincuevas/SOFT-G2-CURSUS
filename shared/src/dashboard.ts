@@ -15,4 +15,5 @@ export interface SeccionDashboard {
 // ESP-03: una tarjeta por inscripción activa del alumno en el período activo.
 export interface SeccionAlumno extends Omit<SeccionDashboard, 'alumnos'> {
   profesor: { id: string; nombre: string } | null
+  anunciosNuevos: number
 }

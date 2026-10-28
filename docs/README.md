@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
 - [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)

@@ -108,6 +108,10 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
   ],
   // Anuncios del curso de la sección (ANU-01).
   [/^\/api\/espacio\/secciones\/[^/]+\/anuncios$/, () => []],
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/anuncios\/lecturas$/,
+    () => new Response(null, { status: 204 }),
+  ],
   // Actividades de entrega de la sección (MAT-08).
   [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
 ]
