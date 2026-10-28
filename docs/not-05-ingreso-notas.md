@@ -58,7 +58,10 @@ La migración `1792630000000-CrearNota` crea `nota`: `universidad_id`, `evaluaci
 **RLS** (ENABLE y no FORCE, como `evaluacion`):
 
 - **Lectura igual que `nota_cambio`:** el profesor y el ayudante de la universidad, y el Director en cualquiera (solo lectura). **El alumno y el Administrativo no ven ninguna fila**, ni siquiera una nota publicada: aunque un endpoint olvide filtrar, la base no les entrega propuestas.
-- Inserción y modificación: en la universidad y solo con rol `AYUDANTE`. Que sea ayudante de esa sección lo exige el servicio.
+- Inserción y modificación: en la universidad, solo con rol `AYUDANTE` y solo de propuestas. La política exige `estado = 'PROPUESTA'` en el `WITH CHECK` del INSERT y en el `USING` y el `WITH CHECK` del UPDATE: un ayudante no crea una nota publicada, no publica una propuesta y no modifica una publicada. Insertar una publicada o publicar una propuesta falla con un error de RLS; el UPDATE de una fila publicada no la alcanza (PostgreSQL omite sin error las filas que no pasan el `USING`).
+- **Alcance de la escritura a nivel de base: por universidad y rol, no por sección.** No hay función de contexto para el usuario de la sesión, así que la base no sabe de qué secciones es ayudante quien escribe: un ayudante de la misma universidad pasaría la política en cualquier evaluación. Que sea ayudante de **esa** sección lo exige el servicio (el guard de ESP-06 y una comprobación en la transacción contra `ayudante_seccion`), igual que en `evaluacion`, `clase` y `asistencia` con el profesor. Esto lo retoman:
+  - **NOT-11:** publicar necesita que el profesor escriba `PUBLICADA`, así que agregará su propia política de UPDATE (con rol `PROFESOR`), sin abrir la del ayudante.
+  - **NOT-13:** si agrega `usuario_actual()` para la lectura del alumno, la misma función permitiría restringir también la escritura a la sección (por ejemplo, exigir una asignación activa en `ayudante_seccion`).
 - **Cómo lee el alumno sus notas publicadas lo decide NOT-13.** No hay función de contexto para el usuario de la sesión: una opción es agregar `usuario_actual()` y una política `alumno_id = usuario_actual() AND estado = 'PUBLICADA'`; la otra, que el alumno lea con una consulta que filtre por su id. Mientras tanto, el rol `ALUMNO` no tiene lectura.
 
 Nuevo sujeto CASL `Nota` en `shared/src/permisos.ts`: el ayudante tiene `update` y `read`; el profesor y el Director, `read`.
@@ -83,7 +86,7 @@ npm run build
   - dos ayudantes que guardan a la vez (llegan a la vez porque el test fija las inscripciones hasta que los dos esperan): la auditoría encadena las notas;
   - que las evaluaciones, el resumen de la sección y el dashboard del alumno no incluyen notas;
   - CHECK (7,5, 0,9 y un estado inválido), FK de otra universidad y una nota activa por alumno;
-  - RLS: profesor y ayudante leen, el Director lee en cualquier universidad, el alumno ve 0 filas (incluida su nota publicada), el Administrativo 0 y otra universidad 0; solo el ayudante inserta; el UPDATE del alumno no alcanza filas; sin DELETE.
+  - RLS: profesor y ayudante leen, el Director lee en cualquier universidad, el alumno ve 0 filas (incluida su nota publicada), el Administrativo 0 y otra universidad 0; solo el ayudante inserta; el ayudante no inserta una nota publicada ni publica una propuesta (error de RLS) y su UPDATE no alcanza una publicada; el UPDATE del alumno no alcanza filas; sin DELETE.
 - `backend/test/notas/notas.e2e-spec.ts`: 401, 403 por CASL y sin rutas POST, PATCH ni DELETE.
 - `frontend/src/pages/NotasDeEvaluacion.test.tsx`: tabla con todos los alumnos, guardado solo de lo que cambió, botón deshabilitado al recargar, 400 "Nota inválida", nota publicada sin editar, sección sin alumnos, error con reintento, y que el profesor, el alumno y el Director no ven el botón ni campos de nota.
 
