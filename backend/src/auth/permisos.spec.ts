@@ -23,6 +23,7 @@ const SUJETOS: SujetoTabla[] = [
   'Asistencia',
   'Evaluacion',
   'Anuncio',
+  'Actividad',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -118,6 +119,17 @@ const ANUNCIO: Record<Rol, AccionConcreta[]> = {
   ALUMNO: LECTURA,
 }
 for (const rol of ROLES) MATRIZ[rol].Anuncio = ANUNCIO[rol]
+
+// MAT-08 (RN-08): actividades de entrega de una sección. Crea el profesor;
+// leen el ayudante, el alumno y el Director. El Administrativo no recibe nada.
+const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: LECTURA,
+  ALUMNO: LECTURA,
+}
+for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
 
 // Secciones del menú que ve cada rol (solo con read).
 const MENU: Record<Rol, SujetoSeccion[]> = {

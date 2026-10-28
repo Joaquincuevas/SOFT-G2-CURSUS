@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'actividad',
   'anuncio',
   'asignacion_cambio',
   'asistencia',
@@ -173,14 +174,21 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearActividad (MAT-08) es la última: solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ACTIVIDAD = TABLAS.filter((tabla) => tabla !== 'actividad')
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
+
     // ANU-02 quita el destinatario, manteniendo las tablas.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
     // CrearAsistencia (ASI-02): quita su tabla y la clave
     // (id, universidad_id) de clase.
     await bd.undoLastMigration()
-    const SIN_ASISTENCIA = TABLAS.filter((tabla) => tabla !== 'asistencia')
+    const SIN_ASISTENCIA = SIN_ACTIVIDAD.filter(
+      (tabla) => tabla !== 'asistencia',
+    )
     expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
     const [{ restosAsistencia }] = await bd.query<
       { restosAsistencia: string }[]
@@ -383,6 +391,7 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'actividad',
         'anuncio',
         'asistencia',
         'ayudante_seccion',
