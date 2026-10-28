@@ -44,6 +44,7 @@ export * from './dashboard-ayudante.js'
 export * from './asistencia.js'
 export * from './anuncios.js'
 export * from './notas.js'
+export * from './materiales.js'
 export * from './superadmin.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.

@@ -1,14 +1,15 @@
 import {
   LARGO_CUERPO_ANUNCIO,
   LARGO_TITULO_ANUNCIO,
+  MAX_ANUNCIOS_LECTURA,
   type Anuncio,
   type PublicarAnuncio,
 } from '@cursus/shared'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
-import { fechaAnuncio } from './anuncios'
+import { EVENTO_LECTURA_ANUNCIOS, fechaAnuncio } from './anuncios'
 import './PestanaAnuncios.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -40,6 +41,9 @@ export function PestanaAnuncios({
           alPublicar={recargar}
         />
       )}
+      {rol === 'ALUMNO' && anuncios && (
+        <RegistrarLectura ruta={ruta} anuncios={anuncios} />
+      )}
       {anuncios === undefined ? (
         <Cargando texto="Cargando anuncios…" />
       ) : anuncios === null ? (
@@ -56,6 +60,9 @@ export function PestanaAnuncios({
               <article aria-labelledby={`anuncio-${anuncio.id}`}>
                 <h4 id={`anuncio-${anuncio.id}`} className="anuncios__titulo">
                   {anuncio.titulo}
+                  {rol === 'ALUMNO' && anuncio.nuevo && (
+                    <span className="anuncios__nuevo">Nuevo</span>
+                  )}
                 </h4>
                 <p className="anuncios__meta">
                   {anuncio.autor.nombre} ·{' '}
@@ -75,6 +82,69 @@ export function PestanaAnuncios({
         </ol>
       )}
     </section>
+  )
+}
+
+// El GET no escribe. Solo después de mostrar una lista correcta se registran
+// sus IDs, por lotes; un GET fallido no avanza la última visita. Las etiquetas
+// de este render se conservan para que el alumno identifique lo que era nuevo.
+function RegistrarLectura({
+  ruta,
+  anuncios,
+}: {
+  ruta: string
+  anuncios: Anuncio[]
+}) {
+  const { fetchConSesion } = useAuth()
+  const [fallo, setFallo] = useState(false)
+  const [intento, setIntento] = useState(0)
+  const [guardando, setGuardando] = useState(true)
+  useEffect(() => {
+    let vigente = true
+    const ids = anuncios.filter((anuncio) => anuncio.nuevo).map((a) => a.id)
+    async function registrar() {
+      for (let desde = 0; desde < ids.length; desde += MAX_ANUNCIOS_LECTURA) {
+        const respuesta = await fetchConSesion(`${ruta}/lecturas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            anuncioIds: ids.slice(desde, desde + MAX_ANUNCIOS_LECTURA),
+          }),
+        })
+        if (!respuesta.ok) throw new Error('No se registró la lectura')
+        window.dispatchEvent(new Event(EVENTO_LECTURA_ANUNCIOS))
+        if (!vigente) return
+      }
+    }
+    void registrar()
+      .then(() => {
+        if (vigente) setFallo(false)
+      })
+      .catch(() => {
+        if (vigente) setFallo(true)
+      })
+      .finally(() => {
+        if (vigente) setGuardando(false)
+      })
+    return () => {
+      vigente = false
+    }
+  }, [anuncios, fetchConSesion, ruta, intento])
+  if (!fallo) return null
+  return (
+    <div role="alert" className="anuncios__error">
+      <p>No pudimos actualizar los anuncios leídos.</p>
+      <button
+        type="button"
+        disabled={guardando}
+        onClick={() => {
+          setGuardando(true)
+          setIntento((actual) => actual + 1)
+        }}
+      >
+        Reintentar actualización
+      </button>
+    </div>
   )
 }
 

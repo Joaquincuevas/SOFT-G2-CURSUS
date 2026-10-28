@@ -3,6 +3,8 @@
 Documentación del proyecto:
 
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))
+- [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
+- [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
 - [ASI-02: marcar presente o ausente a cada alumno de una clase y guía de revisión](asi-02-marcar-asistencia.md)

@@ -14,6 +14,7 @@ const VALOR_INVALIDO = '22P02'
 
 const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
+  'actividad',
   'anuncio',
   'asignacion_cambio',
   'asistencia',
@@ -26,6 +27,7 @@ const TABLAS = [
   'facultad',
   'horario_seccion',
   'inscripcion',
+  'lectura_anuncio',
   'limite_login',
   'nota_cambio',
   'periodo',
@@ -209,14 +211,28 @@ describe('migraciones', () => {
     expect(Number(restosSuperadmin)).toBe(0)
     expect(await tablasExistentes()).toEqual(SIN_SUPERADMIN)
 
-    // ANU-02 quita el destinatario, manteniendo las tablas.
+    // CrearLecturaAnuncio (ANU-04): quita solo el seguimiento de lectura, no
+    // los anuncios.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_SUPERADMIN)
+    const SIN_LECTURA = SIN_SUPERADMIN.filter(
+      (tabla) => tabla !== 'lectura_anuncio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_LECTURA)
+
+    // CrearActividad (MAT-08): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ACTIVIDAD = SIN_LECTURA.filter((tabla) => tabla !== 'actividad')
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
+
+    // DirigirAnuncioSeccion (ANU-02) quita el destinatario, manteniendo las
+    // tablas.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
     // CrearAsistencia (ASI-02): quita su tabla y la clave (id, universidad_id)
     // de clase.
     await bd.undoLastMigration()
-    const SIN_ASISTENCIA = SIN_SUPERADMIN.filter(
+    const SIN_ASISTENCIA = SIN_ACTIVIDAD.filter(
       (tabla) => tabla !== 'asistencia',
     )
     expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
@@ -399,6 +415,7 @@ describe('migraciones', () => {
         t !== 'curso_cambio' &&
         t !== 'asignacion_cambio' &&
         t !== 'nota_cambio' &&
+        t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
@@ -422,6 +439,7 @@ describe('migraciones', () => {
     )
     expect(filas).toEqual(
       [
+        'actividad',
         'anuncio',
         'asistencia',
         'ayudante_seccion',

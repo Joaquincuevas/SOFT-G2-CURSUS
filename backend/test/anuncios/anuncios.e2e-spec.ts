@@ -66,6 +66,10 @@ describe('anuncios (e2e)', () => {
   it('responde 401 sin sesión', async () => {
     await request(app.getHttpServer()).get(RUTA).expect(401)
     await request(app.getHttpServer()).post(RUTA).send(BODY).expect(401)
+    await request(app.getHttpServer())
+      .post(`${RUTA}/lecturas`)
+      .send({ anuncioIds: [] })
+      .expect(401)
   })
 
   it('responde 400 con una sección que no es uuid', async () => {

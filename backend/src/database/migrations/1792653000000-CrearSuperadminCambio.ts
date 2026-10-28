@@ -8,7 +8,8 @@ const ROL_APP = 'cursus_app'
 
 // Tablas con datos de una universidad que el superadmin puede escribir. Las
 // auditorías (curso_cambio, asignacion_cambio y nota_cambio) no van: son el
-// registro de otros cambios. Una tabla nueva con universidad_id debe sumarse
+// registro de otros cambios. lectura_anuncio tampoco: solo la escribe el
+// alumno. Una tabla nueva con universidad_id debe sumarse
 // en su propia migración (lo exige el contrato de test/multitenant/rls).
 const TABLAS_AUDITADAS = [
   'universidad',
@@ -25,6 +26,7 @@ const TABLAS_AUDITADAS = [
   'clase',
   'anuncio',
   'asistencia',
+  'actividad',
 ]
 
 export class CrearSuperadminCambio1792653000000 implements MigrationInterface {

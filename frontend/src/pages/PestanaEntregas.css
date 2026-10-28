@@ -1,0 +1,143 @@
+/* MAT-08: actividades de entrega de la sección (pestaña Entregas). */
+.entregas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.entregas__formulario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.entregas__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.entregas__campo--ancho {
+  flex-basis: 100%;
+}
+
+.entregas__campo input,
+.entregas__campo textarea {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.entregas__campo input {
+  height: var(--control-size);
+}
+
+.entregas__campo textarea {
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+}
+
+.entregas__boton {
+  height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  font: var(--font-button);
+  color: var(--color-background);
+  cursor: pointer;
+}
+
+.entregas__boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.entregas__ayuda,
+.entregas__error,
+.entregas__aviso {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.entregas__ayuda {
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.entregas__error,
+.entregas__aviso {
+  font: var(--font-body);
+}
+
+.entregas__error {
+  color: var(--color-error);
+}
+
+.entregas__aviso {
+  color: var(--color-success);
+}
+
+.entregas__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entregas__actividad {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+
+.entregas__encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.entregas__titulo {
+  margin: 0;
+  font: var(--font-button);
+  color: var(--color-text-primary);
+}
+
+.entregas__estado {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  font: var(--font-caption);
+}
+
+.entregas__estado--abierta {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.entregas__estado--cerrada {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.entregas__plazo,
+.entregas__instrucciones {
+  margin: var(--space-2) 0 0;
+  font: var(--font-body);
+}
+
+.entregas__plazo {
+  color: var(--color-text-secondary);
+}
+
+.entregas__instrucciones {
+  color: var(--color-text-primary);
+  white-space: pre-line;
+}

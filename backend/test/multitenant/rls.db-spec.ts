@@ -351,12 +351,15 @@ describe('contrato del schema', () => {
         'clase',
         // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
         'anuncio',
+        'lectura_anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
         'evaluacion',
         // Auditoría sin filas en el seed: test/notas/auditoria (NOT-04).
         'nota_cambio',
         // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-02).
         'asistencia',
+        // Sin filas en el seed: su RLS la prueba test/materiales (MAT-08).
+        'actividad',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
       ].sort(),
@@ -364,14 +367,18 @@ describe('contrato del schema', () => {
     for (const tabla of tablas) {
       expect(tabla).toMatchObject({
         rls: true,
-        // Las auditorías son de solo adición: no conceden UPDATE a la API. La
-        // del superadmin la escribe un trigger, así que la API solo la lee.
+        // Las auditorías y las lecturas son de solo adición: no conceden
+        // UPDATE a la API. La del superadmin la escribe un trigger, así que la
+        // API solo la lee.
         comandos:
           tabla.tabla === 'superadmin_cambio'
             ? ['SELECT']
-            : ['curso_cambio', 'asignacion_cambio', 'nota_cambio'].includes(
-                  tabla.tabla,
-                )
+            : [
+                  'curso_cambio',
+                  'asignacion_cambio',
+                  'nota_cambio',
+                  'lectura_anuncio',
+                ].includes(tabla.tabla)
               ? ['INSERT', 'SELECT']
               : ['INSERT', 'SELECT', 'UPDATE'],
       })
@@ -380,7 +387,9 @@ describe('contrato del schema', () => {
 
   // MT-04 (ADR 0002): todo lo que el superadmin crea o modifica queda en
   // superadmin_cambio. Si una migración nueva agrega una tabla con
-  // universidad_id y no le pone el trigger, este test falla.
+  // universidad_id y no le pone el trigger, este test falla. lectura_anuncio
+  // (ANU-04) no va: solo la escribe el alumno (su RLS de INSERT exige el rol
+  // ALUMNO), así que el superadmin nunca la modifica.
   it('toda tabla con universidad_id, salvo las auditorías, audita al superadmin', async () => {
     const sinTrigger = await bd.query<{ tabla: string }[]>(
       `SELECT c.relname AS tabla
@@ -388,7 +397,8 @@ describe('contrato del schema', () => {
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r'
           AND c.relname NOT IN ('curso_cambio', 'asignacion_cambio',
-                                'nota_cambio', 'superadmin_cambio')
+                                'nota_cambio', 'superadmin_cambio',
+                                'lectura_anuncio')
           AND (c.relname = 'universidad' OR EXISTS (
             SELECT FROM information_schema.columns col
              WHERE col.table_schema = 'public' AND col.table_name = c.relname

@@ -1,5 +1,10 @@
-import type { Anuncio, Rol, SeccionResumen } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import {
+  MAX_ANUNCIOS_LECTURA,
+  type Anuncio,
+  type Rol,
+  type SeccionResumen,
+} from '@cursus/shared'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 import { fechaAnuncio } from './anuncios'
@@ -43,10 +48,13 @@ const LISTA: Anuncio[] = [
 async function abrirAnuncios(
   rol: Rol,
   anuncios: (init?: RequestInit) => unknown = () => LISTA,
+  lecturas: (init?: RequestInit) => unknown = () =>
+    new Response(null, { status: 204 }),
 ) {
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [ANUNCIOS]: anuncios,
+    [`${ANUNCIOS}/lecturas`]: lecturas,
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
   expect(screen.getByRole('tab', { name: 'Anuncios' })).toHaveAttribute(
@@ -61,6 +69,121 @@ const tarjetas = (panel: ReturnType<typeof within>) =>
     titulo: within(tarjeta).getByRole('heading').textContent,
     texto: tarjeta.textContent,
   }))
+
+describe('ANU-04: marca los anuncios nuevos al abrirlos', () => {
+  test('conserva Nuevo durante la lectura y solo registra los IDs nuevos recibidos', async () => {
+    const enviados: unknown[] = []
+    const { panel } = await abrirAnuncios(
+      'ALUMNO',
+      () => [
+        { ...LISTA[0], nuevo: true },
+        { ...LISTA[1], nuevo: false },
+      ],
+      (init) => {
+        enviados.push(JSON.parse(init?.body as string))
+        return new Response(null, { status: 204 })
+      },
+    )
+    await panel.findByText('Nuevo')
+    await waitFor(() => expect(enviados).toEqual([{ anuncioIds: ['a2'] }]))
+    expect(panel.getAllByText('Nuevo')).toHaveLength(1)
+    expect(panel.getAllByRole('article')[0]).toHaveTextContent('Nuevo')
+    expect(panel.getAllByRole('article')[1]).not.toHaveTextContent('Nuevo')
+  })
+
+  test('si falla registrar, conserva la lista y permite reintentar sin volver a pedirla', async () => {
+    let fallo = true,
+      listas = 0
+    const envios: unknown[] = []
+    const { panel } = await abrirAnuncios(
+      'ALUMNO',
+      () => {
+        listas++
+        return [{ ...LISTA[0], nuevo: true }]
+      },
+      (init) => {
+        envios.push(JSON.parse(init?.body as string))
+        return new Response(null, { status: fallo ? 500 : 204 })
+      },
+    )
+    await panel.findByText('No pudimos actualizar los anuncios leídos.')
+    expect(panel.getByText('Prueba 1')).toBeInTheDocument()
+    expect(panel.getByText('Nuevo')).toBeInTheDocument()
+    fallo = false
+    fireEvent.click(
+      panel.getByRole('button', { name: 'Reintentar actualización' }),
+    )
+    await waitFor(() => expect(panel.queryByRole('alert')).toBeNull())
+    expect(envios).toEqual([{ anuncioIds: ['a2'] }, { anuncioIds: ['a2'] }])
+    expect(listas).toBe(1)
+  })
+
+  test('un GET fallido no registra lectura; al recuperarlo registra solo la respuesta correcta', async () => {
+    let fallo = true,
+      marcas = 0
+    const { panel } = await abrirAnuncios(
+      'ALUMNO',
+      () => (fallo ? json({}, 500) : [{ ...LISTA[0], nuevo: true }]),
+      () => {
+        marcas++
+        return new Response(null, { status: 204 })
+      },
+    )
+    await panel.findByRole('alert')
+    expect(marcas).toBe(0)
+    fallo = false
+    fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
+    await panel.findByText('Nuevo')
+    await waitFor(() => expect(marcas).toBe(1))
+  })
+
+  test.each<Rol>(['PROFESOR', 'AYUDANTE'])(
+    '%s no envía lecturas ni muestra Nuevo',
+    async (rol) => {
+      let marcas = 0
+      const { panel } = await abrirAnuncios(
+        rol,
+        () => [{ ...LISTA[0], nuevo: true }],
+        () => {
+          marcas++
+          return new Response(null, { status: 204 })
+        },
+      )
+      await panel.findByText('Prueba 1')
+      expect(panel.queryByText('Nuevo')).toBeNull()
+      expect(marcas).toBe(0)
+    },
+  )
+
+  test('una lista grande registra lotes acotados sin perder anuncios', async () => {
+    const lista = Array.from({ length: MAX_ANUNCIOS_LECTURA + 1 }, (_, i) => ({
+      ...LISTA[0],
+      id: `anuncio-${i}`,
+      titulo: `Anuncio ${i}`,
+      nuevo: true,
+    }))
+    const enviados: { anuncioIds: string[] }[] = []
+    const { panel } = await abrirAnuncios(
+      'ALUMNO',
+      () => lista,
+      (init) => {
+        enviados.push(
+          JSON.parse(init?.body as string) as { anuncioIds: string[] },
+        )
+        return new Response(null, { status: 204 })
+      },
+    )
+    await panel.findByText('Anuncio 0')
+    await waitFor(() => expect(enviados).toHaveLength(2))
+    expect(enviados.map((lote) => lote.anuncioIds.length)).toEqual([
+      MAX_ANUNCIOS_LECTURA,
+      1,
+    ])
+    expect(enviados.flatMap((lote) => lote.anuncioIds)).toEqual(
+      lista.map((a) => a.id),
+    )
+  })
+})
 
 describe('ANU-03: el alumno lee anuncios del curso', () => {
   test('muestra generales y propios en una lista cronológica con todos sus datos', async () => {

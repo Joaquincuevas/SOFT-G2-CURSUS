@@ -29,6 +29,8 @@ import { CrearAnuncio1792560000000 } from './migrations/1792560000000-CrearAnunc
 import { CrearNotaCambio1792570000000 } from './migrations/1792570000000-CrearNotaCambio.js'
 import { CrearAsistencia1792580000000 } from './migrations/1792580000000-CrearAsistencia.js'
 import { DirigirAnuncioSeccion1792600000000 } from './migrations/1792600000000-DirigirAnuncioSeccion.js'
+import { CrearActividad1792610000000 } from './migrations/1792610000000-CrearActividad.js'
+import { CrearLecturaAnuncio1792620000000 } from './migrations/1792620000000-CrearLecturaAnuncio.js'
 import { AgregarRolSuperadmin1792650000000 } from './migrations/1792650000000-AgregarRolSuperadmin.js'
 import { PermitirUsuarioSuperadmin1792651000000 } from './migrations/1792651000000-PermitirUsuarioSuperadmin.js'
 import { ElegirFacultadSuperadmin1792652000000 } from './migrations/1792652000000-ElegirFacultadSuperadmin.js'
@@ -83,6 +85,8 @@ export function opcionesDataSource(
       CrearNotaCambio1792570000000,
       CrearAsistencia1792580000000,
       DirigirAnuncioSeccion1792600000000,
+      CrearActividad1792610000000,
+      CrearLecturaAnuncio1792620000000,
       AgregarRolSuperadmin1792650000000,
       PermitirUsuarioSuperadmin1792651000000,
       ElegirFacultadSuperadmin1792652000000,
