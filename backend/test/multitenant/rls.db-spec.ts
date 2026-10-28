@@ -360,6 +360,8 @@ describe('contrato del schema', () => {
         'asistencia',
         // Sin filas en el seed: su RLS la prueba test/materiales (MAT-08).
         'actividad',
+        // Sin filas en el seed: su RLS la prueba test/notas (NOT-05).
+        'nota',
       ].sort(),
     )
     for (const tabla of tablas) {

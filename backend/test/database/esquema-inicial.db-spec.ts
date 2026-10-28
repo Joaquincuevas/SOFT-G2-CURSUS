@@ -29,6 +29,7 @@ const TABLAS = [
   'inscripcion',
   'lectura_anuncio',
   'limite_login',
+  'nota',
   'nota_cambio',
   'periodo',
   'refresh_token',
@@ -175,10 +176,15 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearLecturaAnuncio (ANU-04) es la última: quita solo el seguimiento
-    // de lectura, no los anuncios.
+    // CrearNota (NOT-05) es la última: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_LECTURA = TABLAS.filter((tabla) => tabla !== 'lectura_anuncio')
+    const SIN_NOTA = TABLAS.filter((tabla) => tabla !== 'nota')
+    expect(await tablasExistentes()).toEqual(SIN_NOTA)
+
+    // CrearLecturaAnuncio (ANU-04): quita solo el seguimiento de lectura, no
+    // los anuncios.
+    await bd.undoLastMigration()
+    const SIN_LECTURA = SIN_NOTA.filter((tabla) => tabla !== 'lectura_anuncio')
     expect(await tablasExistentes()).toEqual(SIN_LECTURA)
 
     // CrearActividad (MAT-08): solo quita su tabla.
@@ -411,6 +417,7 @@ describe('migraciones', () => {
         'facultad',
         'horario_seccion',
         'inscripcion',
+        'nota',
         'seccion',
         'universidad',
         'usuario',
