@@ -522,42 +522,54 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     expect(await filasDe(evaluacion)).toEqual([])
   })
 
-  it('dos ayudantes que guardan a la vez quedan en orden: la auditoría encadena las notas', async () => {
-    const evaluacion = await crearEvaluacion()
-    await tokenDe(AYUDANTE)
-    await tokenDe(otroAyudante)
+  // El id en mayúsculas lo acepta ParseUUIDPipe: debe tomar el mismo lock.
+  it.each([
+    ['', (id: string) => id],
+    [' (uno con el id en mayúsculas)', (id: string) => id.toUpperCase()],
+  ])(
+    'dos ayudantes que guardan a la vez quedan en orden%s: la auditoría encadena las notas',
+    async (_caso, idDelSegundo) => {
+      const evaluacion = await crearEvaluacion()
+      await tokenDe(AYUDANTE)
+      await tokenDe(otroAyudante)
 
-    // Fija las inscripciones de la sección para que los dos guardados lleguen
-    // a la vez: los dos esperan hasta el commit. Sin el lock por evaluación,
-    // los dos leerían que el alumno no tiene nota y el segundo chocaría con
-    // el índice único.
-    const bloqueo = bd.createQueryRunner()
-    await bloqueo.startTransaction()
-    let guardados: Promise<unknown>[]
-    try {
-      await bloqueo.query(
-        'SELECT id FROM inscripcion WHERE seccion_id = $1 FOR UPDATE',
-        [secciones.s1],
-      )
-      guardados = [
-        guardar(AYUDANTE, evaluacion, notasDe([[alumnos.bruno, 4.5]]), 200),
-        guardar(otroAyudante, evaluacion, notasDe([[alumnos.bruno, 5]]), 200),
-      ]
-      await esperarBloqueados(2)
-    } finally {
-      await bloqueo.commitTransaction()
-      await bloqueo.release()
-    }
-    await Promise.all(guardados)
+      // Fija las inscripciones de la sección para que los dos guardados lleguen
+      // a la vez: los dos esperan hasta el commit. Sin el lock por evaluación,
+      // los dos leerían que el alumno no tiene nota y el segundo chocaría con
+      // el índice único.
+      const bloqueo = bd.createQueryRunner()
+      await bloqueo.startTransaction()
+      let guardados: Promise<unknown>[]
+      try {
+        await bloqueo.query(
+          'SELECT id FROM inscripcion WHERE seccion_id = $1 FOR UPDATE',
+          [secciones.s1],
+        )
+        guardados = [
+          guardar(AYUDANTE, evaluacion, notasDe([[alumnos.bruno, 4.5]]), 200),
+          guardar(
+            otroAyudante,
+            idDelSegundo(evaluacion),
+            notasDe([[alumnos.bruno, 5]]),
+            200,
+          ),
+        ]
+        await esperarBloqueados(2)
+      } finally {
+        await bloqueo.commitTransaction()
+        await bloqueo.release()
+      }
+      await Promise.all(guardados)
 
-    const filas = await filasDe(evaluacion)
-    expect(filas).toHaveLength(1)
-    const eventos = await eventosDe(evaluacion)
-    expect(eventos).toHaveLength(2)
-    expect(eventos[0].nota_anterior).toBeNull()
-    expect(eventos[1].nota_anterior).toBe(eventos[0].nota_nueva)
-    expect(filas[0].valor).toBe(eventos[1].nota_nueva)
-  })
+      const filas = await filasDe(evaluacion)
+      expect(filas).toHaveLength(1)
+      const eventos = await eventosDe(evaluacion)
+      expect(eventos).toHaveLength(2)
+      expect(eventos[0].nota_anterior).toBeNull()
+      expect(eventos[1].nota_anterior).toBe(eventos[0].nota_nueva)
+      expect(filas[0].valor).toBe(eventos[1].nota_nueva)
+    },
+  )
 
   it.each([
     ['cero', 0],

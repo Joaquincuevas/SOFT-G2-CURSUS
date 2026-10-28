@@ -123,11 +123,12 @@ export class NotasService {
       // Un guardado a la vez por evaluación: así la nota anterior que queda
       // en la auditoría es la última guardada. Con un advisory lock y no con
       // FOR UPDATE, porque la RLS de evaluacion solo deja modificarla (y
-      // bloquear sus filas) al profesor.
-      await bd.query(
-        'SELECT pg_advisory_xact_lock(hashtextextended($1::text, 5))',
-        [evaluacionId],
-      )
+      // bloquear sus filas) al profesor. La clave sigue el patrón de
+      // horarios.service.ts; el id va en minúsculas porque ParseUUIDPipe
+      // acepta mayúsculas y la clave se calcula sobre el texto.
+      await bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+        `notas:${evaluacionId.toLowerCase()}`,
+      ])
       const [evaluacion] = await bd.query<{
         id: string
         es_ayudante: boolean
