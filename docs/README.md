@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
 - [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
