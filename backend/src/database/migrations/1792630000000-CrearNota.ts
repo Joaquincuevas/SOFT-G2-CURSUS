@@ -63,9 +63,13 @@ export class CrearNota1792630000000 implements MigrationInterface {
     // el Director todas en solo lectura (ADR 0001). El alumno y el
     // Administrativo no ven ninguna fila, ni siquiera publicada: cómo lee el
     // alumno las suyas lo decide NOT-13 (no hay función de contexto para el
-    // usuario de la sesión). Escribe solo el ayudante; que sea de la sección
-    // lo exige el servicio. UPDATE es para cambiar una propuesta; sin DELETE.
-    const puedeEscribir = `universidad_id = universidad_actual() AND rol_actual() = 'AYUDANTE'`
+    // usuario de la sesión). Escribe solo el ayudante, y solo propuestas: no
+    // puede crear una nota publicada, publicar una propuesta ni tocar una
+    // publicada (publicar es NOT-11 y recorregir NOT-15, del profesor). Que
+    // sea ayudante de esa sección lo exige el servicio. UPDATE es para cambiar
+    // una propuesta; sin DELETE.
+    const puedeEscribir = `universidad_id = universidad_actual()
+      AND rol_actual() = 'AYUDANTE' AND estado = 'PROPUESTA'`
     await q.query(`GRANT SELECT, INSERT, UPDATE ON nota TO cursus_app`)
     await q.query(`ALTER TABLE nota ENABLE ROW LEVEL SECURITY`)
     await q.query(`
