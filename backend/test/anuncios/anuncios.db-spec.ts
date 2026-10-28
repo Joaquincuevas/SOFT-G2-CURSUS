@@ -14,6 +14,7 @@ import { configurarApp } from '../../src/config/configurar-app.js'
 import { ROL_APP } from '../../src/database/base-de-datos.service.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import { DirigirAnuncioSeccion1792600000000 } from '../../src/database/migrations/1792600000000-DirigirAnuncioSeccion.js'
+import { CrearLecturaAnuncio1792620000000 } from '../../src/database/migrations/1792620000000-CrearLecturaAnuncio.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
 
 // ANU-01: base propia con el seed cargado, que se crea y se borra en cada
@@ -942,13 +943,18 @@ describe('ANU-04: anuncios nuevos por alumno', () => {
     const antes = await bd.query<unknown>('SELECT * FROM anuncio WHERE id=$1', [
       anuncio.id,
     ])
+    // Ejecuta el down y el up de la migración directamente: no es la última
+    // registrada (MT-04 vino después), así que undoLastMigration no sirve.
+    const migracion = new CrearLecturaAnuncio1792620000000()
+    const q = bd.createQueryRunner()
     try {
-      await bd.undoLastMigration()
+      await migracion.down(q)
       expect(
         await bd.query('SELECT * FROM anuncio WHERE id=$1', [anuncio.id]),
       ).toEqual(antes)
     } finally {
-      await bd.runMigrations()
+      await migracion.up(q)
+      await q.release()
     }
     expect(await contador(ALUMNO, secciones.s1)).toBe(1)
     expect((await listar(ALUMNO, secciones.s1))[0].nuevo).toBe(true)

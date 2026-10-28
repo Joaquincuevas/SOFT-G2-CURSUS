@@ -37,7 +37,8 @@ export type SujetoTabla =
 // tablas (por ejemplo, el Director y el Administrativo leen las mismas
 // tablas, pero ven secciones distintas). Solo se usan con 'read', y así el
 // menú no cambia cuando se agregan permisos sobre tablas.
-export type SujetoSeccion = 'PanelDirectorio' | 'GestionAcademica' | 'MisCursos'
+export type SujetoSeccion =
+  'PanelDirectorio' | 'PanelSuperadmin' | 'GestionAcademica' | 'MisCursos'
 
 // 'all' es el comodín de CASL.
 export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
@@ -85,13 +86,19 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
       break
+    // MT-04 (ADR 0002): el superadmin trabaja en la facultad que eligió con
+    // los mismos permisos del Administrativo, y además elige universidad y
+    // facultad en su panel. La API resuelve en cuál trabaja (ver
+    // contextoDeLaSesion); sin elegir una, las rutas de gestión le responden 403.
     case 'ADMINISTRATIVO':
+    case 'SUPERADMIN':
       can('read', ['Universidad', 'Facultad'])
       can(
         ['create', 'read', 'update'],
         ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Inscripcion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
+      if (usuario.rol === 'SUPERADMIN') can('read', 'PanelSuperadmin')
       break
     case 'PROFESOR':
     case 'AYUDANTE':

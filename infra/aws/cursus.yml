@@ -131,6 +131,18 @@ Resources:
         PasswordLength: 24
         ExcludePunctuation: true
 
+  # Contraseña provisoria del superadmin (MT-04), que crea infra/aws/superadmin.sh.
+  # El superadmin la cambia en su primer ingreso. Se consulta en Secrets Manager
+  # y se entrega por privado.
+  SecretoSuperadmin:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'cursus-${Entorno}/superadmin-password'
+      Description: Contraseña provisoria del superadmin.
+      GenerateSecretString:
+        PasswordLength: 24
+        ExcludePunctuation: true
+
   # --- Red ----------------------------------------------------------------------
 
   GrupoVpcLink:
@@ -267,6 +279,7 @@ Resources:
                   - !Ref SecretoBaseDeDatos
                   - !Ref SecretoOrigen
                   - !Ref SecretoJwt
+                  - !Ref SecretoSuperadmin
                   - !If [EsStaging, !Ref SecretoSeed, !Ref AWS::NoValue]
 
   # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
@@ -309,6 +322,9 @@ Resources:
               ValueFrom: !Ref SecretoOrigen
             - Name: JWT_SECRET
               ValueFrom: !Ref SecretoJwt
+            # La usa la tarea que crea el superadmin (infra/aws/superadmin.sh).
+            - Name: SUPERADMIN_PASSWORD
+              ValueFrom: !Ref SecretoSuperadmin
             # Solo staging: la usa la tarea del seed (infra/aws/seed.sh).
             - !If
               - EsStaging

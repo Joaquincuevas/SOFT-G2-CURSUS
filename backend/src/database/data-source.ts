@@ -31,6 +31,10 @@ import { CrearAsistencia1792580000000 } from './migrations/1792580000000-CrearAs
 import { DirigirAnuncioSeccion1792600000000 } from './migrations/1792600000000-DirigirAnuncioSeccion.js'
 import { CrearActividad1792610000000 } from './migrations/1792610000000-CrearActividad.js'
 import { CrearLecturaAnuncio1792620000000 } from './migrations/1792620000000-CrearLecturaAnuncio.js'
+import { AgregarRolSuperadmin1792650000000 } from './migrations/1792650000000-AgregarRolSuperadmin.js'
+import { PermitirUsuarioSuperadmin1792651000000 } from './migrations/1792651000000-PermitirUsuarioSuperadmin.js'
+import { ElegirFacultadSuperadmin1792652000000 } from './migrations/1792652000000-ElegirFacultadSuperadmin.js'
+import { CrearSuperadminCambio1792653000000 } from './migrations/1792653000000-CrearSuperadminCambio.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -83,6 +87,10 @@ export function opcionesDataSource(
       DirigirAnuncioSeccion1792600000000,
       CrearActividad1792610000000,
       CrearLecturaAnuncio1792620000000,
+      AgregarRolSuperadmin1792650000000,
+      PermitirUsuarioSuperadmin1792651000000,
+      ElegirFacultadSuperadmin1792652000000,
+      CrearSuperadminCambio1792653000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
