@@ -121,6 +121,7 @@ describe('ESP-03: cursos del alumno del período activo', () => {
     const datos = await listar()
     expect(datos.map((s) => s.id)).toEqual([secciones[0].id, secciones[3].id])
     expect(datos[0]).toEqual({
+      anunciosNuevos: 0,
       id: secciones[0].id,
       numero: 1,
       curso: {

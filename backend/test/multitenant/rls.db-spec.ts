@@ -351,6 +351,7 @@ describe('contrato del schema', () => {
         'clase',
         // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
         'anuncio',
+        'lectura_anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
         'evaluacion',
         // Auditoría sin filas en el seed: test/notas/auditoria (NOT-04).
@@ -363,9 +364,12 @@ describe('contrato del schema', () => {
       expect(tabla).toMatchObject({
         rls: true,
         // Las auditorías son de solo adición: no conceden UPDATE a la API.
-        comandos: ['curso_cambio', 'asignacion_cambio', 'nota_cambio'].includes(
-          tabla.tabla,
-        )
+        comandos: [
+          'curso_cambio',
+          'asignacion_cambio',
+          'nota_cambio',
+          'lectura_anuncio',
+        ].includes(tabla.tabla)
           ? ['INSERT', 'SELECT']
           : ['INSERT', 'SELECT', 'UPDATE'],
       })

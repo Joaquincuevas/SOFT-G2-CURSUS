@@ -1,5 +1,5 @@
 import type { Rol, SeccionAlumno, SeccionResumen } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 import { RUTA_SECCIONES_ALUMNO } from './SeccionesAlumno'
@@ -7,6 +7,7 @@ import { RUTA_SECCIONES_ALUMNO } from './SeccionesAlumno'
 const SECCIONES: SeccionAlumno[] = [
   {
     id: 'seccion-1',
+    anunciosNuevos: 2,
     numero: 1,
     curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
     horario: [
@@ -17,6 +18,7 @@ const SECCIONES: SeccionAlumno[] = [
   },
   {
     id: 'seccion-2',
+    anunciosNuevos: 0,
     numero: 2,
     curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
     horario: [],
@@ -35,6 +37,49 @@ const tarjetas = async () =>
   ).findAllByRole('link')
 
 describe('ESP-03: dashboard del alumno', () => {
+  test('muestra el contador, abrir solo el curso lo conserva y abrir Anuncios lo actualiza al volver', async () => {
+    let leido = false,
+      marcas = 0
+    const anuncio = {
+      id: 'anuncio-1',
+      titulo: 'Nuevo aviso',
+      cuerpo: 'Contenido',
+      autor: { id: 'p', nombre: 'Camila Rojas' },
+      publicadoEn: '2026-10-27T15:00:00Z',
+      seccion: null,
+    }
+    await renderConSesion('ALUMNO', '/', {
+      [RUTA_SECCIONES_ALUMNO]: () => [
+        { ...SECCIONES[0], anunciosNuevos: leido ? 0 : 1 },
+        SECCIONES[1],
+      ],
+      '/api/espacio/secciones/seccion-1/resumen': () => resumen,
+      '/api/espacio/secciones/seccion-1/anuncios': () => [
+        { ...anuncio, nuevo: !leido },
+      ],
+      '/api/espacio/secciones/seccion-1/anuncios/lecturas': () => {
+        marcas++
+        leido = true
+        return new Response(null, { status: 204 })
+      },
+    })
+    expect((await tarjetas())[0]).toHaveTextContent('1 anuncio nuevo')
+    expect((await tarjetas())[1]).toHaveTextContent('0 anuncios nuevos')
+    fireEvent.click((await tarjetas())[0])
+    await screen.findByRole('region', { name: 'Vista del curso' })
+    expect(marcas).toBe(0)
+    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
+    await screen.findByText('Nuevo')
+    await waitFor(() => expect(marcas).toBe(1))
+    fireEvent.click(screen.getByRole('link', { name: 'Volver al Dashboard' }))
+    expect((await tarjetas())[0]).toHaveTextContent('0 anuncios nuevos')
+    fireEvent.click((await tarjetas())[0])
+    fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
+    await screen.findByText('Nuevo aviso')
+    expect(screen.queryByText('Nuevo', { exact: true })).toBeNull()
+    expect(marcas).toBe(1)
+  })
+
   test('muestra una tarjeta por sección con curso, horario y profesor, incluso para dos secciones del mismo curso', async () => {
     await renderConSesion('ALUMNO', '/', {
       [RUTA_SECCIONES_ALUMNO]: () => SECCIONES,
@@ -49,6 +94,7 @@ describe('ESP-03: dashboard del alumno', () => {
       within(a).getByRole('heading', { name: 'Programación' }),
     ).toBeInTheDocument()
     expect(a).toHaveTextContent('Sección 1')
+    expect(a).toHaveTextContent('2 anuncios nuevos')
     expect(a).toHaveTextContent('Profesor a cargo: Camila Rojas')
     expect(
       within(a)

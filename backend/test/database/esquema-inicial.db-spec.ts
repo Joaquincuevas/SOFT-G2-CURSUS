@@ -26,6 +26,7 @@ const TABLAS = [
   'facultad',
   'horario_seccion',
   'inscripcion',
+  'lectura_anuncio',
   'limite_login',
   'nota_cambio',
   'periodo',
@@ -173,14 +174,19 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // ANU-04 quita solo el seguimiento de lectura, no los anuncios.
+    await bd.undoLastMigration()
+    const SIN_LECTURA = TABLAS.filter((tabla) => tabla !== 'lectura_anuncio')
+    expect(await tablasExistentes()).toEqual(SIN_LECTURA)
+
     // ANU-02 quita el destinatario, manteniendo las tablas.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_LECTURA)
 
     // CrearAsistencia (ASI-02): quita su tabla y la clave
     // (id, universidad_id) de clase.
     await bd.undoLastMigration()
-    const SIN_ASISTENCIA = TABLAS.filter((tabla) => tabla !== 'asistencia')
+    const SIN_ASISTENCIA = SIN_LECTURA.filter((tabla) => tabla !== 'asistencia')
     expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
     const [{ restosAsistencia }] = await bd.query<
       { restosAsistencia: string }[]
@@ -360,7 +366,8 @@ describe('migraciones', () => {
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
         t !== 'asignacion_cambio' &&
-        t !== 'nota_cambio',
+        t !== 'nota_cambio' &&
+        t !== 'lectura_anuncio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
