@@ -49,14 +49,9 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
         </p>
       ) : (
         <FormularioNotas
-          // Con las notas recién guardadas, el formulario parte de nuevo.
-          key={datos.alumnos.map((a) => `${a.id}:${a.nota}`).join()}
           ruta={ruta}
-          alumnos={datos.alumnos}
-          alGuardar={() => {
-            setAviso('Notas guardadas como propuesta.')
-            recargar()
-          }}
+          inicial={datos.alumnos}
+          alGuardar={() => setAviso('Notas guardadas como propuesta.')}
           alEditar={() => setAviso(null)}
         />
       )}
@@ -71,6 +66,9 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
 
 const textoDe = (nota: number | null) => (nota === null ? '' : String(nota))
 
+const valoresDe = (alumnos: NotaAlumno[]) =>
+  Object.fromEntries(alumnos.map((a) => [a.id, textoDe(a.nota)]))
+
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',
   PUBLICADA: 'Publicada',
@@ -78,28 +76,36 @@ const ESTADO: Record<EstadoNota, string> = {
 
 function FormularioNotas({
   ruta,
-  alumnos,
+  inicial,
   alGuardar,
   alEditar,
 }: {
   ruta: string
-  alumnos: NotaAlumno[]
+  inicial: NotaAlumno[]
   alGuardar: () => void
   alEditar: () => void
 }) {
   const { fetchConSesion } = useAuth()
+  // Las notas como están en el servidor y lo que muestra cada campo. Después
+  // de guardar, las dos se reinician con lo que devuelve el servidor, cambie
+  // o no: otro ayudante pudo restaurar la misma nota antes de la recarga.
+  const [alumnos, setAlumnos] = useState(inicial)
   const [valores, setValores] = useState<Record<string, string>>(() =>
-    Object.fromEntries(alumnos.map((a) => [a.id, textoDe(a.nota)])),
+    valoresDe(inicial),
   )
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Solo se envían los campos con un valor distinto del guardado, comparados
-  // como número: "5.50" sobre un 5,5 no es un cambio (la recarga traería las
-  // mismas notas y el formulario no se reiniciaría). Un campo vacío no borra
+  // como número: "5.50" sobre un 5,5 no es un cambio. Un campo vacío no borra
   // la nota: nada se elimina.
   const cambios = alumnos.filter(
     (a) => valores[a.id].trim() !== '' && Number(valores[a.id]) !== a.nota,
   )
+
+  function reiniciar(delServidor: NotaAlumno[]) {
+    setAlumnos(delServidor)
+    setValores(valoresDe(delServidor))
+  }
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -127,16 +133,32 @@ function FormularioNotas({
             ? `${cuerpo.message}.`
             : 'No pudimos guardar las notas. Inténtalo nuevamente.',
         )
-        setGuardando(false)
         return
       }
-      // Guardar sigue deshabilitado hasta que llega la recarga: un segundo
-      // clic no envía otro PUT.
       alGuardar()
+      // El PUT devuelve las notas como quedaron; la recarga trae además lo que
+      // otros guardaron después. Si la recarga falla, queda lo que confirmó el
+      // PUT: ningún campo conserva un valor que el servidor no confirmó.
+      const guardadas =
+        ((await res.json().catch(() => null)) as NotasEvaluacion | null)
+          ?.alumnos ?? alumnos
+      try {
+        const recarga = await fetchConSesion(ruta)
+        if (!recarga.ok) throw new Error(`GET ${recarga.status}`)
+        reiniciar(((await recarga.json()) as NotasEvaluacion).alumnos)
+      } catch {
+        reiniciar(guardadas)
+        setError(
+          'Las notas se guardaron, pero no pudimos recargarlas. Vuelve a abrir la evaluación para ver la lista actualizada.',
+        )
+      }
     } catch {
       setError(
         'No pudimos guardar las notas. Comprueba tu conexión e inténtalo nuevamente.',
       )
+    } finally {
+      // Hasta aquí Guardar sigue deshabilitado (un segundo clic no envía otro
+      // PUT); con éxito, error del PUT o error de la recarga, se desbloquea.
       setGuardando(false)
     }
   }

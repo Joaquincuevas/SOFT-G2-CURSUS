@@ -181,6 +181,66 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     terminarRecarga(SIN_NOTAS)
   })
 
+  // Caso de la revisión: se guarda 6,0 para Bruno, pero otro ayudante
+  // restaura su 5,5 antes de la recarga, que trae lo mismo que al abrir.
+  test('si la recarga trae las mismas notas, el formulario se reinicia con ellas', async () => {
+    let puts = 0
+    let terminarRecarga: ((valor: unknown) => void) | undefined
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        puts++
+        return json({
+          ...SIN_NOTAS,
+          alumnos: [
+            SIN_NOTAS.alumnos[0],
+            { ...SIN_NOTAS.alumnos[1], nota: 6 },
+            SIN_NOTAS.alumnos[2],
+          ],
+        })
+      }
+      return puts === 0
+        ? SIN_NOTAS
+        : new Promise((resolve) => {
+            terminarRecarga = resolve
+          })
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Bruno Díaz', '6.0')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+
+    await waitFor(() => expect(terminarRecarga).toBeDefined())
+    terminarRecarga!(SIN_NOTAS)
+
+    const bruno = panel.getByLabelText('Nota de Bruno Díaz')
+    await waitFor(() => expect(bruno).toBeEnabled())
+    expect(bruno).toHaveValue(5.5)
+    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
+  })
+
+  test('si la recarga falla, se desbloquea con las notas del servidor y muestra el error', async () => {
+    let puts = 0
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      // El PUT responde las notas como quedaron en el servidor: Bruno con
+      // 5,5, no el 6,0 que se escribió.
+      if (init?.method === 'PUT') {
+        puts++
+        return json(SIN_NOTAS)
+      }
+      return puts === 0 ? SIN_NOTAS : json({}, 500)
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Bruno Díaz', '6.0')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'no pudimos recargarlas',
+    )
+    const bruno = panel.getByLabelText('Nota de Bruno Díaz')
+    expect(bruno).toBeEnabled()
+    expect(bruno).toHaveValue(5.5)
+    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
+  })
+
   test('mientras guarda no se puede escribir: la recarga borraría lo nuevo', async () => {
     let terminarPut!: (valor: unknown) => void
     const panel = await abrirNotas('AYUDANTE', (init) =>
@@ -215,8 +275,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     await abrirEvaluacion(panel)
     const guardar = panel.getByRole('button', { name: 'Guardar notas' })
 
-    // Bruno ya tiene 5,5: guardarlo no cambiaría nada, y la recarga traería
-    // las mismas notas, así que Guardar quedaría deshabilitado sin salida.
+    // Bruno ya tiene 5,5: guardarlo no cambiaría nada, así que no se envía.
     escribir(panel, 'Bruno Díaz', '5.50')
     expect(guardar).toBeDisabled()
 
