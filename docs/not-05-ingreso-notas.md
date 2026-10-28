@@ -36,14 +36,16 @@ Guardar es `PUT`: enviar las mismas notas otra vez no cambia nada ni deja evento
 
 El PUT:
 
-- Acepta **cualquier subconjunto** de los alumnos activos (incluso una lista vacía); los que no vienen conservan su nota.
+- Acepta **cualquier subconjunto** de los alumnos activos (incluso una lista vacía); los que no vienen conservan su nota. **Hasta 500 notas por guardado** (`MAX_NOTAS_GUARDADO`, más que los alumnos de cualquier sección): una lista más larga responde 400 por la validación del cuerpo, sin llegar al servicio.
 - **Valida todas las notas antes de escribir.** Una nota que no va de 1,0 a 7,0 con un decimal (0, 8, 5,55, `"x"`) responde **400 "Nota inválida"** y no guarda ninguna, aunque las demás sean válidas. La base lo vuelve a exigir con `ck_nota_valor`. Los mensajes por campo y la marca en rojo son NOT-06.
 - 400 con `{ message, sobrantes, repetidos }` si trae alumnos sin inscripción activa en la sección o repetidos (los UUID se comparan en minúsculas). No guarda nada.
-- 400 si intenta cambiar una nota publicada, y por un cuerpo mal formado (sin `notas`, `alumnoId` que no es UUID, nota nula o ausente, campos extra).
+- 400 **"Una nota publicada no se cambia desde aquí"** si la lista incluye a un alumno cuya nota está `PUBLICADA`, aunque traiga el mismo valor: se rechaza **la lista completa** antes de escribir, así que tampoco se guardan las demás notas ni queda ningún evento. Publicar es NOT-11 y recorregir, NOT-15.
+- 400 por un cuerpo mal formado (sin `notas`, `alumnoId` que no es UUID, nota nula o ausente, campos extra).
 - 404 si la evaluación no existe, está archivada o es de otra sección.
 - 403 si quien guarda no es ayudante de la sección. Se vuelve a comprobar dentro de la transacción, con una asignación activa en `ayudante_seccion`.
 - **Todo en una transacción.** Cada nota que cambia se guarda como propuesta y deja un evento `PROPUESTA` en `nota_cambio` con `AuditoriaNotasService.registrar()` (NOT-04): la primera vez con nota anterior nula, y al cambiarla con la anterior. Una nota igual a la guardada no deja evento ni toca la fila.
-- **Un guardado a la vez por evaluación**, con `pg_advisory_xact_lock`: así la nota anterior de la auditoría es siempre la última guardada. No se usa `FOR UPDATE` sobre `evaluacion` porque su RLS solo deja modificarla (y bloquear sus filas) al profesor. Las inscripciones se leen fijadas con `FOR SHARE`, como en ASI-02.
+- Si el `UPDATE` de una propuesta no modifica la fila (por ejemplo, porque la RLS la omite sin error), responde 500 y revierte todo, también el evento ya registrado, en vez de responder 200 con la nota sin cambiar.
+- **Un guardado a la vez por evaluación**, con `pg_advisory_xact_lock` sobre `notas:<evaluacionId>` (el id en minúsculas, porque la ruta también lo acepta en mayúsculas): así la nota anterior de la auditoría es siempre la última guardada. No se usa `FOR UPDATE` sobre `evaluacion` porque su RLS solo deja modificarla (y bloquear sus filas) al profesor. Las inscripciones se leen fijadas con `FOR SHARE`, como en ASI-02.
 
 ## Datos
 
