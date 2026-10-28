@@ -126,6 +126,12 @@ El Director no tiene facultad asociada. En Norte, cada administrativo pertenece 
 
 Además, para que las listas de la demo de gestión parezcan las de un curso real, cada facultad tiene **3 profesores, 4 ayudantes y 25 alumnos de demo** con nombres realistas y correos `nombre.apellido@<dominio>` (por ejemplo, `camila.rojas@norte.cursus.test`). Usan la misma contraseña que el resto y se generan siempre iguales (`usuariosDeDemo` en `backend/src/database/seed.ts`), así que el seed no los duplica. Los tests usan los usuarios de la tabla, no los de demo.
 
+El seed no crea superadmins. Para probar el rol en local, crea uno con el mismo comando de producción (ver "Superadmin" en "Entornos en AWS"); la contraseña es provisoria y se cambia en el primer ingreso:
+
+```bash
+SUPERADMIN_CORREO=superadmin@cursus.test SUPERADMIN_NOMBRE="Superadmin" SUPERADMIN_PASSWORD=<contraseña-provisoria> npm run superadmin --workspace=backend
+```
+
 El mismo comando completa **Ingeniería de Norte con 3 carreras, 15 cursos y 30 secciones** en su período activo (GES-20). Cada sección incluye dos bloques con sala, profesor, dos ayudantes y alumnos de demo. Los horarios no se superponen. Repetirlo conserva las asignaciones y los retiros posteriores; una sala o código demo ocupado por otros datos hace fallar la carga completa sin cambios parciales. Ver [datos, criterios y guía de revisión](docs/ges-20-seed-facultad.md).
 
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
@@ -203,12 +209,12 @@ bash infra/aws/status.sh staging   # imprime "encendido" o "apagado"
 
 Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno>` es `staging` o `production`).
 
-| Dónde                                      | Qué                                                                                                                                                                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
-| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                         |
-| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                          |
-| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                             |
+| Dónde                                      | Qué                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS), `cursus-<entorno>/origin-secret` (header secreto) y `cursus-<entorno>/superadmin-password` (contraseña provisoria del superadmin). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
+| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                                                                                                        |
+| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                                                                                                         |
+| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                                                                                                            |
 
 El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
@@ -253,6 +259,26 @@ bash infra/aws/seed.sh staging
 
 - La contraseña llega a la tarea como `SEED_PASSWORD`, así que también queda como variable en el servicio de staging (el backend no la usa). Es inevitable: la tarea del seed usa la misma definición que el servicio.
 - Si se rota `cursus-staging/seed-password`, hay que volver a correr `seed.sh staging` para que los usuarios tomen la contraseña nueva.
+
+### Superadmin
+
+El superadmin administra la plataforma: elige una universidad y una facultad, y trabaja en ella como su Administrativo (ver el [ADR 0002](docs/adr/0002-superadmin-con-acceso-a-todas-las-universidades.md)). Es quien crea las universidades y sus primeros usuarios, así que producción no necesita datos cargados por el equipo.
+
+Solo se crea con este comando, que corre una persona desde CloudShell, con el entorno encendido:
+
+```bash
+bash infra/aws/superadmin.sh production <correo> "<nombre>"
+```
+
+- El correo no puede ser del dominio de una universidad (el login no lo distinguiría de un usuario de esa universidad) ni estar registrado. Si falla, no cambia nada.
+- La contraseña provisoria es el secreto `cursus-<entorno>/superadmin-password`. Nunca pasa por la línea de comandos ni por los logs. Para obtenerla y entregarla por privado:
+
+  ```bash
+  aws secretsmanager get-secret-value --secret-id cursus-production/superadmin-password --query SecretString --output text
+  ```
+
+- En su primer ingreso, el superadmin debe cambiarla (PER-03).
+- Requiere la plantilla actualizada (`stack.sh <entorno>`): la tarea recibe el secreto como `SUPERADMIN_PASSWORD`. Como con el seed, también queda como variable en el servicio, que no la usa.
 
 ### Límites conocidos
 
