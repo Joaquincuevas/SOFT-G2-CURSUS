@@ -9,6 +9,7 @@ import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
 import { ROL_APP } from '../../src/database/base-de-datos.service.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
+import { DirigirAnuncioSeccion1792600000000 } from '../../src/database/migrations/1792600000000-DirigirAnuncioSeccion.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
 
 // ANU-01: base propia con el seed cargado, que se crea y se borra en cada
@@ -211,6 +212,7 @@ describe('ANU-01: anuncios para todo el curso', () => {
       cuerpo: 'La clase del jueves es en la sala B-201.',
       autor: { id: await idDe(PROFESOR), nombre: 'Profesor Norte' },
       publicadoEn: expect.any(String) as string,
+      seccion: null,
     })
     const publicado = Date.parse(primero.publicadoEn)
     expect(publicado).toBeGreaterThanOrEqual(antes - 5_000)
@@ -371,6 +373,225 @@ describe('ANU-01: anuncios para todo el curso', () => {
   })
 })
 
+describe('ANU-02: anuncios para una sección', () => {
+  let privado: Anuncio
+
+  it('publica con la sección destinataria y su número', async () => {
+    privado = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'Solo sección 1',
+      cuerpo: 'Cambio de horario',
+      seccionId: secciones.s1,
+    })
+    expect(privado.seccion).toEqual({ id: secciones.s1, numero: 1 })
+    const [guardado] = await bd.query<{ seccion_id: string }[]>(
+      'SELECT seccion_id FROM anuncio WHERE id = $1',
+      [privado.id],
+    )
+    expect(guardado.seccion_id).toBe(secciones.s1)
+  })
+
+  it('lo reciben el profesor, ayudante y alumno de la sección', async () => {
+    for (const correo of [PROFESOR, AYUDANTE, ALUMNO]) {
+      expect(await listar(correo, secciones.s1)).toContainEqual(privado)
+    }
+  })
+
+  it('acepta un UUID válido en mayúsculas para la misma sección', async () => {
+    const anuncio = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'UUID normalizado',
+      cuerpo: 'Para esta sección',
+      seccionId: secciones.s1.toUpperCase(),
+    })
+    expect(anuncio.seccion).toEqual({ id: secciones.s1, numero: 1 })
+    expect(await listar(demo.alumno2, secciones.s2)).not.toContainEqual(anuncio)
+  })
+
+  it('no filtra el título ni el cuerpo a otra sección del mismo curso', async () => {
+    for (const correo of [demo.profesor2, demo.ayudante2, demo.alumno2]) {
+      const lista = await listar(correo, secciones.s2)
+      expect(
+        lista.some((a) => a.id === privado.id || a.titulo === privado.titulo),
+      ).toBe(false)
+      expect(lista.length).toBeGreaterThan(0) // Los generales siguen visibles.
+    }
+    expect(await listar(PROFESOR, secciones.otroCurso)).toEqual([])
+  })
+
+  it('el Director sigue viendo los generales, pero no los de sección', async () => {
+    const lista = await listar(DIRECTOR, secciones.s1)
+    expect(lista.length).toBeGreaterThan(0)
+    expect(lista.every((a) => a.seccion === null)).toBe(true)
+  })
+
+  it('null publica para todo el curso, conservando el contrato anterior', async () => {
+    const general = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'General explícito',
+      cuerpo: 'Para todos',
+      seccionId: null,
+    })
+    expect(general.seccion).toBeNull()
+    expect(await listar(demo.alumno2, secciones.s2)).toContainEqual(general)
+  })
+
+  it.each(['', 'no-es-uuid', 1, {}, []])(
+    'rechaza un destinatario inválido: %j',
+    async (seccionId) => {
+      const antes = await anunciosEnBase()
+      await publicar(
+        PROFESOR,
+        secciones.s1,
+        { titulo: 'T', cuerpo: 'C', seccionId },
+        400,
+      )
+      expect(await anunciosEnBase()).toBe(antes)
+    },
+  )
+
+  it('rechaza otra sección, otro curso y un UUID inexistente sin guardar', async () => {
+    for (const seccionId of [
+      secciones.s2,
+      secciones.otroCurso,
+      '00000000-0000-4000-8000-000000000099',
+    ]) {
+      const antes = await anunciosEnBase()
+      await publicar(
+        PROFESOR,
+        secciones.s1,
+        { titulo: 'T', cuerpo: 'C', seccionId },
+        400,
+      )
+      expect(await anunciosEnBase()).toBe(antes)
+    }
+  })
+
+  it('una inscripción retirada pierde el acceso aunque el anuncio exista', async () => {
+    const alumnoId = await idDe(ALUMNO)
+    const retiradas = await bd.query<{ id: string }[]>(
+      `WITH retiradas AS (
+         UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+          WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL RETURNING id
+       ) SELECT id FROM retiradas`,
+      [secciones.s1, alumnoId, await idDe(ADMIN_INGENIERIA)],
+    )
+    try {
+      await listar(ALUMNO, secciones.s1, 403)
+    } finally {
+      await bd.query(
+        'UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL WHERE id = ANY($1::uuid[])',
+        [retiradas.map((i) => i.id)],
+      )
+    }
+  })
+
+  it('la FK rechaza una sección que no pertenece al curso del anuncio', async () => {
+    await expect(
+      bd.query('UPDATE anuncio SET seccion_id = $2 WHERE id = $1', [
+        privado.id,
+        secciones.otroCurso,
+      ]),
+    ).rejects.toMatchObject({
+      driverError: { code: '23503', constraint: 'fk_anuncio_seccion' },
+    })
+  })
+
+  it('un anuncio de sección archivado deja de aparecer', async () => {
+    await bd.query('UPDATE anuncio SET archived_at = now() WHERE id = $1', [
+      privado.id,
+    ])
+    expect(await listar(ALUMNO, secciones.s1)).not.toContainEqual(privado)
+  })
+})
+
+describe('ANU-03: lectura cronológica del alumno', () => {
+  it('mezcla generales y propios por fecha, desempata de forma estable y excluye los demás', async () => {
+    const creados: Anuncio[] = []
+    const crear = async (
+      seccionId: string,
+      titulo: string,
+      fecha: string,
+      privado = false,
+    ) => {
+      const anuncio = await publicar(
+        seccionId === secciones.s2 ? demo.profesor2 : PROFESOR,
+        seccionId,
+        {
+          titulo,
+          cuerpo: `Contenido de ${titulo}\nSegunda línea.`,
+          ...(privado ? { seccionId } : {}),
+        },
+      )
+      creados.push(anuncio)
+      await bd.query('UPDATE anuncio SET created_at = $2 WHERE id = $1', [
+        anuncio.id,
+        fecha,
+      ])
+      return { ...anuncio, publicadoEn: fecha }
+    }
+
+    try {
+      // Se insertan fuera de orden cronológico y con dos fechas iguales. Las
+      // fechas futuras separan estos anuncios de los creados por ANU-01/02.
+      const reciente = await crear(
+        secciones.s2,
+        'ANU-03 general reciente',
+        '2090-10-03T12:00:00.000Z',
+      )
+      const antiguo = await crear(
+        secciones.s1,
+        'ANU-03 general antiguo',
+        '2090-10-01T12:00:00.000Z',
+      )
+      const propio = await crear(
+        secciones.s1,
+        'ANU-03 privado propio',
+        reciente.publicadoEn,
+        true,
+      )
+      const ajeno = await crear(
+        secciones.s2,
+        'ANU-03 privado ajeno',
+        '2090-10-04T12:00:00.000Z',
+        true,
+      )
+      const otroCurso = await crear(
+        secciones.otroCurso,
+        'ANU-03 otro curso',
+        '2090-10-05T12:00:00.000Z',
+      )
+      const archivado = await crear(
+        secciones.s1,
+        'ANU-03 archivado',
+        '2090-10-06T12:00:00.000Z',
+      )
+      await bd.query('UPDATE anuncio SET archived_at = now() WHERE id = $1', [
+        archivado.id,
+      ])
+
+      const empate = [reciente, propio].sort((a, b) => (a.id < b.id ? 1 : -1))
+      const esperado = [...empate, antiguo]
+      for (let lectura = 0; lectura < 2; lectura++) {
+        const lista = await listar(ALUMNO, secciones.s1)
+        // Compara también título, cuerpo multilínea, autor, fecha ISO y destino.
+        expect(lista.slice(0, 3)).toEqual(esperado)
+        for (const oculto of [ajeno, otroCurso, archivado]) {
+          expect(JSON.stringify(lista)).not.toContain(oculto.id)
+          expect(JSON.stringify(lista)).not.toContain(oculto.titulo)
+          expect(JSON.stringify(lista)).not.toContain(oculto.cuerpo)
+        }
+      }
+      // Otro alumno del mismo curso recibe los generales y su propio privado.
+      const otraSeccion = await listar(demo.alumno2, secciones.s2)
+      expect(otraSeccion.slice(0, 3)).toEqual([ajeno, reciente, antiguo])
+      expect(otraSeccion).not.toContainEqual(propio)
+    } finally {
+      await bd.query(
+        'UPDATE anuncio SET archived_at = now() WHERE id = ANY($1::uuid[])',
+        [creados.map((anuncio) => anuncio.id)],
+      )
+    }
+  })
+})
+
 describe('restricciones en la base de datos', () => {
   // Ejecuta la consulta con el rol de la API y la sesión dada (por defecto, la
   // universidad de Norte), dentro de una transacción que se revierte.
@@ -454,5 +675,37 @@ describe('restricciones en la base de datos', () => {
       code: '23514',
       constraint: restriccion,
     })
+  })
+})
+
+describe('reversión de ANU-02', () => {
+  it('archiva los anuncios privados antes de quitar el destinatario, conservando los generales', async () => {
+    const privado = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'Privado al revertir',
+      cuerpo: 'Solo el grupo',
+      seccionId: secciones.s1,
+    })
+    const general = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'General al revertir',
+      cuerpo: 'Todos los grupos',
+    })
+    // Ejecuta el down y el up de la migración directamente: no es la última
+    // registrada (MAT-08 vino después), así que undoLastMigration no sirve.
+    const migracion = new DirigirAnuncioSeccion1792600000000()
+    const q = bd.createQueryRunner()
+    try {
+      await migracion.down(q)
+      const filas = await bd.query<{ id: string; archived_at: Date | null }[]>(
+        'SELECT id, archived_at FROM anuncio WHERE id = ANY($1::uuid[])',
+        [[privado.id, general.id]],
+      )
+      expect(
+        filas.find((a) => a.id === privado.id)?.archived_at,
+      ).toBeInstanceOf(Date)
+      expect(filas.find((a) => a.id === general.id)?.archived_at).toBeNull()
+    } finally {
+      await migracion.up(q)
+      await q.release()
+    }
   })
 })

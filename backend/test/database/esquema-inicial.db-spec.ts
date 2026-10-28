@@ -17,6 +17,7 @@ const TABLAS = [
   'actividad',
   'anuncio',
   'asignacion_cambio',
+  'asistencia',
   'ayudante_seccion',
   'carrera',
   'clase',
@@ -27,6 +28,7 @@ const TABLAS = [
   'horario_seccion',
   'inscripcion',
   'limite_login',
+  'nota_cambio',
   'periodo',
   'refresh_token',
   'seccion',
@@ -160,6 +162,15 @@ afterAll(async () => {
 })
 
 describe('migraciones', () => {
+  it('tienen timestamps únicos y están registradas en orden cronológico', () => {
+    const timestamps = bd.migrations.map((migracion) =>
+      Number((migracion.name ?? migracion.constructor.name).slice(-13)),
+    )
+    expect(timestamps.every(Number.isInteger)).toBe(true)
+    expect(new Set(timestamps).size).toBe(timestamps.length)
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b))
+  })
+
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
@@ -168,9 +179,45 @@ describe('migraciones', () => {
     const SIN_ACTIVIDAD = TABLAS.filter((tabla) => tabla !== 'actividad')
     expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
+    // ANU-02 quita el destinatario, manteniendo las tablas.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
+
+    // CrearAsistencia (ASI-02): quita su tabla y la clave
+    // (id, universidad_id) de clase.
+    await bd.undoLastMigration()
+    const SIN_ASISTENCIA = SIN_ACTIVIDAD.filter(
+      (tabla) => tabla !== 'asistencia',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ASISTENCIA)
+    const [{ restosAsistencia }] = await bd.query<
+      { restosAsistencia: string }[]
+    >(
+      `SELECT count(*) AS "restosAsistencia" FROM pg_constraint
+        WHERE conname = 'uq_clase_id_universidad'`,
+    )
+    expect(Number(restosAsistencia)).toBe(0)
+
+    // CrearNotaCambio (NOT-04): quita su tabla, su función y la clave
+    // (id, universidad_id) de evaluacion.
+    await bd.undoLastMigration()
+    const SIN_NOTA_CAMBIO = SIN_ASISTENCIA.filter(
+      (tabla) => tabla !== 'nota_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_NOTA_CAMBIO)
+    const [{ restosNotaCambio }] = await bd.query<
+      { restosNotaCambio: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_constraint
+                WHERE conname = 'uq_evaluacion_id_universidad')
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname = 'nota_cambio_inmutable') AS "restosNotaCambio"`,
+    )
+    expect(Number(restosNotaCambio)).toBe(0)
+
     // CrearAnuncio: solo quita su tabla.
     await bd.undoLastMigration()
-    const SIN_ANUNCIO = SIN_ACTIVIDAD.filter((tabla) => tabla !== 'anuncio')
+    const SIN_ANUNCIO = SIN_NOTA_CAMBIO.filter((tabla) => tabla !== 'anuncio')
     expect(await tablasExistentes()).toEqual(SIN_ANUNCIO)
 
     // CrearClase (ASI-01): solo quita su tabla.
@@ -320,7 +367,8 @@ describe('migraciones', () => {
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
-        t !== 'asignacion_cambio',
+        t !== 'asignacion_cambio' &&
+        t !== 'nota_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
@@ -345,6 +393,7 @@ describe('migraciones', () => {
       [
         'actividad',
         'anuncio',
+        'asistencia',
         'ayudante_seccion',
         'carrera',
         'clase',

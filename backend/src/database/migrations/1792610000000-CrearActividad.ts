@@ -4,8 +4,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // instrucciones y fecha y hora límite. Una actividad está cerrada cuando su
 // plazo ya pasó: se calcula al leerla, no se guarda. Nada se elimina: una
 // actividad se archiva con archived_at.
-export class CrearActividad1792590000000 implements MigrationInterface {
-  name = 'CrearActividad1792590000000'
+export class CrearActividad1792610000000 implements MigrationInterface {
+  name = 'CrearActividad1792610000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Las FKs compuestas (con las claves de CrearInscripcion) aseguran que la

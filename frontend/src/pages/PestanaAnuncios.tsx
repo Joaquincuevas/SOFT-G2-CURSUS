@@ -13,18 +13,32 @@ import './PestanaAnuncios.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
 
-// ANU-01 (RN-09): anuncios del curso, que ven los integrantes de todas sus
-// secciones. Publica solo el profesor de la sección; el ayudante, el alumno
-// y el Director ven la lista, del más nuevo al más antiguo.
-export function PestanaAnuncios({ seccionId, rol }: PropsPestana) {
+// ANU-03: la API filtra los destinatarios y ordena por fecha antes de responder.
+// Se conserva ese orden; no se consultan anuncios de otras secciones.
+export function PestanaAnuncios({
+  seccionId,
+  numeroSeccion,
+  rol,
+}: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/anuncios`
   const [anuncios, recargar] = useDatos<Anuncio[]>(ruta)
 
   return (
     <section className="anuncios" aria-label="Anuncios del curso">
       <h3 className="vista-seccion__subtitulo">Anuncios del curso</h3>
+      {rol === 'ALUMNO' && (
+        <p className="anuncios__ayuda">
+          Anuncios de todo el curso y de tu sección, del más reciente al más
+          antiguo.
+        </p>
+      )}
       {rol === 'PROFESOR' && (
-        <FormularioAnuncio ruta={ruta} alPublicar={recargar} />
+        <FormularioAnuncio
+          ruta={ruta}
+          seccionId={seccionId}
+          numeroSeccion={numeroSeccion}
+          alPublicar={recargar}
+        />
       )}
       {anuncios === undefined ? (
         <Cargando texto="Cargando anuncios…" />
@@ -36,7 +50,7 @@ export function PestanaAnuncios({ seccionId, rol }: PropsPestana) {
       ) : anuncios.length === 0 ? (
         <p className="dashboard__texto">Aún no hay anuncios</p>
       ) : (
-        <ul className="anuncios__lista" aria-label="Anuncios publicados">
+        <ol className="anuncios__lista" aria-label="Anuncios publicados">
           {anuncios.map((anuncio) => (
             <li key={anuncio.id} className="anuncios__anuncio">
               <article aria-labelledby={`anuncio-${anuncio.id}`}>
@@ -49,11 +63,16 @@ export function PestanaAnuncios({ seccionId, rol }: PropsPestana) {
                     {fechaAnuncio(anuncio.publicadoEn)}
                   </time>
                 </p>
+                <p className="anuncios__destinatario">
+                  {anuncio.seccion
+                    ? `Sección ${anuncio.seccion.numero}`
+                    : 'Todo el curso'}
+                </p>
                 <p className="anuncios__cuerpo">{anuncio.cuerpo}</p>
               </article>
             </li>
           ))}
-        </ul>
+        </ol>
       )}
     </section>
   )
@@ -73,19 +92,25 @@ function mensajeDe(cuerpo: { message?: unknown } | null): string | null {
 
 function FormularioAnuncio({
   ruta,
+  seccionId,
+  numeroSeccion,
   alPublicar,
 }: {
   ruta: string
+  seccionId: string
+  numeroSeccion?: number
   alPublicar: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const [campos, setCampos] = useState(VACIO)
+  const [soloSeccion, setSoloSeccion] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
 
   async function publicar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (guardando) return
     setGuardando(true)
     setError(null)
     setAviso(null)
@@ -93,7 +118,10 @@ function FormularioAnuncio({
       const res = await fetchConSesion(ruta, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(campos satisfies PublicarAnuncio),
+        body: JSON.stringify({
+          ...campos,
+          ...(soloSeccion ? { seccionId } : {}),
+        } satisfies PublicarAnuncio),
       })
       if (!res.ok) {
         const cuerpo = (await res.json().catch(() => null)) as {
@@ -106,7 +134,12 @@ function FormularioAnuncio({
         return
       }
       setCampos(VACIO)
-      setAviso('Anuncio publicado para todas las secciones del curso')
+      setAviso(
+        soloSeccion
+          ? `Anuncio publicado para la sección ${numeroSeccion ?? 'actual'}`
+          : 'Anuncio publicado para todas las secciones del curso',
+      )
+      setSoloSeccion(false)
       alPublicar()
     } catch {
       setError(
@@ -132,8 +165,23 @@ function FormularioAnuncio({
       onSubmit={(event) => void publicar(event)}
     >
       <label className="anuncios__campo">
+        Dirigido a
+        <select
+          value={soloSeccion ? seccionId : ''}
+          disabled={guardando}
+          onChange={(event) => {
+            setAviso(null)
+            setSoloSeccion(event.target.value === seccionId)
+          }}
+        >
+          <option value="">Todo el curso</option>
+          <option value={seccionId}>Sección {numeroSeccion ?? 'actual'}</option>
+        </select>
+      </label>
+      <label className="anuncios__campo">
         Título
         <input
+          disabled={guardando}
           value={campos.titulo}
           onChange={cambiar('titulo')}
           maxLength={LARGO_TITULO_ANUNCIO}
@@ -143,6 +191,7 @@ function FormularioAnuncio({
       <label className="anuncios__campo">
         Mensaje
         <textarea
+          disabled={guardando}
           value={campos.cuerpo}
           onChange={cambiar('cuerpo')}
           maxLength={LARGO_CUERPO_ANUNCIO}
@@ -151,7 +200,9 @@ function FormularioAnuncio({
         />
       </label>
       <p className="anuncios__ayuda">
-        Lo verán los alumnos y ayudantes de todas las secciones del curso.
+        {soloSeccion
+          ? 'Lo verán solo los integrantes de esta sección.'
+          : 'Lo verán los alumnos y ayudantes de todas las secciones del curso.'}
       </p>
       <button className="anuncios__boton" type="submit" disabled={guardando}>
         Publicar anuncio

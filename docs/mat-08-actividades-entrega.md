@@ -59,7 +59,7 @@ Los permisos van en `shared/src/permisos.ts`, con el mismo formato que NOT-01: e
 
 ## Base de datos
 
-La migración `CrearActividad` (`1792590000000`) crea la tabla `actividad`:
+La migración `CrearActividad` (`1792610000000`) crea la tabla `actividad`:
 
 - `seccion_id`, `titulo`, `instrucciones`, `plazo` (`timestamptz`), `creada_por`, `archived_at`, `created_at` y `updated_at`.
 - FKs compuestas `fk_actividad_seccion` y `fk_actividad_creada_por`: la sección y el profesor son de la misma universidad que la actividad.
