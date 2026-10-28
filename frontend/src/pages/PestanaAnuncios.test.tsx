@@ -62,7 +62,77 @@ const tarjetas = (panel: ReturnType<typeof within>) =>
     texto: tarjeta.textContent,
   }))
 
-describe('pestaña Anuncios (ANU-01)', () => {
+describe('ANU-03: el alumno lee anuncios del curso', () => {
+  test('muestra generales y propios en una lista cronológica con todos sus datos', async () => {
+    const privado: Anuncio = {
+      ...LISTA[0],
+      seccion: { id: 'seccion-1', numero: 1 },
+    }
+    const lista = [privado, LISTA[1]]
+    const { panel } = await abrirAnuncios('ALUMNO', () => lista)
+    const publicada = await panel.findByRole('list', {
+      name: 'Anuncios publicados',
+    })
+    expect(publicada.tagName).toBe('OL')
+    expect(
+      panel.getByText(/del más reciente al más antiguo/),
+    ).toHaveTextContent(
+      'Anuncios de todo el curso y de tu sección, del más reciente al más antiguo.',
+    )
+    const articulos = within(publicada).getAllByRole('article')
+    expect(articulos).toHaveLength(lista.length)
+    lista.forEach((anuncio, indice) => {
+      const articulo = within(articulos[indice])
+      expect(articulo.getByRole('heading')).toHaveTextContent(anuncio.titulo)
+      expect(
+        articulo.getByText(anuncio.autor.nombre, { exact: false }),
+      ).toBeInTheDocument()
+      expect(
+        articulo.getByText(anuncio.cuerpo, { normalizer: (texto) => texto }),
+      ).toHaveTextContent(anuncio.cuerpo, { normalizeWhitespace: false })
+      const fecha = articulo.getByText(fechaAnuncio(anuncio.publicadoEn))
+      expect(fecha.tagName).toBe('TIME')
+      expect(fecha).toHaveAttribute('datetime', anuncio.publicadoEn)
+      expect(
+        articulo.getByText(indice === 0 ? 'Sección 1' : 'Todo el curso'),
+      ).toBeInTheDocument()
+    })
+    expect(panel.queryByRole('form')).toBeNull()
+  })
+
+  test('espera la respuesta antes de mostrar la lista al alumno', async () => {
+    let responder: (r: Anuncio[]) => void = () => {}
+    const pendiente = new Promise<Anuncio[]>((resolve) => {
+      responder = resolve
+    })
+    const { panel } = await abrirAnuncios('ALUMNO', () => pendiente)
+    expect(panel.getByText('Cargando anuncios…')).toBeInTheDocument()
+    expect(panel.queryByRole('article')).toBeNull()
+    responder(LISTA)
+    await panel.findByText('Prueba 1')
+    expect(panel.queryByText('Cargando anuncios…')).toBeNull()
+  })
+
+  test('el título y el cuerpo se leen como texto, conservando saltos de línea', async () => {
+    const anuncio: Anuncio = {
+      ...LISTA[0],
+      titulo: '<b>Prueba</b>',
+      cuerpo:
+        '<img src=x onerror=alert(1)>\nRevisar <script>alert(1)</script>.',
+    }
+    const { panel } = await abrirAnuncios('ALUMNO', () => [anuncio])
+    const articulo = await panel.findByRole('article')
+    expect(within(articulo).getByRole('heading')).toHaveTextContent(
+      anuncio.titulo,
+    )
+    expect(articulo).toHaveTextContent(anuncio.cuerpo, {
+      normalizeWhitespace: false,
+    })
+    expect(articulo.querySelector('img, script, b')).toBeNull()
+  })
+})
+
+describe('pestaña Anuncios (ANU-01/02)', () => {
   test.each<Rol>(['ALUMNO', 'AYUDANTE'])(
     '%s ve la sección destinataria sin formulario de publicación',
     async (rol) => {
