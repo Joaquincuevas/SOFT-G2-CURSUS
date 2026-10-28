@@ -122,7 +122,7 @@ for (const rol of ROLES) MATRIZ[rol].Evaluacion = EVALUACION[rol]
 const ANUNCIO: Record<Rol, AccionConcreta[]> = {
   DIRECTOR: LECTURA,
   ADMINISTRATIVO: [],
-  PROFESOR: ['create', 'read'],
+  PROFESOR: ['create', 'read', 'update'],
   AYUDANTE: LECTURA,
   ALUMNO: LECTURA,
   SUPERADMIN: [],

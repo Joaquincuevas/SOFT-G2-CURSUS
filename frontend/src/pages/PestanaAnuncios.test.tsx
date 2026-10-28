@@ -6,7 +6,7 @@ import {
 } from '@cursus/shared'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import { json, renderConSesion } from '../test/sesion'
+import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 import { fechaAnuncio } from './anuncios'
 
 const VISTA = '/mis-cursos/secciones/seccion-1'
@@ -50,11 +50,13 @@ async function abrirAnuncios(
   anuncios: (init?: RequestInit) => unknown = () => LISTA,
   lecturas: (init?: RequestInit) => unknown = () =>
     new Response(null, { status: 204 }),
+  extras: Record<string, RutaSimulada> = {},
 ) {
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [ANUNCIOS]: anuncios,
     [`${ANUNCIOS}/lecturas`]: lecturas,
+    ...extras,
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
   expect(screen.getByRole('tab', { name: 'Anuncios' })).toHaveAttribute(
@@ -69,6 +71,158 @@ const tarjetas = (panel: ReturnType<typeof within>) =>
     titulo: within(tarjeta).getByRole('heading').textContent,
     texto: tarjeta.textContent,
   }))
+
+describe('ANU-05: edición y versiones', () => {
+  const propio: Anuncio = {
+    ...LISTA[1],
+    autor: { id: 'usuario-profesor', nombre: 'Profesor Norte' },
+  }
+  const ruta = `${ANUNCIOS}/${propio.id}`
+
+  test('solo el autor ve Editar e Historial, conserva campos ante error y guarda la corrección', async () => {
+    let actualizado = false,
+      fallo = true
+    const enviados: unknown[] = []
+    const corregido = {
+      ...propio,
+      titulo: 'Título corregido',
+      cuerpo: 'Nuevo cuerpo\nOtra línea.',
+      editadoEn: '2026-10-28T12:15:00Z',
+    }
+    const { panel } = await abrirAnuncios(
+      'PROFESOR',
+      () => [LISTA[0], actualizado ? corregido : propio],
+      undefined,
+      {
+        [ruta]: (init) => {
+          enviados.push(JSON.parse(init?.body as string))
+          if (fallo) return json({ message: ['Error de validación'] }, 400)
+          actualizado = true
+          return corregido
+        },
+      },
+    )
+    await panel.findByText(propio.titulo)
+    expect(
+      panel.getAllByRole('button', { name: 'Editar anuncio' }),
+    ).toHaveLength(1)
+    expect(
+      panel.getAllByRole('button', { name: 'Ver historial' }),
+    ).toHaveLength(1)
+    fireEvent.click(panel.getByRole('button', { name: 'Editar anuncio' }))
+    expect(panel.getByLabelText('Título del anuncio')).toHaveValue(
+      propio.titulo,
+    )
+    expect(panel.getByLabelText('Cuerpo del anuncio')).toHaveValue(
+      propio.cuerpo,
+    )
+    fireEvent.change(panel.getByLabelText('Título del anuncio'), {
+      target: { value: corregido.titulo },
+    })
+    fireEvent.change(panel.getByLabelText('Cuerpo del anuncio'), {
+      target: { value: corregido.cuerpo },
+    })
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar cambios' }))
+    await panel.findByText('Error de validación')
+    expect(panel.getByLabelText('Cuerpo del anuncio')).toHaveValue(
+      corregido.cuerpo,
+    )
+    fallo = false
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar cambios' }))
+    await panel.findByText('Anuncio guardado')
+    await panel.findByRole('heading', { name: corregido.titulo })
+    expect(panel.getByText(/^Editado el/)).toHaveTextContent(
+      fechaAnuncio(corregido.editadoEn),
+    )
+    expect(enviados).toEqual([
+      { titulo: corregido.titulo, cuerpo: corregido.cuerpo },
+      { titulo: corregido.titulo, cuerpo: corregido.cuerpo },
+    ])
+    expect(panel.queryByRole('form', { name: 'Editar anuncio' })).toBeNull()
+  })
+
+  test('Cancelar no envía cambios; durante el guardado bloquea campos y evita otro envío', async () => {
+    let pedidos = 0
+    let responder: (r: Response) => void = () => {}
+    const pendiente = new Promise<Response>((resolve) => {
+      responder = resolve
+    })
+    const { panel } = await abrirAnuncios(
+      'PROFESOR',
+      () => [propio],
+      undefined,
+      {
+        [ruta]: () => {
+          pedidos++
+          return pendiente
+        },
+      },
+    )
+    await panel.findByText(propio.titulo)
+    fireEvent.click(panel.getByRole('button', { name: 'Editar anuncio' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Cancelar edición' }))
+    expect(pedidos).toBe(0)
+    fireEvent.click(panel.getByRole('button', { name: 'Editar anuncio' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar cambios' }))
+    expect(panel.getByLabelText('Título del anuncio')).toBeDisabled()
+    expect(
+      panel.getByRole('button', { name: 'Cancelar edición' }),
+    ).toBeDisabled()
+    fireEvent.submit(panel.getByRole('form', { name: 'Editar anuncio' }))
+    expect(pedidos).toBe(1)
+    responder(json({}, 500))
+    await panel.findByRole('alert')
+    expect(panel.getByLabelText('Título del anuncio')).toBeEnabled()
+  })
+
+  test('el historial conserva la versión original y reintenta ante un fallo de carga', async () => {
+    let fallo = true
+    const { panel } = await abrirAnuncios(
+      'PROFESOR',
+      () => [propio],
+      undefined,
+      {
+        [`${ruta}/historial`]: () =>
+          fallo
+            ? json({}, 500)
+            : [
+                {
+                  id: 'cambio',
+                  titulo: 'Título original',
+                  cuerpo: '<b>Texto original</b>\nSegunda línea.',
+                  fecha: '2026-10-28T12:15:00Z',
+                  responsable: propio.autor,
+                },
+              ],
+      },
+    )
+    await panel.findByText(propio.titulo)
+    fireEvent.click(panel.getByRole('button', { name: 'Ver historial' }))
+    await panel.findByText('No pudimos cargar el historial.')
+    fallo = false
+    fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
+    await panel.findByText('Versión original')
+    expect(panel.getByText('Título original')).toBeInTheDocument()
+    expect(panel.getByText(/<b>Texto original/)).toHaveTextContent(
+      '<b>Texto original</b>\nSegunda línea.',
+      { normalizeWhitespace: false },
+    )
+    fireEvent.click(panel.getByRole('button', { name: 'Ocultar historial' }))
+    expect(panel.queryByText('Versión original')).toBeNull()
+  })
+
+  test.each<Rol>(['ALUMNO', 'AYUDANTE'])(
+    '%s ve la marca y fecha sin controles de edición ni historial',
+    async (rol) => {
+      const { panel } = await abrirAnuncios(rol, () => [
+        { ...propio, editadoEn: '2026-10-28T12:15:00Z' },
+      ])
+      await panel.findByText(/^Editado el/)
+      expect(panel.queryByRole('button', { name: 'Editar anuncio' })).toBeNull()
+      expect(panel.queryByRole('button', { name: 'Ver historial' })).toBeNull()
+    },
+  )
+})
 
 describe('ANU-04: marca los anuncios nuevos al abrirlos', () => {
   test('conserva Nuevo durante la lectura y solo registra los IDs nuevos recibidos', async () => {
