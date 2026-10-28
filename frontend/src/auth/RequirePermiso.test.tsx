@@ -95,6 +95,7 @@ describe('usePuede', () => {
           actualizarPeriodoActivo: () => undefined,
           actualizarNombre: () => undefined,
           marcarPasswordCambiada: () => undefined,
+          reemplazarUsuario: () => undefined,
         }}
       >
         <BotonCrear />

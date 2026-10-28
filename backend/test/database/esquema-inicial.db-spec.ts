@@ -35,6 +35,7 @@ const TABLAS = [
   'refresh_token',
   'seccion',
   'sesion_auth',
+  'superadmin_cambio',
   'universidad',
   'usuario',
 ]
@@ -176,15 +177,53 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearNota (NOT-05) es la última: solo quita su tabla.
+    // CrearNota (NOT-05) es la última: quita su tabla y, con ella, su trigger
+    // de auditoría del superadmin.
     await bd.undoLastMigration()
     const SIN_NOTA = TABLAS.filter((tabla) => tabla !== 'nota')
     expect(await tablasExistentes()).toEqual(SIN_NOTA)
 
+    // Siguen las cuatro de MT-04 (superadmin). CrearSuperadminCambio
+    // quita su tabla, sus funciones y los triggers de auditoría.
+    await bd.undoLastMigration()
+    const SIN_SUPERADMIN = SIN_NOTA.filter(
+      (tabla) => tabla !== 'superadmin_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_SUPERADMIN)
+    // ElegirFacultadSuperadmin, PermitirUsuarioSuperadmin y
+    // AgregarRolSuperadmin no crean tablas: quitan sus columnas, funciones,
+    // triggers y restricciones.
+    await bd.undoLastMigration()
+    await bd.undoLastMigration()
+    await bd.undoLastMigration()
+    const [{ restosSuperadmin }] = await bd.query<
+      { restosSuperadmin: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_proc
+                WHERE proname IN ('auditar_superadmin', 'superadmin_cambio_inmutable',
+                                  'facultad_actual', 'superadmin_actual',
+                                  'responsable_de_la_universidad'))
+            + (SELECT count(*) FROM pg_trigger
+                WHERE tgname LIKE '%superadmin%'
+                   OR tgname IN ('tg_curso_cambio_responsable_id_universidad',
+                                 'tg_asignacion_cambio_responsable_id_universidad',
+                                 'tg_inscripcion_archivada_por_universidad'))
+            + (SELECT count(*) FROM pg_constraint
+                WHERE conname IN ('ck_usuario_superadmin',
+                                  'fk_sesion_auth_facultad_activa'))
+            + (SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'sesion_auth'
+                  AND column_name LIKE '%_activa_id') AS "restosSuperadmin"`,
+    )
+    expect(Number(restosSuperadmin)).toBe(0)
+    expect(await tablasExistentes()).toEqual(SIN_SUPERADMIN)
+
     // CrearLecturaAnuncio (ANU-04): quita solo el seguimiento de lectura, no
     // los anuncios.
     await bd.undoLastMigration()
-    const SIN_LECTURA = SIN_NOTA.filter((tabla) => tabla !== 'lectura_anuncio')
+    const SIN_LECTURA = SIN_SUPERADMIN.filter(
+      (tabla) => tabla !== 'lectura_anuncio',
+    )
     expect(await tablasExistentes()).toEqual(SIN_LECTURA)
 
     // CrearActividad (MAT-08): solo quita su tabla.
@@ -197,8 +236,8 @@ describe('migraciones', () => {
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_ACTIVIDAD)
 
-    // CrearAsistencia (ASI-02): quita su tabla y la clave
-    // (id, universidad_id) de clase.
+    // CrearAsistencia (ASI-02): quita su tabla y la clave (id, universidad_id)
+    // de clase.
     await bd.undoLastMigration()
     const SIN_ASISTENCIA = SIN_ACTIVIDAD.filter(
       (tabla) => tabla !== 'asistencia',
@@ -383,7 +422,8 @@ describe('migraciones', () => {
         t !== 'curso_cambio' &&
         t !== 'asignacion_cambio' &&
         t !== 'nota_cambio' &&
-        t !== 'lectura_anuncio',
+        t !== 'lectura_anuncio' &&
+        t !== 'superadmin_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
       expect(columnas).toEqual(
@@ -524,12 +564,68 @@ describe('carrera', () => {
 })
 
 describe('usuario', () => {
+  // Solo el superadmin no tiene universidad (MT-04).
   it('rechaza un usuario sin universidad', () =>
     enTransaccion(async (q) => {
       await expect(
         crearUsuario(q, { universidadId: null, correo: 'ana@ua.cl' }),
-      ).rejects.toMatchObject({ code: NOT_NULL, column: 'universidad_id' })
+      ).rejects.toMatchObject({
+        code: CHECK,
+        constraint: 'ck_usuario_superadmin',
+      })
     }))
+
+  describe('superadmin (MT-04)', () => {
+    const superadmin = (
+      q: QueryRunner,
+      datos: { universidadId?: string; facultadId?: string; correo?: string },
+    ) =>
+      crearUsuario(q, {
+        universidadId: datos.universidadId ?? null,
+        facultadId: datos.facultadId ?? null,
+        correo: datos.correo ?? 'super@cursus.cl',
+        rol: 'SUPERADMIN',
+      })
+
+    it('acepta un superadmin sin universidad ni facultad', () =>
+      enTransaccion(async (q) => {
+        await superadmin(q, {})
+      }))
+
+    it('rechaza un superadmin con universidad', () =>
+      enTransaccion(async (q) => {
+        const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+        await expect(
+          superadmin(q, { universidadId: ua }),
+        ).rejects.toMatchObject({
+          code: CHECK,
+          constraint: 'ck_usuario_superadmin',
+        })
+      }))
+
+    it('rechaza un superadmin con facultad', () =>
+      enTransaccion(async (q) => {
+        const ua = await crearUniversidad(q, 'Universidad A', 'ua.cl')
+        const facultad = await crearFacultad(q, ua, 'Ingeniería')
+        await expect(
+          superadmin(q, { facultadId: facultad }),
+        ).rejects.toMatchObject({
+          code: CHECK,
+          constraint: 'ck_usuario_superadmin',
+        })
+      }))
+
+    it('rechaza dos superadmins con el mismo correo, sin distinguir mayúsculas', () =>
+      enTransaccion(async (q) => {
+        await superadmin(q, { correo: 'super@cursus.cl' })
+        await expect(
+          superadmin(q, { correo: 'SUPER@cursus.cl' }),
+        ).rejects.toMatchObject({
+          code: UNIQUE,
+          constraint: 'ux_usuario_correo_superadmin',
+        })
+      }))
+  })
 
   it('rechaza un usuario sin rol', () =>
     enTransaccion(async (q) => {
@@ -957,6 +1053,21 @@ describe('seccion', () => {
           })
           await q.query('ROLLBACK TO SAVEPOINT a_medias')
         }
+      }))
+
+    it('acepta a un superadmin como responsable (MT-04)', () =>
+      enTransaccion(async (q) => {
+        const a = await crearBase(q, 'a.cl')
+        const id = await inscribir(q, a)
+        const superadmin = await crearUsuario(q, {
+          universidadId: null,
+          correo: 'super@cursus.cl',
+          rol: 'SUPERADMIN',
+        })
+        await q.query(
+          'UPDATE inscripcion SET archived_at = now(), archivada_por = $2 WHERE id = $1',
+          [id, superadmin],
+        )
       }))
 
     it('rechaza un responsable de otra universidad', () =>

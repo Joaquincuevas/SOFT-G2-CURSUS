@@ -7,4 +7,5 @@ export const ROL_LABEL: Record<Rol, string> = {
   PROFESOR: 'Profesor',
   AYUDANTE: 'Ayudante',
   ALUMNO: 'Alumno',
+  SUPERADMIN: 'Superadmin',
 }

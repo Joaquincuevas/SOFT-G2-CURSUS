@@ -9,19 +9,33 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 
-// Contenido del JWT de sesión.
+// Contenido del JWT de sesión. universidad_id es null solo para el
+// superadmin, que no tiene universidad propia (MT-04).
 export interface PayloadJwt {
   sid?: string
   sub: string
   rol: Rol
-  universidad_id: string
+  universidad_id: string | null
 }
 
 interface Credenciales {
   id: string
   rol: Rol
-  universidad_id: string
+  universidad_id: string | null
   password_hash: string
+}
+
+// MT-04. Universidad y facultad que eligió el superadmin en esta sesión.
+export interface EleccionSuperadmin {
+  universidadId: string
+  facultadId: string
+}
+
+// Estado de la sesión que JwtAuthGuard lee de la base en cada petición.
+export interface SesionVigente {
+  credencialProvisoria: boolean
+  // Solo del superadmin, si eligió una facultad que sigue vigente.
+  eleccion: EleccionSuperadmin | null
 }
 
 // Tokens de una sesión: el JWT de acceso, que vive en memoria del frontend, y
@@ -48,6 +62,8 @@ interface FilaUsuario {
 
 // El Director ve todas las universidades: el Figma lo muestra como "Directorio".
 const NOMBRE_DIRECTORIO = 'Directorio'
+// El superadmin, mientras no elige una universidad, ve la plataforma.
+const NOMBRE_PLATAFORMA = 'CURSUS'
 
 @Injectable()
 export class AuthService {
@@ -71,14 +87,20 @@ export class AuthService {
     // El correo es único por universidad, no global: la universidad se
     // identifica por el dominio del correo. Por eso no usa
     // consultarEnUniversidad: antes del login no hay universidad de sesión.
-    // Un usuario archivado responde igual que uno que no existe.
+    // El superadmin no tiene universidad (MT-04): su correo es único entre
+    // los superadmins y no es de un dominio de universidad
+    // (crear-superadmin.ts). Si aun así calzaran dos, gana el de la
+    // universidad. Un usuario archivado responde igual que uno que no existe.
     const [usuario] = await bd.query<Credenciales>(
       `SELECT u.id, u.rol, u.universidad_id, u.password_hash
          FROM usuario u
-         JOIN universidad un ON un.id = u.universidad_id
+         LEFT JOIN universidad un ON un.id = u.universidad_id
         WHERE lower(u.correo) = $1
-          AND un.dominio_correo = split_part($1, '@', 2)
-          AND u.archived_at IS NULL`,
+          AND (un.dominio_correo = split_part($1, '@', 2)
+               OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
+          AND u.archived_at IS NULL
+        ORDER BY u.universidad_id NULLS LAST
+        LIMIT 1`,
       [correo.trim().toLowerCase()],
     )
     const passwordValida = await verify(
@@ -245,22 +267,63 @@ export class AuthService {
   }
 
   // null si la sesión ya no sirve. También corta la sesión de un usuario
-  // archivado, sin esperar a que venza su JWT. Devuelve además si el usuario
-  // todavía tiene la contraseña provisoria (PER-03), en la misma consulta.
+  // archivado, sin esperar a que venza su JWT. Devuelve además, en la misma
+  // consulta, si el usuario todavía tiene la contraseña provisoria (PER-03) y
+  // la facultad que eligió el superadmin (MT-04). Si esa facultad o su
+  // universidad se archivan, la elección deja de valer y debe elegir otra.
   async sesionActiva(
     sid: string,
     usuarioId: string,
-  ): Promise<{ credencialProvisoria: boolean } | null> {
-    const [sesion] = await this.bd.query<{ credencial_provisoria: boolean }>(
-      `SELECT u.credencial_provisoria FROM sesion_auth s
+  ): Promise<SesionVigente | null> {
+    const [sesion] = await this.bd.query<{
+      credencial_provisoria: boolean
+      universidad_id: string | null
+      facultad_id: string | null
+    }>(
+      `SELECT u.credencial_provisoria, un.id AS universidad_id,
+              f.id AS facultad_id
+         FROM sesion_auth s
          JOIN usuario u ON u.id = s.usuario_id
+         LEFT JOIN facultad f ON u.rol = 'SUPERADMIN'
+                             AND f.id = s.facultad_activa_id
+                             AND f.universidad_id = s.universidad_activa_id
+                             AND f.archived_at IS NULL
+         LEFT JOIN universidad un ON un.id = f.universidad_id
+                                 AND un.archived_at IS NULL
         WHERE s.id::text = $1 AND s.usuario_id::text = $2
           AND s.revocado_en IS NULL AND u.archived_at IS NULL`,
       [sid, usuarioId],
     )
-    return sesion
-      ? { credencialProvisoria: sesion.credencial_provisoria }
-      : null
+    if (!sesion) {
+      return null
+    }
+    return {
+      credencialProvisoria: sesion.credencial_provisoria,
+      eleccion:
+        sesion.universidad_id && sesion.facultad_id
+          ? {
+              universidadId: sesion.universidad_id,
+              facultadId: sesion.facultad_id,
+            }
+          : null,
+    }
+  }
+
+  // MT-04. Guarda en la sesión la universidad y la facultad en las que
+  // trabaja el superadmin. Quien llama ya validó que existen y están
+  // vigentes. Como sesionActiva, no usa consultarEnUniversidad: sesion_auth
+  // no es una tabla institucional.
+  async guardarEleccion(
+    sid: string,
+    usuarioId: string,
+    eleccion: EleccionSuperadmin,
+  ): Promise<void> {
+    await this.bd.query(
+      `UPDATE sesion_auth
+          SET universidad_activa_id = $3, facultad_activa_id = $4
+        WHERE id = $1 AND usuario_id = $2 AND revocado_en IS NULL`,
+      [sid, usuarioId, eleccion.universidadId, eleccion.facultadId],
+    )
   }
 
   // Usuario de la sesión para GET /api/auth/yo, o null si ya no existe en la
@@ -294,6 +357,49 @@ export class AuthService {
       facultadNombre: fila.facultad_nombre,
       debeCambiarPassword: fila.credencial_provisoria,
       periodoActivo: await this.periodoActivo(contexto),
+    }
+  }
+
+  // MT-04. El superadmin de la sesión para GET /api/auth/yo, o null si ya no
+  // existe. Sin universidad propia, muestra la que eligió (con su período
+  // activo), o la plataforma mientras no elija una. Lee su fila como el
+  // login: RLS no deja ver a un usuario sin universidad.
+  async obtenerSuperadmin(
+    id: string,
+    contexto: ContextoUniversidad | null,
+  ): Promise<UsuarioSesion | null> {
+    const [fila] = await this.bd.query<
+      Omit<FilaUsuario, 'universidad_id' | 'universidad_nombre'> & {
+        universidad_id: string | null
+        universidad_nombre: string | null
+      }
+    >(
+      `SELECT u.id, u.nombre, u.correo, u.rol, un.id AS universidad_id,
+              un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
+              u.credencial_provisoria
+         FROM usuario u
+         LEFT JOIN universidad un ON un.id = $2
+         LEFT JOIN facultad f ON f.id = $3
+        WHERE u.id = $1 AND u.rol = 'SUPERADMIN' AND u.archived_at IS NULL`,
+      [
+        id,
+        contexto?.universidadId ?? null,
+        contexto?.superadmin?.facultadId ?? null,
+      ],
+    )
+    if (!fila) {
+      return null
+    }
+    return {
+      id: fila.id,
+      nombre: fila.nombre,
+      correo: fila.correo,
+      rol: fila.rol,
+      universidadId: fila.universidad_id,
+      universidadNombre: fila.universidad_nombre ?? NOMBRE_PLATAFORMA,
+      facultadNombre: fila.facultad_nombre,
+      debeCambiarPassword: fila.credencial_provisoria,
+      periodoActivo: contexto ? await this.periodoActivo(contexto) : null,
     }
   }
 

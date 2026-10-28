@@ -14,6 +14,7 @@ import { AsistenciaModule } from './asistencia/asistencia.module.js'
 import { NotasModule } from './notas/notas.module.js'
 import { AnunciosModule } from './anuncios/anuncios.module.js'
 import { MaterialesModule } from './materiales/materiales.module.js'
+import { SuperadminModule } from './superadmin/superadmin.module.js'
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MaterialesModule } from './materiales/materiales.module.js'
     NotasModule,
     AnunciosModule,
     MaterialesModule,
+    SuperadminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -22,7 +22,9 @@
     "migration:show": "npm run typeorm -- migration:show",
     "migration:run:prod": "node ../node_modules/typeorm/cli.js -d dist/database/data-source.js migration:run",
     "seed": "tsx src/database/ejecutar-seed.ts",
-    "seed:prod": "node dist/database/ejecutar-seed.js"
+    "seed:prod": "node dist/database/ejecutar-seed.js",
+    "superadmin": "tsx src/database/ejecutar-crear-superadmin.ts",
+    "superadmin:prod": "node dist/database/ejecutar-crear-superadmin.js"
   },
   "dependencies": {
     "@cursus/shared": "^0.1.0",

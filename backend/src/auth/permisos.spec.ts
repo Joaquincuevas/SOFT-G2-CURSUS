@@ -28,12 +28,26 @@ const SUJETOS: SujetoTabla[] = [
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
+  'PanelSuperadmin',
   'GestionAcademica',
   'MisCursos',
 ]
 // Nada se elimina, solo se archiva: nadie tiene delete.
 const SIN_DELETE: AccionConcreta[] = ['create', 'read', 'update']
 const LECTURA: AccionConcreta[] = ['read']
+
+// MT-04 (ADR 0002): dentro de la facultad que eligió, el superadmin trabaja
+// con los permisos del Administrativo.
+const ADMINISTRATIVO: Partial<Record<SujetoTabla, AccionConcreta[]>> = {
+  Universidad: LECTURA,
+  Facultad: LECTURA,
+  Carrera: SIN_DELETE,
+  Periodo: SIN_DELETE,
+  Usuario: SIN_DELETE,
+  Curso: SIN_DELETE,
+  Seccion: SIN_DELETE,
+  Inscripcion: SIN_DELETE,
+}
 
 // Matriz rol × permiso esperada. Lo que no aparece está denegado.
 const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
@@ -48,16 +62,8 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Seccion: LECTURA,
     Inscripcion: LECTURA,
   },
-  ADMINISTRATIVO: {
-    Universidad: LECTURA,
-    Facultad: LECTURA,
-    Carrera: SIN_DELETE,
-    Periodo: SIN_DELETE,
-    Usuario: SIN_DELETE,
-    Curso: SIN_DELETE,
-    Seccion: SIN_DELETE,
-    Inscripcion: SIN_DELETE,
-  },
+  ADMINISTRATIVO: { ...ADMINISTRATIVO },
+  SUPERADMIN: { ...ADMINISTRATIVO },
   PROFESOR: {
     Universidad: LECTURA,
     Facultad: LECTURA,
@@ -93,6 +99,7 @@ const CLASE: Record<Rol, AccionConcreta[]> = {
   PROFESOR: ['create', 'read'],
   AYUDANTE: LECTURA,
   ALUMNO: [],
+  SUPERADMIN: [],
 }
 for (const rol of ROLES) MATRIZ[rol].Clase = CLASE[rol]
 // ASI-02 (RN-13): asistencia de una clase. La registra el profesor; la leen
@@ -107,6 +114,7 @@ const EVALUACION: Record<Rol, AccionConcreta[]> = {
   PROFESOR: ['create', 'read'],
   AYUDANTE: LECTURA,
   ALUMNO: LECTURA,
+  SUPERADMIN: [],
 }
 for (const rol of ROLES) MATRIZ[rol].Evaluacion = EVALUACION[rol]
 
@@ -118,6 +126,7 @@ const ANUNCIO: Record<Rol, AccionConcreta[]> = {
   PROFESOR: ['create', 'read'],
   AYUDANTE: LECTURA,
   ALUMNO: LECTURA,
+  SUPERADMIN: [],
 }
 for (const rol of ROLES) MATRIZ[rol].Anuncio = ANUNCIO[rol]
 
@@ -151,6 +160,7 @@ const MENU: Record<Rol, SujetoSeccion[]> = {
   PROFESOR: ['MisCursos'],
   AYUDANTE: ['MisCursos'],
   ALUMNO: ['MisCursos'],
+  SUPERADMIN: ['PanelSuperadmin', 'GestionAcademica'],
 }
 
 describe('definirAbilityPara', () => {

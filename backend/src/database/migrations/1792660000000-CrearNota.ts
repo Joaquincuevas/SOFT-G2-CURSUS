@@ -4,8 +4,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // como propuesta; publicarla (NOT-11) la deja en PUBLICADA. Cada cambio queda
 // en nota_cambio (NOT-04), así que modificar una propuesta es un UPDATE del
 // valor sin perder historia. Nada se elimina: se archiva con archived_at.
-export class CrearNota1792630000000 implements MigrationInterface {
-  name = 'CrearNota1792630000000'
+export class CrearNota1792660000000 implements MigrationInterface {
+  name = 'CrearNota1792660000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Las FKs compuestas (con uq_evaluacion_id_universidad de CrearNotaCambio)
@@ -90,10 +90,21 @@ export class CrearNota1792630000000 implements MigrationInterface {
         USING (${puedeEscribir})
         WITH CHECK (${puedeEscribir})
     `)
+
+    // MT-04: las escrituras del superadmin quedan en superadmin_cambio, como
+    // en el resto de las tablas con universidad_id (CrearSuperadminCambio).
+    await q.query(`
+      CREATE TRIGGER tg_nota_auditar_superadmin
+        AFTER INSERT OR UPDATE ON nota
+        FOR EACH ROW WHEN (superadmin_actual() IS NOT NULL)
+        EXECUTE FUNCTION auditar_superadmin()
+    `)
   }
 
   async down(q: QueryRunner): Promise<void> {
-    // Al borrar la tabla se borran sus índices, trigger y políticas.
+    await q.query('DROP TRIGGER tg_nota_auditar_superadmin ON nota')
+    // Al borrar la tabla se borran sus índices, el otro trigger y las
+    // políticas.
     await q.query('DROP TABLE nota')
   }
 }

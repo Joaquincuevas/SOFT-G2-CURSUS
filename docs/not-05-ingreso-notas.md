@@ -47,13 +47,14 @@ El PUT:
 
 ## Datos
 
-La migración `1792630000000-CrearNota` crea `nota`: `universidad_id`, `evaluacion_id`, `alumno_id`, `valor` (`numeric(2,1)`), `estado`, `propuesta_por`, `archived_at`, `created_at` y `updated_at`.
+La migración `1792660000000-CrearNota` crea `nota`: `universidad_id`, `evaluacion_id`, `alumno_id`, `valor` (`numeric(2,1)`), `estado`, `propuesta_por`, `archived_at`, `created_at` y `updated_at`.
 
 - FKs compuestas por universidad a `evaluacion` (con `uq_evaluacion_id_universidad` de NOT-04), al alumno y al ayudante.
 - `ck_nota_valor`: de 1,0 a 7,0, como `nota_cambio`. `ck_nota_estado`: `PROPUESTA` o `PUBLICADA`; esta tarjeta solo escribe `PROPUESTA`.
 - Índice único `(evaluacion_id, alumno_id) WHERE archived_at IS NULL`: una nota activa por alumno en cada evaluación.
 - Cambiar una propuesta es un `UPDATE` del valor: la historia completa queda en `nota_cambio`.
 - `GRANT SELECT, INSERT, UPDATE`, sin DELETE.
+- `tg_nota_auditar_superadmin` (MT-04): un `INSERT` o `UPDATE` hecho por el superadmin queda en `superadmin_cambio`, como en las demás tablas con `universidad_id`. Usa `superadmin_actual()` y `auditar_superadmin()` de `CrearSuperadminCambio`, así que la migración va después de las cuatro de MT-04 (`1792650000000` a `1792653000000`) y, al revertir, sale antes que ellas. `down` quita el trigger antes de borrar la tabla.
 
 **RLS** (ENABLE y no FORCE, como `evaluacion`):
 

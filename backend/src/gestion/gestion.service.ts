@@ -36,11 +36,10 @@ import { BLOQUES_HORARIO } from './horarios.sql.js'
 // Código de PostgreSQL para una restricción única violada.
 const UNIQUE = '23505'
 
-// Facultad del usuario de la sesión: ni el JWT ni ContextoUniversidad la
-// traen, así que se lee de su usuario ($1 = universidad, el parámetro dado =
-// id del usuario).
-const facultadDe = (parametro: string) =>
-  `(SELECT facultad_id FROM usuario WHERE id = ${parametro} AND universidad_id = $1)`
+// Facultad del usuario de la sesión (el parámetro dado = id del usuario): ni
+// el JWT ni ContextoUniversidad la traen, así que la resuelve la base. Para el
+// superadmin es la que eligió (MT-04).
+const facultadDe = (parametro: string) => `facultad_actual(${parametro})`
 
 // Columnas de un curso, comunes al listado y al detalle.
 const COLUMNAS_CURSO = `
@@ -476,10 +475,12 @@ export class GestionService {
            RETURNING usuario_id, archived_at, archivada_por
          )
          SELECT u.id, u.nombre, u.correo, q.archived_at AS quitado_en,
-                r.id AS por_id, r.nombre AS por_nombre
+                q.archivada_por AS por_id,
+                COALESCE(r.nombre, 'Superadmin') AS por_nombre
            FROM quitada q
            JOIN usuario u ON u.id = q.usuario_id
-           JOIN usuario r ON r.id = q.archivada_por`,
+           -- RLS no deja ver al superadmin, que no tiene universidad (MT-04).
+           LEFT JOIN usuario r ON r.id = q.archivada_por`,
         [universidad, seccionId, alumnoId, responsableId],
       )
       if (!fila) {
@@ -514,9 +515,8 @@ export class GestionService {
           facultad_id: string
           dominio_correo: string
         }>(
-          `SELECT u.facultad_id, un.dominio_correo
-             FROM usuario u JOIN universidad un ON un.id = u.universidad_id
-            WHERE u.universidad_id = $1 AND u.id = $2`,
+          `SELECT facultad_actual($2) AS facultad_id, un.dominio_correo
+             FROM universidad un WHERE un.id = $1`,
           [universidad, usuarioId],
         )
         exigirDominio(datos.correo, administrativo.dominio_correo)

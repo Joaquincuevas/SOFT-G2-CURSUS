@@ -8,7 +8,8 @@ import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
 import { Carreras } from './pages/Carreras'
 import { Perfil } from './pages/Perfil'
-import type { SessionUser } from './session/session'
+import { ElegirFacultad } from './pages/ElegirFacultad'
+import { RUTA_ELEGIR_FACULTAD, type SessionUser } from './session/session'
 
 // Única fuente de la navegación: el Sidebar, las rutas, su guard y el
 // encabezado salen de aquí. Agregar una sección es agregar un ítem.
@@ -54,6 +55,23 @@ export const NAV_ITEMS: readonly NavItem[] = [
         ? 'Visión del Directorio'
         : `Bienvenido/a, ${user.nombre}`,
     subtitle: universidadYSemestre,
+  },
+  {
+    // MT-04: el superadmin elige (o cambia) la universidad y la facultad en
+    // las que trabaja.
+    to: RUTA_ELEGIR_FACULTAD,
+    label: 'Universidad y facultad',
+    icon: 'grid',
+    permiso: { accion: 'read', sujeto: 'PanelSuperadmin' },
+    page: ElegirFacultad,
+    title: () => 'Universidad y facultad',
+    subtitle: (user) =>
+      conSemestre(
+        [user.facultadNombre, user.universidadNombre]
+          .filter(Boolean)
+          .join(', '),
+        user,
+      ),
   },
   {
     to: '/universidades',
