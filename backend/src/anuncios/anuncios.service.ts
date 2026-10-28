@@ -10,6 +10,7 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 import type { PublicarAnuncioDto } from './publicar-anuncio.dto.js'
+import { anuncioPendiente, anunciosVisibles } from './anuncios.sql.js'
 
 interface FilaAnuncio {
   id: string
@@ -20,6 +21,7 @@ interface FilaAnuncio {
   publicado_en: Date
   seccion_id: string | null
   seccion_numero: number | null
+  nuevo?: boolean
 }
 
 const COLUMNAS = `
@@ -35,13 +37,14 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
   seccion: fila.seccion_id
     ? { id: fila.seccion_id, numero: fila.seccion_numero as number }
     : null,
+  ...(typeof fila.nuevo === 'boolean' ? { nuevo: fila.nuevo } : {}),
 })
 
-// ANU-01/02/03 (RN-09): el guard verifica el acceso y el listado filtra el
+// ANU-01/02/03/04 (RN-09): el guard verifica el acceso y el listado filtra el
 // destinatario antes de devolver cualquier título o cuerpo.
-// IMPORTANTE para ANU-03/04: RLS solo aísla universidades. Tanto la vista
-// como el conteo de anuncios nuevos deben reutilizar el filtro de destinatario
-// de listar(); consultar anuncio directamente puede revelar anuncios privados.
+// RLS solo aísla universidades. Listado, conteo y registro de lectura
+// reutilizan anunciosVisibles(); consultar anuncio sin ese filtro puede
+// revelar anuncios privados. anuncioPendiente() comparte el estado de lectura.
 @Injectable()
 export class AnunciosService {
   constructor(private readonly bd: BaseDeDatos) {}
@@ -52,28 +55,74 @@ export class AnunciosService {
   async listar(
     contexto: ContextoUniversidad,
     seccion: SeccionEspacio,
+    usuarioId: string,
   ): Promise<Anuncio[]> {
     const desde = `FROM anuncio a JOIN usuario u ON u.id = a.autor_id AND u.universidad_id = a.universidad_id
       LEFT JOIN seccion s ON s.id = a.seccion_id
         AND s.curso_id = a.curso_id AND s.universidad_id = a.universidad_id`
-    const orden =
-      'AND a.archived_at IS NULL ORDER BY a.created_at DESC, a.id DESC'
+    const orden = 'ORDER BY a.created_at DESC, a.id DESC'
     const filas =
       contexto.rol === 'DIRECTOR'
         ? await this.bd.consultarEnTodasLasUniversidades<FilaAnuncio>(
             contexto,
             `SELECT ${COLUMNAS} ${desde}
-              WHERE a.curso_id = $1 AND a.seccion_id IS NULL ${orden}`,
+              WHERE a.curso_id = $1 AND a.seccion_id IS NULL AND a.archived_at IS NULL ${orden}`,
             [seccion.curso.id],
           )
         : await this.bd.consultarEnUniversidad<FilaAnuncio>(
             contexto,
-            `SELECT ${COLUMNAS} ${desde}
-              WHERE a.universidad_id = $1 AND a.curso_id = $2
-                AND (a.seccion_id IS NULL OR a.seccion_id = $3) ${orden}`,
-            [seccion.curso.id, seccion.id],
+            `SELECT ${COLUMNAS}${contexto.rol === 'ALUMNO' ? `, ${anuncioPendiente('$4')} AS nuevo` : ''} ${desde}
+              WHERE ${anunciosVisibles('$2', '$3')} ${orden}`,
+            contexto.rol === 'ALUMNO'
+              ? [seccion.curso.id, seccion.id, usuarioId]
+              : [seccion.curso.id, seccion.id],
           )
     return filas.map(anuncioDe)
+  }
+
+  // Marca solo el conjunto recibido por el navegador. Un anuncio publicado
+  // después del GET (o aún sin commit durante ese GET) sigue pendiente.
+  async registrarLectura(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    anuncioIds: string[],
+  ): Promise<void> {
+    if (contexto.rol !== 'ALUMNO' || seccion.rol !== 'ALUMNO') {
+      throw new ForbiddenException('Solo el alumno registra su lectura')
+    }
+    await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Se vuelve a comprobar la inscripción y se la bloquea hasta el commit:
+      // una baja que gane antes de esta consulta impide registrar la visita.
+      const inscripciones = await bd.query<{ id: string }>(
+        `SELECT i.id FROM inscripcion i
+          JOIN seccion s ON s.id = i.seccion_id AND s.universidad_id = i.universidad_id
+          JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
+          JOIN usuario u ON u.id = i.usuario_id AND u.universidad_id = i.universidad_id
+         WHERE i.universidad_id = $1 AND i.usuario_id = $2 AND s.id = $3
+           AND i.archived_at IS NULL AND s.archived_at IS NULL
+           AND c.archived_at IS NULL AND u.archived_at IS NULL AND u.rol = 'ALUMNO'
+         FOR SHARE OF i, s, c, u`,
+        [contexto.universidadId, usuarioId, seccion.id],
+      )
+      if (inscripciones.length === 0) {
+        throw new ForbiddenException('No eres integrante de esta sección')
+      }
+      await bd.query(
+        `INSERT INTO lectura_anuncio (universidad_id, alumno_id, anuncio_id)
+         SELECT $1, $2, a.id FROM anuncio a
+          WHERE ${anunciosVisibles('$4', '$3')} AND a.id = ANY($5::uuid[])
+         ORDER BY a.id
+         ON CONFLICT (alumno_id, anuncio_id) DO NOTHING`,
+        [
+          contexto.universidadId,
+          usuarioId,
+          seccion.id,
+          seccion.curso.id,
+          anuncioIds,
+        ],
+      )
+    })
   }
 
   // Publica para todo el curso o solo esta sección. El INSERT vuelve a exigir que

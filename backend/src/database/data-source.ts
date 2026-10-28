@@ -29,6 +29,7 @@ import { CrearAnuncio1792560000000 } from './migrations/1792560000000-CrearAnunc
 import { CrearNotaCambio1792570000000 } from './migrations/1792570000000-CrearNotaCambio.js'
 import { CrearAsistencia1792580000000 } from './migrations/1792580000000-CrearAsistencia.js'
 import { DirigirAnuncioSeccion1792600000000 } from './migrations/1792600000000-DirigirAnuncioSeccion.js'
+import { CrearLecturaAnuncio1792610000000 } from './migrations/1792610000000-CrearLecturaAnuncio.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -79,6 +80,7 @@ export function opcionesDataSource(
       CrearNotaCambio1792570000000,
       CrearAsistencia1792580000000,
       DirigirAnuncioSeccion1792600000000,
+      CrearLecturaAnuncio1792610000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
