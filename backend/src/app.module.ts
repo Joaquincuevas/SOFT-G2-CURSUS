@@ -13,6 +13,7 @@ import { DashboardModule } from './dashboard/dashboard.module.js'
 import { AsistenciaModule } from './asistencia/asistencia.module.js'
 import { NotasModule } from './notas/notas.module.js'
 import { AnunciosModule } from './anuncios/anuncios.module.js'
+import { SuperadminModule } from './superadmin/superadmin.module.js'
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AnunciosModule } from './anuncios/anuncios.module.js'
     AsistenciaModule,
     NotasModule,
     AnunciosModule,
+    SuperadminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

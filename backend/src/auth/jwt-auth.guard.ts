@@ -8,11 +8,20 @@ import {
 import { Reflector } from '@nestjs/core'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
-import { AuthService, type PayloadJwt } from './auth.service.js'
+import {
+  AuthService,
+  type EleccionSuperadmin,
+  type PayloadJwt,
+} from './auth.service.js'
 import { PERMITIDA_CON_PROVISORIA } from './credencial-provisoria.decorator.js'
 import { ES_PUBLICO } from './publico.decorator.js'
 
-export type RequestConUsuario = Request & { usuario?: PayloadJwt }
+// eleccion: la facultad en la que trabaja el superadmin (MT-04), leída de su
+// sesión en cada petición. La usa contextoDeLaSesion.
+export type RequestConUsuario = Request & {
+  usuario?: PayloadJwt
+  eleccion?: EleccionSuperadmin | null
+}
 
 // Guard global: toda ruta exige "Authorization: Bearer <jwt>" salvo las
 // marcadas con @Public(). Un usuario con contraseña provisoria solo entra a
@@ -52,6 +61,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!sesion) {
       throw new UnauthorizedException()
     }
+    req.eleccion = sesion.eleccion
     // PER-03. Con la contraseña provisoria solo se puede consultar la sesión y
     // cambiarla. Se lee de la base y no del JWT, para que el cambio rija
     // apenas se guarda.

@@ -42,4 +42,26 @@ export class PerfilService {
     }
     return { nombre: fila.nombre }
   }
+
+  // MT-04. El superadmin cambia su propio nombre. RLS no deja ver a un
+  // usuario sin universidad, así que, como el cambio de contraseña, toca solo
+  // la fila del id del JWT sin pasar por consultarEnUniversidad.
+  async actualizarNombreSuperadmin(
+    usuarioId: string,
+    nombre: string,
+  ): Promise<PerfilActualizado> {
+    const [fila] = await this.bd.query<{ nombre: string }>(
+      `WITH actualizado AS (
+         UPDATE usuario SET nombre = $2
+          WHERE id = $1 AND rol = 'SUPERADMIN' AND archived_at IS NULL
+          RETURNING nombre
+       )
+       SELECT nombre FROM actualizado`,
+      [usuarioId, nombre],
+    )
+    if (!fila) {
+      throw new UnauthorizedException()
+    }
+    return { nombre: fila.nombre }
+  }
 }

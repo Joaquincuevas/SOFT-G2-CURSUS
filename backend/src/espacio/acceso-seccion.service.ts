@@ -34,7 +34,8 @@ const DESDE_SECCION = `
 
 // Rol con el que el usuario ($3) entra a la sección s, o NULL si no es
 // integrante. Solo cuentan las asignaciones e inscripciones activas, y el
-// Administrativo solo entra a las secciones de su facultad.
+// Administrativo solo entra a las secciones de su facultad (facultad_actual,
+// que para el superadmin es la que eligió: MT-04).
 const ROL_EN_SECCION = `
   CASE
     WHEN s.profesor_id = $3 THEN 'PROFESOR'
@@ -44,10 +45,7 @@ const ROL_EN_SECCION = `
     WHEN EXISTS (SELECT 1 FROM inscripcion i
                   WHERE i.seccion_id = s.id AND i.usuario_id = $3
                     AND i.archived_at IS NULL) THEN 'ALUMNO'
-    WHEN EXISTS (SELECT 1 FROM usuario u
-                  WHERE u.id = $3 AND u.universidad_id = $1
-                    AND u.rol = 'ADMINISTRATIVO'
-                    AND u.facultad_id = ca.facultad_id) THEN 'ADMINISTRATIVO'
+    WHEN facultad_actual($3) = ca.facultad_id THEN 'ADMINISTRATIVO'
   END AS rol`
 
 // ESP-06 (RE-01): solo los integrantes de una sección acceden a sus datos.

@@ -13,6 +13,7 @@ import {
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarMotivo,
 } from '../database/base-de-datos.service.js'
 
 // Sección vigente (ella y su curso sin archivar) de un curso de la facultad
@@ -25,8 +26,7 @@ const SECCION_EDITABLE = `
     JOIN carrera ca ON ca.id = c.carrera_id
    WHERE s.universidad_id = $1 AND s.id = $2
      AND s.archived_at IS NULL AND c.archived_at IS NULL
-     AND ca.facultad_id = (SELECT facultad_id FROM usuario
-                            WHERE universidad_id = $1 AND id = $3)
+     AND ca.facultad_id = facultad_actual($3)
    FOR UPDATE OF s, c`
 
 // Registra el cambio en el historial y devuelve la entrada con los nombres.
@@ -40,10 +40,12 @@ const REGISTRAR_QUITADA = `
     RETURNING anterior_id, responsable_id, motivo, fecha
   )
   SELECT q.id AS quitado_id, q.nombre AS quitado_nombre,
-         r.id AS por_id, r.nombre AS por_nombre, registro.motivo, registro.fecha
+         registro.responsable_id AS por_id,
+         COALESCE(r.nombre, 'Superadmin') AS por_nombre, registro.motivo, registro.fecha
     FROM registro
     JOIN usuario q ON q.id = registro.anterior_id
-    JOIN usuario r ON r.id = registro.responsable_id`
+    -- RLS no deja ver al superadmin, que no tiene universidad (MT-04).
+    LEFT JOIN usuario r ON r.id = registro.responsable_id`
 
 interface FilaRegistro {
   quitado_id: string
@@ -81,6 +83,8 @@ export class AsignacionesService {
     motivo: string,
   ): Promise<AsignacionQuitada> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Si lo quita un superadmin, el motivo va también a su auditoría.
+      await fijarMotivo(bd, motivo)
       const universidad = contexto.universidadId
       const [seccion] = await bd.query<{ profesor_id: string | null }>(
         SECCION_EDITABLE,
@@ -127,6 +131,8 @@ export class AsignacionesService {
     motivo: string,
   ): Promise<AyudanteQuitado> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Si lo quita un superadmin, el motivo va también a su auditoría.
+      await fijarMotivo(bd, motivo)
       const universidad = contexto.universidadId
       const [seccion] = await bd.query(SECCION_EDITABLE, [
         universidad,
