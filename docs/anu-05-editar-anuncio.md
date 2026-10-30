@@ -20,15 +20,15 @@ Decisiones de alcance:
 ## API y persistencia
 
 - `PATCH /api/espacio/secciones/:id/anuncios/:anuncioId`: `{ titulo, cuerpo }`, ambos obligatorios; responde 200 con el anuncio actualizado. Usa el mismo DTO base de contenido que publicar. Un campo extra como `autorId` o `seccionId` produce 400. El ID de anuncio debe ser UUID.
-- `GET /api/espacio/secciones/:id/anuncios/:anuncioId/historial`: `CambioAnuncio[]`, solo para el autor autorizado. Cada entrada incluye `id`, `titulo`, `cuerpo`, `fecha` ISO y `responsable: { id, nombre }`.
+- `GET /api/espacio/secciones/:id/anuncios/:anuncioId/historial`: `CambioAnuncio[]`, solo para el autor autorizado. Cada entrada incluye `id`, `titulo`, `cuerpo`, `fecha` ISO y `responsable: { id, nombre }`. `fecha` indica cuándo se reemplazó esa versión, no cuándo se publicó o empezó a existir.
 - `Anuncio` agrega `editadoEn` ISO solo después de una edición real. El listado y la publicación conservan el resto del contrato.
 - El permiso CASL `update Anuncio` pertenece al Profesor. El guard exige pertenencia; el servicio vuelve a verificar rol, vigencia y autoría. Un anuncio privado ajeno, de otro curso/universidad o archivado devuelve 404, sin exponer su historial. Un anuncio general visible de otro autor devuelve 403. Sin sesión, 401. Superadmin no recibe edición de anuncios.
 
-La migración **`1792670000000-CrearHistorialAnuncio`** agrega `anuncio.editado_en` y la tabla `anuncio_cambio`, con FKs compuestas por universidad, índices y RLS. Se contrastó el timestamp con `develop` (MT-04 termina en `1792653000000`) y el PR abierto NOT-05 (#83, `1792660000000`).
+La migración **`1792670000000-CrearHistorialAnuncio`** agrega `anuncio.editado_en` y la tabla `anuncio_cambio`, con FKs compuestas por universidad, índices y RLS. Conserva su timestamp al integrar NOT-05 (`1792660000000`) desde `develop`. La reversión conjunta retira CrearHistorialAnuncio, luego CrearNota y luego las cuatro migraciones de MT-04, en ese orden.
 
 Antes de modificar el contenido, el servicio bloquea la vigencia de sección/curso/usuario y la fila del anuncio. Un trigger conserva `OLD.titulo` y `OLD.cuerpo`, registra al autor y fija `editado_en` con `clock_timestamp()` en la misma operación. Para el rol de la API exige además que `app.anuncio_autor_id`, fijado desde la sesión con alcance local a la transacción, coincida con el autor. Si falla la auditoría se revierten contenido y fecha.
 
-El historial es de solo adición: sin UPDATE/DELETE para la API y con trigger que rechaza esas operaciones incluso para el dueño de la tabla. RLS limita por universidad y rol Profesor; el endpoint limita además por autor y destinatario. No se envían versiones antiguas a lectores que solo pueden ver el contenido actual.
+El historial es de solo adición: sin UPDATE/DELETE para la API y con trigger que rechaza esas operaciones incluso para el dueño de la tabla. RLS permite leer el historial a cualquier Profesor de la misma universidad: no distingue al autor. La restricción «solo el autor», junto con el acceso vigente y el destinatario, la aplica el servicio; las futuras consultas deben reutilizar esa validación y no exponer `anuncio_cambio` directamente. No se envían versiones antiguas a lectores que solo pueden ver el contenido actual.
 
 Aplicar la migración antes del backend actualizado. No necesita backfill: la primera corrección captura la versión original que ya existía. El rollback elimina historial, funciones y marca de edición, pero conserva el contenido corregido, los anuncios y sus lecturas. Al reaplicar, empieza un historial nuevo; el seguimiento anterior no se recupera. Probar rollback solo en una base de prueba con backend compatible. Se conserva la reversión de todas las migraciones anteriores.
 
@@ -60,8 +60,10 @@ npm run dev:front
 ## Pruebas
 
 - PostgreSQL/API: autoría, datos completos, normalización y no-op, múltiples versiones, concurrencia, permisos, privacidad, validación, anuncios leídos y rollback atómico si falla el historial. Historial inmutable y comprobación adicional de autor en el trigger.
-- Esquema/RLS: migraciones únicas/ordenadas, aplicación/reversión conjunta, políticas, grants y exclusión de la auditoría de los permisos del Superadmin.
+- Esquema/RLS: migraciones únicas/ordenadas, aplicación/reversión conjunta, políticas, grants y exclusión de la auditoría de los permisos del Superadmin. SQL directo como `cursus_app`/Profesor de Norte: SELECT sin filtro solo ve su historial e INSERT con referencias válidas de Sur se rechaza con 42501; insertar para Norte sí está permitido. Estas pruebas detectan quitar el filtro de universidad de cualquiera de las dos políticas de `anuncio_cambio`.
 - Frontend: controles solo del autor, precarga, cancelación, errores y reintento, bloqueo durante envío, marca/fecha, versión original, cuerpo como texto y lectores sin controles.
+
+Comprobación de regresión RLS: se retiró temporalmente el filtro `universidad_id = universidad_actual()` y ambas pruebas nuevas fallaron (lectura ajena e inserción indebida). Se restauró la migración original antes de ejecutar la suite completa.
 
 ```bash
 npm run lint

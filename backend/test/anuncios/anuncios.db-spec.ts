@@ -1345,6 +1345,68 @@ describe('restricciones en la base de datos', () => {
     INSERT INTO anuncio (universidad_id, curso_id, autor_id, titulo, cuerpo)
     SELECT s.universidad_id, s.curso_id, $2, $3, $4 FROM seccion s WHERE s.id = $1`
 
+  // SQL directo: ninguna consulta del servicio puede ocultar un fallo de RLS.
+  async function escenarioHistorialRls() {
+    const filas: { id: string; universidad_id: string; autor_id: string }[] = []
+    for (const correo of [PROFESOR, PROFESOR_SUR]) {
+      const [anuncio] = await bd.query<
+        { id: string; universidad_id: string; autor_id: string }[]
+      >(
+        `INSERT INTO anuncio (universidad_id, curso_id, autor_id, titulo, cuerpo)
+         SELECT u.universidad_id, c.id, u.id, 'Original RLS', 'Cuerpo original'
+           FROM usuario u JOIN curso c ON c.universidad_id = u.universidad_id
+          WHERE u.correo = $1 AND c.archived_at IS NULL
+          ORDER BY c.id LIMIT 1
+         RETURNING id, universidad_id, autor_id`,
+        [correo],
+      )
+      // El trigger crea una versión anterior real en cada universidad.
+      await bd.query('UPDATE anuncio SET titulo = $2 WHERE id = $1', [
+        anuncio.id,
+        'Corregido RLS',
+      ])
+      filas.push(anuncio)
+    }
+    return filas
+  }
+
+  it('RLS de anuncio_cambio: SELECT sin filtro solo ve el historial de su universidad', async () => {
+    const [norte, sur] = await escenarioHistorialRls()
+    const propias = await bd.query<{ id: string; anuncio_id: string }[]>(
+      `SELECT id, anuncio_id FROM anuncio_cambio
+        WHERE universidad_id = $1 ORDER BY id`,
+      [norte.universidad_id],
+    )
+    expect(propias.some((f) => f.anuncio_id === norte.id)).toBe(true)
+    const visibles = await comoApp(
+      'PROFESOR',
+      'SELECT id, anuncio_id FROM anuncio_cambio ORDER BY id',
+      [],
+    )
+    expect(visibles).toEqual(propias)
+    expect(visibles).not.toContainEqual(
+      expect.objectContaining({ anuncio_id: sur.id }),
+    )
+  })
+
+  it('RLS de anuncio_cambio: una sesión de Norte no inserta historial de Sur', async () => {
+    const [norte, sur] = await escenarioHistorialRls()
+    const sql = `INSERT INTO anuncio_cambio
+      (universidad_id, anuncio_id, responsable_id, titulo, cuerpo, fecha)
+      VALUES ($1, $2, $3, 'Versión RLS', 'Cuerpo', clock_timestamp())`
+    // Control positivo: mismos permisos y columnas, universidad propia.
+    await comoApp('PROFESOR', sql, [
+      norte.universidad_id,
+      norte.id,
+      norte.autor_id,
+    ])
+    // Las tres FKs apuntan a Sur y son válidas: debe rechazarlo la política,
+    // no una FK ni la comprobación de autor del trigger de anuncio.
+    await expect(
+      comoApp('PROFESOR', sql, [sur.universidad_id, sur.id, sur.autor_id]),
+    ).rejects.toMatchObject({ code: '42501' })
+  })
+
   it('RLS: cada universidad lee solo sus anuncios, aunque la consulta no filtre', async () => {
     const enBase = await anunciosEnBase()
     expect(enBase).toBeGreaterThan(0)

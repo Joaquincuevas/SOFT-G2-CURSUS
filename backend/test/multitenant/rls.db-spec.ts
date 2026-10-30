@@ -351,6 +351,7 @@ describe('contrato del schema', () => {
         'clase',
         // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
         'anuncio',
+        // Auditoría sin filas en el seed: su RLS la prueba test/anuncios (ANU-05).
         'anuncio_cambio',
         'lectura_anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
