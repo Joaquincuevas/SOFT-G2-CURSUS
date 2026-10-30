@@ -35,6 +35,7 @@ import { AgregarRolSuperadmin1792650000000 } from './migrations/1792650000000-Ag
 import { PermitirUsuarioSuperadmin1792651000000 } from './migrations/1792651000000-PermitirUsuarioSuperadmin.js'
 import { ElegirFacultadSuperadmin1792652000000 } from './migrations/1792652000000-ElegirFacultadSuperadmin.js'
 import { CrearSuperadminCambio1792653000000 } from './migrations/1792653000000-CrearSuperadminCambio.js'
+import { CrearNota1792660000000 } from './migrations/1792660000000-CrearNota.js'
 import { CrearHistorialAnuncio1792670000000 } from './migrations/1792670000000-CrearHistorialAnuncio.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
@@ -92,6 +93,7 @@ export function opcionesDataSource(
       PermitirUsuarioSuperadmin1792651000000,
       ElegirFacultadSuperadmin1792652000000,
       CrearSuperadminCambio1792653000000,
+      CrearNota1792660000000,
       CrearHistorialAnuncio1792670000000,
     ],
     migrationsTableName: 'migraciones',

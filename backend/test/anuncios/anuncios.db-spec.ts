@@ -947,7 +947,8 @@ describe('ANU-04: anuncios nuevos por alumno', () => {
       [anuncio.id],
     )
     // Ejecuta el down y el up de la migración directamente: no es la última
-    // registrada (MT-04 vino después), así que undoLastMigration no sirve.
+    // registrada (MT-04 y NOT-05 vinieron después), así que undoLastMigration
+    // no sirve.
     const migracion = new CrearLecturaAnuncio1792620000000()
     const historial = new CrearHistorialAnuncio1792670000000()
     const q = bd.createQueryRunner()

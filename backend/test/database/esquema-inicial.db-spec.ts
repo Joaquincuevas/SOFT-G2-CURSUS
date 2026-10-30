@@ -30,6 +30,7 @@ const TABLAS = [
   'inscripcion',
   'lectura_anuncio',
   'limite_login',
+  'nota',
   'nota_cambio',
   'periodo',
   'refresh_token',
@@ -184,10 +185,16 @@ describe('migraciones', () => {
     )
     expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ANUNCIO)
 
-    // Las cuatro de MT-04 (superadmin) son las últimas. CrearSuperadminCambio
+    // CrearNota (NOT-05): quita su tabla y, con ella, su trigger
+    // de auditoría del superadmin.
+    await bd.undoLastMigration()
+    const SIN_NOTA = SIN_CAMBIO_ANUNCIO.filter((tabla) => tabla !== 'nota')
+    expect(await tablasExistentes()).toEqual(SIN_NOTA)
+
+    // Siguen las cuatro de MT-04 (superadmin). CrearSuperadminCambio
     // quita su tabla, sus funciones y los triggers de auditoría.
     await bd.undoLastMigration()
-    const SIN_SUPERADMIN = SIN_CAMBIO_ANUNCIO.filter(
+    const SIN_SUPERADMIN = SIN_NOTA.filter(
       (tabla) => tabla !== 'superadmin_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_SUPERADMIN)
@@ -459,6 +466,7 @@ describe('migraciones', () => {
         'facultad',
         'horario_seccion',
         'inscripcion',
+        'nota',
         'seccion',
         'universidad',
         'usuario',

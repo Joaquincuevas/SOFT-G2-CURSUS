@@ -126,6 +126,14 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones$/,
     () => ({ evaluaciones: [], sumaPonderaciones: 0 }),
   ],
+  // Notas de una evaluación (NOT-05).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones\/[^/]+\/notas$/,
+    () => ({
+      evaluacion: { id: 'e', nombre: '', fecha: '', ponderacion: 0 },
+      alumnos: [],
+    }),
+  ],
   // Anuncios del curso de la sección (ANU-01).
   [/^\/api\/espacio\/secciones\/[^/]+\/anuncios$/, () => []],
   [

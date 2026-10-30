@@ -1,7 +1,6 @@
 import {
+  esNotaValida,
   LARGO_MOTIVO_NOTA,
-  NOTA_MAXIMA,
-  NOTA_MINIMA,
   type TipoEventoNota,
 } from '@cursus/shared'
 import { Injectable } from '@nestjs/common'
@@ -28,21 +27,16 @@ export interface EventoNota {
 // Nota en décimas (por ejemplo, 5,5 -> 55), o null. Rechaza lo que no es una
 // nota de 1,0 a 7,0 con un decimal: la columna numeric(2,1) la redondearía
 // (0,95 quedaría como 1,0) y la auditoría guardaría una nota que nadie puso.
+// La regla es esNotaValida, la misma del 400 "Nota inválida" de NOT-05.
 function enDecimas(nota: number | string | null | undefined): number | null {
   if (nota === null || nota === undefined) return null
   const valor = Number(nota)
-  const decimas = Math.round(valor * 10)
-  if (
-    !Number.isFinite(valor) ||
-    Math.abs(valor * 10 - decimas) > 1e-9 ||
-    decimas < NOTA_MINIMA * 10 ||
-    decimas > NOTA_MAXIMA * 10
-  ) {
+  if (!esNotaValida(valor)) {
     throw new RangeError(
       `Nota inválida (${String(nota)}): debe ir de 1,0 a 7,0 con un decimal`,
     )
   }
-  return decimas
+  return Math.round(valor * 10)
 }
 
 // Tipos que exigen motivo.

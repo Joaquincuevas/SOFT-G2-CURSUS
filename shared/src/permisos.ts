@@ -31,6 +31,7 @@ export type SujetoTabla =
   | 'Anuncio'
   | 'Evaluacion'
   | 'Actividad'
+  | 'Nota'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -58,6 +59,8 @@ const LEEN_EVALUACIONES: readonly Rol[] = [
   'ALUMNO',
   'DIRECTOR',
 ]
+// NOT-05: el alumno ve sus notas publicadas en NOT-13.
+const LEEN_NOTAS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 const LEEN_ACTIVIDADES: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
@@ -147,6 +150,13 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // El Administrativo no recibe nada. Nadie las borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Actividad')
   if (LEEN_ACTIVIDADES.includes(usuario.rol)) can('read', 'Actividad')
+
+  // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante como
+  // propuesta (el controlador exige además que sea ayudante de esa sección) y
+  // las leen el profesor y el Director, este en solo lectura. El alumno y el
+  // Administrativo no reciben nada. Nadie las borra.
+  if (usuario.rol === 'AYUDANTE') can('update', 'Nota')
+  if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
 
   return build()
 }
