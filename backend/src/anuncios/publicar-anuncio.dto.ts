@@ -16,14 +16,7 @@ import {
 // Body de POST /api/espacio/secciones/:id/anuncios (ANU-01/02). Título y cuerpo
 // son obligatorios: uno de solo espacios cuenta como vacío. La base los
 // vuelve a revisar con ck_anuncio_titulo y ck_anuncio_cuerpo.
-export class PublicarAnuncioDto implements PublicarAnuncio {
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.toLowerCase() : value,
-  )
-  @IsOptional()
-  @IsUUID()
-  seccionId?: string | null
-
+export class ContenidoAnuncioDto {
   // Una sola línea: sin espacios repetidos ni caracteres de control
   // (PostgreSQL rechaza el NUL y respondería 500).
   @Transform(({ value }: { value: unknown }) =>
@@ -50,4 +43,16 @@ export class PublicarAnuncioDto implements PublicarAnuncio {
     message: 'cuerpo no puede tener caracteres de control',
   })
   cuerpo!: string
+}
+
+export class PublicarAnuncioDto
+  extends ContenidoAnuncioDto
+  implements PublicarAnuncio
+{
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
+  @IsOptional()
+  @IsUUID()
+  seccionId?: string | null
 }

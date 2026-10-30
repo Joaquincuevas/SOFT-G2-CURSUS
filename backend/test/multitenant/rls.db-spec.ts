@@ -351,6 +351,8 @@ describe('contrato del schema', () => {
         'clase',
         // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
         'anuncio',
+        // Auditoría sin filas en el seed: su RLS la prueba test/anuncios (ANU-05).
+        'anuncio_cambio',
         'lectura_anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
         'evaluacion',
@@ -379,6 +381,7 @@ describe('contrato del schema', () => {
                   'curso_cambio',
                   'asignacion_cambio',
                   'nota_cambio',
+                  'anuncio_cambio',
                   'lectura_anuncio',
                 ].includes(tabla.tabla)
               ? ['INSERT', 'SELECT']
@@ -399,7 +402,7 @@ describe('contrato del schema', () => {
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r'
           AND c.relname NOT IN ('curso_cambio', 'asignacion_cambio',
-                                'nota_cambio', 'superadmin_cambio',
+                                'nota_cambio', 'anuncio_cambio', 'superadmin_cambio',
                                 'lectura_anuncio')
           AND (c.relname = 'universidad' OR EXISTS (
             SELECT FROM information_schema.columns col

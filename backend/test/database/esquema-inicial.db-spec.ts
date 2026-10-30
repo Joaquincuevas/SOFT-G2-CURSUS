@@ -16,6 +16,7 @@ const HASH = '$2b$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOP'
 const TABLAS = [
   'actividad',
   'anuncio',
+  'anuncio_cambio',
   'asignacion_cambio',
   'asistencia',
   'ayudante_seccion',
@@ -177,10 +178,17 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearNota (NOT-05) es la última: quita su tabla y, con ella, su trigger
+    // ANU-05: se retira primero el historial, conservando los anuncios.
+    await bd.undoLastMigration()
+    const SIN_CAMBIO_ANUNCIO = TABLAS.filter(
+      (tabla) => tabla !== 'anuncio_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ANUNCIO)
+
+    // CrearNota (NOT-05): quita su tabla y, con ella, su trigger
     // de auditoría del superadmin.
     await bd.undoLastMigration()
-    const SIN_NOTA = TABLAS.filter((tabla) => tabla !== 'nota')
+    const SIN_NOTA = SIN_CAMBIO_ANUNCIO.filter((tabla) => tabla !== 'nota')
     expect(await tablasExistentes()).toEqual(SIN_NOTA)
 
     // Siguen las cuatro de MT-04 (superadmin). CrearSuperadminCambio
@@ -422,6 +430,7 @@ describe('migraciones', () => {
         t !== 'curso_cambio' &&
         t !== 'asignacion_cambio' &&
         t !== 'nota_cambio' &&
+        t !== 'anuncio_cambio' &&
         t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {

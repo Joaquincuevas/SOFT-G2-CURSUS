@@ -1,6 +1,7 @@
 import {
   MAX_ANUNCIOS_LECTURA,
   type Anuncio,
+  type CambioAnuncio,
   type SeccionAlumno,
 } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
@@ -16,6 +17,7 @@ import { opcionesDataSource } from '../../src/database/data-source.js'
 import { DirigirAnuncioSeccion1792600000000 } from '../../src/database/migrations/1792600000000-DirigirAnuncioSeccion.js'
 import { CrearLecturaAnuncio1792620000000 } from '../../src/database/migrations/1792620000000-CrearLecturaAnuncio.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
+import { CrearHistorialAnuncio1792670000000 } from '../../src/database/migrations/1792670000000-CrearHistorialAnuncio.js'
 
 // ANU-01: base propia con el seed cargado, que se crea y se borra en cada
 // ejecución. Todos los usuarios del seed comparten la contraseña.
@@ -940,25 +942,373 @@ describe('ANU-04: anuncios nuevos por alumno', () => {
   it('el rollback retira las lecturas sin alterar los anuncios; al reaplicar vuelven a estar nuevos', async () => {
     const anuncio = await crear('Conservar al revertir')
     await marcar(ALUMNO, secciones.s1, [anuncio.id])
-    const antes = await bd.query<unknown>('SELECT * FROM anuncio WHERE id=$1', [
-      anuncio.id,
-    ])
+    const antes = await bd.query<unknown>(
+      'SELECT id,titulo,cuerpo,created_at,archived_at FROM anuncio WHERE id=$1',
+      [anuncio.id],
+    )
     // Ejecuta el down y el up de la migración directamente: no es la última
     // registrada (MT-04 y NOT-05 vinieron después), así que undoLastMigration
     // no sirve.
     const migracion = new CrearLecturaAnuncio1792620000000()
+    const historial = new CrearHistorialAnuncio1792670000000()
+    const q = bd.createQueryRunner()
+    try {
+      await historial.down(q)
+      await migracion.down(q)
+      expect(
+        await bd.query(
+          'SELECT id,titulo,cuerpo,created_at,archived_at FROM anuncio WHERE id=$1',
+          [anuncio.id],
+        ),
+      ).toEqual(antes)
+    } finally {
+      await migracion.up(q)
+      await historial.up(q)
+      await q.release()
+    }
+    expect(await contador(ALUMNO, secciones.s1)).toBe(1)
+    expect((await listar(ALUMNO, secciones.s1))[0].nuevo).toBe(true)
+  })
+})
+
+describe('ANU-05: edición del autor e historial', () => {
+  const editar = async (
+    correo: string,
+    seccionId: string,
+    anuncioId: string,
+    datos: object,
+    estado = 200,
+  ) => {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .patch(`/api/espacio/secciones/${seccionId}/anuncios/${anuncioId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(datos)
+      .expect(estado)
+    return respuesta.body as Anuncio
+  }
+  const historial = async (
+    correo: string,
+    seccionId: string,
+    anuncioId: string,
+    estado = 200,
+  ) => {
+    const token = await tokenDe(correo)
+    const r = await request(app.getHttpServer())
+      .get(
+        `/api/espacio/secciones/${seccionId}/anuncios/${anuncioId}/historial`,
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return r.body as CambioAnuncio[]
+  }
+  const crear = () =>
+    publicar(PROFESOR, secciones.s1, {
+      titulo: 'Original ANU-05',
+      cuerpo: 'Contenido original\nSegunda línea.',
+      seccionId: secciones.s1,
+    })
+
+  it('edita título y cuerpo sin cambiar ID, publicación ni destinatario; conserva todas las versiones', async () => {
+    const original = await crear()
+    expect(await historial(PROFESOR, secciones.s1, original.id)).toEqual([])
+    const primera = await editar(PROFESOR, secciones.s1, original.id, {
+      titulo: '  Título\n corregido ',
+      cuerpo: ' Cuerpo corregido\nSegunda línea. ',
+    })
+    expect(primera).toMatchObject({
+      id: original.id,
+      titulo: 'Título corregido',
+      cuerpo: 'Cuerpo corregido\nSegunda línea.',
+      publicadoEn: original.publicadoEn,
+      autor: original.autor,
+      seccion: original.seccion,
+      editadoEn: expect.any(String) as string,
+    })
+    const segunda = await editar(PROFESOR, secciones.s1, original.id, {
+      titulo: 'Versión final',
+      cuerpo: 'Cuerpo final',
+    })
+    const cambios = await historial(PROFESOR, secciones.s1, original.id)
+    expect(cambios).toHaveLength(2)
+    expect(cambios[0]).toMatchObject({
+      titulo: original.titulo,
+      cuerpo: original.cuerpo,
+      fecha: primera.editadoEn,
+      responsable: original.autor,
+    })
+    expect(cambios[1]).toMatchObject({
+      titulo: primera.titulo,
+      cuerpo: primera.cuerpo,
+      fecha: segunda.editadoEn,
+    })
+    expect(
+      (await listar(ALUMNO, secciones.s1)).find((a) => a.id === original.id),
+    ).toMatchObject(segunda)
+    expect(
+      (await listar(DIRECTOR, secciones.s1)).some((a) => a.id === original.id),
+    ).toBe(false)
+    expect(
+      (await listar(demo.alumno2, secciones.s2)).some(
+        (a) => a.id === original.id,
+      ),
+    ).toBe(false)
+  })
+
+  it('un guardado sin cambios normalizados no agrega historial ni cambia la marca', async () => {
+    const a = await crear()
+    const misma = await editar(PROFESOR, secciones.s1, a.id, {
+      titulo: ` ${a.titulo} `,
+      cuerpo: ` ${a.cuerpo} `,
+    })
+    expect(misma).toEqual(a)
+    expect(await historial(PROFESOR, secciones.s1, a.id)).toEqual([])
+    const b = await editar(PROFESOR, secciones.s1, a.id, {
+      titulo: 'Cambio real',
+      cuerpo: a.cuerpo,
+    })
+    expect(
+      await editar(PROFESOR, secciones.s1, a.id, {
+        titulo: b.titulo,
+        cuerpo: b.cuerpo,
+      }),
+    ).toEqual(b)
+    expect(await historial(PROFESOR, secciones.s1, a.id)).toHaveLength(1)
+  })
+
+  it('otro profesor del mismo curso no edita ni consulta historial de un anuncio general ajeno', async () => {
+    const a = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'General del autor',
+      cuerpo: 'Original',
+    })
+    await editar(
+      demo.profesor2,
+      secciones.s2,
+      a.id,
+      { titulo: 'Intrusión', cuerpo: 'No debe guardar' },
+      403,
+    )
+    await historial(demo.profesor2, secciones.s2, a.id, 403)
+    expect(await historial(PROFESOR, secciones.s1, a.id)).toEqual([])
+  })
+
+  it.each([ALUMNO, AYUDANTE, DIRECTOR, ADMIN_INGENIERIA])(
+    '%s no edita ni lee historial',
+    async (correo) => {
+      const a = await crear()
+      await editar(
+        correo,
+        secciones.s1,
+        a.id,
+        { titulo: 'No autorizado', cuerpo: 'Contenido' },
+        403,
+      )
+      await historial(correo, secciones.s1, a.id, 403)
+    },
+  )
+
+  it('rechaza privados ajenos, otro curso, universidad, archivados e IDs inválidos', async () => {
+    const a = await crear()
+    await editar(
+      demo.profesor2,
+      secciones.s2,
+      a.id,
+      { titulo: 'Cambio', cuerpo: 'C' },
+      404,
+    )
+    await editar(
+      PROFESOR,
+      secciones.otroCurso,
+      a.id,
+      { titulo: 'Cambio', cuerpo: 'C' },
+      404,
+    )
+    await editar(
+      PROFESOR_SUR,
+      secciones.s1,
+      a.id,
+      { titulo: 'Cambio', cuerpo: 'C' },
+      404,
+    )
+    await editar(
+      PROFESOR,
+      secciones.s1,
+      'no-uuid',
+      { titulo: 'Cambio', cuerpo: 'C' },
+      400,
+    )
+    await bd.query('UPDATE anuncio SET archived_at=now() WHERE id=$1', [a.id])
+    await editar(
+      PROFESOR,
+      secciones.s1,
+      a.id,
+      { titulo: 'Cambio', cuerpo: 'C' },
+      404,
+    )
+  })
+
+  it.each([
+    { titulo: '', cuerpo: 'C' },
+    { titulo: 'T', cuerpo: ' ' },
+    { titulo: 'x'.repeat(201), cuerpo: 'C' },
+    { titulo: 'T', cuerpo: 'x'.repeat(5001) },
+    { titulo: 'T\u0000', cuerpo: 'C' },
+    { titulo: 'T', cuerpo: 'C\u0000' },
+    { titulo: 'T' },
+    { titulo: 1, cuerpo: 'C' },
+    { titulo: 'T', cuerpo: 'C', autorId: 'otro' },
+    { titulo: 'T', cuerpo: 'C', seccionId: null },
+  ])(
+    'aplica las validaciones de publicación sin alterar contenido o historial: %j',
+    async (datos) => {
+      const a = await crear()
+      await editar(PROFESOR, secciones.s1, a.id, datos, 400)
+      expect(await historial(PROFESOR, secciones.s1, a.id)).toEqual([])
+    },
+  )
+
+  it('serializa dos ediciones y conserva la cadena completa de versiones anteriores', async () => {
+    const a = await crear()
+    await Promise.all([
+      editar(PROFESOR, secciones.s1, a.id, { titulo: 'Cambio A', cuerpo: 'A' }),
+      editar(PROFESOR, secciones.s1, a.id, { titulo: 'Cambio B', cuerpo: 'B' }),
+    ])
+    const cambios = await historial(PROFESOR, secciones.s1, a.id)
+    expect(cambios).toHaveLength(2)
+    expect(cambios[0].titulo).toBe(a.titulo)
+    const actual = (await listar(PROFESOR, secciones.s1)).find(
+      (f) => f.id === a.id,
+    ) as Anuncio
+    expect([cambios[1].titulo, actual.titulo].sort()).toEqual([
+      'Cambio A',
+      'Cambio B',
+    ])
+  })
+
+  it('no convierte un anuncio leído en nuevo por corregir su contenido', async () => {
+    const a = await crear()
+    const token = await tokenDe(ALUMNO)
+    await request(app.getHttpServer())
+      .post(`/api/espacio/secciones/${secciones.s1}/anuncios/lecturas`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ anuncioIds: [a.id] })
+      .expect(204)
+    await editar(PROFESOR, secciones.s1, a.id, {
+      titulo: 'Corrección posterior',
+      cuerpo: 'C',
+    })
+    expect(
+      (await listar(ALUMNO, secciones.s1)).find((f) => f.id === a.id)?.nuevo,
+    ).toBe(false)
+  })
+
+  it('el historial es inmutable incluso para el dueño de la tabla, y el trigger exige autor de sesión', async () => {
+    const a = await crear()
+    await editar(PROFESOR, secciones.s1, a.id, {
+      titulo: 'Versión editada',
+      cuerpo: 'C',
+    })
+    await expect(
+      bd.query('UPDATE anuncio_cambio SET titulo=$2 WHERE anuncio_id=$1', [
+        a.id,
+        'Manipulado',
+      ]),
+    ).rejects.toMatchObject({ driverError: { code: '42501' } })
+    await expect(
+      bd.query('DELETE FROM anuncio_cambio WHERE anuncio_id=$1', [a.id]),
+    ).rejects.toMatchObject({ driverError: { code: '42501' } })
+    const q = bd.createQueryRunner()
+    await q.startTransaction()
+    try {
+      await q.query(`SET LOCAL ROLE ${ROL_APP}`)
+      const [{ universidad_id }] = await bd.query<{ universidad_id: string }[]>(
+        'SELECT universidad_id FROM anuncio WHERE id=$1',
+        [a.id],
+      )
+      await q.query(
+        `SELECT set_config('app.universidad_id',$1,true),set_config('app.rol','PROFESOR',true)`,
+        [universidad_id],
+      )
+      await expect(
+        bd.query<unknown>(
+          'UPDATE anuncio SET titulo=$2 WHERE id=$1',
+          [a.id, 'Intrusión SQL'],
+          q,
+        ),
+      ).rejects.toMatchObject({ driverError: { code: '42501' } })
+    } finally {
+      await q.rollbackTransaction()
+      await q.release()
+    }
+  })
+
+  it('si falla la auditoría, se revierte también el contenido y la fecha', async () => {
+    const a = await crear()
+    await bd.query(
+      `CREATE FUNCTION fallar_anuncio_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Fallo simulado'; END; $$`,
+    )
+    await bd.query(
+      'CREATE TRIGGER tg_fallar_anuncio_test BEFORE INSERT ON anuncio_cambio FOR EACH ROW EXECUTE FUNCTION fallar_anuncio_test()',
+    )
+    try {
+      await editar(
+        PROFESOR,
+        secciones.s1,
+        a.id,
+        { titulo: 'No guardar', cuerpo: 'C' },
+        500,
+      )
+    } finally {
+      await bd.query('DROP TRIGGER tg_fallar_anuncio_test ON anuncio_cambio')
+      await bd.query('DROP FUNCTION fallar_anuncio_test()')
+    }
+    expect(
+      (await listar(PROFESOR, secciones.s1)).find((f) => f.id === a.id),
+    ).toEqual(a)
+    expect(await historial(PROFESOR, secciones.s1, a.id)).toEqual([])
+  })
+})
+
+describe('rollback de ANU-05', () => {
+  it('conserva la corrección publicada y las lecturas al retirar solo el historial', async () => {
+    const a = await publicar(PROFESOR, secciones.s1, {
+      titulo: 'Original rollback',
+      cuerpo: 'Original',
+    })
+    const token = await tokenDe(PROFESOR)
+    await request(app.getHttpServer())
+      .patch(`/api/espacio/secciones/${secciones.s1}/anuncios/${a.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ titulo: 'Corrección conservada', cuerpo: 'Cuerpo corregido' })
+      .expect(200)
+    const antes = await bd.query<{ anuncio_id: string }[]>(
+      'SELECT anuncio_id FROM lectura_anuncio ORDER BY alumno_id,anuncio_id',
+    )
+    const migracion = new CrearHistorialAnuncio1792670000000()
     const q = bd.createQueryRunner()
     try {
       await migracion.down(q)
+      const [fila] = await bd.query<{ titulo: string; cuerpo: string }[]>(
+        'SELECT titulo,cuerpo FROM anuncio WHERE id=$1',
+        [a.id],
+      )
+      expect(fila).toEqual({
+        titulo: 'Corrección conservada',
+        cuerpo: 'Cuerpo corregido',
+      })
       expect(
-        await bd.query('SELECT * FROM anuncio WHERE id=$1', [anuncio.id]),
+        await bd.query(
+          'SELECT anuncio_id FROM lectura_anuncio ORDER BY alumno_id,anuncio_id',
+        ),
       ).toEqual(antes)
     } finally {
       await migracion.up(q)
       await q.release()
     }
-    expect(await contador(ALUMNO, secciones.s1)).toBe(1)
-    expect((await listar(ALUMNO, secciones.s1))[0].nuevo).toBe(true)
+    expect(
+      (await listar(PROFESOR, secciones.s1)).find((f) => f.id === a.id)
+        ?.editadoEn,
+    ).toBeUndefined()
   })
 })
 
@@ -994,6 +1344,68 @@ describe('restricciones en la base de datos', () => {
   const INSERTAR = `
     INSERT INTO anuncio (universidad_id, curso_id, autor_id, titulo, cuerpo)
     SELECT s.universidad_id, s.curso_id, $2, $3, $4 FROM seccion s WHERE s.id = $1`
+
+  // SQL directo: ninguna consulta del servicio puede ocultar un fallo de RLS.
+  async function escenarioHistorialRls() {
+    const filas: { id: string; universidad_id: string; autor_id: string }[] = []
+    for (const correo of [PROFESOR, PROFESOR_SUR]) {
+      const [anuncio] = await bd.query<
+        { id: string; universidad_id: string; autor_id: string }[]
+      >(
+        `INSERT INTO anuncio (universidad_id, curso_id, autor_id, titulo, cuerpo)
+         SELECT u.universidad_id, c.id, u.id, 'Original RLS', 'Cuerpo original'
+           FROM usuario u JOIN curso c ON c.universidad_id = u.universidad_id
+          WHERE u.correo = $1 AND c.archived_at IS NULL
+          ORDER BY c.id LIMIT 1
+         RETURNING id, universidad_id, autor_id`,
+        [correo],
+      )
+      // El trigger crea una versión anterior real en cada universidad.
+      await bd.query('UPDATE anuncio SET titulo = $2 WHERE id = $1', [
+        anuncio.id,
+        'Corregido RLS',
+      ])
+      filas.push(anuncio)
+    }
+    return filas
+  }
+
+  it('RLS de anuncio_cambio: SELECT sin filtro solo ve el historial de su universidad', async () => {
+    const [norte, sur] = await escenarioHistorialRls()
+    const propias = await bd.query<{ id: string; anuncio_id: string }[]>(
+      `SELECT id, anuncio_id FROM anuncio_cambio
+        WHERE universidad_id = $1 ORDER BY id`,
+      [norte.universidad_id],
+    )
+    expect(propias.some((f) => f.anuncio_id === norte.id)).toBe(true)
+    const visibles = await comoApp(
+      'PROFESOR',
+      'SELECT id, anuncio_id FROM anuncio_cambio ORDER BY id',
+      [],
+    )
+    expect(visibles).toEqual(propias)
+    expect(visibles).not.toContainEqual(
+      expect.objectContaining({ anuncio_id: sur.id }),
+    )
+  })
+
+  it('RLS de anuncio_cambio: una sesión de Norte no inserta historial de Sur', async () => {
+    const [norte, sur] = await escenarioHistorialRls()
+    const sql = `INSERT INTO anuncio_cambio
+      (universidad_id, anuncio_id, responsable_id, titulo, cuerpo, fecha)
+      VALUES ($1, $2, $3, 'Versión RLS', 'Cuerpo', clock_timestamp())`
+    // Control positivo: mismos permisos y columnas, universidad propia.
+    await comoApp('PROFESOR', sql, [
+      norte.universidad_id,
+      norte.id,
+      norte.autor_id,
+    ])
+    // Las tres FKs apuntan a Sur y son válidas: debe rechazarlo la política,
+    // no una FK ni la comprobación de autor del trigger de anuncio.
+    await expect(
+      comoApp('PROFESOR', sql, [sur.universidad_id, sur.id, sur.autor_id]),
+    ).rejects.toMatchObject({ code: '42501' })
+  })
 
   it('RLS: cada universidad lee solo sus anuncios, aunque la consulta no filtre', async () => {
     const enBase = await anunciosEnBase()
