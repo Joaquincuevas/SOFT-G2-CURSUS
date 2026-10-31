@@ -264,14 +264,15 @@ function FormularioNotas({
                       )
                     }}
                   />
-                  {motivo && (
-                    <span
-                      id={`${idMotivo}-${alumno.id}`}
-                      className="notas__motivo"
-                    >
-                      {motivo}
-                    </span>
-                  )}
+                  {/* Siempre montado: un lector de pantalla anuncia el motivo
+                      cuando aparece (aria-live), mientras se escribe. */}
+                  <span
+                    id={`${idMotivo}-${alumno.id}`}
+                    className="notas__motivo"
+                    aria-live="polite"
+                  >
+                    {motivo}
+                  </span>
                 </td>
                 <td>
                   {alumno.estado === null ? 'Sin nota' : ESTADO[alumno.estado]}
