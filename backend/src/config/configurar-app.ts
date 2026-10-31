@@ -1,5 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
-import { type INestApplication, ValidationPipe } from '@nestjs/common'
+import {
+  type INestApplication,
+  ValidationPipe,
+  type ValidationPipeOptions,
+} from '@nestjs/common'
 import type { NextFunction, Request, Response } from 'express'
 import { ORIGEN_VERIFICADO, type RequestLogin } from '../auth/ip-login.js'
 import helmet from 'helmet'
@@ -10,6 +14,14 @@ export const HEADER_SECRETO = 'x-origin-secret'
 // /api/health lo llama el health check del contenedor desde localhost, sin
 // pasar por Vercel, así que no exige el header secreto.
 const RUTAS_SIN_SECRETO = new Set([`/${PREFIJO_API}/health`])
+
+// Opciones del ValidationPipe global. Las reutiliza el pipe propio del PUT de
+// notas (NOT-06), que valida su cuerpo fuera del global.
+export const OPCIONES_VALIDACION = {
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+} as const satisfies ValidationPipeOptions
 
 interface OpcionesApp {
   secretoOrigen?: string
@@ -32,13 +44,7 @@ export function configurarApp(
     }),
   )
   // Todo body se valida con su DTO; un campo no declarado responde 400.
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  )
+  app.useGlobalPipes(new ValidationPipe(OPCIONES_VALIDACION))
   app.use(sinCache)
   if (secretoOrigen) {
     app.use(exigirSecretoOrigen(secretoOrigen))

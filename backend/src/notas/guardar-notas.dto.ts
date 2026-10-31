@@ -14,6 +14,7 @@ import {
   ValidateNested,
   type ValidationError,
 } from 'class-validator'
+import { OPCIONES_VALIDACION } from '../config/configurar-app.js'
 
 const ES_NOTA = 'esNota'
 
@@ -70,7 +71,11 @@ function notasInvalidas(
         ) {
           return null
         }
-        const { alumnoId } = campo.target as NotaAlumnoDto
+        // Sin el objeto validado (por ejemplo, con validationError.target en
+        // false) responde el 400 de siempre.
+        const alumnoId = (campo.target as Partial<NotaAlumnoDto> | undefined)
+          ?.alumnoId
+        if (typeof alumnoId !== 'string') return null
         invalidas.push({ alumnoId, motivo: motivos[0][1] })
       }
     }
@@ -78,18 +83,18 @@ function notasInvalidas(
   return invalidas.length ? invalidas : null
 }
 
-const errorPorDefecto = new ValidationPipe().createExceptionFactory()
+const errorPorDefecto = new ValidationPipe(
+  OPCIONES_VALIDACION,
+).createExceptionFactory()
 
-// Pipe del cuerpo del PUT, con las mismas opciones que el global de
-// configurar-app. Lo usa el controlador con el cuerpo tipado como la interfaz
+// Pipe del cuerpo del PUT, con las mismas opciones que el global
+// (OPCIONES_VALIDACION). Lo usa el controlador con el cuerpo tipado como la interfaz
 // GuardarNotas: el pipe global no valida una interfaz (su metatipo es
 // Object), así que este es el único que valida y puede responder qué alumnos
 // tienen una nota inválida y por qué (NOT-06).
 export const validarGuardarNotas = new ValidationPipe({
+  ...OPCIONES_VALIDACION,
   expectedType: GuardarNotasDto,
-  whitelist: true,
-  forbidNonWhitelisted: true,
-  transform: true,
   exceptionFactory: (errores) => {
     const invalidas = notasInvalidas(errores)
     if (!invalidas) return errorPorDefecto(errores)
