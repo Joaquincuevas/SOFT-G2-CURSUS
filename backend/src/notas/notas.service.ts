@@ -100,9 +100,10 @@ export class NotasService {
   // Guarda como propuesta las notas recibidas, de cualquier subconjunto de
   // los alumnos activos; los que no vienen conservan la suya. El pipe del
   // controlador ya rechazó las notas fuera de la escala con su detalle por
-  // alumno (NOT-06); se vuelve a revisar aquí por si se llama sin él. Cada
-  // nota que cambia deja un evento PROPUESTA en nota_cambio (NOT-04), en la
-  // misma transacción.
+  // alumno (NOT-06). Esta revisión no sobra: el servicio no confía en quien
+  // lo llama, y es la última barrera antes de la base si un cuerpo llega sin
+  // pasar por el pipe. Cada nota que cambia deja un evento PROPUESTA en
+  // nota_cambio (NOT-04), en la misma transacción.
   async guardar(
     contexto: ContextoUniversidad,
     usuarioId: string,

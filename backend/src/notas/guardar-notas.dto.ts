@@ -9,6 +9,7 @@ import { Type } from 'class-transformer'
 import {
   ArrayMaxSize,
   IsArray,
+  IsObject,
   IsUUID,
   ValidateBy,
   ValidateNested,
@@ -46,6 +47,8 @@ class NotaAlumnoDto {
 export class GuardarNotasDto {
   @IsArray()
   @ArrayMaxSize(MAX_NOTAS_GUARDADO)
+  // Sin esto, una lista de listas ([[{...}]]) pasaría la validación anidada.
+  @IsObject({ each: true })
   @ValidateNested({ each: true })
   @Type(() => NotaAlumnoDto)
   notas!: NotaAlumnoDto[]
