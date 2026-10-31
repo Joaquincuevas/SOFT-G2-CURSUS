@@ -1,8 +1,10 @@
-import type {
-  EvaluacionesSeccion,
-  NotasEvaluacion,
-  Rol,
-  SeccionResumen,
+import {
+  type ErrorNotasInvalidas,
+  type EvaluacionesSeccion,
+  MENSAJES_NOTA_INVALIDA,
+  type NotasEvaluacion,
+  type Rol,
+  type SeccionResumen,
 } from '@cursus/shared'
 import {
   fireEvent,
@@ -97,8 +99,8 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       'Bruno DíazPropuesta',
       'Zoe RuizSin nota',
     ])
-    expect(formulario.getByLabelText('Nota de Ana Ávila')).toHaveValue(null)
-    expect(formulario.getByLabelText('Nota de Bruno Díaz')).toHaveValue(5.5)
+    expect(formulario.getByLabelText('Nota de Ana Ávila')).toHaveValue('')
+    expect(formulario.getByLabelText('Nota de Bruno Díaz')).toHaveValue('5.5')
     expect(
       formulario.getByRole('button', { name: 'Guardar notas' }),
     ).toBeDisabled()
@@ -213,7 +215,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
 
     const bruno = panel.getByLabelText('Nota de Bruno Díaz')
     await waitFor(() => expect(bruno).toBeEnabled())
-    expect(bruno).toHaveValue(5.5)
+    expect(bruno).toHaveValue('5.5')
     expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
   })
 
@@ -237,7 +239,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     )
     const bruno = panel.getByLabelText('Nota de Bruno Díaz')
     expect(bruno).toBeEnabled()
-    expect(bruno).toHaveValue(5.5)
+    expect(bruno).toHaveValue('5.5')
     expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
   })
 
@@ -284,18 +286,40 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     expect(puts).toBe(0)
   })
 
-  test('un 400 "Nota inválida" muestra el mensaje', async () => {
+  test('si el 400 trae notas inválidas, marca esos campos con su motivo', async () => {
     const panel = await abrirNotas('AYUDANTE', (init) =>
       init?.method === 'PUT'
-        ? json({ statusCode: 400, message: 'Nota inválida' }, 400)
+        ? json(
+            {
+              statusCode: 400,
+              message: 'Nota inválida',
+              invalidas: [
+                { alumnoId: 'a1', motivo: MENSAJES_NOTA_INVALIDA.rango },
+              ],
+            } satisfies ErrorNotasInvalidas,
+            400,
+          )
         : SIN_NOTAS,
     )
     await abrirEvaluacion(panel)
-    escribir(panel, 'Ana Ávila', '8')
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    escribir(panel, 'Ana Ávila', '6')
+    escribir(panel, 'Zoe Ruiz', '4')
+    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+    fireEvent.click(guardar)
 
     expect(await panel.findByRole('alert')).toHaveTextContent('Nota inválida.')
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeEnabled()
+    const ana = panel.getByLabelText('Nota de Ana Ávila')
+    await waitFor(() => expect(ana).toHaveAttribute('aria-invalid', 'true'))
+    expect(ana).toHaveAccessibleDescription(MENSAJES_NOTA_INVALIDA.rango)
+    expect(panel.getByLabelText('Nota de Zoe Ruiz')).not.toHaveAttribute(
+      'aria-invalid',
+    )
+    expect(guardar).toBeDisabled()
+
+    // Al corregir el campo se quita la marca del servidor.
+    escribir(panel, 'Ana Ávila', '6.5')
+    expect(ana).not.toHaveAttribute('aria-invalid')
+    expect(guardar).toBeEnabled()
   })
 
   test('una nota publicada se muestra sin poder editarla', async () => {

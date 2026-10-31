@@ -108,3 +108,16 @@
   border-radius: var(--radius-md);
   font: var(--font-body);
 }
+
+/* NOT-06: nota fuera de la escala o con formato inválido, con su motivo. */
+.notas__nota--invalida {
+  border-color: var(--color-error);
+  outline-color: var(--color-error);
+}
+
+.notas__motivo {
+  display: block;
+  margin-top: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-error);
+}
