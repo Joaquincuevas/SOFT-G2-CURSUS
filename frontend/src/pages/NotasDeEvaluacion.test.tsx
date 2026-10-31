@@ -294,6 +294,8 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     ['0,9', MENSAJES_NOTA_INVALIDA.rango],
     ['7.1', MENSAJES_NOTA_INVALIDA.rango],
     ['5,55', MENSAJES_NOTA_INVALIDA.formato],
+    ['0,99999999999', MENSAJES_NOTA_INVALIDA.formato],
+    ['7.00000000001', MENSAJES_NOTA_INVALIDA.formato],
     ['x', MENSAJES_NOTA_INVALIDA.formato],
   ])(
     'una nota %j se marca en rojo con su motivo y deshabilita Guardar',

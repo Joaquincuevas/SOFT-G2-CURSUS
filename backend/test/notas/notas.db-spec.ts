@@ -588,6 +588,9 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     ['8', 8, MENSAJES_NOTA_INVALIDA.rango],
     ['0', 0, MENSAJES_NOTA_INVALIDA.rango],
     ['5,55 (dos decimales)', 5.55, MENSAJES_NOTA_INVALIDA.formato],
+    // Casi un decimal: la base los redondearía a 1,0 y 7,0.
+    ['0,99999999999', 0.99999999999, MENSAJES_NOTA_INVALIDA.formato],
+    ['7,00000000001', 7.00000000001, MENSAJES_NOTA_INVALIDA.formato],
     ['"x"', 'x', MENSAJES_NOTA_INVALIDA.formato],
     ['vacía', '', MENSAJES_NOTA_INVALIDA.formato],
     ['"5.5" (texto)', '5.5', MENSAJES_NOTA_INVALIDA.formato],
