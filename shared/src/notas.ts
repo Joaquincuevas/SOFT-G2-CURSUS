@@ -74,7 +74,10 @@ export const MENSAJES_NOTA_INVALIDA: Record<MotivoNotaInvalida, string> = {
 export function motivoNotaInvalida(valor: unknown): MotivoNotaInvalida | null {
   if (typeof valor !== 'number' || !Number.isFinite(valor)) return 'formato'
   const decimas = Math.round(valor * 10)
-  if (Math.abs(valor * 10 - decimas) > 1e-9) return 'formato'
+  // Exacto, sin tolerancia: decimas / 10 da el mismo número que leer "5,5"
+  // o "5.5", así que toda nota con un decimal pasa. Una tolerancia aceptaría
+  // 0,99999999999 o 7,00000000001, que numeric(2,1) guardaría como 1,0 y 7,0.
+  if (decimas / 10 !== valor) return 'formato'
   return decimas < NOTA_MINIMA * 10 || decimas > NOTA_MAXIMA * 10
     ? 'rango'
     : null
