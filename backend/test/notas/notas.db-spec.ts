@@ -668,6 +668,38 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     expect(await filasDe(evaluacion)).toEqual([])
   })
 
+  it.each([
+    [
+      'una lista de listas',
+      () => ({ notas: [[{ alumnoId: alumnos.ana, nota: 5 }]] }),
+    ],
+    [
+      'una fila nula junto a una nota inválida',
+      () => ({ notas: [null, { alumnoId: alumnos.ana, nota: 8 }] }),
+    ],
+    [
+      'más de 500 notas inválidas',
+      () =>
+        notasDe(
+          Array.from(
+            { length: MAX_NOTAS_GUARDADO + 1 },
+            (): [string, unknown] => [alumnos.ana, 8],
+          ),
+        ),
+    ],
+  ])(
+    '%s responde el 400 de validación, sin invalidas',
+    async (_caso, cuerpo) => {
+      const evaluacion = await crearEvaluacion()
+      const respuesta = await guardar(AYUDANTE, evaluacion, cuerpo(), 400)
+
+      expect(respuesta).not.toHaveProperty('invalidas')
+      expect(Array.isArray(respuesta.message)).toBe(true)
+      expect(await filasDe(evaluacion)).toEqual([])
+      expect(await eventosDe(evaluacion)).toEqual([])
+    },
+  )
+
   it('una nota inválida después de una que ya existía tampoco cambia la existente', async () => {
     const evaluacion = await crearEvaluacion()
     await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 5]]), 200)
