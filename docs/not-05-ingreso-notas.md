@@ -40,7 +40,7 @@ El PUT:
 - **Valida todas las notas antes de escribir.** Una nota que no va de 1,0 a 7,0 con un decimal (0, 8, 5,55, `"x"`) responde **400 "Nota inválida"** y no guarda ninguna, aunque las demás sean válidas. Desde [NOT-06](not-06-escala-notas.md) el 400 trae `invalidas` con el motivo de cada alumno (fuera de rango o formato inválido), y la interfaz marca en rojo cada campo inválido al escribir. La base exige el rango con `ck_nota_valor`; el decimal lo exigen el DTO y el servicio, porque `numeric(2,1)` redondea antes del `CHECK`.
 - 400 con `{ message, sobrantes, repetidos }` si trae alumnos sin inscripción activa en la sección o repetidos (los UUID se comparan en minúsculas). No guarda nada.
 - 400 **"Una nota publicada no se cambia desde aquí"** si la lista incluye a un alumno cuya nota está `PUBLICADA`, aunque traiga el mismo valor: se rechaza **la lista completa** antes de escribir, así que tampoco se guardan las demás notas ni queda ningún evento. Publicar es NOT-11 y recorregir, NOT-15.
-- 400 por un cuerpo mal formado (sin `notas`, `alumnoId` que no es UUID, nota nula o ausente, campos extra).
+- 400 por un cuerpo mal formado (sin `notas`, `alumnoId` que no es UUID, campos extra). Una nota nula o ausente responde, desde NOT-06, el 400 "Nota inválida" con `invalidas` y motivo de formato.
 - 404 si la evaluación no existe, está archivada o es de otra sección.
 - 403 si quien guarda no es ayudante de la sección. Se vuelve a comprobar dentro de la transacción, con una asignación activa en `ayudante_seccion`.
 - **Todo en una transacción.** Cada nota que cambia se guarda como propuesta y deja un evento `PROPUESTA` en `nota_cambio` con `AuditoriaNotasService.registrar()` (NOT-04): la primera vez con nota anterior nula, y al cambiarla con la anterior. Una nota igual a la guardada no deja evento ni toca la fila.
@@ -98,5 +98,5 @@ npm run build
 1. Ejecutar las migraciones y el seed de facultad completa. Levantar backend y frontend.
 2. Como profesor (`camila.rojas@norte.cursus.test`, contraseña `SEED_PASSWORD`), crear una evaluación en una sección.
 3. Ingresar como un ayudante de esa sección, abrir la pestaña **Notas** y pulsar **Ingresar notas**. Escribir dos notas y guardar: quedan como "Propuesta". Volver a abrir: siguen ahí.
-4. Escribir un 8 y guardar: aparece "Nota inválida." y no se guarda nada.
+4. Escribir un 8: desde NOT-06 el campo se marca en rojo con "Fuera de rango: la nota va de 1,0 a 7,0" y Guardar queda deshabilitado, así que no se guarda nada.
 5. Ingresar como alumno de la sección: la pestaña Notas muestra la evaluación, sin notas.
