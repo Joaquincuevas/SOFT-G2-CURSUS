@@ -1,6 +1,7 @@
 import {
   esNotaValida,
   type ErrorListaNotas,
+  type GuardarNotas,
   type EstadoNota,
   type NotasEvaluacion,
   type SeccionEspacio,
@@ -18,7 +19,6 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
-import type { GuardarNotasDto } from './guardar-notas.dto.js'
 
 // La evaluación se llama e en la consulta.
 const COLUMNAS_EVALUACION = `json_build_object(
@@ -98,16 +98,17 @@ export class NotasService {
   }
 
   // Guarda como propuesta las notas recibidas, de cualquier subconjunto de
-  // los alumnos activos; los que no vienen conservan la suya. Todas las
-  // notas se validan antes de escribir: una inválida responde 400 "Nota
-  // inválida" y no guarda ninguna. Cada nota que cambia deja un evento
-  // PROPUESTA en nota_cambio (NOT-04), en la misma transacción.
+  // los alumnos activos; los que no vienen conservan la suya. El pipe del
+  // controlador ya rechazó las notas fuera de la escala con su detalle por
+  // alumno (NOT-06); se vuelve a revisar aquí por si se llama sin él. Cada
+  // nota que cambia deja un evento PROPUESTA en nota_cambio (NOT-04), en la
+  // misma transacción.
   async guardar(
     contexto: ContextoUniversidad,
     usuarioId: string,
     seccion: SeccionEspacio,
     evaluacionId: string,
-    datos: GuardarNotasDto,
+    datos: GuardarNotas,
   ): Promise<NotasEvaluacion> {
     if (!datos.notas.every((n) => esNotaValida(n.nota))) {
       throw new BadRequestException('Nota inválida')
@@ -115,7 +116,7 @@ export class NotasService {
     // Los UUID se comparan en minúsculas, como los devuelve PostgreSQL.
     const notas = datos.notas.map((n) => ({
       alumnoId: n.alumnoId.toLowerCase(),
-      nota: n.nota as number,
+      nota: n.nota,
     }))
     const dobles = repetidos(notas.map((n) => n.alumnoId))
 

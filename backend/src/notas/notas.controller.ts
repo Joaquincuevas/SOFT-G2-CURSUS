@@ -1,4 +1,9 @@
-import type { NotasEvaluacion, Rol, SeccionEspacio } from '@cursus/shared'
+import type {
+  GuardarNotas,
+  NotasEvaluacion,
+  Rol,
+  SeccionEspacio,
+} from '@cursus/shared'
 import {
   Body,
   Controller,
@@ -17,7 +22,7 @@ import {
   IntegranteDeSeccion,
   SeccionActual,
 } from '../espacio/integrante-seccion.guard.js'
-import { GuardarNotasDto } from './guardar-notas.dto.js'
+import { validarGuardarNotas } from './guardar-notas.dto.js'
 import { NotasService } from './notas.service.js'
 
 // Roles en la sección que leen las notas propuestas. El alumno ve las suyas,
@@ -56,7 +61,9 @@ export class NotasController {
     @Req() req: RequestConUsuario,
     @SeccionActual() seccion: SeccionEspacio,
     @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
-    @Body() datos: GuardarNotasDto,
+    // El cuerpo lo valida validarGuardarNotas con GuardarNotasDto; se tipa con
+    // la interfaz para que el pipe global no lo valide antes (NOT-06).
+    @Body(validarGuardarNotas) datos: GuardarNotas,
   ): Promise<NotasEvaluacion> {
     if (seccion.rol !== 'AYUDANTE') {
       throw new ForbiddenException(
