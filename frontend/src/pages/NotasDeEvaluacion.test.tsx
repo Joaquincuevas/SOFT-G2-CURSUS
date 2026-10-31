@@ -286,6 +286,66 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     expect(puts).toBe(0)
   })
 
+  // NOT-06: validación al escribir.
+  test.each([
+    ['8', MENSAJES_NOTA_INVALIDA.rango],
+    ['0,9', MENSAJES_NOTA_INVALIDA.rango],
+    ['7.1', MENSAJES_NOTA_INVALIDA.rango],
+    ['5,55', MENSAJES_NOTA_INVALIDA.formato],
+    ['x', MENSAJES_NOTA_INVALIDA.formato],
+  ])(
+    'una nota %j se marca en rojo con su motivo y deshabilita Guardar',
+    async (texto, motivo) => {
+      const panel = await abrirNotas('AYUDANTE')
+      await abrirEvaluacion(panel)
+      const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+      escribir(panel, 'Zoe Ruiz', '4')
+      expect(guardar).toBeEnabled()
+
+      escribir(panel, 'Ana Ávila', texto)
+      const ana = panel.getByLabelText('Nota de Ana Ávila')
+      expect(ana).toHaveAttribute('aria-invalid', 'true')
+      expect(ana).toHaveClass('notas__nota--invalida')
+      expect(ana).toHaveAccessibleDescription(motivo)
+      // Aunque Zoe tenga una nota válida, no se guarda ninguna.
+      expect(guardar).toBeDisabled()
+
+      escribir(panel, 'Ana Ávila', '6')
+      expect(ana).not.toHaveAttribute('aria-invalid')
+      expect(panel.queryByText(motivo)).not.toBeInTheDocument()
+      expect(guardar).toBeEnabled()
+    },
+  )
+
+  test('acepta coma y punto como separador decimal', async () => {
+    const enviados: unknown[] = []
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        enviados.push(JSON.parse(init.body as string))
+        return json(SIN_NOTAS)
+      }
+      return SIN_NOTAS
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Ana Ávila', '5,5')
+    escribir(panel, 'Zoe Ruiz', '6.5')
+    expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
+      'aria-invalid',
+    )
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+
+    await waitFor(() =>
+      expect(enviados).toEqual([
+        {
+          notas: [
+            { alumnoId: 'a1', nota: 5.5 },
+            { alumnoId: 'a3', nota: 6.5 },
+          ],
+        },
+      ]),
+    )
+  })
+
   test('si el 400 trae notas inválidas, marca esos campos con su motivo', async () => {
     const panel = await abrirNotas('AYUDANTE', (init) =>
       init?.method === 'PUT'
