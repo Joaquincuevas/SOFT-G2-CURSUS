@@ -280,6 +280,8 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     // Bruno ya tiene 5,5: guardarlo no cambiaría nada, así que no se envía.
     escribir(panel, 'Bruno Díaz', '5.50')
     expect(guardar).toBeDisabled()
+    escribir(panel, 'Bruno Díaz', '5,5')
+    expect(guardar).toBeDisabled()
 
     escribir(panel, 'Ana Ávila', '6')
     expect(guardar).toBeEnabled()
@@ -307,6 +309,8 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       expect(ana).toHaveAttribute('aria-invalid', 'true')
       expect(ana).toHaveClass('notas__nota--invalida')
       expect(ana).toHaveAccessibleDescription(motivo)
+      // Un lector de pantalla lo anuncia mientras se escribe.
+      expect(panel.getByText(motivo)).toHaveAttribute('aria-live', 'polite')
       // Aunque Zoe tenga una nota válida, no se guarda ninguna.
       expect(guardar).toBeDisabled()
 
@@ -316,6 +320,46 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       expect(guardar).toBeEnabled()
     },
   )
+
+  test('un separador al final no se marca mientras se escribe "5,5"', async () => {
+    const panel = await abrirNotas('AYUDANTE')
+    await abrirEvaluacion(panel)
+    const ana = panel.getByLabelText('Nota de Ana Ávila')
+
+    for (const paso of ['5', '5,', '5,5']) {
+      escribir(panel, 'Ana Ávila', paso)
+      expect(ana).not.toHaveAttribute('aria-invalid')
+    }
+    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeEnabled()
+  })
+
+  test('un 400 sin notas inválidas muestra el mensaje sin marcar campos', async () => {
+    const panel = await abrirNotas('AYUDANTE', (init) =>
+      init?.method === 'PUT'
+        ? json(
+            {
+              statusCode: 400,
+              message:
+                'Solo se ingresan notas de alumnos inscritos, una por alumno',
+              sobrantes: ['a1'],
+              repetidos: [],
+            },
+            400,
+          )
+        : SIN_NOTAS,
+    )
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Ana Ávila', '6')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'Solo se ingresan notas de alumnos inscritos, una por alumno.',
+    )
+    expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
+      'aria-invalid',
+    )
+    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeEnabled()
+  })
 
   test('acepta coma y punto como separador decimal', async () => {
     const enviados: unknown[] = []
@@ -459,9 +503,7 @@ function sinIngresoDeNotas(panel: ReturnType<typeof within>) {
   expect(
     panel.queryByRole('columnheader', { name: 'Notas' }),
   ).not.toBeInTheDocument()
-  expect(
-    panel.queryAllByRole('spinbutton', { name: /^Nota de / }),
-  ).toHaveLength(0)
+  expect(panel.queryAllByLabelText(/^Nota de /)).toHaveLength(0)
   expect(
     panel.queryByRole('form', { name: 'Ingresar notas' }),
   ).not.toBeInTheDocument()
