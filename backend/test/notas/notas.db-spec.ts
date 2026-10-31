@@ -1,6 +1,8 @@
 import {
   type ErrorListaNotas,
+  type ErrorNotasInvalidas,
   MAX_NOTAS_GUARDADO,
+  MENSAJES_NOTA_INVALIDA,
   type NotasEvaluacion,
   type Rol,
 } from '@cursus/shared'
@@ -103,7 +105,10 @@ async function guardar(
     .send(cuerpo as object)
     .expect(estado)
   return respuesta.body as NotasEvaluacion &
-    ErrorListaNotas & { message: string | string[] }
+    ErrorListaNotas &
+    Partial<Pick<ErrorNotasInvalidas, 'invalidas'>> & {
+      message: string | string[]
+    }
 }
 
 const notasDe = (notas: [alumnoId: string, nota: unknown][]) => ({
@@ -576,14 +581,25 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     },
   )
 
+  // NOT-06: el 400 dice qué alumno tiene la nota inválida y por qué.
   it.each([
-    ['cero', 0],
-    ['sobre 7,0', 8],
-    ['con dos decimales', 5.55],
-    ['que no es un número', 'x'],
+    ['0,9 (bajo 1,0)', 0.9, MENSAJES_NOTA_INVALIDA.rango],
+    ['7,1 (sobre 7,0)', 7.1, MENSAJES_NOTA_INVALIDA.rango],
+    ['8', 8, MENSAJES_NOTA_INVALIDA.rango],
+    ['0', 0, MENSAJES_NOTA_INVALIDA.rango],
+    ['5,55 (dos decimales)', 5.55, MENSAJES_NOTA_INVALIDA.formato],
+    // Casi un decimal: la base los redondearía a 1,0 y 7,0.
+    ['0,99999999999', 0.99999999999, MENSAJES_NOTA_INVALIDA.formato],
+    ['7,00000000001', 7.00000000001, MENSAJES_NOTA_INVALIDA.formato],
+    ['"x"', 'x', MENSAJES_NOTA_INVALIDA.formato],
+    ['vacía', '', MENSAJES_NOTA_INVALIDA.formato],
+    ['"5.5" (texto)', '5.5', MENSAJES_NOTA_INVALIDA.formato],
+    ['nula', null, MENSAJES_NOTA_INVALIDA.formato],
+    // JSON.stringify omite el undefined: la nota no viene.
+    ['ausente', undefined, MENSAJES_NOTA_INVALIDA.formato],
   ])(
-    'una nota %s responde 400 "Nota inválida" sin escribir filas ni eventos',
-    async (_caso, nota) => {
+    'una nota %s responde 400 con el motivo por alumno, sin escribir filas ni eventos',
+    async (_caso, nota, motivo) => {
       const evaluacion = await crearEvaluacion()
       const respuesta = await guardar(
         AYUDANTE,
@@ -592,13 +608,29 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
         400,
       )
 
-      expect(respuesta.message).toBe('Nota inválida')
+      expect(respuesta).toEqual({
+        statusCode: 400,
+        message: 'Nota inválida',
+        invalidas: [{ alumnoId: alumnos.ana, motivo }],
+      } satisfies ErrorNotasInvalidas)
       expect(await filasDe(evaluacion)).toEqual([])
       expect(await eventosDe(evaluacion)).toEqual([])
     },
   )
 
-  it('una lista con una nota válida y una inválida no guarda nada', async () => {
+  it.each([
+    ['1,0', 1, '1.0'],
+    ['7,0', 7, '7.0'],
+    ['4,5', 4.5, '4.5'],
+  ])('una nota de %s se guarda', async (_caso, nota, valor) => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, nota]]), 200)
+    expect(await filasDe(evaluacion)).toEqual([
+      expect.objectContaining({ alumno_id: alumnos.ana, valor }),
+    ])
+  })
+
+  it('una lista mixta no guarda nada y trae solo las inválidas, en orden', async () => {
     const evaluacion = await crearEvaluacion()
     const respuesta = await guardar(
       AYUDANTE,
@@ -606,14 +638,70 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
       notasDe([
         [alumnos.ana, 6],
         [alumnos.zoe, 8],
+        [alumnos.bruno, 4.5],
+        [alumnos.carla, 'x'],
       ]),
       400,
     )
 
-    expect(respuesta.message).toBe('Nota inválida')
+    expect(respuesta.invalidas).toEqual([
+      { alumnoId: alumnos.zoe, motivo: MENSAJES_NOTA_INVALIDA.rango },
+      { alumnoId: alumnos.carla, motivo: MENSAJES_NOTA_INVALIDA.formato },
+    ])
     expect(await filasDe(evaluacion)).toEqual([])
     expect(await eventosDe(evaluacion)).toEqual([])
   })
+
+  it('una nota inválida junto a un cuerpo mal formado responde el 400 de validación', async () => {
+    const evaluacion = await crearEvaluacion()
+    const respuesta = await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe([
+        ['no-es-uuid', 5],
+        [alumnos.ana, 8],
+      ]),
+      400,
+    )
+
+    expect(respuesta).not.toHaveProperty('invalidas')
+    expect(respuesta.message).toEqual(
+      expect.arrayContaining([expect.stringContaining('alumnoId')]),
+    )
+    expect(await filasDe(evaluacion)).toEqual([])
+  })
+
+  it.each([
+    [
+      'una lista de listas',
+      () => ({ notas: [[{ alumnoId: alumnos.ana, nota: 5 }]] }),
+    ],
+    [
+      'una fila nula junto a una nota inválida',
+      () => ({ notas: [null, { alumnoId: alumnos.ana, nota: 8 }] }),
+    ],
+    [
+      'más de 500 notas inválidas',
+      () =>
+        notasDe(
+          Array.from(
+            { length: MAX_NOTAS_GUARDADO + 1 },
+            (): [string, unknown] => [alumnos.ana, 8],
+          ),
+        ),
+    ],
+  ])(
+    '%s responde el 400 de validación, sin invalidas',
+    async (_caso, cuerpo) => {
+      const evaluacion = await crearEvaluacion()
+      const respuesta = await guardar(AYUDANTE, evaluacion, cuerpo(), 400)
+
+      expect(respuesta).not.toHaveProperty('invalidas')
+      expect(Array.isArray(respuesta.message)).toBe(true)
+      expect(await filasDe(evaluacion)).toEqual([])
+      expect(await eventosDe(evaluacion)).toEqual([])
+    },
+  )
 
   it('una nota inválida después de una que ya existía tampoco cambia la existente', async () => {
     const evaluacion = await crearEvaluacion()
@@ -691,8 +779,6 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     ['sin notas', {}],
     ['notas que no es una lista', { notas: 'x' }],
     ['un alumnoId que no es UUID', { notas: [{ alumnoId: 'x', nota: 5 }] }],
-    ['una nota sin valor', { notas: [{ alumnoId: NO_EXISTE }] }],
-    ['una nota nula', { notas: [{ alumnoId: NO_EXISTE, nota: null }] }],
     ['un campo extra', { notas: [], alumnoId: NO_EXISTE }],
     [
       'un campo extra en una nota',

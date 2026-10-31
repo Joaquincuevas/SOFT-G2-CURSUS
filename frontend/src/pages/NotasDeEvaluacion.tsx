@@ -1,10 +1,13 @@
-import type {
-  EstadoNota,
-  GuardarNotas,
-  NotaAlumno,
-  NotasEvaluacion,
+import {
+  type ErrorNotasInvalidas,
+  type EstadoNota,
+  type GuardarNotas,
+  MENSAJES_NOTA_INVALIDA,
+  motivoNotaInvalida,
+  type NotaAlumno,
+  type NotasEvaluacion,
 } from '@cursus/shared'
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
@@ -17,8 +20,9 @@ interface Props {
 
 // NOT-05 (RN-10): el ayudante ingresa la nota de cada alumno de la sección.
 // Se guardan como propuesta, que el alumno no ve; se pueden guardar unas
-// pocas y volver después por el resto. Los mensajes de la escala por campo
-// son NOT-06.
+// pocas y volver después por el resto. NOT-06: cada campo se valida al
+// escribir con la escala de 1,0 a 7,0 y se marca en rojo con su motivo; el
+// backend vuelve a validar y devuelve el motivo por alumno.
 export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar] = useDatos<NotasEvaluacion>(ruta)
@@ -69,6 +73,23 @@ const textoDe = (nota: number | null) => (nota === null ? '' : String(nota))
 const valoresDe = (alumnos: NotaAlumno[]) =>
   Object.fromEntries(alumnos.map((a) => [a.id, textoDe(a.nota)]))
 
+// NOT-06: lo escrito en un campo, con coma o punto como separador decimal
+// ("5,5" y "5.5"). Un separador al final ("5,") se lee como el entero: es el
+// paso intermedio al escribir "5,5" y no se marca como error.
+const NOTA_ESCRITA = /^\d+(?:[.,]\d*)?$/
+const leerNota = (texto: string) => Number(texto.trim().replace(',', '.'))
+
+// Por qué lo escrito no es una nota, o null si lo es o si el campo está
+// vacío (un campo vacío no se envía).
+function motivoDe(texto: string): string | null {
+  const limpio = texto.trim()
+  if (limpio === '') return null
+  const motivo = NOTA_ESCRITA.test(limpio)
+    ? motivoNotaInvalida(leerNota(limpio))
+    : 'formato'
+  return motivo && MENSAJES_NOTA_INVALIDA[motivo]
+}
+
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',
   PUBLICADA: 'Publicada',
@@ -95,16 +116,28 @@ function FormularioNotas({
   )
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Motivos que devolvió el último 400, por alumno; se borra al editar el
+  // campo.
+  const [rechazadas, setRechazadas] = useState<Record<string, string>>({})
+  const idMotivo = useId()
   // Solo se envían los campos con un valor distinto del guardado, comparados
   // como número: "5.50" sobre un 5,5 no es un cambio. Un campo vacío no borra
   // la nota: nada se elimina.
   const cambios = alumnos.filter(
-    (a) => valores[a.id].trim() !== '' && Number(valores[a.id]) !== a.nota,
+    (a) => valores[a.id].trim() !== '' && leerNota(valores[a.id]) !== a.nota,
   )
+  const motivos: Record<string, string | null> = Object.fromEntries(
+    alumnos.map((a) => [
+      a.id,
+      motivoDe(valores[a.id]) ?? rechazadas[a.id] ?? null,
+    ]),
+  )
+  const hayInvalidas = alumnos.some((a) => motivos[a.id] !== null)
 
   function reiniciar(delServidor: NotaAlumno[]) {
     setAlumnos(delServidor)
     setValores(valoresDe(delServidor))
+    setRechazadas({})
   }
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
@@ -114,7 +147,7 @@ function FormularioNotas({
     const datos: GuardarNotas = {
       notas: cambios.map((a) => ({
         alumnoId: a.id,
-        nota: Number(valores[a.id]),
+        nota: leerNota(valores[a.id]),
       })),
     }
     try {
@@ -124,10 +157,23 @@ function FormularioNotas({
         body: JSON.stringify(datos),
       })
       if (!res.ok) {
-        const cuerpo = (await res.json().catch(() => null)) as {
-          message?: unknown
-        } | null
-        // 400: una nota inválida o la lista de alumnos cambió.
+        const cuerpo = (await res.json().catch(() => null)) as
+          | (Partial<Pick<ErrorNotasInvalidas, 'invalidas'>> & {
+              message?: unknown
+            })
+          | null
+        // 400: una nota inválida (con su motivo por alumno, NOT-06) o la lista
+        // de alumnos cambió.
+        if (res.status === 400 && Array.isArray(cuerpo?.invalidas)) {
+          setRechazadas(
+            Object.fromEntries(
+              cuerpo.invalidas.map(({ alumnoId, motivo }) => [
+                alumnoId,
+                motivo,
+              ]),
+            ),
+          )
+        }
         setError(
           res.status === 400 && typeof cuerpo?.message === 'string'
             ? `${cuerpo.message}.`
@@ -178,41 +224,69 @@ function FormularioNotas({
           </tr>
         </thead>
         <tbody>
-          {alumnos.map((alumno) => (
-            <tr key={alumno.id}>
-              <td>{alumno.nombre}</td>
-              <td>
-                <input
-                  className="notas__nota"
-                  type="number"
-                  step={0.1}
-                  inputMode="decimal"
-                  aria-label={`Nota de ${alumno.nombre}`}
-                  value={valores[alumno.id]}
-                  // Una nota publicada la cambia el profesor (NOT-15). Mientras
-                  // guarda tampoco: la recarga reinicia el formulario y
-                  // borraría lo escrito después de enviar.
-                  disabled={guardando || alumno.estado === 'PUBLICADA'}
-                  onChange={(event) => {
-                    alEditar()
-                    setValores((actuales) => ({
-                      ...actuales,
-                      [alumno.id]: event.target.value,
-                    }))
-                  }}
-                />
-              </td>
-              <td>
-                {alumno.estado === null ? 'Sin nota' : ESTADO[alumno.estado]}
-              </td>
-            </tr>
-          ))}
+          {alumnos.map((alumno) => {
+            const motivo = motivos[alumno.id]
+            return (
+              <tr key={alumno.id}>
+                <td>{alumno.nombre}</td>
+                <td>
+                  {/* Texto y no number: el navegador descartaría "5,5". */}
+                  <input
+                    className={
+                      motivo
+                        ? 'notas__nota notas__nota--invalida'
+                        : 'notas__nota'
+                    }
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={`Nota de ${alumno.nombre}`}
+                    aria-invalid={motivo ? true : undefined}
+                    aria-describedby={
+                      motivo ? `${idMotivo}-${alumno.id}` : undefined
+                    }
+                    value={valores[alumno.id]}
+                    // Una nota publicada la cambia el profesor (NOT-15). Mientras
+                    // guarda tampoco: la recarga reinicia el formulario y
+                    // borraría lo escrito después de enviar.
+                    disabled={guardando || alumno.estado === 'PUBLICADA'}
+                    onChange={(event) => {
+                      alEditar()
+                      setValores((actuales) => ({
+                        ...actuales,
+                        [alumno.id]: event.target.value,
+                      }))
+                      setRechazadas((actuales) =>
+                        Object.fromEntries(
+                          Object.entries(actuales).filter(
+                            ([id]) => id !== alumno.id,
+                          ),
+                        ),
+                      )
+                    }}
+                  />
+                  {/* Siempre montado: un lector de pantalla anuncia el motivo
+                      cuando aparece (aria-live), mientras se escribe. */}
+                  <span
+                    id={`${idMotivo}-${alumno.id}`}
+                    className="notas__motivo"
+                    aria-live="polite"
+                  >
+                    {motivo}
+                  </span>
+                </td>
+                <td>
+                  {alumno.estado === null ? 'Sin nota' : ESTADO[alumno.estado]}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
       <button
         className="notas__boton"
         type="submit"
-        disabled={cambios.length === 0 || guardando}
+        // NOT-06: mientras haya una nota inválida no se guarda ninguna.
+        disabled={cambios.length === 0 || guardando || hayInvalidas}
       >
         Guardar notas
       </button>
