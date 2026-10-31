@@ -74,8 +74,9 @@ const valoresDe = (alumnos: NotaAlumno[]) =>
   Object.fromEntries(alumnos.map((a) => [a.id, textoDe(a.nota)]))
 
 // NOT-06: lo escrito en un campo, con coma o punto como separador decimal
-// ("5,5" y "5.5").
-const NOTA_ESCRITA = /^\d+(?:[.,]\d+)?$/
+// ("5,5" y "5.5"). Un separador al final ("5,") se lee como el entero: es el
+// paso intermedio al escribir "5,5" y no se marca como error.
+const NOTA_ESCRITA = /^\d+(?:[.,]\d*)?$/
 const leerNota = (texto: string) => Number(texto.trim().replace(',', '.'))
 
 // Por qué lo escrito no es una nota, o null si lo es o si el campo está
