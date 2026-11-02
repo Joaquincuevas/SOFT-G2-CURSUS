@@ -128,3 +128,20 @@
 .asistencia__marcas .asistencia__boton {
   align-self: flex-start;
 }
+
+.asistencia__correccion,
+.asistencia__correccion form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.asistencia__campo textarea {
+  min-height: 5rem;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}

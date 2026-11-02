@@ -11,6 +11,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { AsistenciaDeClase } from './AsistenciaDeClase'
+import { MiAsistencia } from './MiAsistencia'
 import './PestanaAsistencia.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -23,6 +24,7 @@ const LEEN = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 // sección las registra; el ayudante ve la lista. Al elegir una clase se
 // muestra su asistencia (ASI-02).
 export function PestanaAsistencia({ seccionId, rol }: PropsPestana) {
+  if (rol === 'ALUMNO') return <MiAsistencia seccionId={seccionId} />
   if (!LEEN.includes(rol)) {
     return (
       <p className="dashboard__texto">
