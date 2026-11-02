@@ -90,7 +90,8 @@ export class AuthService {
     // El superadmin no tiene universidad (MT-04): su correo es único entre
     // los superadmins y no es de un dominio de universidad
     // (crear-superadmin.ts). Si aun así calzaran dos, gana el de la
-    // universidad. Un usuario archivado responde igual que uno que no existe.
+    // universidad. Un usuario archivado, o de una universidad archivada
+    // (GES-23), responde igual que uno que no existe.
     const [usuario] = await bd.query<Credenciales>(
       `SELECT u.id, u.rol, u.universidad_id, u.password_hash
          FROM usuario u
@@ -98,7 +99,7 @@ export class AuthService {
         WHERE lower(u.correo) = $1
           AND (un.dominio_correo = split_part($1, '@', 2)
                OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
-          AND u.archived_at IS NULL
+          AND u.archived_at IS NULL AND un.archived_at IS NULL
         ORDER BY u.universidad_id NULLS LAST
         LIMIT 1`,
       [correo.trim().toLowerCase()],
@@ -137,7 +138,8 @@ export class AuthService {
        )
        SELECT u.id, u.rol, u.universidad_id, rotado.sesion_id
          FROM rotado JOIN usuario u ON u.id = rotado.usuario_id
-        WHERE u.archived_at IS NULL`,
+         LEFT JOIN universidad un ON un.id = u.universidad_id
+        WHERE u.archived_at IS NULL AND un.archived_at IS NULL`,
       [hashToken],
     )
     if (!usuario) {
@@ -267,7 +269,8 @@ export class AuthService {
   }
 
   // null si la sesión ya no sirve. También corta la sesión de un usuario
-  // archivado, sin esperar a que venza su JWT. Devuelve además, en la misma
+  // archivado o de una universidad archivada (GES-23), sin esperar a que
+  // venza su JWT. Devuelve además, en la misma
   // consulta, si el usuario todavía tiene la contraseña provisoria (PER-03) y
   // la facultad que eligió el superadmin (MT-04). Si esa facultad o su
   // universidad se archivan, la elección deja de valer y debe elegir otra.
@@ -291,7 +294,10 @@ export class AuthService {
          LEFT JOIN universidad un ON un.id = f.universidad_id
                                  AND un.archived_at IS NULL
         WHERE s.id::text = $1 AND s.usuario_id::text = $2
-          AND s.revocado_en IS NULL AND u.archived_at IS NULL`,
+          AND s.revocado_en IS NULL AND u.archived_at IS NULL
+          AND NOT EXISTS (SELECT FROM universidad propia
+                           WHERE propia.id = u.universidad_id
+                             AND propia.archived_at IS NOT NULL)`,
       [sid, usuarioId],
     )
     if (!sesion) {
@@ -323,6 +329,17 @@ export class AuthService {
           SET universidad_activa_id = $3, facultad_activa_id = $4
         WHERE id = $1 AND usuario_id = $2 AND revocado_en IS NULL`,
       [sid, usuarioId, eleccion.universidadId, eleccion.facultadId],
+    )
+  }
+
+  // MT-04: el superadmin sale de la universidad en la que trabajaba y vuelve a
+  // la vista global. Solo cambia su sesión, no datos institucionales.
+  async limpiarEleccion(sid: string, usuarioId: string): Promise<void> {
+    await this.bd.query(
+      `UPDATE sesion_auth
+          SET universidad_activa_id = NULL, facultad_activa_id = NULL
+        WHERE id = $1 AND usuario_id = $2 AND revocado_en IS NULL`,
+      [sid, usuarioId],
     )
   }
 

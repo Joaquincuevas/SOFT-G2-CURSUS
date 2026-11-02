@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [GES-23: el superadmin gestiona universidades y facultades, y guía de revisión](ges-23-universidades-facultades.md)
 - [NOT-06: rechazo de notas fuera de la escala 1,0 a 7,0 y guía de revisión](not-06-escala-notas.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)

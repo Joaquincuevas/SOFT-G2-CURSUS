@@ -2,6 +2,7 @@ import type { Rol, UniversidadElegible } from '@cursus/shared'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { EleccionSuperadmin } from '../auth/auth.service.js'
 import { BaseDeDatos } from '../database/base-de-datos.service.js'
+import { SQL_UNIVERSIDADES } from './universidades.service.js'
 
 // MT-04 (ADR 0002): dónde puede trabajar el superadmin. Lee todas las
 // universidades con consultarComoSuperadmin, que responde 403 a otro rol.
@@ -15,19 +16,8 @@ export class SuperadminService {
   ): Promise<UniversidadElegible[]> {
     return this.bd.consultarComoSuperadmin<UniversidadElegible>(
       rol,
-      `SELECT un.id, un.nombre,
-              COALESCE(
-                json_agg(json_build_object('id', f.id, 'nombre', f.nombre)
-                         ORDER BY f.nombre, f.id)
-                  FILTER (WHERE f.id IS NOT NULL),
-                '[]'
-              ) AS facultades
-         FROM universidad un
-         LEFT JOIN facultad f ON f.universidad_id = un.id
-                             AND f.archived_at IS NULL
-        WHERE un.archived_at IS NULL
-        GROUP BY un.id
-        ORDER BY un.nombre, un.id`,
+      SQL_UNIVERSIDADES,
+      [null],
     )
   }
 
