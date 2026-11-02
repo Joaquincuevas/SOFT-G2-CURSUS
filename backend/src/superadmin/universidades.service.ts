@@ -4,6 +4,7 @@ import type {
   FacultadElegible,
   Rol,
   UniversidadElegible,
+  UsuariosAfectados,
 } from '@cursus/shared'
 import {
   BadRequestException,
@@ -12,7 +13,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { QueryFailedError } from 'typeorm'
-import { BaseDeDatos } from '../database/base-de-datos.service.js'
+import { BaseDeDatos, fijarMotivo } from '../database/base-de-datos.service.js'
 
 // Superadmin que hace la acción (el usuario de la sesión).
 export interface Superadmin {
@@ -142,18 +143,44 @@ export class UniversidadesService {
     }
   }
 
+  // Los usuarios vigentes que archivar la universidad dejaría sin acceso, para
+  // confirmarlo en la interfaz.
+  async usuariosAfectados(
+    superadmin: Superadmin,
+    id: string,
+  ): Promise<UsuariosAfectados> {
+    const [{ usuarios }] = await this.bd.consultarComoSuperadmin<{
+      usuarios: number | null
+    }>(superadmin.rol, 'SELECT usuarios_vigentes_universidad($1) AS usuarios', [
+      id,
+    ])
+    if (usuarios === null) {
+      throw new NotFoundException('Universidad no encontrada')
+    }
+    return { usuarios }
+  }
+
   // Sus usuarios dejan de poder iniciar sesión (ver AuthService), y la
-  // elección de un superadmin que trabajaba en ella deja de valer.
-  async archivarUniversidad(superadmin: Superadmin, id: string): Promise<void> {
-    const archivada = await this.bd.escribirComoSuperadmin(superadmin, (tx) =>
-      tx.query<{ id: string }>(
-        `WITH archivada AS (
-           UPDATE universidad SET archived_at = now()
-            WHERE id = $1 AND archived_at IS NULL
-           RETURNING id)
-         SELECT id FROM archivada`,
-        [id],
-      ),
+  // elección de un superadmin que trabajaba en ella deja de valer. No se
+  // deshace por la API: el motivo queda en superadmin_cambio.
+  async archivarUniversidad(
+    superadmin: Superadmin,
+    id: string,
+    motivo: string,
+  ): Promise<void> {
+    const archivada = await this.bd.escribirComoSuperadmin(
+      superadmin,
+      async (tx) => {
+        await fijarMotivo(tx, motivo)
+        return tx.query<{ id: string }>(
+          `WITH archivada AS (
+             UPDATE universidad SET archived_at = now()
+              WHERE id = $1 AND archived_at IS NULL
+             RETURNING id)
+           SELECT id FROM archivada`,
+          [id],
+        )
+      },
     )
     if (archivada.length === 0) {
       throw new NotFoundException('Universidad no encontrada')
@@ -215,7 +242,7 @@ export class UniversidadesService {
     }
   }
 
-  // Solo sin carreras ni usuarios vigentes (lo revisa la base).
+  // Solo sin carreras, cursos ni usuarios vigentes (lo revisa la base).
   async archivarFacultad(superadmin: Superadmin, id: string): Promise<void> {
     try {
       const archivada = await this.bd.escribirComoSuperadmin(superadmin, (tx) =>

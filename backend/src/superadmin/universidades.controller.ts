@@ -1,7 +1,12 @@
-import type { FacultadElegible, UniversidadElegible } from '@cursus/shared'
+import type {
+  FacultadElegible,
+  UniversidadElegible,
+  UsuariosAfectados,
+} from '@cursus/shared'
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -13,6 +18,7 @@ import {
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import {
+  ArchivarUniversidadDto,
   CrearUniversidadDto,
   EditarUniversidadDto,
   GuardarFacultadDto,
@@ -53,14 +59,29 @@ export class UniversidadesController {
     return this.universidades.editarUniversidad(this.superadmin(req), id, datos)
   }
 
+  // Antes de archivar: a cuántos usuarios dejaría sin acceso.
+  @Puede('update', 'Universidad')
+  @Get('universidades/:id/usuarios-afectados')
+  usuariosAfectados(
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UsuariosAfectados> {
+    return this.universidades.usuariosAfectados(this.superadmin(req), id)
+  }
+
   @Puede('update', 'Universidad')
   @Patch('universidades/:id/archivar')
   @HttpCode(204)
   archivarUniversidad(
     @Req() req: RequestConUsuario,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() datos: ArchivarUniversidadDto,
   ): Promise<void> {
-    return this.universidades.archivarUniversidad(this.superadmin(req), id)
+    return this.universidades.archivarUniversidad(
+      this.superadmin(req),
+      id,
+      datos.motivo,
+    )
   }
 
   @Puede('create', 'Facultad')

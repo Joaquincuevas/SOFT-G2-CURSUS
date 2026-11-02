@@ -208,9 +208,10 @@ export class BaseDeDatos implements OnModuleDestroy {
 }
 
 // MT-04. Motivo de la acción en curso, para la auditoría del superadmin
-// (superadmin_cambio.motivo). Se llama dentro de enTransaccionEnUniversidad,
-// antes de escribir, y dura solo esa transacción. Con otros roles no tiene
-// efecto: el trigger de auditoría corre solo con un superadmin.
+// (superadmin_cambio.motivo). Se llama dentro de enTransaccionEnUniversidad
+// o escribirComoSuperadmin, antes de escribir, y dura solo esa transacción.
+// Con otros roles no tiene efecto: el trigger de auditoría corre solo con un
+// superadmin.
 export async function fijarMotivo(
   bd: Pick<BaseDeDatos, 'query'>,
   motivo: string,

@@ -106,20 +106,51 @@ export class GestionarUniversidades1792680000000 implements MigrationInterface {
         FOR EACH ROW EXECUTE FUNCTION validar_dominio_universidad()
     `)
 
-    // Una facultad se archiva solo sin carreras ni usuarios vigentes: si no,
-    // quedarían colgando de una facultad que ya no aparece.
+    // Usuarios vigentes de una universidad vigente (NULL si no existe o está
+    // archivada), para que el superadmin vea a cuántos corta antes de
+    // archivarla. SECURITY DEFINER: la RLS no le deja ver usuarios desde la
+    // vista global; por eso responde solo a ese rol.
+    await q.query(`
+      CREATE FUNCTION usuarios_vigentes_universidad(p_universidad uuid)
+      RETURNS int
+      LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
+      BEGIN
+        IF rol_actual() IS DISTINCT FROM 'SUPERADMIN' THEN
+          RAISE EXCEPTION 'Solo el superadmin cuenta los usuarios de una universidad'
+            USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        IF NOT EXISTS (
+          SELECT FROM universidad
+           WHERE id = p_universidad AND archived_at IS NULL
+        ) THEN
+          RETURN NULL;
+        END IF;
+        RETURN (SELECT count(*) FROM usuario
+                 WHERE universidad_id = p_universidad AND archived_at IS NULL);
+      END;
+      $$
+    `)
+
+    // Una facultad se archiva solo sin carreras, cursos ni usuarios vigentes:
+    // si no, quedarían colgando de una facultad que ya no aparece. Los cursos
+    // cuelgan de una carrera: se cuentan aparte por si su carrera ya se
+    // archivó.
     await q.query(`
       CREATE FUNCTION facultad_archivable() RETURNS trigger
       LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
       DECLARE
         carreras int := (SELECT count(*) FROM carrera
                           WHERE facultad_id = NEW.id AND archived_at IS NULL);
+        cursos int := (SELECT count(*) FROM curso c
+                         JOIN carrera ca ON ca.id = c.carrera_id
+                                        AND ca.universidad_id = c.universidad_id
+                        WHERE ca.facultad_id = NEW.id AND c.archived_at IS NULL);
         usuarios int := (SELECT count(*) FROM usuario
                           WHERE facultad_id = NEW.id AND archived_at IS NULL);
       BEGIN
-        IF carreras > 0 OR usuarios > 0 THEN
-          RAISE EXCEPTION 'No se puede archivar: la facultad tiene % carreras y % usuarios vigentes',
-            carreras, usuarios
+        IF carreras > 0 OR cursos > 0 OR usuarios > 0 THEN
+          RAISE EXCEPTION 'No se puede archivar: la facultad tiene % carreras, % cursos y % usuarios vigentes',
+            carreras, cursos, usuarios
             USING ERRCODE = 'restrict_violation',
                   CONSTRAINT = 'ck_facultad_archivada_sin_uso';
         END IF;
@@ -139,6 +170,7 @@ export class GestionarUniversidades1792680000000 implements MigrationInterface {
   async down(q: QueryRunner): Promise<void> {
     await q.query('DROP TRIGGER tg_facultad_archivable ON facultad')
     await q.query('DROP FUNCTION facultad_archivable()')
+    await q.query('DROP FUNCTION usuarios_vigentes_universidad(uuid)')
     await q.query('DROP TRIGGER tg_universidad_dominio ON universidad')
     await q.query('DROP FUNCTION validar_dominio_universidad()')
     // Las políticas de PermitirLecturaDirector.

@@ -51,6 +51,21 @@ export interface CrearUniversidad {
 // dominio solo se cambia mientras la universidad no tenga usuarios.
 export type EditarUniversidad = Partial<CrearUniversidad>
 
+// Archivar una universidad corta a todos sus usuarios y no se deshace por la
+// API: el motivo es obligatorio y queda en superadmin_cambio.
+export const LARGO_MOTIVO_ARCHIVAR = 500
+
+// Body de PATCH /api/superadmin/universidades/:id/archivar.
+export interface ArchivarUniversidad {
+  motivo: string
+}
+
+// Respuesta de GET /api/superadmin/universidades/:id/usuarios-afectados: los
+// usuarios vigentes que dejarían de poder iniciar sesión al archivarla.
+export interface UsuariosAfectados {
+  usuarios: number
+}
+
 // Body de POST /api/superadmin/universidades/:id/facultades y de
 // PATCH /api/superadmin/facultades/:id.
 export interface GuardarFacultad {

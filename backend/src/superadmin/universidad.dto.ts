@@ -1,10 +1,12 @@
 import {
+  type ArchivarUniversidad,
   type CrearUniversidad,
   type EditarUniversidad,
   FORMATO_COLOR,
   FORMATO_DOMINIO_CORREO,
   type GuardarFacultad,
   LARGO_DOMINIO_CORREO,
+  LARGO_MOTIVO_ARCHIVAR,
   LARGO_NOMBRE_FACULTAD,
   LARGO_NOMBRE_UNIVERSIDAD,
 } from '@cursus/shared'
@@ -75,6 +77,18 @@ export class EditarUniversidadDto implements EditarUniversidad {
     message: 'El color debe tener el formato #rrggbb',
   })
   color?: string
+}
+
+export class ArchivarUniversidadDto implements ArchivarUniversidad {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty({ message: 'Escribe el motivo para archivar la universidad' })
+  @MaxLength(LARGO_MOTIVO_ARCHIVAR, {
+    message: `El motivo puede tener hasta ${LARGO_MOTIVO_ARCHIVAR} caracteres`,
+  })
+  motivo!: string
 }
 
 export class GuardarFacultadDto implements GuardarFacultad {
