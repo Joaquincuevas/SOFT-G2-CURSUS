@@ -35,6 +35,7 @@ const TABLAS = [
   'nota_cambio',
   'periodo',
   'refresh_token',
+  'revision_notas',
   'seccion',
   'sesion_auth',
   'superadmin_cambio',
@@ -179,8 +180,13 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-07: quita el estado de las notas con su trigger del superadmin.
+    await bd.undoLastMigration()
+    const SIN_REVISION_NOTAS = TABLAS.filter((t) => t !== 'revision_notas')
+    expect(await tablasExistentes()).toEqual(SIN_REVISION_NOTAS)
+
     await bd.undoLastMigration() // ASI-04: conserva las marcas corregidas.
-    const SIN_CAMBIO_ASISTENCIA = TABLAS.filter(
+    const SIN_CAMBIO_ASISTENCIA = SIN_REVISION_NOTAS.filter(
       (t) => t !== 'asistencia_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ASISTENCIA)

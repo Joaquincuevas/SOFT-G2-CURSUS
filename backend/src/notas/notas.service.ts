@@ -44,6 +44,12 @@ const DESDE_EVALUACION = `
   JOIN seccion s ON s.id = e.seccion_id
   JOIN curso cu ON cu.id = s.curso_id`
 
+// NOT-07: estado de las notas frente al profesor. Una evaluación sin fila en
+// revision_notas es un borrador.
+const ESTADO_REVISION = `COALESCE(r.estado, 'BORRADOR') AS estado`
+const CON_REVISION = `
+  LEFT JOIN revision_notas r ON r.evaluacion_id = e.id`
+
 // IDs repetidos en una lista, en el orden en que aparecen por primera vez.
 function repetidos(ids: string[]): string[] {
   const vistos = new Set<string>()
@@ -75,18 +81,18 @@ export class NotasService {
     seccion: SeccionEspacio,
     evaluacionId: string,
   ): Promise<NotasEvaluacion> {
-    const columnas = `${COLUMNAS_EVALUACION}, ${ALUMNOS_CON_NOTA}`
+    const columnas = `${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}`
     const [fila] =
       contexto.rol === 'DIRECTOR'
         ? await this.bd.consultarEnTodasLasUniversidades<NotasEvaluacion>(
             contexto,
-            `SELECT ${columnas} ${DESDE_EVALUACION}
+            `SELECT ${columnas} ${DESDE_EVALUACION} ${CON_REVISION}
               WHERE s.id = $1 AND e.id = $2 AND e.archived_at IS NULL`,
             [seccion.id, evaluacionId],
           )
         : await this.bd.consultarEnUniversidad<NotasEvaluacion>(
             contexto,
-            `SELECT ${columnas} ${DESDE_EVALUACION}
+            `SELECT ${columnas} ${DESDE_EVALUACION} ${CON_REVISION}
               WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
                 AND e.archived_at IS NULL`,
             [seccion.id, evaluacionId],
@@ -255,9 +261,20 @@ export class NotasService {
         }
       }
 
+      // NOT-07: el primer guardado deja la evaluación en borrador, que el
+      // profesor no ve como pendiente. Sin evento: no es una transición. El
+      // advisory lock ya serializa los guardados; ON CONFLICT cubre igual una
+      // fila creada por otra vía.
+      await bd.query(
+        `INSERT INTO revision_notas (universidad_id, evaluacion_id, actualizado_por)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (evaluacion_id) DO NOTHING`,
+        [contexto.universidadId, evaluacionId, usuarioId],
+      )
+
       const [guardada] = await bd.query<NotasEvaluacion>(
-        `SELECT ${COLUMNAS_EVALUACION}, ${ALUMNOS_CON_NOTA}
-           ${DESDE_EVALUACION}
+        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+           ${DESDE_EVALUACION} ${CON_REVISION}
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
         [contexto.universidadId, seccion.id, evaluacionId],
       )

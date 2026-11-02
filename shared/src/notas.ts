@@ -89,6 +89,18 @@ export function esNotaValida(valor: unknown): valor is number {
   return motivoNotaInvalida(valor) === null
 }
 
+// NOT-07: estado de las notas de una evaluación frente al profesor. El
+// ayudante guarda un BORRADOR, que el profesor no ve como pendiente; enviar a
+// revisión (NOT-08), aprobar (NOT-09) y devolver (NOT-12) son otras tarjetas.
+export const ESTADOS_REVISION_NOTAS = [
+  'BORRADOR',
+  'EN_REVISION',
+  'APROBADA',
+  'DEVUELTA',
+] as const
+
+export type EstadoRevisionNotas = (typeof ESTADOS_REVISION_NOTAS)[number]
+
 // Un alumno activo de la sección con su nota en la evaluación, o null si aún
 // no tiene.
 export interface NotaAlumno {
@@ -101,6 +113,8 @@ export interface NotaAlumno {
 // GET y respuesta del PUT: los alumnos activos de la sección por nombre.
 export interface NotasEvaluacion {
   evaluacion: Evaluacion
+  // BORRADOR también si el ayudante aún no guarda nada.
+  estado: EstadoRevisionNotas
   alumnos: NotaAlumno[]
 }
 
