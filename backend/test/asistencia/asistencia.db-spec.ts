@@ -1,4 +1,11 @@
-import type { AsistenciaClase, ErrorListaAsistencia, Rol } from '@cursus/shared'
+import type {
+  AsistenciaClase,
+  AsistenciaPropia,
+  CambioAsistencia,
+  ErrorListaAsistencia,
+  Rol,
+} from '@cursus/shared'
+import { CrearAsistenciaCambio1792690000000 } from '../../src/database/migrations/1792690000000-CrearAsistenciaCambio.js'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -261,7 +268,7 @@ beforeAll(async () => {
   }).compile()
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
   configurarApp(app, { secretoOrigen: '' })
-  await app.init()
+  await app.listen(0)
 })
 
 afterAll(async () => {
@@ -595,5 +602,382 @@ describe('RLS y sin DELETE (ASI-02)', () => {
       .delete(ruta(secciones.s1, clases.c1))
       .set('Authorization', `Bearer ${token}`)
       .expect(404)
+  })
+})
+
+describe('ASI-04: correcciones trazables', () => {
+  let semana = 10
+  const cambio = {
+    anterior: true,
+    presente: false,
+    motivo: 'Llegó después de cerrar la lista',
+  }
+  async function preparar() {
+    const clase = await crearClase(secciones.s1, semana++)
+    const original = await guardar(PROFESOR, clase, marcasDe(), 201)
+    return { clase, original }
+  }
+  async function corregir(
+    clase: string,
+    body: object = cambio,
+    estado = 200,
+    correo = PROFESOR,
+    alumnoId = alumnos.base,
+  ) {
+    const token = await tokenDe(correo)
+    return request(app.getHttpServer())
+      .patch(`${ruta(secciones.s1, clase)}/alumnos/${alumnoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send(body)
+      .expect(estado)
+  }
+  async function historial(
+    clase: string,
+    estado = 200,
+    correo = PROFESOR,
+    alumnoId = alumnos.base,
+  ) {
+    const token = await tokenDe(correo)
+    const res = await request(app.getHttpServer())
+      .get(`${ruta(secciones.s1, clase)}/alumnos/${alumnoId}/historial`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return res.body as CambioAsistencia[]
+  }
+  async function propia(
+    seccionId = secciones.s1,
+    estado = 200,
+    extra = '',
+    correo = ALUMNO,
+  ) {
+    const token = await tokenDe(correo)
+    const res = await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${seccionId}/mi-asistencia${extra}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return res.body as AsistenciaPropia[]
+  }
+
+  it('corrige en ambos sentidos, conserva el registro original y guarda profesor, motivo y fecha', async () => {
+    const { clase, original } = await preparar()
+    expect(await historial(clase)).toEqual([])
+    const antes = Date.now()
+    const corregida = await corregir(clase, {
+      ...cambio,
+      motivo: '  Justificación revisada  ',
+    })
+    expect(
+      (corregida.body as AsistenciaClase).alumnos.find(
+        (a) => a.id === alumnos.base,
+      )?.presente,
+    ).toBe(false)
+    expect((corregida.body as AsistenciaClase).registrada).toEqual(
+      original.registrada,
+    )
+    await corregir(clase, {
+      anterior: false,
+      presente: true,
+      motivo: 'Se confirmó su presencia',
+    })
+    const eventos = await historial(clase)
+    expect(eventos).toHaveLength(2)
+    expect(eventos[0]).toMatchObject({
+      anterior: true,
+      nuevo: false,
+      motivo: 'Justificación revisada',
+      profesor: { id: await idDe(PROFESOR), nombre: 'Profesor Norte' },
+    })
+    expect(eventos[1]).toMatchObject({
+      anterior: false,
+      nuevo: true,
+      motivo: 'Se confirmó su presencia',
+    })
+    for (const h of eventos) {
+      expect(Date.parse(h.fecha)).toBeGreaterThanOrEqual(antes - 1000)
+      expect(Date.parse(h.fecha)).toBeLessThanOrEqual(Date.now() + 1000)
+    }
+    expect((await leer(PROFESOR, clase, 200)).alumnos).toEqual(original.alumnos)
+  })
+
+  it('el alumno ve su marca corregida sin recibir otras marcas ni el historial o motivo', async () => {
+    const { clase } = await preparar()
+    expect((await propia()).find((a) => a.clase.id === clase)?.presente).toBe(
+      true,
+    )
+    await corregir(clase)
+    const marcas = await propia(
+      secciones.s1,
+      200,
+      `?alumnoId=${alumnos.ana}&universidadId=${await universidadDe('sur.cursus.test')}`,
+    )
+    const marca = marcas.find((a) => a.clase.id === clase)
+    expect(marca).toEqual({
+      clase: (await leer(PROFESOR, clase, 200)).clase,
+      presente: false,
+    })
+    expect(JSON.stringify(marcas)).not.toContain(cambio.motivo)
+    await historial(clase, 403, ALUMNO)
+  })
+
+  it('un guardado sin cambio no inventa un evento y un formulario desactualizado responde 409', async () => {
+    const { clase } = await preparar()
+    await corregir(clase, { ...cambio, presente: true })
+    expect(await historial(clase)).toEqual([])
+    await corregir(clase)
+    await corregir(clase, cambio, 409)
+    expect(await historial(clase)).toHaveLength(1)
+  })
+
+  it('dos correcciones concurrentes de la misma versión producen un cambio y un conflicto', async () => {
+    const { clase } = await preparar()
+    const token = await tokenDe(PROFESOR)
+    const enviar = (motivo: string) =>
+      request(app.getHttpServer())
+        .patch(`${ruta(secciones.s1, clase)}/alumnos/${alumnos.base}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ ...cambio, motivo })
+    const res = await Promise.all([
+      enviar('Revisión primera'),
+      enviar('Revisión segunda'),
+    ])
+    expect(res.map((r) => r.status).sort()).toEqual([200, 409])
+    expect(await historial(clase)).toHaveLength(1)
+    expect(
+      (await leer(PROFESOR, clase, 200)).alumnos.find(
+        (a) => a.id === alumnos.base,
+      )?.presente,
+    ).toBe(false)
+  })
+
+  it.each([
+    {},
+    { presente: false, motivo: 'M' },
+    { ...cambio, anterior: 'true' },
+    { ...cambio, presente: 'false' },
+    { ...cambio, motivo: '' },
+    { ...cambio, motivo: ' \t\n ' },
+    { ...cambio, motivo: null },
+    { ...cambio, motivo: 'm'.repeat(501) },
+    { ...cambio, motivo: 'a\u0001b' },
+    { ...cambio, profesorId: NO_EXISTE },
+    { ...cambio, universidadId: NO_EXISTE },
+  ])(
+    'rechaza el body inválido sin modificar marcas ni auditoría: %j',
+    async (body) => {
+      const { clase, original } = await preparar()
+      await corregir(clase, body, 400)
+      expect(await leer(PROFESOR, clase, 200)).toEqual(original)
+      expect(await historial(clase)).toEqual([])
+    },
+  )
+
+  it.each([AYUDANTE, ALUMNO, ADMIN_INGENIERIA, DIRECTOR])(
+    '%s no corrige ni accede al historial',
+    async (correo) => {
+      const { clase } = await preparar()
+      await corregir(clase, cambio, 403, correo)
+      await historial(clase, 403, correo)
+      expect(await historial(clase)).toEqual([])
+    },
+  )
+
+  it('rechaza al profesor de otra sección o universidad y a quien no es alumno en lectura propia', async () => {
+    const { clase } = await preparar()
+    await corregir(clase, cambio, 403, profesorOtraSeccion)
+    await corregir(clase, cambio, 404, PROFESOR_SUR)
+    await historial(clase, 403, profesorOtraSeccion)
+    await historial(clase, 404, PROFESOR_SUR)
+    await propia(secciones.s2, 403)
+    await propia(secciones.s1, 403, '', PROFESOR)
+  })
+
+  it('no corrige una marca inexistente, clase pendiente, de otra sección o archivada', async () => {
+    await corregir(NO_EXISTE, cambio, 404)
+    await corregir(clases.otraSeccion, cambio, 404)
+    await corregir(clases.archivada, cambio, 404)
+    const { clase } = await preparar()
+    await corregir(clase, cambio, 404, PROFESOR, alumnos.noInscrito)
+    const pendiente = await crearClase(secciones.s1, semana++)
+    await corregir(pendiente, cambio, 404)
+    await bd.query('UPDATE clase SET archived_at = now() WHERE id = $1', [
+      clase,
+    ])
+    await corregir(clase, cambio, 404)
+  })
+
+  it('permite corregir una marca histórica si el alumno ya no está inscrito, pero no le da acceso al espacio', async () => {
+    const { clase } = await preparar()
+    await archivarInscripcion(secciones.s1, alumnos.base)
+    try {
+      await corregir(clase)
+      expect(await historial(clase)).toHaveLength(1)
+      await propia(secciones.s1, 403)
+    } finally {
+      await inscribir(secciones.s1, alumnos.base)
+    }
+  })
+
+  it('un fallo de auditoría revierte también la marca', async () => {
+    const { clase, original } = await preparar()
+    await bd.query(
+      `CREATE FUNCTION fallar_asistencia_test() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Fallo simulado'; END; $$`,
+    )
+    await bd.query(
+      'CREATE TRIGGER tg_fallar_asistencia_test BEFORE INSERT ON asistencia_cambio FOR EACH ROW EXECUTE FUNCTION fallar_asistencia_test()',
+    )
+    try {
+      await corregir(clase, cambio, 500)
+    } finally {
+      await bd.query(
+        'DROP TRIGGER tg_fallar_asistencia_test ON asistencia_cambio',
+      )
+      await bd.query('DROP FUNCTION fallar_asistencia_test()')
+    }
+    expect(await leer(PROFESOR, clase, 200)).toEqual(original)
+    expect(await historial(clase)).toEqual([])
+  })
+
+  it('el historial es inmutable incluso para el dueño y el SQL directo exige profesor y motivo', async () => {
+    const { clase } = await preparar()
+    await corregir(clase)
+    const [marca] = await bd.query<{ id: string }[]>(
+      'SELECT id FROM asistencia WHERE clase_id=$1 AND alumno_id=$2',
+      [clase, alumnos.base],
+    )
+    for (const sql of [
+      'UPDATE asistencia_cambio SET nuevo = anterior WHERE asistencia_id = $1',
+      'DELETE FROM asistencia_cambio WHERE asistencia_id = $1',
+    ]) {
+      await expect(bd.query(sql, [marca.id])).rejects.toMatchObject({
+        driverError: { code: SIN_PERMISO },
+      })
+    }
+    await comoApp(
+      {
+        universidadId: await universidadDe('norte.cursus.test'),
+        rol: 'PROFESOR',
+      },
+      async (q) => {
+        await expect(
+          q.query('UPDATE asistencia SET presente = true WHERE id = $1', [
+            marca.id,
+          ]),
+        ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+      },
+    )
+  })
+
+  it('RLS del historial: SELECT sin filtro oculta otra universidad e INSERT ajeno con FKs válidas se rechaza', async () => {
+    const { clase } = await preparar()
+    await corregir(clase)
+    const norte = await universidadDe('norte.cursus.test')
+    const sur = await universidadDe('sur.cursus.test')
+    const profesorSur = await idDe(PROFESOR_SUR)
+    const [claseSur] = await bd.query<{ id: string }[]>(
+      `INSERT INTO clase (universidad_id,seccion_id,fecha,inicio,termino,sala,creada_por)
+      SELECT $1,s.id,'2026-09-14','08:30','10:00','Sur',$2 FROM seccion s WHERE s.universidad_id=$1 LIMIT 1 RETURNING id`,
+      [sur, profesorSur],
+    )
+    const [marcaSur] = await bd.query<{ id: string }[]>(
+      `INSERT INTO asistencia (universidad_id,clase_id,alumno_id,presente,registrada_por)
+      VALUES ($1,$2,$3,true,$4) RETURNING id`,
+      [sur, claseSur.id, await idDe('alumno@sur.cursus.test'), profesorSur],
+    )
+    const [eventoSur] = await bd.query<{ id: string }[]>(
+      `INSERT INTO asistencia_cambio (universidad_id,asistencia_id,anterior,nuevo,motivo,responsable_id) VALUES ($1,$2,true,false,'Prueba Sur',$3) RETURNING id`,
+      [sur, marcaSur.id, profesorSur],
+    )
+    await comoApp({ universidadId: norte, rol: 'PROFESOR' }, async (q) => {
+      const propias = await bd.query<{ id: string }[]>(
+        'SELECT id FROM asistencia_cambio WHERE universidad_id=$1 ORDER BY id',
+        [norte],
+      )
+      expect(propias.length).toBeGreaterThan(0)
+      expect(
+        await q.query('SELECT id FROM asistencia_cambio ORDER BY id'),
+      ).toEqual(propias)
+      await expect(
+        q.query(
+          `INSERT INTO asistencia_cambio (universidad_id,asistencia_id,anterior,nuevo,motivo,responsable_id) VALUES ($1,$2,true,false,'Otra universidad',$3)`,
+          [sur, marcaSur.id, profesorSur],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+    expect(eventoSur.id).toBeTruthy()
+  })
+
+  it('RLS de lectura del alumno solo permite su propia marca y niega el historial', async () => {
+    const { clase } = await preparar()
+    await corregir(clase)
+    await comoApp(
+      {
+        universidadId: await universidadDe('norte.cursus.test'),
+        rol: 'ALUMNO',
+      },
+      async (q) => {
+        expect(await q.query('SELECT id FROM asistencia')).toEqual([])
+        await q.query(`SELECT set_config('app.asistencia_alumno_id',$1,true)`, [
+          alumnos.base,
+        ])
+        const visibles = (await q.query(
+          'SELECT alumno_id FROM asistencia',
+        )) as { alumno_id: string }[]
+        expect(visibles.length).toBeGreaterThan(0)
+        expect(visibles.every((a) => a.alumno_id === alumnos.base)).toBe(true)
+        expect(await q.query('SELECT id FROM asistencia_cambio')).toEqual([])
+      },
+    )
+  })
+
+  it('SQL con un profesor válido sigue exigiendo motivo y las FKs aíslan al responsable', async () => {
+    const { clase } = await preparar()
+    const profesor = await idDe(PROFESOR)
+    const norte = await universidadDe('norte.cursus.test')
+    const [marca] = await bd.query<{ id: string }[]>(
+      'SELECT id FROM asistencia WHERE clase_id=$1 AND alumno_id=$2',
+      [clase, alumnos.base],
+    )
+    await comoApp({ universidadId: norte, rol: 'PROFESOR' }, async (q) => {
+      await q.query(`SELECT set_config('app.asistencia_profesor_id',$1,true)`, [
+        profesor,
+      ])
+      await expect(
+        q.query('UPDATE asistencia SET presente=false WHERE id=$1', [marca.id]),
+      ).rejects.toMatchObject({ driverError: { code: '23502' } })
+    })
+    expect(
+      (await leer(PROFESOR, clase, 200)).alumnos.find(
+        (a) => a.id === alumnos.base,
+      )?.presente,
+    ).toBe(true)
+    await expect(
+      bd.query(
+        `INSERT INTO asistencia_cambio (universidad_id,asistencia_id,anterior,nuevo,motivo,responsable_id) VALUES ($1,$2,true,false,'Responsable ajeno',$3)`,
+        [norte, marca.id, await idDe(PROFESOR_SUR)],
+      ),
+    ).rejects.toMatchObject({
+      driverError: {
+        code: '23503',
+        constraint: 'fk_asistencia_cambio_responsable',
+      },
+    })
+  })
+
+  it('rollback retira la auditoría y conserva la última marca corregida', async () => {
+    const { clase } = await preparar()
+    await corregir(clase)
+    const migracion = new CrearAsistenciaCambio1792690000000()
+    const q = bd.createQueryRunner()
+    try {
+      await migracion.down(q)
+      const [marca] = await bd.query<{ presente: boolean }[]>(
+        'SELECT presente FROM asistencia WHERE clase_id=$1 AND alumno_id=$2',
+        [clase, alumnos.base],
+      )
+      expect(marca.presente).toBe(false)
+    } finally {
+      await migracion.up(q)
+      await q.release()
+    }
   })
 })

@@ -54,6 +54,29 @@ export interface GuardarAsistencia {
 
 export const MAX_MARCAS_ASISTENCIA = 1000
 
+// ASI-04: anterior permite detectar una corrección concurrente (409).
+export const LARGO_MOTIVO_ASISTENCIA = 500
+export interface CorregirAsistencia {
+  anterior: boolean
+  presente: boolean
+  motivo: string
+}
+
+export interface CambioAsistencia {
+  id: string
+  anterior: boolean
+  nuevo: boolean
+  motivo: string
+  fecha: string
+  profesor: { id: string; nombre: string }
+}
+
+// Lectura mínima para el alumno: solo sus propias marcas guardadas.
+export interface AsistenciaPropia {
+  clase: Clase
+  presente: boolean
+}
+
 // 400 cuando la lista no coincide con los alumnos activos de la sección.
 export interface ErrorListaAsistencia {
   statusCode: 400

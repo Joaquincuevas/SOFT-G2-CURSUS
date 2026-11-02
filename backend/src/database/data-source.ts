@@ -38,6 +38,7 @@ import { CrearSuperadminCambio1792653000000 } from './migrations/1792653000000-C
 import { CrearNota1792660000000 } from './migrations/1792660000000-CrearNota.js'
 import { CrearHistorialAnuncio1792670000000 } from './migrations/1792670000000-CrearHistorialAnuncio.js'
 import { GestionarUniversidades1792680000000 } from './migrations/1792680000000-GestionarUniversidades.js'
+import { CrearAsistenciaCambio1792690000000 } from './migrations/1792690000000-CrearAsistenciaCambio.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -97,6 +98,7 @@ export function opcionesDataSource(
       CrearNota1792660000000,
       CrearHistorialAnuncio1792670000000,
       GestionarUniversidades1792680000000,
+      CrearAsistenciaCambio1792690000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

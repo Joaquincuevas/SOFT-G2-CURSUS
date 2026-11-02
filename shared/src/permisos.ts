@@ -132,6 +132,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // controlador exige además que sea el de esa sección) y la leen los mismos
   // que las clases. El alumno ve la suya en ASI-06. Corregirla es ASI-04.
   if (usuario.rol === 'PROFESOR') can('create', 'Asistencia')
+  if (usuario.rol === 'PROFESOR') can('update', 'Asistencia')
   if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Asistencia')
 
   // ANU-01 (RN-09): anuncios de un curso. Los publica el profesor (el

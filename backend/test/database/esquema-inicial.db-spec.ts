@@ -19,6 +19,7 @@ const TABLAS = [
   'anuncio_cambio',
   'asignacion_cambio',
   'asistencia',
+  'asistencia_cambio',
   'ayudante_seccion',
   'carrera',
   'clase',
@@ -178,11 +179,17 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // GestionarUniversidades (GES-23) va primero: no crea tablas. Quita el
+    await bd.undoLastMigration() // ASI-04: conserva las marcas corregidas.
+    const SIN_CAMBIO_ASISTENCIA = TABLAS.filter(
+      (t) => t !== 'asistencia_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ASISTENCIA)
+
+    // Sigue GestionarUniversidades (GES-23): no crea tablas. Quita el
     // color, los índices de nombres, sus triggers y vuelve a las políticas de
     // escritura de PermitirLecturaDirector.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ASISTENCIA)
     const [{ restosGestion }] = await bd.query<{ restosGestion: string }[]>(
       `SELECT (SELECT count(*) FROM information_schema.columns
                 WHERE table_name = 'universidad' AND column_name = 'color')
@@ -201,7 +208,7 @@ describe('migraciones', () => {
 
     // ANU-05: luego el historial, conservando los anuncios.
     await bd.undoLastMigration()
-    const SIN_CAMBIO_ANUNCIO = TABLAS.filter(
+    const SIN_CAMBIO_ANUNCIO = SIN_CAMBIO_ASISTENCIA.filter(
       (tabla) => tabla !== 'anuncio_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_CAMBIO_ANUNCIO)
@@ -452,6 +459,7 @@ describe('migraciones', () => {
         t !== 'asignacion_cambio' &&
         t !== 'nota_cambio' &&
         t !== 'anuncio_cambio' &&
+        t !== 'asistencia_cambio' &&
         t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {

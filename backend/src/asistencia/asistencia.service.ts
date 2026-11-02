@@ -1,5 +1,7 @@
 import type {
   AsistenciaClase,
+  AsistenciaPropia,
+  CambioAsistencia,
   ErrorListaAsistencia,
   SeccionEspacio,
 } from '@cursus/shared'
@@ -16,6 +18,7 @@ import {
 } from '../database/base-de-datos.service.js'
 import { ALUMNOS_SECCION } from '../gestion/alumnos.sql.js'
 import type { GuardarAsistenciaDto } from './guardar-asistencia.dto.js'
+import type { CorregirAsistenciaDto } from './corregir-asistencia.dto.js'
 
 // Código de PostgreSQL para una restricción única violada.
 const UNIQUE = '23505'
@@ -33,19 +36,19 @@ const REGISTRO = `
   (SELECT json_agg(json_build_object(
             'id', u.id, 'nombre', u.nombre, 'presente', a.presente)
           ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo)
-     FROM asistencia a JOIN usuario u ON u.id = a.alumno_id
-    WHERE a.clase_id = c.id AND a.archived_at IS NULL) AS marcas,
+     FROM asistencia a JOIN usuario u ON u.id = a.alumno_id AND u.universidad_id = a.universidad_id
+    WHERE a.clase_id = c.id AND a.universidad_id = c.universidad_id AND a.archived_at IS NULL) AS marcas,
   (SELECT json_build_object(
             'por', json_build_object('id', r.id, 'nombre', r.nombre),
             'en', a.created_at)
-     FROM asistencia a JOIN usuario r ON r.id = a.registrada_por
-    WHERE a.clase_id = c.id AND a.archived_at IS NULL
+     FROM asistencia a JOIN usuario r ON r.id = a.registrada_por AND r.universidad_id = a.universidad_id
+    WHERE a.clase_id = c.id AND a.universidad_id = c.universidad_id AND a.archived_at IS NULL
     ORDER BY a.created_at, a.id LIMIT 1) AS registrada`
 
 const DESDE_CLASE = `
   FROM clase c
-  JOIN seccion s ON s.id = c.seccion_id
-  JOIN curso cu ON cu.id = s.curso_id`
+  JOIN seccion s ON s.id = c.seccion_id AND s.universidad_id = c.universidad_id
+  JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id`
 
 interface FilaAsistencia {
   clase: AsistenciaClase['clase']
@@ -84,6 +87,140 @@ function repetidos(ids: string[]): string[] {
 @Injectable()
 export class AsistenciaService {
   constructor(private readonly bd: BaseDeDatos) {}
+
+  private async marcaEditable(
+    bd: Pick<BaseDeDatos, 'query'>,
+    contexto: ContextoUniversidad,
+    profesorId: string,
+    seccion: SeccionEspacio,
+    claseId: string,
+    alumnoId: string,
+  ) {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo el profesor de la sección puede corregir la asistencia',
+      )
+    }
+    const [marca] = await bd.query<{
+      id: string
+      presente: boolean
+      es_profesor: boolean
+    }>(
+      `SELECT a.id, a.presente, s.profesor_id = $5 AS es_profesor
+         ${DESDE_CLASE}
+         JOIN usuario u ON u.id = $5 AND u.universidad_id = s.universidad_id
+         JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
+        WHERE c.universidad_id = $1 AND s.id = $2 AND c.id = $3 AND a.alumno_id = $4
+          AND c.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+          AND a.archived_at IS NULL AND u.archived_at IS NULL AND u.rol = 'PROFESOR'
+        FOR SHARE OF c, s, cu, u FOR UPDATE OF a`,
+      [contexto.universidadId, seccion.id, claseId, alumnoId, profesorId],
+    )
+    if (!marca) throw new NotFoundException('La marca de asistencia no existe')
+    if (!marca.es_profesor)
+      throw new ForbiddenException(
+        'Solo el profesor de la sección puede corregir la asistencia',
+      )
+    return marca
+  }
+
+  async corregir(
+    contexto: ContextoUniversidad,
+    profesorId: string,
+    seccion: SeccionEspacio,
+    claseId: string,
+    alumnoId: string,
+    datos: CorregirAsistenciaDto,
+  ): Promise<AsistenciaClase> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const marca = await this.marcaEditable(
+        bd,
+        contexto,
+        profesorId,
+        seccion,
+        claseId,
+        alumnoId,
+      )
+      if (marca.presente !== datos.anterior) {
+        throw new ConflictException(
+          'La marca cambió mientras la editabas. Vuelve a cargar la asistencia',
+        )
+      }
+      if (marca.presente !== datos.presente) {
+        await bd.query(
+          `SELECT set_config('app.asistencia_profesor_id', $1, true), set_config('app.asistencia_motivo', $2, true)`,
+          [profesorId, datos.motivo],
+        )
+        // El trigger captura OLD y NEW bajo el mismo lock; si falla la
+        // auditoría, PostgreSQL revierte también la marca.
+        await bd.query(
+          'UPDATE asistencia SET presente = $3 WHERE universidad_id = $1 AND id = $2',
+          [contexto.universidadId, marca.id, datos.presente],
+        )
+      }
+      const [fila] = await bd.query<FilaAsistencia>(
+        `SELECT ${COLUMNAS_CLASE}, ${REGISTRO}, ${ALUMNOS_SECCION} ${DESDE_CLASE}
+          WHERE c.universidad_id = $1 AND s.id = $2 AND c.id = $3`,
+        [contexto.universidadId, seccion.id, claseId],
+      )
+      return respuesta(fila)
+    })
+  }
+
+  async historial(
+    contexto: ContextoUniversidad,
+    profesorId: string,
+    seccion: SeccionEspacio,
+    claseId: string,
+    alumnoId: string,
+  ): Promise<CambioAsistencia[]> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const marca = await this.marcaEditable(
+        bd,
+        contexto,
+        profesorId,
+        seccion,
+        claseId,
+        alumnoId,
+      )
+      const cambios = await bd.query<
+        Omit<CambioAsistencia, 'fecha'> & { fecha: Date }
+      >(
+        `SELECT h.id, h.anterior, h.nuevo, h.motivo, h.fecha,
+                json_build_object('id', u.id, 'nombre', u.nombre) AS profesor
+           FROM asistencia_cambio h JOIN usuario u ON u.id = h.responsable_id AND u.universidad_id = h.universidad_id
+          WHERE h.universidad_id = $1 AND h.asistencia_id = $2 ORDER BY h.fecha, h.id`,
+        [contexto.universidadId, marca.id],
+      )
+      return cambios.map((h) => ({ ...h, fecha: h.fecha.toISOString() }))
+    })
+  }
+
+  async propia(
+    contexto: ContextoUniversidad,
+    alumnoId: string,
+    seccion: SeccionEspacio,
+  ): Promise<AsistenciaPropia[]> {
+    if (contexto.rol !== 'ALUMNO' || seccion.rol !== 'ALUMNO')
+      throw new ForbiddenException()
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await bd.query(
+        `SELECT set_config('app.asistencia_alumno_id', $1, true)`,
+        [alumnoId],
+      )
+      return bd.query<AsistenciaPropia>(
+        `SELECT ${COLUMNAS_CLASE}, a.presente ${DESDE_CLASE}
+           JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
+          WHERE c.universidad_id = $1 AND s.id = $2 AND a.alumno_id = $3
+            AND c.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+            AND a.archived_at IS NULL AND EXISTS (
+              SELECT 1 FROM inscripcion i WHERE i.seccion_id = s.id AND i.universidad_id = s.universidad_id
+                AND i.usuario_id = $3 AND i.archived_at IS NULL)
+          ORDER BY c.fecha DESC, c.inicio DESC, c.id`,
+        [contexto.universidadId, seccion.id, alumnoId],
+      )
+    })
+  }
 
   // La clase debe ser de la sección y no estar archivada; si no, 404. El
   // Director la lee en cualquier universidad, en una transacción READ ONLY.

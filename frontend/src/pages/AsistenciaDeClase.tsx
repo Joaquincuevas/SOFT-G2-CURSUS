@@ -10,6 +10,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
+import { CorreccionAsistencia } from './CorreccionAsistencia'
 
 interface Props {
   seccionId: string
@@ -25,10 +26,10 @@ const fechaHora = (iso: string) =>
     timeStyle: 'short',
   })
 
-// ASI-02 (RN-13): asistencia de una clase. Si ya está registrada se muestra
-// en solo lectura; si no, el profesor de la sección marca presente o ausente
+// ASI-02/04 (RN-13): si ya está registrada, el profesor puede corregir una
+// marca con motivo; los demás lectores solo consultan. Si no, marca presente o ausente
 // a cada alumno, con marcado masivo y conteos (ASI-03). Corregir una marca
-// ya guardada es ASI-04.
+// ya guardada deja historial (ASI-04).
 export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases/${claseId}/asistencia`
   const [datos, recargar] = useDatos<AsistenciaClase>(ruta)
@@ -58,7 +59,12 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
           <p className="dashboard__texto">
             Registrada por {registrada.por.nombre} el {fechaHora(registrada.en)}
           </p>
-          <MarcasRegistradas alumnos={alumnos} />
+          <MarcasRegistradas
+            alumnos={alumnos}
+            rol={rol}
+            ruta={ruta}
+            recargar={recargar}
+          />
         </>
       ) : alumnos.length === 0 ? (
         <p className="dashboard__texto">
@@ -80,13 +86,24 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
   )
 }
 
-function MarcasRegistradas({ alumnos }: { alumnos: AlumnoAsistencia[] }) {
+function MarcasRegistradas({
+  alumnos,
+  rol,
+  ruta,
+  recargar,
+}: {
+  alumnos: AlumnoAsistencia[]
+  rol: Rol
+  ruta: string
+  recargar: () => void
+}) {
   return (
     <table className="asistencia__tabla" aria-label="Asistencia registrada">
       <thead>
         <tr>
           <th scope="col">Alumno</th>
           <th scope="col">Asistencia</th>
+          {rol === 'PROFESOR' && <th scope="col">Acciones</th>}
         </tr>
       </thead>
       <tbody>
@@ -94,6 +111,15 @@ function MarcasRegistradas({ alumnos }: { alumnos: AlumnoAsistencia[] }) {
           <tr key={alumno.id}>
             <td>{alumno.nombre}</td>
             <td>{alumno.presente ? 'Presente' : 'Ausente'}</td>
+            {rol === 'PROFESOR' && (
+              <td>
+                <CorreccionAsistencia
+                  alumno={alumno}
+                  ruta={ruta}
+                  alGuardar={recargar}
+                />
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
