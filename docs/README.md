@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [NOT-06: rechazo de notas fuera de la escala 1,0 a 7,0 y guía de revisión](not-06-escala-notas.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))

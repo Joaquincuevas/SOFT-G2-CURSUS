@@ -59,16 +59,34 @@ export type EstadoNota = (typeof ESTADOS_NOTA)[number]
 // Tope de notas por guardado: más que los alumnos de cualquier sección.
 export const MAX_NOTAS_GUARDADO = 500
 
-// true si es un número de 1,0 a 7,0 con a lo más un decimal. El backend lo
-// exige antes de escribir; los mensajes por campo en la interfaz son NOT-06.
-export function esNotaValida(valor: unknown): valor is number {
-  if (typeof valor !== 'number' || !Number.isFinite(valor)) return false
+// NOT-06: por qué una nota no es válida. `formato`: no es un número o tiene
+// más de un decimal (5,55, "x", vacío); `rango`: es un número con a lo más un
+// decimal, pero fuera de 1,0 a 7,0 (0,9, 7,1, 8).
+export type MotivoNotaInvalida = 'formato' | 'rango'
+
+export const MENSAJES_NOTA_INVALIDA: Record<MotivoNotaInvalida, string> = {
+  formato: 'Formato inválido: escribe un número con un decimal, como 5,5',
+  rango: 'Fuera de rango: la nota va de 1,0 a 7,0',
+}
+
+// Motivo por el que el valor no es una nota de 1,0 a 7,0 con a lo más un
+// decimal, o null si lo es. Primero el formato y después el rango.
+export function motivoNotaInvalida(valor: unknown): MotivoNotaInvalida | null {
+  if (typeof valor !== 'number' || !Number.isFinite(valor)) return 'formato'
   const decimas = Math.round(valor * 10)
-  return (
-    Math.abs(valor * 10 - decimas) <= 1e-9 &&
-    decimas >= NOTA_MINIMA * 10 &&
-    decimas <= NOTA_MAXIMA * 10
-  )
+  // Exacto, sin tolerancia: decimas / 10 da el mismo número que leer "5,5"
+  // o "5.5", así que toda nota con un decimal pasa. Una tolerancia aceptaría
+  // 0,99999999999 o 7,00000000001, que numeric(2,1) guardaría como 1,0 y 7,0.
+  if (decimas / 10 !== valor) return 'formato'
+  return decimas < NOTA_MINIMA * 10 || decimas > NOTA_MAXIMA * 10
+    ? 'rango'
+    : null
+}
+
+// true si es un número de 1,0 a 7,0 con a lo más un decimal. Lo exigen el
+// DTO del PUT (NOT-06), el servicio y la auditoría (NOT-04).
+export function esNotaValida(valor: unknown): valor is number {
+  return motivoNotaInvalida(valor) === null
 }
 
 // Un alumno activo de la sección con su nota en la evaluación, o null si aún
@@ -90,6 +108,15 @@ export interface NotasEvaluacion {
 // activos. Un alumno que no viene conserva la nota que tenía.
 export interface GuardarNotas {
   notas: { alumnoId: string; nota: number }[]
+}
+
+// NOT-06: 400 del PUT cuando alguna nota no es válida. Trae cada alumno con
+// su motivo (MENSAJES_NOTA_INVALIDA), en el orden de la lista; no se guarda
+// ninguna nota.
+export interface ErrorNotasInvalidas {
+  statusCode: 400
+  message: 'Nota inválida'
+  invalidas: { alumnoId: string; motivo: string }[]
 }
 
 // 400 del PUT cuando la lista trae alumnos que no están inscritos en la

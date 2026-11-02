@@ -108,3 +108,31 @@
   border-radius: var(--radius-md);
   font: var(--font-body);
 }
+
+.notas__nota:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* NOT-06: nota fuera de la escala o con formato inválido, con su motivo. */
+.notas__nota--invalida {
+  border-color: var(--color-error);
+}
+
+.notas__nota--invalida:focus-visible {
+  outline-color: var(--color-error);
+}
+
+/* El ancho máximo evita que la columna Nota se ensanche al aparecer el
+   motivo; vacío no ocupa espacio. */
+.notas__motivo {
+  display: block;
+  max-width: 12rem;
+  margin-top: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-error);
+}
+
+.notas__motivo:empty {
+  margin-top: 0;
+}
