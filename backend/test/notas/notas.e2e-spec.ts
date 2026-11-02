@@ -75,3 +75,33 @@ describe('notas de una evaluación (NOT-05)', () => {
     },
   )
 })
+
+// NOT-07: guardar el borrador es el mismo PUT. El 404 de otra universidad
+// necesita la base: está en notas.db-spec.ts.
+describe('guardar borrador (NOT-07)', () => {
+  it('el borrador no se guarda ni se lee sin sesión: 401', async () => {
+    await request(app.getHttpServer()).put(RUTA).send(NOTAS).expect(401)
+    await request(app.getHttpServer()).get(RUTA).expect(401)
+  })
+
+  it.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO', 'DIRECTOR'])(
+    '%s no guarda un borrador: 403 antes de llegar a la base',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .put(RUTA)
+        .set('Authorization', sesion(rol))
+        .send(NOTAS)
+        .expect(403)
+    },
+  )
+
+  it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO'])(
+    '%s no lee el estado del borrador: 403',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get(RUTA)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    },
+  )
+})

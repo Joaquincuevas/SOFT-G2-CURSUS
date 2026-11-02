@@ -521,3 +521,57 @@ function sinIngresoDeNotas(panel: ReturnType<typeof within>) {
     panel.queryByRole('form', { name: 'Ingresar notas' }),
   ).not.toBeInTheDocument()
 }
+
+describe('borrador de notas (NOT-07)', () => {
+  test('Guardar borrador guarda aunque falten alumnos y al volver se recuperan', async () => {
+    // Backend simulado: el GET devuelve lo último que guardó el PUT.
+    let actuales = SIN_NOTAS
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        const { notas } = JSON.parse(init.body as string) as {
+          notas: { alumnoId: string; nota: number }[]
+        }
+        actuales = {
+          ...actuales,
+          alumnos: actuales.alumnos.map((a) => {
+            const nueva = notas.find((n) => n.alumnoId === a.id)
+            return nueva ? { ...a, nota: nueva.nota, estado: 'PROPUESTA' } : a
+          }),
+        }
+        return json(actuales)
+      }
+      return actuales
+    })
+    await abrirEvaluacion(panel)
+    expect(panel.getByText('Estado: Borrador')).toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Guardar notas' }),
+    ).not.toBeInTheDocument()
+
+    // Solo Ana: Zoe queda sin nota.
+    escribir(panel, 'Ana Ávila', '6,1')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
+    expect(await panel.findByRole('status')).toHaveTextContent(
+      'Borrador guardado.',
+    )
+
+    // Cerrar y volver a abrir la evaluación pide las notas de nuevo.
+    fireEvent.click(panel.getByRole('button', { name: 'Notas de Control 1' }))
+    expect(
+      panel.queryByRole('form', { name: 'Ingresar notas' }),
+    ).not.toBeInTheDocument()
+    await abrirEvaluacion(panel)
+    expect(await panel.findByLabelText('Nota de Ana Ávila')).toHaveValue('6.1')
+    expect(panel.getByLabelText('Nota de Bruno Díaz')).toHaveValue('5.5')
+    expect(panel.getByLabelText('Nota de Zoe Ruiz')).toHaveValue('')
+    expect(panel.getByText('Estado: Borrador')).toBeInTheDocument()
+  })
+
+  test('el profesor no ve la evaluación en borrador como pendiente de revisión', async () => {
+    const panel = await abrirNotas('PROFESOR')
+    expect(panel.getByText('Control 1')).toBeInTheDocument()
+    expect(panel.queryByText(/pendiente/i)).not.toBeInTheDocument()
+    expect(panel.queryByText(/borrador/i)).not.toBeInTheDocument()
+    expect(panel.queryByText(/en revisión/i)).not.toBeInTheDocument()
+  })
+})
