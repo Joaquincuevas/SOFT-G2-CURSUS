@@ -155,24 +155,19 @@ describe('asistencia de una clase (ASI-02)', () => {
     },
   )
 
-  test.each<Rol>(['AYUDANTE'])(
-    '%s no puede marcar una clase sin asistencia',
-    async (rol) => {
-      const panel = await abrir(rol, () => PENDIENTE)
+  test('el ayudante no puede marcar una clase sin asistencia', async () => {
+    const panel = await abrir('AYUDANTE', () => PENDIENTE)
 
-      expect(
-        await panel.findByText(
-          'Aún no se registra la asistencia de esta clase.',
-        ),
-      ).toBeInTheDocument()
-      expect(
-        panel.queryByRole('form', { name: 'Marcar asistencia' }),
-      ).not.toBeInTheDocument()
-      expect(
-        panel.queryByRole('button', { name: 'Marcar todos presentes' }),
-      ).not.toBeInTheDocument()
-    },
-  )
+    expect(
+      await panel.findByText('Aún no se registra la asistencia de esta clase.'),
+    ).toBeInTheDocument()
+    expect(
+      panel.queryByRole('form', { name: 'Marcar asistencia' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Marcar todos presentes' }),
+    ).not.toBeInTheDocument()
+  })
 
   test('una sección sin alumnos lo indica', async () => {
     const panel = await abrir('PROFESOR', () => ({ ...PENDIENTE, alumnos: [] }))
@@ -297,6 +292,90 @@ describe('asistencia de una clase (ASI-02)', () => {
 })
 
 describe('marcado masivo y excepciones (ASI-03)', () => {
+  test.each([false, true])(
+    'una recarga pendiente libera los controles y conserva las excepciones (nuevo inscrito: %s)',
+    async (nuevoInscrito) => {
+      const enviados: unknown[] = []
+      let terminarRecarga!: (valor: AsistenciaClase) => void
+      const panel = await abrir('PROFESOR', (init) => {
+        if (init?.method === 'POST') {
+          enviados.push(JSON.parse(init.body as string))
+          return json(REGISTRADA, 201)
+        }
+        if (enviados.length === 0) return PENDIENTE
+        if (enviados.length > 1) return REGISTRADA
+        return new Promise<AsistenciaClase>((resolve) => {
+          terminarRecarga = resolve
+        })
+      })
+      const todos = await panel.findByRole('button', {
+        name: 'Marcar todos presentes',
+      })
+      fireEvent.click(todos)
+      marcar(panel, 'Bruno Díaz', 'Ausente')
+      const guardar = panel.getByRole('button', { name: 'Guardar asistencia' })
+      fireEvent.click(guardar)
+      await waitFor(() => expect(terminarRecarga).toBeTypeOf('function'))
+      expect(todos).toBeDisabled()
+      expect(guardar).toBeDisabled()
+      for (const radio of panel.getAllByRole('radio'))
+        expect(radio).toBeDisabled()
+      fireEvent.click(guardar)
+      expect(enviados).toHaveLength(1)
+
+      // Incluso una respuesta idéntica debe terminar el bloqueo. Un nuevo
+      // inscrito queda sin marcar y no se confunde con una ausencia.
+      terminarRecarga(
+        nuevoInscrito
+          ? {
+              ...PENDIENTE,
+              alumnos: [
+                ...PENDIENTE.alumnos,
+                { id: 'a4', nombre: 'Nuevo Alumno', presente: null },
+              ],
+            }
+          : PENDIENTE,
+      )
+      await waitFor(() => expect(todos).toBeEnabled())
+      for (const radio of panel.getAllByRole('radio'))
+        expect(radio).toBeEnabled()
+      expect(
+        within(panel.getByRole('group', { name: 'Bruno Díaz' })).getByLabelText(
+          'Ausente',
+        ),
+      ).toBeChecked()
+      expect(
+        panel.getByText(
+          new RegExp(
+            `Presentes: 2 · Ausentes: 1 · Sin marcar: ${nuevoInscrito ? 1 : 0}\\.`,
+          ),
+        ),
+      ).toBeInTheDocument()
+      if (nuevoInscrito) {
+        expect(guardar).toBeDisabled()
+        marcar(panel, 'Nuevo Alumno', 'Presente')
+      }
+      expect(guardar).toBeEnabled()
+      fireEvent.click(guardar)
+      expect(
+        await panel.findByRole('table', { name: 'Asistencia registrada' }),
+      ).toBeInTheDocument()
+      const marcas = [
+        { alumnoId: 'a1', presente: true },
+        { alumnoId: 'a2', presente: false },
+        { alumnoId: 'a3', presente: true },
+      ]
+      expect(enviados).toEqual([
+        { marcas },
+        {
+          marcas: nuevoInscrito
+            ? [...marcas, { alumnoId: 'a4', presente: true }]
+            : marcas,
+        },
+      ])
+    },
+  )
+
   test('marca toda la lista sin guardar y envía las excepciones solo al confirmar', async () => {
     const enviados: unknown[] = []
     let guardada = false

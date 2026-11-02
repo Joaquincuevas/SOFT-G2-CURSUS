@@ -11,7 +11,7 @@ El resumen anuncia **Presentes**, **Ausentes** y **Sin marcar** con `aria-live="
 Decisiones:
 
 - Volver a pulsar Marcar todos presentes reinicia toda la lista a Presente. Se pueden ajustar las excepciones de nuevo.
-- Durante el guardado se bloquean el botón masivo, los radios y Guardar. Permanecen bloqueados hasta que la recarga muestre la asistencia registrada. Un error libera los controles y conserva las marcas y el conteo para reintentar.
+- Durante el guardado y la recarga se bloquean el botón masivo, los radios y Guardar. Si la respuesta muestra la asistencia registrada, pasa a solo lectura. Si vuelve como pendiente, incluso con los mismos valores, libera los controles conservando las marcas y el conteo; cualquier nuevo inscrito queda sin marcar y debe completarse antes de reintentar. Un error al guardar también libera los controles y conserva las marcas y el conteo.
 - El formulario sigue disponible solo para el profesor y en clases sin asistencia con alumnos inscritos. Una clase registrada sigue en solo lectura; corregirla corresponde a ASI-04. El ayudante no recibe controles de marcado.
 - Los cambios pendientes viven en el formulario: cerrar la clase o recargar la página antes de guardar los descarta.
 
@@ -28,6 +28,7 @@ Esta tarjeta modifica el frontend, sus pruebas y documentación. No requiere mig
 - Marcado total sin envío automático; ajuste de una excepción, conteos y un único POST con las marcas finales.
 - Lista parcialmente marcada, todos ausentes, repetir la acción y cambiar de vuelta a Presente.
 - Bloqueo de todos los controles durante una petición pendiente, sin doble envío; error con conservación de marcas/conteos y posibilidad de seguir ajustando.
+- Recarga posterior al 201 que vuelve pendiente: con los mismos datos y con un nuevo inscrito. Libera los controles, conserva las excepciones y permite un nuevo guardado con la lista completa.
 - Regresiones ASI-02: marcado individual, sin alumnos, ayudante sin formulario, clase registrada sin marcado masivo, lista modificada, conflicto y recarga.
 
 ```bash
@@ -65,6 +66,8 @@ npm run dev:front
 5. Pulsar Guardar asistencia. Con conexión lenta, comprobar controles bloqueados y un solo POST. La vista pasa a solo lectura con las marcas finales, profesor y fecha. Ocultar y reabrir la clase conserva el resultado; no hay botón masivo.
 6. En otra clase pendiente, simular un error de red al guardar. Debe conservar marcas y conteo, mostrar el error y permitir ajustar/reintentar. Si cambian los inscritos, usar Volver a cargar y completar la lista actual antes de guardar.
 7. Como ayudante, comprobar que no puede marcar una clase pendiente y que ve una ya registrada en solo lectura. Una sección sin alumnos no ofrece el formulario.
+
+Caso de regresión del feedback: simular un POST 201 seguido de un GET con `registrada: null`, primero con los mismos alumnos y luego agregando uno. Mientras el GET esté pendiente, los controles siguen bloqueados. Al resolverse, se habilitan los radios y el botón masivo; las excepciones previas se conservan. Con un nuevo alumno, Guardar espera su marca. Las dos variantes están automatizadas en `AsistenciaDeClase.test.tsx`.
 
 ## Evidencia
 

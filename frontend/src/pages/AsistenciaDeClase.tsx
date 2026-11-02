@@ -114,7 +114,13 @@ function FormularioAsistencia({
 }) {
   const { fetchConSesion } = useAuth()
   const [marcas, setMarcas] = useState<Record<string, boolean>>({})
-  const [guardando, setGuardando] = useState(false)
+  // useDatos conserva esta lista durante la recarga y la reemplaza al
+  // terminar, aunque los valores sean idénticos. El bloqueo pertenece al
+  // envío de esa lista: una respuesta pendiente nueva permite reintentar.
+  const [listaEnviada, setListaEnviada] = useState<AlumnoAsistencia[] | null>(
+    null,
+  )
+  const guardando = listaEnviada === alumnos
   const [error, setError] = useState<string | null>(null)
   const faltan = alumnos.filter((a) => marcas[a.id] === undefined).length
   const presentes = alumnos.filter((a) => marcas[a.id] === true).length
@@ -123,7 +129,7 @@ function FormularioAsistencia({
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (guardando || faltan > 0) return
-    setGuardando(true)
+    setListaEnviada(alumnos)
     setError(null)
     const datos: GuardarAsistencia = {
       marcas: alumnos.map((a) => ({ alumnoId: a.id, presente: marcas[a.id] })),
@@ -146,17 +152,18 @@ function FormularioAsistencia({
             ? `${cuerpo.message}.`
             : 'No pudimos guardar la asistencia. Inténtalo nuevamente.',
         )
-        setGuardando(false)
+        setListaEnviada(null)
         return
       }
-      // Guardar sigue deshabilitado hasta que la recarga muestre la
-      // asistencia en solo lectura: un segundo clic no envía otro POST.
+      // Mientras recarga no se puede enviar otro POST. Al terminar, la
+      // respuesta registrada desmonta el formulario; una pendiente libera
+      // los controles sin descartar las marcas.
       alGuardar()
     } catch {
       setError(
         'No pudimos guardar la asistencia. Comprueba tu conexión e inténtalo nuevamente.',
       )
-      setGuardando(false)
+      setListaEnviada(null)
     }
   }
 
