@@ -6,11 +6,11 @@ Tarjeta: [F4 · NOT-05 Ayudante ingresa las notas de una evaluación](https://tr
 
 En la pestaña **Notas** de la vista de la sección, el ayudante ve una columna **Notas** con un botón **Ingresar notas** por evaluación. Al pulsarlo se abre, debajo de la lista, una tabla con todos los alumnos activos de la sección (por nombre), un campo de nota por alumno y su estado ("Sin nota" o "Propuesta").
 
-- **Guardar notas** envía solo los campos que cambiaron y queda deshabilitado si no hay cambios, mientras guarda y hasta que llega la recarga (un doble clic no envía dos veces).
-- **Guardado parcial:** se pueden guardar unas pocas notas y volver después por el resto; al volver se recuperan las guardadas. Un campo vacío no borra una nota: nada se elimina.
+- **Guardar notas** (desde [NOT-07](not-07-borrador-notas.md), **Guardar borrador**) envía solo los campos que cambiaron y queda deshabilitado si no hay cambios, mientras guarda y hasta que llega la recarga (un doble clic no envía dos veces).
+- **Guardado parcial:** se pueden guardar unas pocas notas y volver después por el resto; al volver se recuperan las guardadas. Un campo vacío no borra una nota: nada se elimina. Desde NOT-07 lo guardado es un **borrador** de la evaluación (`revision_notas`), que el profesor no ve como pendiente de revisión.
 - Las notas quedan en estado **propuesta**, que el alumno no ve.
 - Una nota publicada (NOT-11) aparece como "Publicada" y su campo no se edita: cambiarla es una recorrección del profesor (NOT-15).
-- El profesor, el alumno y el Director no ven el botón ni ningún campo de nota. El profesor revisa las propuestas en NOT-10.
+- El profesor, el alumno y el Director no ven el botón ni ningún campo de nota. El profesor revisa las propuestas en NOT-10, una vez enviadas a revisión (NOT-08); un borrador (NOT-07) no es pendiente.
 
 | Quién                                 | Lee (GET) | Guarda (PUT) |
 | ------------------------------------- | --------- | ------------ |
@@ -97,6 +97,6 @@ npm run build
 
 1. Ejecutar las migraciones y el seed de facultad completa. Levantar backend y frontend.
 2. Como profesor (`camila.rojas@norte.cursus.test`, contraseña `SEED_PASSWORD`), crear una evaluación en una sección.
-3. Ingresar como un ayudante de esa sección, abrir la pestaña **Notas** y pulsar **Ingresar notas**. Escribir dos notas y guardar: quedan como "Propuesta". Volver a abrir: siguen ahí.
+3. Ingresar como un ayudante de esa sección, abrir la pestaña **Notas** y pulsar **Ingresar notas**. Escribir dos notas y guardar (desde NOT-07, **Guardar borrador**): quedan como "Propuesta". Volver a abrir: siguen ahí.
 4. Escribir un 8: desde NOT-06 el campo se marca en rojo con "Fuera de rango: la nota va de 1,0 a 7,0" y Guardar queda deshabilitado, así que no se guarda nada.
 5. Ingresar como alumno de la sección: la pestaña Notas muestra la evaluación, sin notas.
