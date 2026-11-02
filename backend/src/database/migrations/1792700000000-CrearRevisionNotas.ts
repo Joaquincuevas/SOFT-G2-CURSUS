@@ -17,6 +17,9 @@ export class CrearRevisionNotas1792700000000 implements MigrationInterface {
         universidad_id uuid NOT NULL,
         evaluacion_id uuid NOT NULL,
         estado text NOT NULL DEFAULT 'BORRADOR',
+        -- Quien dejó el estado actual: en BORRADOR, el primer ayudante que
+        -- guardó (los guardados siguientes no lo cambian); cada transición
+        -- de NOT-08, 09 y 12 lo actualizará.
         actualizado_por uuid NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
