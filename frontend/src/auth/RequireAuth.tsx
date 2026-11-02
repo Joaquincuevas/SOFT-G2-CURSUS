@@ -1,11 +1,7 @@
 import { useContext } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router'
 import { Cargando } from '../components/Cargando'
-import {
-  debeElegirFacultad,
-  RUTA_ELEGIR_FACULTAD,
-  SessionContext,
-} from '../session/session'
+import { SessionContext } from '../session/session'
 import { RUTA_CAMBIO_OBLIGATORIO, useAuth } from './auth'
 
 // Ruta de layout: sin sesión redirige a /login y recuerda a dónde se quería ir.
@@ -30,15 +26,6 @@ export function RequireAuth() {
   const provisoria = sesion.user.debeCambiarPassword
   if (provisoria !== (pathname === RUTA_CAMBIO_OBLIGATORIO)) {
     return <Navigate to={provisoria ? RUTA_CAMBIO_OBLIGATORIO : '/'} replace />
-  }
-  // MT-04: el superadmin elige universidad y facultad antes de trabajar. Su
-  // perfil no depende de la facultad.
-  if (
-    debeElegirFacultad(sesion.user) &&
-    pathname !== RUTA_ELEGIR_FACULTAD &&
-    pathname !== '/perfil'
-  ) {
-    return <Navigate to={RUTA_ELEGIR_FACULTAD} replace />
   }
   return <Outlet />
 }

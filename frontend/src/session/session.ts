@@ -14,16 +14,13 @@ export interface SessionValue {
   // PER-03: al cambiar la contraseña provisoria se quita la marca, sin volver
   // a pedir la sesión.
   marcarPasswordCambiada: () => void
-  // MT-04: al elegir universidad y facultad, el superadmin recibe el usuario
-  // de la sesión con la elección nueva.
+  // MT-04: al elegir universidad y facultad, o al salir de ellas, el
+  // superadmin recibe el usuario de la sesión con la elección nueva.
   reemplazarUsuario: (user: SessionUser) => void
 }
 
-// MT-04: pantalla en la que el superadmin elige universidad y facultad.
-export const RUTA_ELEGIR_FACULTAD = '/superadmin'
-
-// MT-04: el superadmin sin universidad elegida solo puede elegir una (la API
-// le responde 403 en el resto).
+// MT-04: el superadmin sin universidad elegida solo ve el Dashboard, donde
+// elige una, y su perfil (la API le responde 403 en el resto).
 export const debeElegirFacultad = (user: SessionUser) =>
   user.rol === 'SUPERADMIN' && !user.universidadId
 

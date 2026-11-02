@@ -157,6 +157,30 @@ export class BaseDeDatos implements OnModuleDestroy {
     })
   }
 
+  // GES-23. Escritura del superadmin en su vista global (sin universidad de
+  // sesión): crear y editar universidades y facultades. Fija app.rol
+  // SUPERADMIN y app.superadmin_id, que exigen las políticas de escritura de
+  // esas tablas (GestionarUniversidades) y usa la auditoría. En las demás
+  // tablas no ve ni escribe filas: no tiene universidad. Responde 403 a
+  // cualquier otro rol.
+  async escribirComoSuperadmin<T>(
+    superadmin: { id: string; rol: Rol | undefined },
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    if (superadmin.rol !== 'SUPERADMIN' || !superadmin.id) {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccion(async (bd) => {
+      await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await bd.query(
+        `SELECT set_config('app.rol', $1, true),
+                set_config('app.superadmin_id', $2, true)`,
+        [superadmin.rol, superadmin.id],
+      )
+      return tarea(bd)
+    })
+  }
+
   // Un recurso de la universidad de la sesión. Responde 404 si no existe o es
   // de otra universidad: desde fuera no se distinguen.
   async obtenerEnUniversidad<T>(
@@ -184,9 +208,10 @@ export class BaseDeDatos implements OnModuleDestroy {
 }
 
 // MT-04. Motivo de la acción en curso, para la auditoría del superadmin
-// (superadmin_cambio.motivo). Se llama dentro de enTransaccionEnUniversidad,
-// antes de escribir, y dura solo esa transacción. Con otros roles no tiene
-// efecto: el trigger de auditoría corre solo con un superadmin.
+// (superadmin_cambio.motivo). Se llama dentro de enTransaccionEnUniversidad
+// o escribirComoSuperadmin, antes de escribir, y dura solo esa transacción.
+// Con otros roles no tiene efecto: el trigger de auditoría corre solo con un
+// superadmin.
 export async function fijarMotivo(
   bd: Pick<BaseDeDatos, 'query'>,
   motivo: string,

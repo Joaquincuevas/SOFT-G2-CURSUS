@@ -2,6 +2,7 @@ import type { UniversidadElegible, UsuarioSesion } from '@cursus/shared'
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Put,
   Req,
@@ -14,8 +15,9 @@ import { contextoDeLaSesion } from '../auth/universidad-actual.decorator.js'
 import { ElegirContextoDto } from './elegir-contexto.dto.js'
 import { SuperadminService } from './superadmin.service.js'
 
-// MT-04 (ADR 0002): panel del superadmin. Después del login elige una
-// universidad y una facultad, y puede cambiarlas en cualquier momento.
+// MT-04 (ADR 0002): panel del superadmin. Desde el Dashboard elige una
+// universidad y una facultad, puede cambiarlas en cualquier momento y puede
+// salir de ellas para volver a la vista global.
 @Controller('superadmin')
 export class SuperadminController {
   constructor(
@@ -55,6 +57,25 @@ export class SuperadminController {
       sub,
       contextoDeLaSesion(req),
     )
+    if (!usuario) {
+      throw new UnauthorizedException()
+    }
+    return usuario
+  }
+
+  // Salir de la universidad: quita la elección de la sesión, no borra datos.
+  // Desde esta respuesta las rutas del Administrativo vuelven a responder 403
+  // hasta que elija otra.
+  @Puede('read', 'PanelSuperadmin')
+  @Delete('contexto')
+  async salir(@Req() req: RequestConUsuario): Promise<UsuarioSesion> {
+    const { sub, sid } = req.usuario ?? {}
+    if (!sub || !sid) {
+      throw new UnauthorizedException()
+    }
+    await this.auth.limpiarEleccion(sid, sub)
+    req.eleccion = undefined
+    const usuario = await this.auth.obtenerSuperadmin(sub, null)
     if (!usuario) {
       throw new UnauthorizedException()
     }
