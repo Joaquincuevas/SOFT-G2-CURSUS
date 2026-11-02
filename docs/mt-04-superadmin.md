@@ -43,7 +43,7 @@ Cuatro migraciones:
   - La tabla `superadmin_cambio`: universidad, superadmin, tabla, registro, operación (`INSERT` o `UPDATE`), `anterior` y `nuevo` en `jsonb` sin `password_hash`, motivo y fecha.
   - Un trigger `tg_<tabla>_auditar_superadmin` en cada tabla institucional, que corre solo con `app.superadmin_id`. Un UPDATE sin cambios no deja registro.
   - Es de solo adición: la API solo la lee, y solo un superadmin; la escribe el trigger (`SECURITY DEFINER`); y otro trigger impide modificarla o borrarla incluso al dueño de la tabla.
-  - El motivo se fija con `fijarMotivo(bd, motivo)` dentro de la transacción. Hoy lo usan las bajas de profesor y ayudante (GES-14).
+  - El motivo se fija con `fijarMotivo(bd, motivo)` dentro de la transacción. Hoy lo usan las bajas de profesor y ayudante (GES-14) y el archivo de una universidad (GES-23).
 
 Las migraciones son compatibles hacia atrás: el código anterior sigue funcionando con la base migrada.
 
