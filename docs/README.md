@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [ASI-03: marcar todos presentes, ajustar excepciones y guía de revisión](asi-03-marcar-todos-presentes.md)
 - [GES-23: el superadmin gestiona universidades y facultades, y guía de revisión](ges-23-universidades-facultades.md)
 - [NOT-06: rechazo de notas fuera de la escala 1,0 a 7,0 y guía de revisión](not-06-escala-notas.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)

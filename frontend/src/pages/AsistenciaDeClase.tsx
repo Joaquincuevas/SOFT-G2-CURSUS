@@ -27,7 +27,8 @@ const fechaHora = (iso: string) =>
 
 // ASI-02 (RN-13): asistencia de una clase. Si ya está registrada se muestra
 // en solo lectura; si no, el profesor de la sección marca presente o ausente
-// a cada alumno. Corregir una marca es ASI-04.
+// a cada alumno, con marcado masivo y conteos (ASI-03). Corregir una marca
+// ya guardada es ASI-04.
 export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases/${claseId}/asistencia`
   const [datos, recargar] = useDatos<AsistenciaClase>(ruta)
@@ -113,13 +114,22 @@ function FormularioAsistencia({
 }) {
   const { fetchConSesion } = useAuth()
   const [marcas, setMarcas] = useState<Record<string, boolean>>({})
-  const [guardando, setGuardando] = useState(false)
+  // useDatos conserva esta lista durante la recarga y la reemplaza al
+  // terminar, aunque los valores sean idénticos. El bloqueo pertenece al
+  // envío de esa lista: una respuesta pendiente nueva permite reintentar.
+  const [listaEnviada, setListaEnviada] = useState<AlumnoAsistencia[] | null>(
+    null,
+  )
+  const guardando = listaEnviada === alumnos
   const [error, setError] = useState<string | null>(null)
   const faltan = alumnos.filter((a) => marcas[a.id] === undefined).length
+  const presentes = alumnos.filter((a) => marcas[a.id] === true).length
+  const ausentes = alumnos.length - faltan - presentes
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setGuardando(true)
+    if (guardando || faltan > 0) return
+    setListaEnviada(alumnos)
     setError(null)
     const datos: GuardarAsistencia = {
       marcas: alumnos.map((a) => ({ alumnoId: a.id, presente: marcas[a.id] })),
@@ -142,17 +152,18 @@ function FormularioAsistencia({
             ? `${cuerpo.message}.`
             : 'No pudimos guardar la asistencia. Inténtalo nuevamente.',
         )
-        setGuardando(false)
+        setListaEnviada(null)
         return
       }
-      // Guardar sigue deshabilitado hasta que la recarga muestre la
-      // asistencia en solo lectura: un segundo clic no envía otro POST.
+      // Mientras recarga no se puede enviar otro POST. Al terminar, la
+      // respuesta registrada desmonta el formulario; una pendiente libera
+      // los controles sin descartar las marcas.
       alGuardar()
     } catch {
       setError(
         'No pudimos guardar la asistencia. Comprueba tu conexión e inténtalo nuevamente.',
       )
-      setGuardando(false)
+      setListaEnviada(null)
     }
   }
 
@@ -162,8 +173,25 @@ function FormularioAsistencia({
       aria-label="Marcar asistencia"
       onSubmit={(event) => void guardar(event)}
     >
+      <button
+        className="asistencia__boton"
+        type="button"
+        disabled={guardando}
+        onClick={() =>
+          setMarcas(Object.fromEntries(alumnos.map((a) => [a.id, true])))
+        }
+      >
+        Marcar todos presentes
+      </button>
+      <p className="dashboard__texto">
+        Puedes ajustar las excepciones antes de guardar.
+      </p>
       {alumnos.map((alumno) => (
-        <fieldset key={alumno.id} className="asistencia__alumno">
+        <fieldset
+          key={alumno.id}
+          className="asistencia__alumno"
+          disabled={guardando}
+        >
           <legend>{alumno.nombre}</legend>
           {[true, false].map((presente) => (
             <label key={String(presente)}>
@@ -184,6 +212,7 @@ function FormularioAsistencia({
         </fieldset>
       ))}
       <p className="dashboard__texto" aria-live="polite">
+        Presentes: {presentes} · Ausentes: {ausentes} · Sin marcar: {faltan}.{' '}
         {faltan === 0
           ? 'Todos los alumnos están marcados.'
           : `Faltan ${faltan} por marcar.`}
