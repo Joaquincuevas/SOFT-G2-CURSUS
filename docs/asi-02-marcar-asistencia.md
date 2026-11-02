@@ -7,7 +7,7 @@ Tarjeta: [F4 · ASI-02 Profesor marca presente o ausente a cada alumno](https://
 En la pestaña **Asistencia** de la vista de la sección (ASI-01), cada clase de la lista tiene un botón **Ver** que abre su asistencia debajo de la tabla.
 
 - **Clase sin asistencia, profesor de la sección:** la lista de alumnos activos de la sección, por nombre, con una opción **Presente** o **Ausente** por alumno. Un contador indica cuántos faltan por marcar y **Guardar asistencia** queda deshabilitado mientras falte alguno. Al guardar, la asistencia queda registrada con la fecha y el profesor, y la vista pasa a solo lectura.
-- **Clase con asistencia:** solo lectura, para todos los que la leen: cada alumno con Presente o Ausente y "Registrada por <profesor> el <fecha y hora>". Corregir una marca es ASI-04.
+- **Clase con asistencia:** cada alumno con Presente o Ausente y "Registrada por <profesor> el <fecha y hora>". ASI-02 no vuelve a crear la lista; [ASI-04](asi-04-corregir-asistencia.md) agrega corrección por alumno con motivo para el profesor. Los demás lectores conservan solo lectura.
 - **Clase sin asistencia, ayudante:** "Aún no se registra la asistencia de esta clase".
 - **Sección sin alumnos inscritos:** lo indica y no hay nada que guardar.
 
@@ -35,7 +35,7 @@ La lista **no incluye correos**: también la lee el ayudante, que no ve correos 
 - Sin asistencia: los alumnos **activos** de la sección (reutiliza `ALUMNOS_SECCION` de GES-18, sin el correo) con `presente: null`.
 - Con asistencia: las **filas guardadas**, aunque un alumno ya no esté inscrito. La lista de una clase registrada no cambia cuando cambia la sección.
 
-Guardar es `POST`, como crear una clase, un anuncio o una evaluación: crea la asistencia una sola vez y, si se repite, responde 409, así que no es idempotente como un `PUT`. `PUT` y `PATCH` quedan libres para corregir marcas (ASI-04); hoy responden 404.
+Guardar es `POST`, como crear una clase, un anuncio o una evaluación: crea la asistencia una sola vez y, si se repite, responde 409, así que no es idempotente como un `PUT`. ASI-04 agrega `PATCH .../asistencia/alumnos/:alumnoId`; `PUT` y `PATCH` sobre la colección original siguen respondiendo 404.
 
 El POST:
 
@@ -52,8 +52,8 @@ El POST:
 La migración `1792580000000-CrearAsistencia` crea `asistencia`: `universidad_id`, `clase_id`, `alumno_id`, `presente`, `registrada_por`, `archived_at`, `created_at` y `updated_at`.
 
 - FKs compuestas por universidad a `clase` (agrega `uq_clase_id_universidad`), al alumno y al profesor.
-- Índice único `(clase_id, alumno_id) WHERE archived_at IS NULL`: una sola marca activa por alumno en cada clase. `archived_at` queda para ASI-04, que corregirá archivando la marca y dejando registro del cambio.
-- RLS con el patrón de `clase`: lectura en la universidad, o en cualquiera para el Director; inserción y modificación solo en la universidad y con rol `PROFESOR`. `GRANT SELECT, INSERT, UPDATE` (UPDATE para archivar en ASI-04), sin DELETE.
+- Índice único `(clase_id, alumno_id) WHERE archived_at IS NULL`: una sola marca activa por alumno en cada clase. [ASI-04](asi-04-corregir-asistencia.md) corrige la marca vigente con un evento inmutable de auditoría, conservando el registro inicial; sustituye la previsión original de archivar/recrear cada marca.
+- RLS con el patrón de `clase`: lectura en la universidad, o en cualquiera para el Director; inserción y modificación solo en la universidad y con rol `PROFESOR`. `GRANT SELECT, INSERT, UPDATE`, sin DELETE. ASI-04 usa UPDATE para corregir con auditoría y restringe además la lectura del alumno a sus propias marcas.
 - Nuevo sujeto `Asistencia` en `shared/src/permisos.ts`, con los mismos lectores que `Clase`.
 
 ## Verificación
@@ -77,5 +77,5 @@ npm run build
 1. Ejecutar las migraciones y el seed de facultad completa. Levantar backend y frontend.
 2. Ingresar con `camila.rojas@norte.cursus.test` y la contraseña `SEED_PASSWORD` del `.env`. Abrir una sección, la pestaña **Asistencia**, registrar una clase y pulsar **Ver**.
 3. Marcar a algunos alumnos: **Guardar asistencia** sigue deshabilitado. Marcar a todos y guardar: la vista pasa a solo lectura con "Registrada por Camila Rojas…".
-4. Volver a abrir la clase: sigue en solo lectura. Un POST directo responde 409.
+4. Volver a abrir la clase: conserva las marcas. Un POST directo responde 409. ASI-04 ofrece al profesor una acción separada para corregir con motivo.
 5. Ingresar como un ayudante de esa sección: ve la asistencia registrada, pero no puede marcar una clase sin asistencia.
