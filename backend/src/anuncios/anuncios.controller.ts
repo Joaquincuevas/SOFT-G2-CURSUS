@@ -1,10 +1,18 @@
-import type { Anuncio, Rol, SeccionEspacio } from '@cursus/shared'
+import type {
+  Anuncio,
+  CambioAnuncio,
+  Rol,
+  SeccionEspacio,
+} from '@cursus/shared'
 import {
   Body,
   Controller,
   ForbiddenException,
   Get,
   HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   Req,
 } from '@nestjs/common'
@@ -19,6 +27,7 @@ import {
 import { AnunciosService } from './anuncios.service.js'
 import { PublicarAnuncioDto } from './publicar-anuncio.dto.js'
 import { RegistrarLecturaDto } from './registrar-lectura.dto.js'
+import { EditarAnuncioDto } from './editar-anuncio.dto.js'
 
 // Roles en la sección que leen sus anuncios. El Administrativo no (aunque
 // pase IntegranteSeccionGuard por ser de la facultad del curso).
@@ -30,6 +39,42 @@ const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO', 'DIRECTOR']
 @Controller('espacio/secciones/:id/anuncios')
 export class AnunciosController {
   constructor(private readonly anuncios: AnunciosService) {}
+
+  @Puede('update', 'Anuncio')
+  @IntegranteDeSeccion()
+  @Patch(':anuncioId')
+  editar(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('anuncioId', new ParseUUIDPipe()) id: string,
+    @Body() datos: EditarAnuncioDto,
+  ): Promise<Anuncio> {
+    return this.anuncios.editar(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      id,
+      datos,
+    )
+  }
+
+  @Puede('update', 'Anuncio')
+  @IntegranteDeSeccion()
+  @Get(':anuncioId/historial')
+  historial(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('anuncioId', new ParseUUIDPipe()) id: string,
+  ): Promise<CambioAnuncio[]> {
+    return this.anuncios.historial(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      id,
+    )
+  }
 
   @Puede('read', 'Anuncio')
   @IntegranteDeSeccion()

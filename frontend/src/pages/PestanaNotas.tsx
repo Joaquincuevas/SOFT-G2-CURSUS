@@ -9,6 +9,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
+import { NotasDeEvaluacion } from './NotasDeEvaluacion'
 import './PestanaNotas.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -16,9 +17,13 @@ import type { PropsPestana } from './VistaSeccion'
 // NOT-01 (RN-10): evaluaciones de la sección con su ponderación y la suma
 // total. Las crea solo el profesor de la sección; el ayudante, el alumno y
 // el Director ven la lista. El aviso de que no suman 100 % es NOT-02.
+// NOT-05: el ayudante abre cada evaluación para ingresar las notas; el
+// profesor las revisa en NOT-10.
 export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar] = useDatos<EvaluacionesSeccion>(ruta)
+  const [elegida, setElegida] = useState<string | null>(null)
+  const ingresaNotas = rol === 'AYUDANTE'
 
   return (
     <section className="notas" aria-label="Evaluaciones">
@@ -42,6 +47,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
               <th scope="col">Evaluación</th>
               <th scope="col">Fecha</th>
               <th scope="col">Ponderación</th>
+              {ingresaNotas && <th scope="col">Notas</th>}
             </tr>
           </thead>
           <tbody>
@@ -50,6 +56,23 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                 <td>{evaluacion.nombre}</td>
                 <td>{evaluacion.fecha}</td>
                 <td>{evaluacion.ponderacion} %</td>
+                {ingresaNotas && (
+                  <td>
+                    <button
+                      type="button"
+                      className="notas__enlace"
+                      aria-pressed={elegida === evaluacion.id}
+                      aria-label={`Notas de ${evaluacion.nombre}`}
+                      onClick={() =>
+                        setElegida(
+                          elegida === evaluacion.id ? null : evaluacion.id,
+                        )
+                      }
+                    >
+                      {elegida === evaluacion.id ? 'Ocultar' : 'Ingresar notas'}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -59,9 +82,17 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                 Suma de ponderaciones
               </th>
               <td>{datos.sumaPonderaciones} %</td>
+              {ingresaNotas && <td />}
             </tr>
           </tfoot>
         </table>
+      )}
+      {ingresaNotas && elegida && (
+        <NotasDeEvaluacion
+          key={elegida}
+          seccionId={seccionId}
+          evaluacionId={elegida}
+        />
       )}
     </section>
   )

@@ -7,6 +7,8 @@ import {
 } from '@cursus/shared'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
+import { useSession } from '../session/session'
+import { EdicionAnuncio } from './EdicionAnuncio'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { EVENTO_LECTURA_ANUNCIOS, fechaAnuncio } from './anuncios'
@@ -23,6 +25,7 @@ export function PestanaAnuncios({
 }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/anuncios`
   const [anuncios, recargar] = useDatos<Anuncio[]>(ruta)
+  const { user } = useSession()
 
   return (
     <section className="anuncios" aria-label="Anuncios del curso">
@@ -75,7 +78,22 @@ export function PestanaAnuncios({
                     ? `Sección ${anuncio.seccion.numero}`
                     : 'Todo el curso'}
                 </p>
+                {anuncio.editadoEn && (
+                  <p className="anuncios__meta">
+                    Editado el{' '}
+                    <time dateTime={anuncio.editadoEn}>
+                      {fechaAnuncio(anuncio.editadoEn)}
+                    </time>
+                  </p>
+                )}
                 <p className="anuncios__cuerpo">{anuncio.cuerpo}</p>
+                {rol === 'PROFESOR' && anuncio.autor.id === user.id && (
+                  <EdicionAnuncio
+                    anuncio={anuncio}
+                    ruta={ruta}
+                    recargar={recargar}
+                  />
+                )}
               </article>
             </li>
           ))}

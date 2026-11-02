@@ -48,3 +48,55 @@ export const LARGO_MOTIVO_NOTA = 500
 // Notas de 1,0 a 7,0 con un decimal (NOT-06).
 export const NOTA_MINIMA = 1
 export const NOTA_MAXIMA = 7
+
+// NOT-05 (RN-10): notas de una evaluación
+// (/api/espacio/secciones/:id/evaluaciones/:evaluacionId/notas). El ayudante
+// las ingresa como propuesta; publicarlas es NOT-11.
+export const ESTADOS_NOTA = ['PROPUESTA', 'PUBLICADA'] as const
+
+export type EstadoNota = (typeof ESTADOS_NOTA)[number]
+
+// Tope de notas por guardado: más que los alumnos de cualquier sección.
+export const MAX_NOTAS_GUARDADO = 500
+
+// true si es un número de 1,0 a 7,0 con a lo más un decimal. El backend lo
+// exige antes de escribir; los mensajes por campo en la interfaz son NOT-06.
+export function esNotaValida(valor: unknown): valor is number {
+  if (typeof valor !== 'number' || !Number.isFinite(valor)) return false
+  const decimas = Math.round(valor * 10)
+  return (
+    Math.abs(valor * 10 - decimas) <= 1e-9 &&
+    decimas >= NOTA_MINIMA * 10 &&
+    decimas <= NOTA_MAXIMA * 10
+  )
+}
+
+// Un alumno activo de la sección con su nota en la evaluación, o null si aún
+// no tiene.
+export interface NotaAlumno {
+  id: string
+  nombre: string
+  nota: number | null
+  estado: EstadoNota | null
+}
+
+// GET y respuesta del PUT: los alumnos activos de la sección por nombre.
+export interface NotasEvaluacion {
+  evaluacion: Evaluacion
+  alumnos: NotaAlumno[]
+}
+
+// Body del PUT: las notas a guardar, de cualquier subconjunto de los alumnos
+// activos. Un alumno que no viene conserva la nota que tenía.
+export interface GuardarNotas {
+  notas: { alumnoId: string; nota: number }[]
+}
+
+// 400 del PUT cuando la lista trae alumnos que no están inscritos en la
+// sección o repetidos (ids).
+export interface ErrorListaNotas {
+  statusCode: 400
+  message: string
+  sobrantes: string[]
+  repetidos: string[]
+}

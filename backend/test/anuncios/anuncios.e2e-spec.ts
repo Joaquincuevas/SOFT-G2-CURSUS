@@ -64,6 +64,13 @@ describe('anuncios (e2e)', () => {
   })
 
   it('responde 401 sin sesión', async () => {
+    await request(app.getHttpServer())
+      .patch(`${RUTA}/00000000-0000-4000-8000-000000000006`)
+      .send(BODY)
+      .expect(401)
+    await request(app.getHttpServer())
+      .get(`${RUTA}/00000000-0000-4000-8000-000000000006/historial`)
+      .expect(401)
     await request(app.getHttpServer()).get(RUTA).expect(401)
     await request(app.getHttpServer()).post(RUTA).send(BODY).expect(401)
     await request(app.getHttpServer())
@@ -71,6 +78,22 @@ describe('anuncios (e2e)', () => {
       .send({ anuncioIds: [] })
       .expect(401)
   })
+
+  it.each(['ALUMNO', 'AYUDANTE', 'DIRECTOR', 'ADMINISTRATIVO', 'SUPERADMIN'])(
+    '%s no accede a edición ni historial',
+    async (rol) => {
+      const ruta = `${RUTA}/00000000-0000-4000-8000-000000000006`
+      await request(app.getHttpServer())
+        .patch(ruta)
+        .set('Authorization', sesionDe(rol))
+        .send(BODY)
+        .expect(403)
+      await request(app.getHttpServer())
+        .get(`${ruta}/historial`)
+        .set('Authorization', sesionDe(rol))
+        .expect(403)
+    },
+  )
 
   it('responde 400 con una sección que no es uuid', async () => {
     await request(app.getHttpServer())

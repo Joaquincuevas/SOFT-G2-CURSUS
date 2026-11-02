@@ -77,3 +77,34 @@
 .notas__tabla tfoot td {
   font: var(--font-button);
 }
+
+/* NOT-05: ingreso de notas del ayudante. */
+.notas__enlace {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: var(--font-button);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.notas__evaluacion,
+.notas__ingreso {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.notas__ingreso .notas__boton {
+  align-self: flex-start;
+}
+
+.notas__nota {
+  width: 6rem;
+  height: var(--control-size);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}

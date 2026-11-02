@@ -1,4 +1,9 @@
-import type { Anuncio, SeccionEspacio } from '@cursus/shared'
+import type {
+  Anuncio,
+  CambioAnuncio,
+  EditarAnuncio,
+  SeccionEspacio,
+} from '@cursus/shared'
 import {
   BadRequestException,
   ForbiddenException,
@@ -22,11 +27,12 @@ interface FilaAnuncio {
   seccion_id: string | null
   seccion_numero: number | null
   nuevo?: boolean
+  editado_en: Date | null
 }
 
 const COLUMNAS = `
   a.id, a.titulo, a.cuerpo, u.id AS autor_id, u.nombre AS autor_nombre,
-  a.created_at AS publicado_en, a.seccion_id, s.numero AS seccion_numero`
+  a.created_at AS publicado_en, a.seccion_id, s.numero AS seccion_numero, a.editado_en`
 
 const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
   id: fila.id,
@@ -38,6 +44,7 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
     ? { id: fila.seccion_id, numero: fila.seccion_numero as number }
     : null,
   ...(typeof fila.nuevo === 'boolean' ? { nuevo: fila.nuevo } : {}),
+  ...(fila.editado_en ? { editadoEn: fila.editado_en.toISOString() } : {}),
 })
 
 // ANU-01/02/03/04 (RN-09): el guard verifica el acceso y el listado filtra el
@@ -48,6 +55,105 @@ const anuncioDe = (fila: FilaAnuncio): Anuncio => ({
 @Injectable()
 export class AnunciosService {
   constructor(private readonly bd: BaseDeDatos) {}
+
+  private async editable(
+    bd: Pick<BaseDeDatos, 'query'>,
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    anuncioId: string,
+  ): Promise<FilaAnuncio> {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR')
+      throw new ForbiddenException()
+    // Bloquear vigencia antes del anuncio evita guardar si se reasignó o archivó
+    // la sección después del guard. Los locks duran hasta terminar la operación.
+    const vigentes = await bd.query<{ id: string }>(
+      `SELECT sv.id FROM seccion sv
+      JOIN curso c ON c.id=sv.curso_id AND c.universidad_id=sv.universidad_id
+      JOIN usuario u ON u.id=sv.profesor_id AND u.universidad_id=sv.universidad_id
+      WHERE sv.universidad_id=$1 AND sv.id=$2 AND sv.profesor_id=$3
+        AND sv.archived_at IS NULL AND c.archived_at IS NULL
+        AND u.archived_at IS NULL AND u.rol='PROFESOR'
+      FOR SHARE OF sv,c,u`,
+      [contexto.universidadId, seccion.id, usuarioId],
+    )
+    if (!vigentes.length)
+      throw new ForbiddenException('Ya no estás a cargo de esta sección')
+    const [fila] = await bd.query<FilaAnuncio>(
+      `SELECT ${COLUMNAS} FROM anuncio a
+      JOIN usuario u ON u.id=a.autor_id AND u.universidad_id=a.universidad_id
+      LEFT JOIN seccion s ON s.id=a.seccion_id AND s.universidad_id=a.universidad_id AND s.curso_id=a.curso_id
+      WHERE ${anunciosVisibles('$2', '$3')} AND a.id=$4 FOR UPDATE OF a`,
+      [contexto.universidadId, seccion.curso.id, seccion.id, anuncioId],
+    )
+    if (!fila) throw new NotFoundException('El anuncio no existe')
+    if (fila.autor_id !== usuarioId)
+      throw new ForbiddenException('Solo el autor puede editar el anuncio')
+    return fila
+  }
+
+  async editar(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    anuncioId: string,
+    datos: EditarAnuncio,
+  ): Promise<Anuncio> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const anterior = await this.editable(
+        bd,
+        contexto,
+        usuarioId,
+        seccion,
+        anuncioId,
+      )
+      if (anterior.titulo === datos.titulo && anterior.cuerpo === datos.cuerpo)
+        return anuncioDe(anterior)
+      await bd.query(`SELECT set_config('app.anuncio_autor_id',$1,true)`, [
+        usuarioId,
+      ])
+      const [fila] = await bd.query<FilaAnuncio>(
+        `WITH actualizado AS (
+        UPDATE anuncio SET titulo=$3,cuerpo=$4 WHERE universidad_id=$1 AND id=$2 RETURNING *
+      ) SELECT ${COLUMNAS} FROM actualizado a
+        JOIN usuario u ON u.id=a.autor_id AND u.universidad_id=a.universidad_id
+        LEFT JOIN seccion s ON s.id=a.seccion_id AND s.universidad_id=a.universidad_id AND s.curso_id=a.curso_id`,
+        [contexto.universidadId, anuncioId, datos.titulo, datos.cuerpo],
+      )
+      return anuncioDe(fila)
+    })
+  }
+
+  async historial(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    anuncioId: string,
+  ): Promise<CambioAnuncio[]> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await this.editable(bd, contexto, usuarioId, seccion, anuncioId)
+      const filas = await bd.query<{
+        id: string
+        titulo: string
+        cuerpo: string
+        fecha: Date
+        responsable_id: string
+        nombre: string
+      }>(
+        `SELECT h.id,h.titulo,h.cuerpo,h.fecha,h.responsable_id,u.nombre FROM anuncio_cambio h
+         JOIN usuario u ON u.id=h.responsable_id AND u.universidad_id=h.universidad_id
+         WHERE h.universidad_id=$1 AND h.anuncio_id=$2 ORDER BY h.fecha,h.id`,
+        [contexto.universidadId, anuncioId],
+      )
+      return filas.map((f) => ({
+        id: f.id,
+        titulo: f.titulo,
+        cuerpo: f.cuerpo,
+        fecha: f.fecha.toISOString(),
+        responsable: { id: f.responsable_id, nombre: f.nombre },
+      }))
+    })
+  }
 
   // Activos, del más nuevo al más antiguo; id DESC desempata fechas iguales
   // para mantener un orden estable entre lecturas. El Director lee solo los generales

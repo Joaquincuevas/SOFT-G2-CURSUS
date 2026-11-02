@@ -46,7 +46,7 @@ Todas las rutas son solo del superadmin (`create` o `update` sobre `Universidad`
 
 ## Base de datos
 
-Migración `1792660000000-GestionarUniversidades` (compatible hacia atrás):
+Migración `1792680000000-GestionarUniversidades` (compatible hacia atrás). Va después de `1792660000000-CrearNota` (NOT-05) y `1792670000000-CrearHistorialAnuncio` (ANU-05), y al revertir sale antes que ellas:
 
 - `universidad.color`, con el color de CURSUS por defecto y el CHECK `ck_universidad_color`.
 - Índices únicos de nombre normalizado: `ux_universidad_nombre_normalizado` y `ux_facultad_universidad_nombre_normalizado`.

@@ -32,8 +32,8 @@ const TABLAS: [tabla: string, columna: string][] = [
 const normalizado = (columna: string) =>
   `lower(btrim(regexp_replace(${columna}, '[[:space:]]+', ' ', 'g')))`
 
-export class GestionarUniversidades1792660000000 implements MigrationInterface {
-  name = 'GestionarUniversidades1792660000000'
+export class GestionarUniversidades1792680000000 implements MigrationInterface {
+  name = 'GestionarUniversidades1792680000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`
