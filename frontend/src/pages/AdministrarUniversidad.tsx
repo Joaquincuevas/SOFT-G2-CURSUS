@@ -1,8 +1,10 @@
 import {
   type CrearUniversidad,
   type FacultadElegible,
+  LARGO_MOTIVO_ARCHIVAR,
   LARGO_NOMBRE_FACULTAD,
   type UniversidadElegible,
+  type UsuariosAfectados,
 } from '@cursus/shared'
 import { type FormEvent, useState } from 'react'
 import {
@@ -31,13 +33,9 @@ import { useDatos } from './useDatos'
 export function AdministrarUniversidad() {
   const { id } = useParams()
   const { fetchConSesion } = useAuth()
-  const { user, reemplazarUsuario } = useSession()
-  const navigate = useNavigate()
   const [universidades, recargar] =
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
   const [aviso, setAviso] = useState<string | null>(null)
-  const [confirmando, setConfirmando] = useState(false)
-  const [errorArchivar, setErrorArchivar] = useState<string | null>(null)
 
   if (universidades === undefined) return <Cargando />
   if (universidades === null) {
@@ -76,26 +74,6 @@ export function AdministrarUniversidad() {
     return null
   }
 
-  async function archivar() {
-    setErrorArchivar(null)
-    const resultado = await enviar<void>(
-      fetchConSesion,
-      `${RUTA_UNIVERSIDADES}/${universidad?.id}/archivar`,
-      'PATCH',
-    )
-    if (!resultado.ok) {
-      setErrorArchivar(resultado.error)
-      return
-    }
-    // Si trabajaba en ella, su elección dejó de valer: se pide la sesión de
-    // nuevo para que la barra muestre la vista global.
-    if (user.universidadId === universidad?.id) {
-      const nuevo = await pedirUsuario(fetchConSesion)
-      if (nuevo) reemplazarUsuario(nuevo)
-    }
-    void navigate('/')
-  }
-
   return (
     <section className="carreras" aria-label="Administrar universidad">
       <div className="carreras__intro">
@@ -130,47 +108,143 @@ export function AdministrarUniversidad() {
             textoBoton="Guardar cambios"
             onGuardar={guardarDatos}
           />
-          <div className="carreras__panel">
-            <h2>Archivar universidad</h2>
-            <p>
-              Deja de aparecer en las listas y sus usuarios ya no pueden iniciar
-              sesión. Sus datos se conservan.
-            </p>
-            {errorArchivar && (
-              <p className="carreras__error" role="alert">
-                {errorArchivar}
-              </p>
-            )}
-            {confirmando ? (
-              <div className="carreras__acciones">
-                <button
-                  type="button"
-                  className="carreras__primario"
-                  onClick={() => void archivar()}
-                >
-                  Sí, archivar {universidad.nombre}
-                </button>
-                <button
-                  type="button"
-                  className="carreras__secundario"
-                  onClick={() => setConfirmando(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="carreras__secundario"
-                onClick={() => setConfirmando(true)}
-              >
-                Archivar universidad
-              </button>
-            )}
-          </div>
+          <ArchivarUniversidad universidad={universidad} />
         </div>
       </div>
     </section>
+  )
+}
+
+// Archivar corta a todos sus usuarios y no se deshace por la API: antes de
+// confirmar muestra a cuántos afecta y pide el motivo, que queda en
+// superadmin_cambio.
+function ArchivarUniversidad({
+  universidad,
+}: {
+  universidad: UniversidadElegible
+}) {
+  const { fetchConSesion } = useAuth()
+  const { user, reemplazarUsuario } = useSession()
+  const navigate = useNavigate()
+  const [confirmando, setConfirmando] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [archivando, setArchivando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [afectados, recargarAfectados] = useDatos<UsuariosAfectados>(
+    confirmando
+      ? `${RUTA_UNIVERSIDADES}/${universidad.id}/usuarios-afectados`
+      : null,
+  )
+
+  function cancelar() {
+    setConfirmando(false)
+    setMotivo('')
+    setError(null)
+  }
+
+  async function archivar(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setArchivando(true)
+    setError(null)
+    const resultado = await enviar<void>(
+      fetchConSesion,
+      `${RUTA_UNIVERSIDADES}/${universidad.id}/archivar`,
+      'PATCH',
+      { motivo: motivo.trim() },
+    )
+    if (!resultado.ok) {
+      setArchivando(false)
+      setError(resultado.error)
+      return
+    }
+    // Si trabajaba en ella, su elección dejó de valer: se pide la sesión de
+    // nuevo para que la barra muestre la vista global.
+    if (user.universidadId === universidad.id) {
+      const nuevo = await pedirUsuario(fetchConSesion)
+      if (nuevo) reemplazarUsuario(nuevo)
+    }
+    void navigate('/')
+  }
+
+  return (
+    <div className="carreras__panel">
+      <h2>Archivar universidad</h2>
+      <p>
+        Deja de aparecer en las listas y sus usuarios ya no pueden iniciar
+        sesión. Sus datos se conservan, pero no se puede deshacer desde CURSUS.
+      </p>
+      {!confirmando ? (
+        <button
+          type="button"
+          className="carreras__secundario"
+          onClick={() => setConfirmando(true)}
+        >
+          Archivar universidad
+        </button>
+      ) : (
+        <form
+          className="carreras__formulario"
+          aria-label="Confirmar archivo"
+          onSubmit={(event) => void archivar(event)}
+        >
+          {afectados === undefined && <p role="status">Contando usuarios…</p>}
+          {afectados === null && (
+            <p className="carreras__error" role="alert">
+              No se pudo contar a sus usuarios.{' '}
+              <button
+                type="button"
+                className="carreras__secundario"
+                onClick={recargarAfectados}
+              >
+                Reintentar
+              </button>
+            </p>
+          )}
+          {afectados && (
+            <p className="administrar-universidad__afectados" role="status">
+              {afectados.usuarios === 1
+                ? '1 usuario dejará de poder iniciar sesión.'
+                : `${afectados.usuarios} usuarios dejarán de poder iniciar sesión.`}
+            </p>
+          )}
+          <label htmlFor="archivar-motivo">Motivo</label>
+          <textarea
+            id="archivar-motivo"
+            className="administrar-universidad__motivo"
+            value={motivo}
+            onChange={(event) => setMotivo(event.target.value)}
+            maxLength={LARGO_MOTIVO_ARCHIVAR}
+            rows={3}
+            required
+            disabled={archivando}
+            placeholder="Por ejemplo: la universidad dejó el directorio"
+          />
+          <p>El motivo queda registrado con la fecha y tu nombre.</p>
+          {error && (
+            <p className="carreras__error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="carreras__acciones">
+            <button
+              type="submit"
+              className="carreras__primario"
+              disabled={archivando || !afectados || !motivo.trim()}
+            >
+              Sí, archivar {universidad.nombre}
+            </button>
+            <button
+              type="button"
+              className="carreras__secundario"
+              disabled={archivando}
+              onClick={cancelar}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   )
 }
 
