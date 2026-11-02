@@ -84,6 +84,32 @@ async function crearFacultad(
   ).body as FacultadElegible
 }
 
+const MOTIVO = 'La universidad dejó el directorio'
+
+const archivarUniversidad = (id: string) =>
+  pedir('patch', `/api/superadmin/universidades/${id}/archivar`).send({
+    motivo: MOTIVO,
+  })
+
+const usuariosAfectados = (id: string) =>
+  pedir('get', `/api/superadmin/universidades/${id}/usuarios-afectados`)
+
+// Un usuario vigente de la universidad, con la contraseña del seed.
+const agregarDirector = (
+  universidad: UniversidadElegible,
+  nombre = 'director',
+) =>
+  bd.query(
+    `INSERT INTO usuario (universidad_id, nombre, correo, password_hash, rol)
+     SELECT $1, 'Director Nuevo', $2, password_hash, 'DIRECTOR'
+       FROM usuario WHERE correo = $3`,
+    [
+      universidad.id,
+      `${nombre}@${universidad.dominioCorreo}`,
+      `director@${NORTE}`,
+    ],
+  )
+
 const idDe = async (dominio: string) => {
   const [{ id }] = await bd.query<{ id: string }[]>(
     'SELECT id FROM universidad WHERE dominio_correo = $1',
@@ -262,10 +288,7 @@ describe('universidades', () => {
   it('al archivar deja de aparecer, conserva sus datos y no se edita', async () => {
     const universidad = await crearUniversidad()
 
-    await pedir(
-      'patch',
-      `/api/superadmin/universidades/${universidad.id}/archivar`,
-    ).expect(204)
+    await archivarUniversidad(universidad.id).expect(204)
 
     expect((await listar()).map((u) => u.id)).not.toContain(universidad.id)
     const [fila] = await bd.query<{ nombre: string; archivada: boolean }[]>(
@@ -277,37 +300,77 @@ describe('universidades', () => {
     await pedir('patch', `/api/superadmin/universidades/${universidad.id}`)
       .send({ color: '#003366' })
       .expect(404)
-    await pedir(
-      'patch',
-      `/api/superadmin/universidades/${universidad.id}/archivar`,
-    ).expect(404)
+    await archivarUniversidad(universidad.id).expect(404)
     // El nombre archivado no se reutiliza.
     await crear({ ...nueva(), nombre: universidad.nombre }).expect(409)
   })
 
   it('los usuarios de una universidad archivada no inician sesión y pierden su sesión', async () => {
     const universidad = await crearUniversidad()
-    // Un usuario de esa universidad, con la contraseña del seed.
-    await bd.query(
-      `INSERT INTO usuario (universidad_id, nombre, correo, password_hash, rol)
-       SELECT $1, 'Director Nuevo', $2, password_hash, 'DIRECTOR'
-         FROM usuario WHERE correo = $3`,
-      [
-        universidad.id,
-        `director@${universidad.dominioCorreo}`,
-        `director@${NORTE}`,
-      ],
-    )
+    await agregarDirector(universidad)
     const sesion = await tokenDe(`director@${universidad.dominioCorreo}`)
     await pedir('get', '/api/auth/yo', sesion).expect(200)
 
-    await pedir(
-      'patch',
-      `/api/superadmin/universidades/${universidad.id}/archivar`,
-    ).expect(204)
+    await archivarUniversidad(universidad.id).expect(204)
 
     await login(`director@${universidad.dominioCorreo}`).expect(401)
     await pedir('get', '/api/auth/yo', sesion).expect(401)
+  })
+
+  it('exige el motivo al archivar y lo guarda en la auditoría', async () => {
+    const universidad = await crearUniversidad()
+    const ruta = `/api/superadmin/universidades/${universidad.id}/archivar`
+
+    for (const cuerpo of [{}, { motivo: '   ' }, { motivo: 'x'.repeat(501) }]) {
+      await pedir('patch', ruta).send(cuerpo).expect(400)
+    }
+    expect((await listar()).map((u) => u.id)).toContain(universidad.id)
+
+    await pedir('patch', ruta)
+      .send({ motivo: `  ${MOTIVO}  ` })
+      .expect(204)
+    const [cambio] = await bd.query<{ operacion: string; motivo: string }[]>(
+      `SELECT operacion, motivo FROM superadmin_cambio
+        WHERE tabla = 'universidad' AND registro_id = $1
+        ORDER BY fecha DESC, id DESC LIMIT 1`,
+      [universidad.id],
+    )
+    expect(cambio).toEqual({ operacion: 'UPDATE', motivo: MOTIVO })
+  })
+
+  it('cuenta los usuarios vigentes que dejarían de iniciar sesión', async () => {
+    const universidad = await crearUniversidad()
+    expect((await usuariosAfectados(universidad.id).expect(200)).body).toEqual({
+      usuarios: 0,
+    })
+
+    await agregarDirector(universidad, 'director')
+    await agregarDirector(universidad, 'directora')
+    // Un usuario archivado ya no inicia sesión: no cuenta.
+    await bd.query('UPDATE usuario SET archived_at = now() WHERE correo = $1', [
+      `directora@${universidad.dominioCorreo}`,
+    ])
+    expect((await usuariosAfectados(universidad.id).expect(200)).body).toEqual({
+      usuarios: 1,
+    })
+
+    const norte = await idDe(NORTE)
+    const [{ vigentes }] = await bd.query<{ vigentes: number }[]>(
+      `SELECT count(*)::int AS vigentes FROM usuario
+        WHERE universidad_id = $1 AND archived_at IS NULL`,
+      [norte],
+    )
+    expect((await usuariosAfectados(norte).expect(200)).body).toEqual({
+      usuarios: vigentes,
+    })
+  })
+
+  it('no cuenta los usuarios de una universidad archivada o que no existe (404)', async () => {
+    const universidad = await crearUniversidad()
+    await archivarUniversidad(universidad.id).expect(204)
+
+    await usuariosAfectados(universidad.id).expect(404)
+    await usuariosAfectados('00000000-0000-0000-0000-000000000000').expect(404)
   })
 })
 
@@ -386,7 +449,7 @@ describe('facultades', () => {
       .expect(404)
   })
 
-  it('no archiva una facultad con carreras o usuarios vigentes (409)', async () => {
+  it('no archiva una facultad con carreras, cursos o usuarios vigentes (409)', async () => {
     const [{ id }] = await bd.query<{ id: string }[]>(
       `SELECT f.id FROM facultad f JOIN universidad un ON un.id = f.universidad_id
         WHERE un.dominio_correo = $1 AND f.nombre = 'Facultad de Ingeniería'`,
@@ -399,17 +462,49 @@ describe('facultades', () => {
     ).expect(409)
     expect(respuesta.body).toMatchObject({
       message: expect.stringMatching(
-        /^No se puede archivar: la facultad tiene \d+ carreras y \d+ usuarios vigentes$/,
+        /^No se puede archivar: la facultad tiene \d+ carreras, \d+ cursos y \d+ usuarios vigentes$/,
       ) as string,
     })
   })
 
+  it('no archiva una facultad con cursos vigentes aunque su carrera esté archivada (409)', async () => {
+    const facultad = await crearFacultad(universidad.id, 'Facultad con Cursos')
+    const [{ carrera }] = await bd.query<{ carrera: string }[]>(
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       VALUES ($1, $2, 'Carrera Antigua') RETURNING id AS carrera`,
+      [universidad.id, facultad.id],
+    )
+    const [{ periodo }] = await bd.query<{ periodo: string }[]>(
+      `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino)
+       VALUES ($1, 2027, 1, '2027-03-01', '2027-07-15') RETURNING id AS periodo`,
+      [universidad.id],
+    )
+    const [{ curso }] = await bd.query<{ curso: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       VALUES ($1, $2, $3, 'ANT101', 'Curso Antiguo') RETURNING id AS curso`,
+      [universidad.id, carrera, periodo],
+    )
+    await bd.query('UPDATE carrera SET archived_at = now() WHERE id = $1', [
+      carrera,
+    ])
+    const ruta = `/api/superadmin/facultades/${facultad.id}/archivar`
+
+    const respuesta = await pedir('patch', ruta).expect(409)
+    expect(respuesta.body).toMatchObject({
+      message:
+        'No se puede archivar: la facultad tiene 0 carreras, 1 cursos y 0 usuarios vigentes',
+    })
+
+    // Con el curso archivado, ya se archiva.
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      curso,
+    ])
+    await pedir('patch', ruta).expect(204)
+  })
+
   it('no crea facultades en una universidad archivada (404)', async () => {
     const archivada = await crearUniversidad()
-    await pedir(
-      'patch',
-      `/api/superadmin/universidades/${archivada.id}/archivar`,
-    ).expect(204)
+    await archivarUniversidad(archivada.id).expect(204)
 
     await pedir(
       'post',
@@ -458,6 +553,11 @@ describe('solo el superadmin', () => {
       )
         .send({ nombre: 'Otra' })
         .expect(403)
+      await pedir(
+        'get',
+        `/api/superadmin/universidades/${norte}/usuarios-afectados`,
+        sesion,
+      ).expect(403)
     },
   )
 
@@ -519,6 +619,19 @@ describe('solo el superadmin', () => {
             [sur],
           ),
         ).rejects.toThrow('row-level security')
+      })
+    },
+  )
+
+  it.each(['ADMINISTRATIVO', 'DIRECTOR'])(
+    'la base no deja al rol %s contar los usuarios de una universidad',
+    async (rol) => {
+      await comoApp(rol, async (q, sur) => {
+        await expect(
+          q.query('SELECT usuarios_vigentes_universidad($1)', [sur]),
+        ).rejects.toThrow(
+          'Solo el superadmin cuenta los usuarios de una universidad',
+        )
       })
     },
   )

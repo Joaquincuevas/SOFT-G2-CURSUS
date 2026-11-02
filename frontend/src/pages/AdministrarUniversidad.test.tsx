@@ -254,7 +254,7 @@ describe('Administrar una universidad (GES-23)', () => {
 
   test('explica por qué no se archiva una facultad en uso', async () => {
     const mensaje =
-      'No se puede archivar: la facultad tiene 4 carreras y 36 usuarios vigentes'
+      'No se puede archivar: la facultad tiene 4 carreras, 12 cursos y 36 usuarios vigentes'
     await abrir(RUTA_NORTE, {
       '/api/superadmin/facultades/ingenieria-norte/archivar': () =>
         json({ message: mensaje }, 409),
@@ -270,24 +270,103 @@ describe('Administrar una universidad (GES-23)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(mensaje)
   })
 
-  test('archiva la universidad tras confirmar y vuelve al Dashboard', async () => {
+  test('muestra los usuarios afectados, exige el motivo y vuelve al Dashboard', async () => {
     const archivada = registrar(sinContenido)
-    await abrir(RUTA_NORTE, { [`${API_NORTE}/archivar`]: archivada.ruta })
+    await abrir(RUTA_NORTE, {
+      [`${API_NORTE}/usuarios-afectados`]: () => ({ usuarios: 36 }),
+      [`${API_NORTE}/archivar`]: archivada.ruta,
+    })
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Archivar universidad' }),
     )
+    const confirmar = screen.getByRole('form', { name: 'Confirmar archivo' })
+    expect(
+      await within(confirmar).findByText(
+        '36 usuarios dejarán de poder iniciar sesión.',
+      ),
+    ).toBeInTheDocument()
+    const boton = within(confirmar).getByRole('button', {
+      name: 'Sí, archivar Universidad Demo Norte',
+    })
+    // Sin motivo no se archiva.
+    expect(boton).toBeDisabled()
+    escribir('Motivo', '   ', confirmar)
+    expect(boton).toBeDisabled()
     expect(archivada.pedidas).toEqual([])
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Sí, archivar Universidad Demo Norte',
-      }),
-    )
+
+    escribir('Motivo', '  La universidad dejó el directorio ', confirmar)
+    fireEvent.click(boton)
 
     expect(
       await screen.findByRole('heading', { level: 2, name: 'Universidades' }),
     ).toBeInTheDocument()
-    expect(archivada.pedidas).toEqual([{ metodo: 'PATCH', cuerpo: undefined }])
+    expect(archivada.pedidas).toEqual([
+      {
+        metodo: 'PATCH',
+        cuerpo: { motivo: 'La universidad dejó el directorio' },
+      },
+    ])
+  })
+
+  test('cancelar no archiva y olvida el motivo', async () => {
+    await abrir(RUTA_NORTE, {
+      [`${API_NORTE}/usuarios-afectados`]: () => ({ usuarios: 1 }),
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Archivar universidad' }),
+    )
+    expect(
+      await screen.findByText('1 usuario dejará de poder iniciar sesión.'),
+    ).toBeInTheDocument()
+    escribir('Motivo', 'Error')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(
+      screen.queryByRole('form', { name: 'Confirmar archivo' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Archivar universidad' }),
+    )
+    expect(screen.getByLabelText('Motivo')).toHaveValue('')
+  })
+
+  test('no deja archivar si no se pudo contar a sus usuarios', async () => {
+    let falla = true
+    await abrir(RUTA_NORTE, {
+      [`${API_NORTE}/usuarios-afectados`]: () =>
+        falla ? json({ message: 'Error' }, 500) : { usuarios: 2 },
+    })
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Archivar universidad' }),
+    )
+    const confirmar = screen.getByRole('form', { name: 'Confirmar archivo' })
+    expect(await within(confirmar).findByRole('alert')).toHaveTextContent(
+      'No se pudo contar a sus usuarios.',
+    )
+    escribir('Motivo', 'La universidad dejó el directorio', confirmar)
+    expect(
+      within(confirmar).getByRole('button', {
+        name: 'Sí, archivar Universidad Demo Norte',
+      }),
+    ).toBeDisabled()
+
+    falla = false
+    fireEvent.click(
+      within(confirmar).getByRole('button', { name: 'Reintentar' }),
+    )
+    expect(
+      await within(confirmar).findByText(
+        '2 usuarios dejarán de poder iniciar sesión.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(confirmar).getByRole('button', {
+        name: 'Sí, archivar Universidad Demo Norte',
+      }),
+    ).toBeEnabled()
   })
 
   test('avisa si la universidad no existe o está archivada', async () => {

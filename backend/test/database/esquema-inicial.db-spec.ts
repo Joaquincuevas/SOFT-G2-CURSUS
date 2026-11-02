@@ -191,7 +191,8 @@ describe('migraciones', () => {
                                   'ux_facultad_universidad_nombre_normalizado'))
             + (SELECT count(*) FROM pg_proc
                 WHERE proname IN ('validar_dominio_universidad',
-                                  'facultad_archivable'))
+                                  'facultad_archivable',
+                                  'usuarios_vigentes_universidad'))
             + (SELECT count(*) FROM pg_policies
                 WHERE tablename IN ('universidad', 'facultad')
                   AND with_check LIKE '%SUPERADMIN%') AS "restosGestion"`,
