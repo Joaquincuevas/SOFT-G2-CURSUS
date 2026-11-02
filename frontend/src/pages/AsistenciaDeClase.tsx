@@ -27,7 +27,8 @@ const fechaHora = (iso: string) =>
 
 // ASI-02 (RN-13): asistencia de una clase. Si ya está registrada se muestra
 // en solo lectura; si no, el profesor de la sección marca presente o ausente
-// a cada alumno. Corregir una marca es ASI-04.
+// a cada alumno, con marcado masivo y conteos (ASI-03). Corregir una marca
+// ya guardada es ASI-04.
 export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases/${claseId}/asistencia`
   const [datos, recargar] = useDatos<AsistenciaClase>(ruta)
@@ -116,9 +117,12 @@ function FormularioAsistencia({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const faltan = alumnos.filter((a) => marcas[a.id] === undefined).length
+  const presentes = alumnos.filter((a) => marcas[a.id] === true).length
+  const ausentes = alumnos.length - faltan - presentes
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (guardando || faltan > 0) return
     setGuardando(true)
     setError(null)
     const datos: GuardarAsistencia = {
@@ -162,8 +166,25 @@ function FormularioAsistencia({
       aria-label="Marcar asistencia"
       onSubmit={(event) => void guardar(event)}
     >
+      <button
+        className="asistencia__boton"
+        type="button"
+        disabled={guardando}
+        onClick={() =>
+          setMarcas(Object.fromEntries(alumnos.map((a) => [a.id, true])))
+        }
+      >
+        Marcar todos presentes
+      </button>
+      <p className="dashboard__texto">
+        Puedes ajustar las excepciones antes de guardar.
+      </p>
       {alumnos.map((alumno) => (
-        <fieldset key={alumno.id} className="asistencia__alumno">
+        <fieldset
+          key={alumno.id}
+          className="asistencia__alumno"
+          disabled={guardando}
+        >
           <legend>{alumno.nombre}</legend>
           {[true, false].map((presente) => (
             <label key={String(presente)}>
@@ -184,6 +205,7 @@ function FormularioAsistencia({
         </fieldset>
       ))}
       <p className="dashboard__texto" aria-live="polite">
+        Presentes: {presentes} · Ausentes: {ausentes} · Sin marcar: {faltan}.{' '}
         {faltan === 0
           ? 'Todos los alumnos están marcados.'
           : `Faltan ${faltan} por marcar.`}
