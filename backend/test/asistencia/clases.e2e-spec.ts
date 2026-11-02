@@ -94,6 +94,42 @@ describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
     ],
   }
 
+  it('corrección e historial requieren sesión', async () => {
+    await request(app.getHttpServer())
+      .patch(`${ASISTENCIA}/alumnos/00000000-0000-4000-8000-000000000030`)
+      .send({ anterior: true, presente: false, motivo: 'Revisión' })
+      .expect(401)
+    await request(app.getHttpServer())
+      .get(
+        `${ASISTENCIA}/alumnos/00000000-0000-4000-8000-000000000030/historial`,
+      )
+      .expect(401)
+    await request(app.getHttpServer())
+      .get(
+        '/api/espacio/secciones/00000000-0000-4000-8000-000000000010/mi-asistencia',
+      )
+      .expect(401)
+  })
+  it.each<Rol>([
+    'ALUMNO',
+    'AYUDANTE',
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'SUPERADMIN',
+  ])('%s no corrige ni lee el historial', async (rol) => {
+    await request(app.getHttpServer())
+      .patch(`${ASISTENCIA}/alumnos/00000000-0000-4000-8000-000000000030`)
+      .set('Authorization', sesion(rol))
+      .send({ anterior: true, presente: false, motivo: 'Revisión' })
+      .expect(403)
+    await request(app.getHttpServer())
+      .get(
+        `${ASISTENCIA}/alumnos/00000000-0000-4000-8000-000000000030/historial`,
+      )
+      .set('Authorization', sesion(rol))
+      .expect(403)
+  })
+
   it('GET y POST responden 401 sin sesión', async () => {
     await request(app.getHttpServer()).get(ASISTENCIA).expect(401)
     await request(app.getHttpServer()).post(ASISTENCIA).send(MARCAS).expect(401)

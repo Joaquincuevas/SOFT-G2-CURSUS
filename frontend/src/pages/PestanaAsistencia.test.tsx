@@ -245,7 +245,7 @@ describe('pestaña Asistencia (ASI-01)', () => {
     ])
   })
 
-  test('el alumno no ve las clases ni las pide (su asistencia es ASI-06)', async () => {
+  test('el alumno consulta solo sus marcas y no pide la lista de clases', async () => {
     let pedidas = 0
     const panel = await abrirAsistencia('ALUMNO', () => {
       pedidas++
@@ -253,7 +253,7 @@ describe('pestaña Asistencia (ASI-01)', () => {
     })
 
     expect(
-      panel.getByText('Las clases de la sección las registra su profesor.'),
+      await panel.findByText('Aún no tienes marcas de asistencia registradas.'),
     ).toBeInTheDocument()
     expect(panel.queryByRole('table')).not.toBeInTheDocument()
     expect(pedidas).toBe(0)

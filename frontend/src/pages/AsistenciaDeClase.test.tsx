@@ -56,11 +56,16 @@ const REGISTRADA: AsistenciaClase = {
 }
 
 // Abre la pestaña Asistencia con el rol dado y la asistencia de la clase c1.
-async function abrir(rol: Rol, asistencia: (init?: RequestInit) => unknown) {
+async function abrir(
+  rol: Rol,
+  asistencia: (init?: RequestInit) => unknown,
+  extras: Record<string, (init?: RequestInit) => unknown> = {},
+) {
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [CLASES]: () => [CLASE],
     [ASISTENCIA]: asistencia,
+    ...extras,
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
   const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
@@ -125,7 +130,7 @@ describe('asistencia de una clase (ASI-02)', () => {
   })
 
   test.each<Rol>(['PROFESOR', 'AYUDANTE'])(
-    'una clase con asistencia se muestra en solo lectura (%s)',
+    'una clase con asistencia muestra las marcas guardadas (%s)',
     async (rol) => {
       const panel = await abrir(rol, () => REGISTRADA)
 
@@ -135,7 +140,12 @@ describe('asistencia de una clase (ASI-02)', () => {
       expect(
         within(tabla)
           .getAllByRole('row')
-          .map((f) => f.textContent),
+          .map((f) =>
+            Array.from(f.children)
+              .slice(0, 2)
+              .map((c) => c.textContent)
+              .join(''),
+          ),
       ).toEqual([
         'AlumnoAsistencia',
         'Ana ÁvilaPresente',
@@ -494,6 +504,302 @@ describe('marcado masivo y excepciones (ASI-03)', () => {
     marcar(panel, 'Ana Ávila', 'Ausente')
     expect(
       panel.getByText(/Presentes: 1 · Ausentes: 2 · Sin marcar: 0\./),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('ASI-04: corrección de marcas', () => {
+  const correccion = `${ASISTENCIA}/alumnos/a2`
+  test('recargar por la corrección de otra fila no desbloquea un envío pendiente', async () => {
+    let terminarBruno!: (r: Response) => void
+    let enviosBruno = 0
+    let anaCorregida = false
+    const panel = await abrir(
+      'PROFESOR',
+      () => ({
+        ...REGISTRADA,
+        alumnos: REGISTRADA.alumnos.map((a) =>
+          a.id === 'a1' && anaCorregida ? { ...a, presente: false } : a,
+        ),
+      }),
+      {
+        [correccion]: () => {
+          enviosBruno++
+          return new Promise<Response>((resolve) => {
+            terminarBruno = resolve
+          })
+        },
+        [`${ASISTENCIA}/alumnos/a1`]: () => {
+          anaCorregida = true
+          return json(REGISTRADA)
+        },
+      },
+    )
+    fireEvent.click(
+      await panel.findByRole('button', {
+        name: 'Corregir asistencia de Bruno Díaz',
+      }),
+    )
+    const bruno = within(
+      panel.getByRole('form', { name: 'Corregir asistencia de Bruno Díaz' }),
+    )
+    fireEvent.change(bruno.getByLabelText('Motivo de la corrección'), {
+      target: { value: 'Justificación' },
+    })
+    const guardarBruno = bruno.getByRole('button', {
+      name: 'Guardar corrección',
+    })
+    fireEvent.click(guardarBruno)
+    await waitFor(() => expect(enviosBruno).toBe(1))
+    fireEvent.click(
+      panel.getByRole('button', { name: 'Corregir asistencia de Ana Ávila' }),
+    )
+    const ana = within(
+      panel.getByRole('form', { name: 'Corregir asistencia de Ana Ávila' }),
+    )
+    fireEvent.change(ana.getByLabelText('Motivo de la corrección'), {
+      target: { value: 'Lista revisada' },
+    })
+    fireEvent.click(ana.getByRole('button', { name: 'Guardar corrección' }))
+    await waitFor(() =>
+      expect(
+        within(
+          panel
+            .getByRole('button', { name: 'Corregir asistencia de Ana Ávila' })
+            .closest('tr')!,
+        ).getByText('Ausente'),
+      ).toBeInTheDocument(),
+    )
+    expect(guardarBruno).toBeDisabled()
+    expect(bruno.getByLabelText('Motivo de la corrección')).toBeDisabled()
+    fireEvent.click(guardarBruno)
+    expect(enviosBruno).toBe(1)
+    terminarBruno(json(REGISTRADA))
+    await waitFor(() =>
+      expect(
+        panel.queryByRole('form', {
+          name: 'Corregir asistencia de Bruno Díaz',
+        }),
+      ).not.toBeInTheDocument(),
+    )
+  })
+  test('el profesor corrige una ausencia con motivo y consulta el evento sin HTML ejecutable', async () => {
+    let guardada = false
+    let consultasHistorial = 0
+    const enviados: unknown[] = []
+    const panel = await abrir(
+      'PROFESOR',
+      () =>
+        guardada
+          ? {
+              ...REGISTRADA,
+              alumnos: REGISTRADA.alumnos.map((a) =>
+                a.id === 'a2' ? { ...a, presente: true } : a,
+              ),
+            }
+          : REGISTRADA,
+      {
+        [correccion]: (init) => {
+          enviados.push(JSON.parse(init?.body as string))
+          guardada = true
+          return json(REGISTRADA)
+        },
+        [`${correccion}/historial`]: () => {
+          consultasHistorial++
+          return [
+            {
+              id: 'h1',
+              anterior: false,
+              nuevo: true,
+              motivo: '<script>alert(1)</script> Justificante revisado',
+              fecha: '2026-09-14T13:00:00.000Z',
+              profesor: { id: 'p1', nombre: 'Camila Rojas' },
+            },
+          ]
+        },
+      },
+    )
+    fireEvent.click(
+      await panel.findByRole('button', {
+        name: 'Corregir asistencia de Bruno Díaz',
+      }),
+    )
+    const form = within(
+      panel.getByRole('form', { name: 'Corregir asistencia de Bruno Díaz' }),
+    )
+    expect(form.getByText('Marca actual: Ausente')).toBeInTheDocument()
+    expect(form.getByLabelText('Nueva marca')).toHaveValue('true')
+    expect(
+      form.getByRole('button', { name: 'Guardar corrección' }),
+    ).toBeDisabled()
+    fireEvent.change(form.getByLabelText('Motivo de la corrección'), {
+      target: { value: '  Justificante revisado  ' },
+    })
+    expect(enviados).toEqual([])
+    expect(consultasHistorial).toBe(0)
+    fireEvent.click(form.getByRole('button', { name: 'Guardar corrección' }))
+    expect(await panel.findByText('Corrección guardada')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        panel.getByRole('button', {
+          name: 'Corregir asistencia de Bruno Díaz',
+        }),
+      ).toBeEnabled(),
+    )
+    const fila = panel
+      .getByRole('button', { name: 'Corregir asistencia de Bruno Díaz' })
+      .closest('tr')!
+    expect(within(fila).getByText('Presente')).toBeInTheDocument()
+    expect(enviados).toEqual([
+      { anterior: false, presente: true, motivo: 'Justificante revisado' },
+    ])
+    fireEvent.click(
+      panel.getByRole('button', {
+        name: 'Historial de asistencia de Bruno Díaz',
+      }),
+    )
+    expect(await panel.findByText('Ausente → Presente')).toBeInTheDocument()
+    expect(
+      panel.getByText('<script>alert(1)</script> Justificante revisado'),
+    ).toBeInTheDocument()
+    expect(
+      panel.getByText('Camila Rojas ·', { exact: false }),
+    ).toBeInTheDocument()
+    expect(
+      panel
+        .getByRole('list', { name: 'Correcciones de Bruno Díaz' })
+        .querySelector('time'),
+    ).toHaveAttribute('dateTime', '2026-09-14T13:00:00.000Z')
+    expect(
+      panel
+        .getByRole('list', { name: 'Correcciones de Bruno Díaz' })
+        .querySelector('script'),
+    ).toBeNull()
+  })
+
+  test('cancela sin enviar y bloquea campos/doble envío; conserva el motivo ante conflicto y permite recargar', async () => {
+    let terminar!: (r: Response) => void
+    let envios = 0
+    const panel = await abrir('PROFESOR', () => REGISTRADA, {
+      [correccion]: () => {
+        envios++
+        return new Promise<Response>((r) => {
+          terminar = r
+        })
+      },
+    })
+    const abrirBoton = await panel.findByRole('button', {
+      name: 'Corregir asistencia de Bruno Díaz',
+    })
+    fireEvent.click(abrirBoton)
+    fireEvent.click(panel.getByRole('button', { name: 'Cancelar corrección' }))
+    expect(envios).toBe(0)
+    fireEvent.click(
+      panel.getByRole('button', { name: 'Corregir asistencia de Bruno Díaz' }),
+    )
+    const motivo = panel.getByLabelText('Motivo de la corrección')
+    fireEvent.change(motivo, { target: { value: 'Se revisó la lista' } })
+    const guardar = panel.getByRole('button', { name: 'Guardar corrección' })
+    fireEvent.click(guardar)
+    await waitFor(() => expect(envios).toBe(1))
+    expect(guardar).toBeDisabled()
+    expect(motivo).toBeDisabled()
+    expect(panel.getByLabelText('Nueva marca')).toBeDisabled()
+    expect(
+      panel.getByRole('button', { name: 'Cancelar corrección' }),
+    ).toBeDisabled()
+    fireEvent.click(guardar)
+    expect(envios).toBe(1)
+    terminar(json({ message: 'La marca cambió mientras la editabas' }, 409))
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'La marca cambió mientras la editabas',
+    )
+    expect(motivo).toHaveValue('Se revisó la lista')
+    expect(guardar).toBeEnabled()
+    fireEvent.click(
+      panel.getByRole('button', { name: 'Volver a cargar asistencia' }),
+    )
+    await waitFor(() =>
+      expect(
+        panel.queryByRole('form', {
+          name: 'Corregir asistencia de Bruno Díaz',
+        }),
+      ).not.toBeInTheDocument(),
+    )
+  })
+
+  test('el historial permite reintentar y muestra vacío sin correcciones', async () => {
+    let intentos = 0
+    const panel = await abrir('PROFESOR', () => REGISTRADA, {
+      [`${correccion}/historial`]: () =>
+        ++intentos === 1 ? json({}, 500) : [],
+    })
+    fireEvent.click(
+      await panel.findByRole('button', {
+        name: 'Historial de asistencia de Bruno Díaz',
+      }),
+    )
+    expect(
+      await panel.findByText('No pudimos cargar las correcciones.'),
+    ).toBeInTheDocument()
+    fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await panel.findByText('Sin correcciones registradas'),
+    ).toBeInTheDocument()
+  })
+
+  test('el ayudante no recibe acciones de corrección ni historial', async () => {
+    const panel = await abrir('AYUDANTE', () => REGISTRADA)
+    await panel.findByRole('table', { name: 'Asistencia registrada' })
+    expect(
+      panel.queryByRole('button', { name: /Corregir asistencia/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: /Historial de asistencia/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('el alumno ve la marca vigente al reabrir Asistencia, sin acciones ni nombres de otros alumnos', async () => {
+    let presente = true
+    await renderConSesion('ALUMNO', VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'ALUMNO' }),
+      '/api/espacio/secciones/seccion-1/mi-asistencia': () => [
+        { clase: CLASE, presente },
+      ],
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+    expect(await panel.findByText('Presente')).toBeInTheDocument()
+    expect(panel.queryByText('Bruno Díaz')).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: /Corregir/ }),
+    ).not.toBeInTheDocument()
+    presente = false
+    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Asistencia' }))
+    expect(
+      await within(
+        screen.getByRole('tabpanel', { name: 'Asistencia' }),
+      ).findByText('Ausente'),
+    ).toBeInTheDocument()
+  })
+
+  test('la lectura del alumno muestra error y permite reintentar', async () => {
+    let intento = 0
+    await renderConSesion('ALUMNO', VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'ALUMNO' }),
+      '/api/espacio/secciones/seccion-1/mi-asistencia': () =>
+        ++intento === 1 ? json({}, 500) : [],
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    expect(
+      await screen.findByText('No pudimos cargar tu asistencia.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByText(
+        'Aún no tienes marcas de asistencia registradas.',
+      ),
     ).toBeInTheDocument()
   })
 })
