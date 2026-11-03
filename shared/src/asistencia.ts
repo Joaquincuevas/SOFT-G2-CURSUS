@@ -77,6 +77,21 @@ export interface AsistenciaPropia {
   presente: boolean
 }
 
+// ASI-05: calculado en SQL sobre las clases activas con asistencia guardada.
+// Sin registros, el porcentaje es null (no se presenta como una inasistencia).
+export interface PorcentajeAsistenciaAlumno {
+  id: string
+  nombre: string
+  asistidas: number
+  sinMarca: number
+  porcentaje: number | null
+}
+
+export interface ResumenAsistenciaSeccion {
+  clasesRegistradas: number
+  alumnos: PorcentajeAsistenciaAlumno[]
+}
+
 // 400 cuando la lista no coincide con los alumnos activos de la sección.
 export interface ErrorListaAsistencia {
   statusCode: 400

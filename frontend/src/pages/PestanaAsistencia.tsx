@@ -12,6 +12,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { AsistenciaDeClase } from './AsistenciaDeClase'
 import { MiAsistencia } from './MiAsistencia'
+import { ResumenAsistencia } from './ResumenAsistencia'
 import './PestanaAsistencia.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -99,6 +100,7 @@ function ClasesSeccion({ seccionId, rol }: PropsPestana) {
           rol={rol}
         />
       )}
+      {rol === 'PROFESOR' && <ResumenAsistencia seccionId={seccionId} />}
     </section>
   )
 }

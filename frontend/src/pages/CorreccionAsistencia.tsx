@@ -15,10 +15,12 @@ export function CorreccionAsistencia({
   alumno,
   ruta,
   alGuardar,
+  alCorregir,
 }: {
   alumno: AlumnoAsistencia
   ruta: string
   alGuardar: () => void
+  alCorregir?: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const [editando, setEditando] = useState(false)
@@ -75,6 +77,7 @@ export function CorreccionAsistencia({
       setVerHistorial(false)
       setAviso(true)
       alGuardar()
+      alCorregir?.()
     } catch {
       setError(
         'No pudimos corregir la asistencia. Comprueba tu conexión e inténtalo nuevamente.',

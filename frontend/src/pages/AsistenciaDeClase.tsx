@@ -11,6 +11,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 import { CorreccionAsistencia } from './CorreccionAsistencia'
+import { avisarAsistenciaGuardada } from './asistencia-eventos'
 
 interface Props {
   seccionId: string
@@ -64,6 +65,7 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
             rol={rol}
             ruta={ruta}
             recargar={recargar}
+            alCorregir={() => avisarAsistenciaGuardada(seccionId)}
           />
         </>
       ) : alumnos.length === 0 ? (
@@ -74,7 +76,10 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
         <FormularioAsistencia
           ruta={ruta}
           alumnos={alumnos}
-          alGuardar={recargar}
+          alGuardar={() => {
+            recargar()
+            avisarAsistenciaGuardada(seccionId)
+          }}
           recargar={recargar}
         />
       ) : (
@@ -91,11 +96,13 @@ function MarcasRegistradas({
   rol,
   ruta,
   recargar,
+  alCorregir,
 }: {
   alumnos: AlumnoAsistencia[]
   rol: Rol
   ruta: string
   recargar: () => void
+  alCorregir: () => void
 }) {
   return (
     <table className="asistencia__tabla" aria-label="Asistencia registrada">
@@ -117,6 +124,7 @@ function MarcasRegistradas({
                   alumno={alumno}
                   ruta={ruta}
                   alGuardar={recargar}
+                  alCorregir={alCorregir}
                 />
               </td>
             )}

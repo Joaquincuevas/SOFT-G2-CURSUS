@@ -7,6 +7,8 @@ import {
 import { AsistenciaService } from './asistencia.service.js'
 import { ClasesController } from './clases.controller.js'
 import { ClasesService } from './clases.service.js'
+import { ResumenAsistenciaController } from './resumen-asistencia.controller.js'
+import { ResumenAsistenciaService } from './resumen-asistencia.service.js'
 
 // Asistencia (F4). Importa EspacioModule por IntegranteSeccionGuard.
 @Module({
@@ -15,7 +17,8 @@ import { ClasesService } from './clases.service.js'
     ClasesController,
     AsistenciaController,
     AsistenciaPropiaController,
+    ResumenAsistenciaController,
   ],
-  providers: [ClasesService, AsistenciaService],
+  providers: [ClasesService, AsistenciaService, ResumenAsistenciaService],
 })
 export class AsistenciaModule {}
