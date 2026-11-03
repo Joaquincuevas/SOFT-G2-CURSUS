@@ -46,7 +46,7 @@ La migración `1792700000000-CrearRevisionNotas` crea `revision_notas`: `id`, `u
 
 ## Lo que queda para las tarjetas siguientes
 
-- **NOT-08 (enviar a revisión):** política de UPDATE para que el ayudante pase de `BORRADOR` o `DEVUELTA` a `EN_REVISION`, con un evento `ENVIO`. El PUT deberá rechazar los guardados cuando el estado no sea `BORRADOR` ni `DEVUELTA`. "Enviar a revisión" irá junto a "Guardar borrador".
+- **NOT-08 (enviar a revisión), [hecho](not-08-envio-revision.md):** política de UPDATE para que el ayudante pase de `BORRADOR` o `DEVUELTA` a `EN_REVISION`, con un evento `ENVIO`. El PUT responde 409 cuando el estado no es `BORRADOR` ni `DEVUELTA`, y la RLS de `nota` también lo exige al ayudante. "Enviar a revisión" va junto a "Guardar borrador".
 - **NOT-09 y NOT-12 (aprobar y devolver):** política de UPDATE del profesor desde `EN_REVISION`, con eventos `APROBACION` o `DEVOLUCION`. El comentario de la devolución va en `nota_cambio.motivo`, que ya lo exige.
 - **NOT-10 (pendientes del profesor):** las evaluaciones con `estado = 'EN_REVISION'`.
 
