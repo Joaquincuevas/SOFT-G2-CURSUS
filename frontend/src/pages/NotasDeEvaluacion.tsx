@@ -73,6 +73,12 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
             recargar()
           }}
           alEditar={() => setAviso(null)}
+          // 409: otro ayudante la envió mientras tanto. La recarga la deja en
+          // solo lectura y el aviso explica por qué.
+          alBloquear={(mensaje) => {
+            setAviso(mensaje)
+            recargar()
+          }}
         />
       )}
       {aviso && (
@@ -116,6 +122,10 @@ const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
 // NOT-08: el ayudante escribe y envía solo en borrador o devuelta.
 const EDITABLE: readonly EstadoRevisionNotas[] = ['BORRADOR', 'DEVUELTA']
 
+// El mensaje del backend con punto final, o el dado si no trae uno.
+const mensajeDe = (cuerpo: { message?: unknown } | null, otro: string) =>
+  `${typeof cuerpo?.message === 'string' ? cuerpo.message : otro}.`
+
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',
   PUBLICADA: 'Publicada',
@@ -128,6 +138,7 @@ function FormularioNotas({
   alGuardar,
   alEnviar,
   alEditar,
+  alBloquear,
 }: {
   ruta: string
   inicial: NotaAlumno[]
@@ -135,6 +146,7 @@ function FormularioNotas({
   alGuardar: () => void
   alEnviar: () => void
   alEditar: () => void
+  alBloquear: (mensaje: string) => void
 }) {
   const { fetchConSesion } = useAuth()
   // Las notas como están en el servidor y lo que muestra cada campo. Después
@@ -185,7 +197,12 @@ function FormularioNotas({
             message?: unknown
           })
         | null
-      // 400: otro ayudante cambió la lista o falta una nota; 409: ya se envió.
+      if (res.status === 409) {
+        setConfirmando(false)
+        alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden enviar'))
+        return
+      }
+      // 400: otro ayudante cambió la lista o falta una nota.
       const faltantes = Array.isArray(cuerpo?.faltantes)
         ? alumnos
             .filter((a) => cuerpo.faltantes?.includes(a.id))
@@ -194,8 +211,7 @@ function FormularioNotas({
       setError(
         faltantes.length
           ? `Faltan notas de: ${faltantes.join(', ')}.`
-          : (res.status === 400 || res.status === 409) &&
-              typeof cuerpo?.message === 'string'
+          : res.status === 400 && typeof cuerpo?.message === 'string'
             ? `${cuerpo.message}.`
             : 'No pudimos enviar las notas. Inténtalo nuevamente.',
       )
@@ -216,6 +232,8 @@ function FormularioNotas({
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // Enter en un campo de solo lectura también envía el formulario.
+    if (!editable || confirmando || cambios.length === 0) return
     setGuardando(true)
     setError(null)
     const datos: GuardarNotas = {
@@ -236,6 +254,11 @@ function FormularioNotas({
               message?: unknown
             })
           | null
+        // NOT-08: 409, la evaluación se envió o se aprobó mientras tanto.
+        if (res.status === 409) {
+          alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden editar'))
+          return
+        }
         // 400: una nota inválida (con su motivo por alumno, NOT-06) o la lista
         // de alumnos cambió.
         if (res.status === 400 && Array.isArray(cuerpo?.invalidas)) {
@@ -324,7 +347,9 @@ function FormularioNotas({
                     // borraría lo escrito después de enviar.
                     disabled={guardando || alumno.estado === 'PUBLICADA'}
                     // NOT-08: enviada a revisión o aprobada, solo se lee.
-                    readOnly={!editable}
+                    // Tampoco mientras se confirma el envío: se envía lo
+                    // guardado.
+                    readOnly={!editable || confirmando}
                     onChange={(event) => {
                       alEditar()
                       setValores((actuales) => ({
@@ -365,7 +390,11 @@ function FormularioNotas({
             type="submit"
             // NOT-06: mientras haya una nota inválida no se guarda ninguna.
             disabled={
-              cambios.length === 0 || guardando || hayInvalidas || enviando
+              cambios.length === 0 ||
+              guardando ||
+              hayInvalidas ||
+              enviando ||
+              confirmando
             }
           >
             Guardar borrador
@@ -395,7 +424,7 @@ function FormularioNotas({
           <button
             className="notas__boton"
             type="button"
-            disabled={enviando}
+            disabled={enviando || !puedeEnviar}
             onClick={() => void enviar()}
           >
             {enviando ? 'Enviando…' : 'Enviar'}

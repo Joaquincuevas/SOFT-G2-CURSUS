@@ -754,12 +754,19 @@ describe('envío a revisión (NOT-08)', () => {
     )
   })
 
-  test('un 409 muestra el mensaje del servidor', async () => {
+  test('un 409 del envío lo avisa y recarga en solo lectura', async () => {
+    let enviadaPorOtro = false
     const panel = await abrirNotas(
       'AYUDANTE',
-      () => COMPLETAS,
       () =>
-        json({ statusCode: 409, message: 'Las notas están en revisión' }, 409),
+        enviadaPorOtro ? { ...COMPLETAS, estado: 'EN_REVISION' } : COMPLETAS,
+      () => {
+        enviadaPorOtro = true
+        return json(
+          { statusCode: 409, message: 'Las notas están en revisión' },
+          409,
+        )
+      },
     )
     await abrirEvaluacion(panel)
     fireEvent.click(enviarARevision(panel))
@@ -769,8 +776,64 @@ describe('envío a revisión (NOT-08)', () => {
         { name: 'Enviar' },
       ),
     )
-    expect(await panel.findByRole('alert')).toHaveTextContent(
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(panel.getByRole('status')).toHaveTextContent(
       'Las notas están en revisión.',
+    )
+    expect(panel.getByLabelText('Nota de Ana Ávila')).toHaveAttribute(
+      'readonly',
+    )
+  })
+
+  test('un 409 del PUT (enviada por otro ayudante) lo avisa y recarga en solo lectura', async () => {
+    let enviadaPorOtro = false
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        enviadaPorOtro = true
+        return json(
+          { statusCode: 409, message: 'Las notas están en revisión' },
+          409,
+        )
+      }
+      return enviadaPorOtro
+        ? { ...COMPLETAS, estado: 'EN_REVISION' }
+        : COMPLETAS
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Ana Ávila', '7')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
+
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(panel.getByRole('status')).toHaveTextContent(
+      'Las notas están en revisión.',
+    )
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('mientras se confirma el envío no se editan ni se guardan notas', async () => {
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => COMPLETAS,
+      () => ({
+        ...COMPLETAS,
+        estado: 'EN_REVISION',
+      }),
+    )
+    await abrirEvaluacion(panel)
+    fireEvent.click(enviarARevision(panel))
+
+    expect(panel.getByLabelText('Nota de Ana Ávila')).toHaveAttribute(
+      'readonly',
+    )
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeDisabled()
+    // Al cancelar se vuelve a editar.
+    fireEvent.click(panel.getByRole('button', { name: 'Cancelar' }))
+    expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
+      'readonly',
     )
   })
 })

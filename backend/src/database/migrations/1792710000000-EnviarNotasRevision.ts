@@ -38,7 +38,11 @@ export class EnviarNotasRevision1792710000000 implements MigrationInterface {
   name = 'EnviarNotasRevision1792710000000'
 
   async up(q: QueryRunner): Promise<void> {
-    await q.query(`GRANT UPDATE ON revision_notas TO cursus_app`)
+    // Solo estas columnas: un UPDATE no mueve la fila a otra evaluación ni
+    // universidad (updated_at lo pone el trigger).
+    await q.query(
+      `GRANT UPDATE (estado, actualizado_por) ON revision_notas TO cursus_app`,
+    )
     await q.query(`
       CREATE POLICY pol_revision_notas_envio ON revision_notas
         FOR UPDATE TO cursus_app
@@ -54,6 +58,8 @@ export class EnviarNotasRevision1792710000000 implements MigrationInterface {
   async down(q: QueryRunner): Promise<void> {
     await politicasNotaAyudante(q, ESCRIBE_AYUDANTE)
     await q.query('DROP POLICY pol_revision_notas_envio ON revision_notas')
-    await q.query(`REVOKE UPDATE ON revision_notas FROM cursus_app`)
+    await q.query(
+      `REVOKE UPDATE (estado, actualizado_por) ON revision_notas FROM cursus_app`,
+    )
   }
 }

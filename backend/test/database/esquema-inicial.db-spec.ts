@@ -188,7 +188,7 @@ describe('migraciones', () => {
     const [{ restosEnvio }] = await bd.query<{ restosEnvio: string }[]>(
       `SELECT (SELECT count(*) FROM pg_policies
                 WHERE policyname = 'pol_revision_notas_envio')
-            + (SELECT count(*) FROM information_schema.role_table_grants
+            + (SELECT count(*) FROM information_schema.column_privileges
                 WHERE grantee = 'cursus_app' AND table_name = 'revision_notas'
                   AND privilege_type = 'UPDATE')
             + (SELECT count(*) FROM pg_policies
