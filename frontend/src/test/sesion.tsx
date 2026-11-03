@@ -100,6 +100,10 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
 // alumnos de una sección para su profesor (ESP-05): vacía salvo que el test
 // la simule.
 const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/asistencia\/resumen$/,
+    () => ({ clasesRegistradas: 0, alumnos: [] }),
+  ],
   [/^\/api\/espacio\/secciones\/[^/]+\/mi-asistencia$/, () => []],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,

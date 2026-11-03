@@ -4,6 +4,7 @@ import type {
   CambioAsistencia,
   ErrorListaAsistencia,
   Rol,
+  ResumenAsistenciaSeccion,
 } from '@cursus/shared'
 import { CrearAsistenciaCambio1792690000000 } from '../../src/database/migrations/1792690000000-CrearAsistenciaCambio.js'
 import type { INestApplication } from '@nestjs/common'
@@ -661,7 +662,11 @@ describe('ASI-04: correcciones trazables', () => {
   it('corrige en ambos sentidos, conserva el registro original y guarda profesor, motivo y fecha', async () => {
     const { clase, original } = await preparar()
     expect(await historial(clase)).toEqual([])
-    const antes = Date.now()
+    // La fecha la produce PostgreSQL: comparar con su reloj evita depender
+    // del desfase entre Docker Desktop y el equipo que ejecuta Vitest.
+    const [{ ahora: antes }] = await bd.query<{ ahora: Date }[]>(
+      'SELECT clock_timestamp() AS ahora',
+    )
     const corregida = await corregir(clase, {
       ...cambio,
       motivo: '  Justificación revisada  ',
@@ -692,9 +697,12 @@ describe('ASI-04: correcciones trazables', () => {
       nuevo: true,
       motivo: 'Se confirmó su presencia',
     })
+    const [{ ahora: despues }] = await bd.query<{ ahora: Date }[]>(
+      'SELECT clock_timestamp() AS ahora',
+    )
     for (const h of eventos) {
-      expect(Date.parse(h.fecha)).toBeGreaterThanOrEqual(antes - 1000)
-      expect(Date.parse(h.fecha)).toBeLessThanOrEqual(Date.now() + 1000)
+      expect(Date.parse(h.fecha)).toBeGreaterThanOrEqual(antes.getTime())
+      expect(Date.parse(h.fecha)).toBeLessThanOrEqual(despues.getTime())
     }
     expect((await leer(PROFESOR, clase, 200)).alumnos).toEqual(original.alumnos)
   })
@@ -979,5 +987,217 @@ describe('ASI-04: correcciones trazables', () => {
       await migracion.up(q)
       await q.release()
     }
+  })
+})
+
+describe('ASI-05: porcentaje por alumno calculado en el backend', () => {
+  let numero = 10
+  async function escenario(vacio = false) {
+    const [s] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion (universidad_id, curso_id, numero, profesor_id)
+       SELECT universidad_id, curso_id, $2, $3 FROM seccion WHERE id=$1 RETURNING id`,
+      [secciones.s1, numero++, await idDe(PROFESOR)],
+    )
+    if (!vacio)
+      for (const alumnoId of [alumnos.base, alumnos.ana, alumnos.zoe])
+        await inscribir(s.id, alumnoId)
+    return s.id
+  }
+  async function resumen(
+    seccion: string,
+    correo = PROFESOR,
+    estado = 200,
+    query = '',
+  ) {
+    const token = await tokenDe(correo)
+    const res = await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${seccion}/asistencia/resumen${query}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return res.body as ResumenAsistenciaSeccion
+  }
+  async function registrar(
+    seccion: string,
+    semana: number,
+    ausentes: string[] = [],
+  ) {
+    const clase = await crearClase(seccion, semana)
+    await guardar(PROFESOR, clase, marcasDe(ausentes), 201, seccion)
+    return clase
+  }
+
+  it('sin clases o solo con clases pendientes devuelve null, no divide por cero ni inventa ausencias', async () => {
+    const seccion = await escenario()
+    expect(await resumen(seccion)).toEqual({
+      clasesRegistradas: 0,
+      alumnos: [
+        {
+          id: alumnos.base,
+          nombre: 'Alumno Norte',
+          asistidas: 0,
+          sinMarca: 0,
+          porcentaje: null,
+        },
+        {
+          id: alumnos.ana,
+          nombre: 'Ana Ávila',
+          asistidas: 0,
+          sinMarca: 0,
+          porcentaje: null,
+        },
+        {
+          id: alumnos.zoe,
+          nombre: 'Zoe Ruiz',
+          asistidas: 0,
+          sinMarca: 0,
+          porcentaje: null,
+        },
+      ],
+    })
+    await crearClase(seccion, 0)
+    expect((await resumen(seccion)).clasesRegistradas).toBe(0)
+    expect(
+      (await resumen(seccion)).alumnos.every((a) => a.porcentaje === null),
+    ).toBe(true)
+  })
+
+  it('cuenta cada clase una vez, calcula 0/66.67/100 y cambia al corregir y registrar otra clase', async () => {
+    const seccion = await escenario()
+    await registrar(seccion, 0, [alumnos.zoe])
+    const segunda = await registrar(seccion, 1, [alumnos.zoe, alumnos.base])
+    await registrar(seccion, 2, [alumnos.zoe])
+    await crearClase(seccion, 3) // No tiene lista guardada.
+    const inicial = await resumen(
+      seccion,
+      PROFESOR,
+      200,
+      `?universidadId=${await universidadDe('sur.cursus.test')}&profesorId=${await idDe(PROFESOR_SUR)}`,
+    )
+    expect(inicial).toEqual({
+      clasesRegistradas: 3,
+      alumnos: [
+        {
+          id: alumnos.base,
+          nombre: 'Alumno Norte',
+          asistidas: 2,
+          sinMarca: 0,
+          porcentaje: 66.67,
+        },
+        {
+          id: alumnos.ana,
+          nombre: 'Ana Ávila',
+          asistidas: 3,
+          sinMarca: 0,
+          porcentaje: 100,
+        },
+        {
+          id: alumnos.zoe,
+          nombre: 'Zoe Ruiz',
+          asistidas: 0,
+          sinMarca: 0,
+          porcentaje: 0,
+        },
+      ],
+    })
+    const token = await tokenDe(PROFESOR)
+    await request(app.getHttpServer())
+      .patch(`${ruta(seccion, segunda)}/alumnos/${alumnos.base}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ anterior: false, presente: true, motivo: 'Lista revisada' })
+      .expect(200)
+    const corregido = await resumen(seccion)
+    expect(corregido.clasesRegistradas).toBe(3)
+    expect(corregido.alumnos.find((a) => a.id === alumnos.base)).toMatchObject({
+      asistidas: 3,
+      porcentaje: 100,
+    })
+    await registrar(seccion, 4, [alumnos.base, alumnos.zoe])
+    expect(
+      (await resumen(seccion)).alumnos.find((a) => a.id === alumnos.base),
+    ).toMatchObject({ asistidas: 3, porcentaje: 75 })
+  })
+
+  it('la lista vacía no se sustituye por alumnos de otras secciones y los datos no se mezclan', async () => {
+    const vacia = await escenario(true)
+    expect(await resumen(vacia)).toEqual({ clasesRegistradas: 0, alumnos: [] })
+    const primera = await escenario()
+    const segunda = await escenario()
+    await registrar(primera, 0)
+    expect((await resumen(primera)).clasesRegistradas).toBe(1)
+    expect((await resumen(segunda)).clasesRegistradas).toBe(0)
+  })
+
+  it('un inscrito nuevo usa el denominador de la sección e indica las clases sin marca', async () => {
+    const seccion = await escenario()
+    await registrar(seccion, 0)
+    const nuevo = await crearAlumno(seccion, 'Nuevo Resumen')
+    await inscribir(seccion, nuevo)
+    expect(
+      (await resumen(seccion)).alumnos.find((a) => a.id === nuevo),
+    ).toEqual({
+      id: nuevo,
+      nombre: 'Nuevo Resumen',
+      asistidas: 0,
+      sinMarca: 1,
+      porcentaje: 0,
+    })
+    await archivarInscripcion(seccion, alumnos.ana)
+    await bd.query('UPDATE usuario SET archived_at=now() WHERE id=$1', [
+      alumnos.zoe,
+    ])
+    try {
+      const lista = (await resumen(seccion)).alumnos
+      expect(lista.map((a) => a.id).sort()).toEqual(
+        [alumnos.base, nuevo].sort(),
+      )
+    } finally {
+      await bd.query('UPDATE usuario SET archived_at=NULL WHERE id=$1', [
+        alumnos.zoe,
+      ])
+    }
+  })
+
+  it('excluye clases archivadas y marcas archivadas; una clase sin marcas activas deja de contar', async () => {
+    const seccion = await escenario()
+    const clase = await registrar(seccion, 0)
+    await bd.query(
+      'UPDATE asistencia SET archived_at=now() WHERE clase_id=$1 AND alumno_id=$2',
+      [clase, alumnos.base],
+    )
+    expect(
+      (await resumen(seccion)).alumnos.find((a) => a.id === alumnos.base),
+    ).toMatchObject({ asistidas: 0, sinMarca: 1, porcentaje: 0 })
+    await bd.query('UPDATE clase SET archived_at=now() WHERE id=$1', [clase])
+    expect((await resumen(seccion)).clasesRegistradas).toBe(0)
+    await bd.query('UPDATE clase SET archived_at=NULL WHERE id=$1', [clase])
+    await bd.query(
+      'UPDATE asistencia SET archived_at=now() WHERE clase_id=$1',
+      [clase],
+    )
+    expect((await resumen(seccion)).clasesRegistradas).toBe(0)
+  })
+
+  it.each([ALUMNO, AYUDANTE, DIRECTOR, ADMIN_INGENIERIA])(
+    '%s no accede al resumen del profesor',
+    async (correo) => {
+      const seccion = await escenario()
+      if (correo === AYUDANTE)
+        await bd.query(
+          'INSERT INTO ayudante_seccion (universidad_id,seccion_id,usuario_id) SELECT universidad_id,id,$2 FROM seccion WHERE id=$1',
+          [seccion, await idDe(AYUDANTE)],
+        )
+      await resumen(seccion, correo, 403)
+    },
+  )
+
+  it('rechaza a otro profesor, otra universidad y una sección inexistente o archivada', async () => {
+    const seccion = await escenario()
+    await resumen(seccion, profesorOtraSeccion, 403)
+    await resumen(seccion, PROFESOR_SUR, 404)
+    await resumen(NO_EXISTE, PROFESOR, 404)
+    await bd.query('UPDATE seccion SET archived_at=now() WHERE id=$1', [
+      seccion,
+    ])
+    await resumen(seccion, PROFESOR, 404)
   })
 })

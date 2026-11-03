@@ -86,6 +86,26 @@ describe('clases de una sección (ASI-01)', () => {
   })
 })
 
+describe('resumen de asistencia del profesor (ASI-05)', () => {
+  const resumen = RUTA.replace('/clases', '/asistencia/resumen')
+  it('requiere sesión y valida el id', async () => {
+    await request(app.getHttpServer()).get(resumen).expect(401)
+    await request(app.getHttpServer())
+      .get('/api/espacio/secciones/no-uuid/asistencia/resumen')
+      .set('Authorization', sesion('PROFESOR'))
+      .expect(400)
+  })
+  it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO', 'SUPERADMIN'])(
+    '%s no tiene permiso para el resumen',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get(resumen)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    },
+  )
+})
+
 describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
   const ASISTENCIA = `${RUTA}/00000000-0000-4000-8000-000000000020/asistencia`
   const MARCAS = {
