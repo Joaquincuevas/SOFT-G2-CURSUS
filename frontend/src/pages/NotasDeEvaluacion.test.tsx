@@ -1,4 +1,5 @@
 import {
+  type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EvaluacionesSeccion,
   MENSAJES_NOTA_INVALIDA,
@@ -61,11 +62,13 @@ const SIN_NOTAS: NotasEvaluacion = {
 async function abrirNotas(
   rol: Rol,
   notas: (init?: RequestInit) => unknown = () => SIN_NOTAS,
+  envio?: (init?: RequestInit) => unknown,
 ) {
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [EVALUACIONES]: () => LISTA,
     [NOTAS]: notas,
+    ...(envio && { [`${NOTAS}/envio`]: envio }),
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
   const panel = within(screen.getByRole('tabpanel', { name: 'Notas' }))
@@ -573,5 +576,201 @@ describe('borrador de notas (NOT-07)', () => {
     expect(panel.queryByText(/pendiente/i)).not.toBeInTheDocument()
     expect(panel.queryByText(/borrador/i)).not.toBeInTheDocument()
     expect(panel.queryByText(/en revisión/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('envío a revisión (NOT-08)', () => {
+  // Todos con nota guardada: se puede enviar.
+  const COMPLETAS: NotasEvaluacion = {
+    ...SIN_NOTAS,
+    alumnos: SIN_NOTAS.alumnos.map((a) => ({
+      ...a,
+      nota: a.nota ?? 6,
+      estado: 'PROPUESTA',
+    })),
+  }
+  const enviarARevision = (panel: ReturnType<typeof within>) =>
+    panel.getByRole('button', { name: 'Enviar a revisión' })
+
+  test('con notas faltantes el botón queda deshabilitado y lo explica', async () => {
+    const panel = await abrirNotas('AYUDANTE')
+    await abrirEvaluacion(panel)
+
+    expect(enviarARevision(panel)).toBeDisabled()
+    expect(
+      panel.getByText(
+        'Para enviar a revisión, todos los alumnos deben tener una nota guardada.',
+      ),
+    ).toBeInTheDocument()
+    // Escribir las que faltan no basta: hay que guardarlas antes.
+    escribir(panel, 'Ana Ávila', '5')
+    escribir(panel, 'Zoe Ruiz', '4')
+    expect(enviarARevision(panel)).toBeDisabled()
+  })
+
+  test('pide confirmación; al enviar queda en revisión y en solo lectura', async () => {
+    let enviada = false
+    const envios: (RequestInit | undefined)[] = []
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => (enviada ? { ...COMPLETAS, estado: 'EN_REVISION' } : COMPLETAS),
+      (init) => {
+        envios.push(init)
+        enviada = true
+        return { ...COMPLETAS, estado: 'EN_REVISION' }
+      },
+    )
+    await abrirEvaluacion(panel)
+
+    // Cancelar no envía.
+    fireEvent.click(enviarARevision(panel))
+    const confirmar = within(
+      panel.getByRole('region', { name: 'Confirmar envío' }),
+    )
+    expect(
+      confirmar.getByText(
+        '¿Enviar las notas a revisión? No podrás editarlas hasta que el profesor responda.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(confirmar.getByRole('button', { name: 'Cancelar' }))
+    expect(
+      panel.queryByRole('region', { name: 'Confirmar envío' }),
+    ).not.toBeInTheDocument()
+    expect(envios).toEqual([])
+
+    fireEvent.click(enviarARevision(panel))
+    fireEvent.click(
+      within(panel.getByRole('region', { name: 'Confirmar envío' })).getByRole(
+        'button',
+        { name: 'Enviar' },
+      ),
+    )
+
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(envios).toHaveLength(1)
+    expect(envios[0]?.method).toBe('POST')
+    expect(panel.getByRole('status')).toHaveTextContent(
+      'Notas enviadas a revisión.',
+    )
+    for (const campo of panel.getAllByLabelText(/^Nota de /)) {
+      expect(campo).toHaveAttribute('readonly')
+    }
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Enviar a revisión' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test.each(['EN_REVISION', 'APROBADA'] as const)(
+    'una evaluación %s se abre en solo lectura',
+    async (estado) => {
+      const panel = await abrirNotas('AYUDANTE', () => ({
+        ...COMPLETAS,
+        estado,
+      }))
+      await abrirEvaluacion(panel)
+      expect(panel.getByLabelText('Nota de Ana Ávila')).toHaveAttribute(
+        'readonly',
+      )
+      expect(
+        panel.queryByRole('button', { name: 'Enviar a revisión' }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  test('una evaluación devuelta se edita y se vuelve a enviar', async () => {
+    const panel = await abrirNotas('AYUDANTE', () => ({
+      ...COMPLETAS,
+      estado: 'DEVUELTA',
+    }))
+    await abrirEvaluacion(panel)
+    expect(panel.getByText('Estado: Devuelta')).toBeInTheDocument()
+    expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
+      'readonly',
+    )
+    expect(enviarARevision(panel)).toBeEnabled()
+  })
+
+  test('si el envío falla muestra el error y permite reintentar', async () => {
+    let intentos = 0
+    let enviada = false
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => (enviada ? { ...COMPLETAS, estado: 'EN_REVISION' } : COMPLETAS),
+      () => {
+        if (++intentos === 1) return json({}, 500)
+        enviada = true
+        return { ...COMPLETAS, estado: 'EN_REVISION' }
+      },
+    )
+    await abrirEvaluacion(panel)
+    const confirmarYEnviar = () => {
+      fireEvent.click(
+        within(
+          panel.getByRole('region', { name: 'Confirmar envío' }),
+        ).getByRole('button', { name: 'Enviar' }),
+      )
+    }
+
+    fireEvent.click(enviarARevision(panel))
+    confirmarYEnviar()
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'No pudimos enviar las notas. Inténtalo nuevamente.',
+    )
+    expect(panel.getByText('Estado: Borrador')).toBeInTheDocument()
+
+    // La confirmación sigue abierta: Enviar reintenta.
+    confirmarYEnviar()
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(intentos).toBe(2)
+  })
+
+  test('un 400 con faltantes nombra a los alumnos sin nota', async () => {
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => COMPLETAS,
+      () =>
+        json(
+          {
+            statusCode: 400,
+            message: 'Faltan notas',
+            faltantes: ['a3'],
+          } satisfies ErrorNotasFaltantes,
+          400,
+        ),
+    )
+    await abrirEvaluacion(panel)
+    fireEvent.click(enviarARevision(panel))
+    fireEvent.click(
+      within(panel.getByRole('region', { name: 'Confirmar envío' })).getByRole(
+        'button',
+        { name: 'Enviar' },
+      ),
+    )
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'Faltan notas de: Zoe Ruiz.',
+    )
+  })
+
+  test('un 409 muestra el mensaje del servidor', async () => {
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => COMPLETAS,
+      () =>
+        json({ statusCode: 409, message: 'Las notas están en revisión' }, 409),
+    )
+    await abrirEvaluacion(panel)
+    fireEvent.click(enviarARevision(panel))
+    fireEvent.click(
+      within(panel.getByRole('region', { name: 'Confirmar envío' })).getByRole(
+        'button',
+        { name: 'Enviar' },
+      ),
+    )
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'Las notas están en revisión.',
+    )
   })
 })
