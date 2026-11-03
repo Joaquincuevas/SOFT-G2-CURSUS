@@ -133,6 +133,14 @@ export interface ErrorNotasInvalidas {
   invalidas: { alumnoId: string; motivo: string }[]
 }
 
+// NOT-08: 400 del envío a revisión cuando algún alumno con inscripción
+// activa no tiene nota válida (sus ids). No cambia nada.
+export interface ErrorNotasFaltantes {
+  statusCode: 400
+  message: 'Faltan notas'
+  faltantes: string[]
+}
+
 // 400 del PUT cuando la lista trae alumnos que no están inscritos en la
 // sección o repetidos (ids).
 export interface ErrorListaNotas {

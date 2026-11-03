@@ -180,6 +180,24 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
+    // revision_notas, y deja las políticas del ayudante en nota sin la
+    // condición del estado.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ restosEnvio }] = await bd.query<{ restosEnvio: string }[]>(
+      `SELECT (SELECT count(*) FROM pg_policies
+                WHERE policyname = 'pol_revision_notas_envio')
+            + (SELECT count(*) FROM information_schema.role_table_grants
+                WHERE grantee = 'cursus_app' AND table_name = 'revision_notas'
+                  AND privilege_type = 'UPDATE')
+            + (SELECT count(*) FROM pg_policies
+                WHERE tablename = 'nota'
+                  AND (coalesce(qual, '') || coalesce(with_check, ''))
+                      LIKE '%revision_notas%') AS "restosEnvio"`,
+    )
+    expect(Number(restosEnvio)).toBe(0)
+
     // NOT-07: quita el estado de las notas con su trigger del superadmin.
     await bd.undoLastMigration()
     const SIN_REVISION_NOTAS = TABLAS.filter((t) => t !== 'revision_notas')

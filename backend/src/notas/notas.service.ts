@@ -1,6 +1,8 @@
 import {
   esNotaValida,
   type ErrorListaNotas,
+  type ErrorNotasFaltantes,
+  type EstadoRevisionNotas,
   type GuardarNotas,
   type EstadoNota,
   type NotasEvaluacion,
@@ -8,6 +10,7 @@ import {
 } from '@cursus/shared'
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   InternalServerErrorException,
@@ -49,6 +52,78 @@ const DESDE_EVALUACION = `
 const ESTADO_REVISION = `COALESCE(r.estado, 'BORRADOR') AS estado`
 const CON_REVISION = `
   LEFT JOIN revision_notas r ON r.evaluacion_id = e.id`
+
+// NOT-08: el ayudante escribe notas y envía solo en BORRADOR o DEVUELTA.
+const NO_EDITABLE: Partial<Record<EstadoRevisionNotas, string>> = {
+  EN_REVISION: 'Las notas están en revisión',
+  APROBADA: 'Las notas ya fueron aprobadas',
+}
+
+type Consulta = Pick<BaseDeDatos, 'query'>
+
+// Dentro de la transacción de un guardado o un envío: toma el lock de la
+// evaluación y comprueba que existe, que quien escribe sigue siendo ayudante
+// de la sección y que las notas aún se editan (409 si no).
+async function bloquearEvaluacionEditable(
+  bd: Consulta,
+  contexto: ContextoUniversidad,
+  usuarioId: string,
+  seccion: SeccionEspacio,
+  evaluacionId: string,
+): Promise<void> {
+  // Un guardado o envío a la vez por evaluación: así la nota anterior que
+  // queda en la auditoría es la última guardada, y un envío ve las notas
+  // definitivas. Con un advisory lock y no con FOR UPDATE, porque la RLS de
+  // evaluacion solo deja modificarla (y bloquear sus filas) al profesor. La
+  // clave sigue el patrón de horarios.service.ts; el id va en minúsculas
+  // porque ParseUUIDPipe acepta mayúsculas y la clave se calcula sobre el
+  // texto.
+  await bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+    `notas:${evaluacionId.toLowerCase()}`,
+  ])
+  const [evaluacion] = await bd.query<{
+    es_ayudante: boolean
+    estado: EstadoRevisionNotas
+  }>(
+    `SELECT ${ESTADO_REVISION},
+            EXISTS (SELECT 1 FROM ayudante_seccion a
+                      JOIN usuario u ON u.id = a.usuario_id
+                     WHERE a.seccion_id = s.id AND a.usuario_id = $4
+                       AND a.archived_at IS NULL AND u.rol = 'AYUDANTE'
+                       AND u.archived_at IS NULL) AS es_ayudante
+       ${DESDE_EVALUACION} ${CON_REVISION}
+      WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+        AND e.archived_at IS NULL AND s.archived_at IS NULL
+        AND cu.archived_at IS NULL`,
+    [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
+  )
+  if (!evaluacion) {
+    throw new NotFoundException('La evaluación no existe')
+  }
+  // Se le quitó la sección después de que el guard la verificara.
+  if (!evaluacion.es_ayudante) {
+    throw new ForbiddenException('Solo un ayudante de la sección ingresa notas')
+  }
+  const bloqueo = NO_EDITABLE[evaluacion.estado]
+  if (bloqueo) {
+    throw new ConflictException(bloqueo)
+  }
+}
+
+// Alumnos con inscripción activa en la sección, fijados (FOR SHARE) como en
+// ASI-02: quitar a un alumno (GES-19) espera a que termine la transacción.
+const inscritosFijados = (
+  bd: Consulta,
+  contexto: ContextoUniversidad,
+  seccionId: string,
+) =>
+  bd.query<{ id: string }>(
+    `SELECT i.usuario_id AS id FROM inscripcion i
+      WHERE i.universidad_id = $1 AND i.seccion_id = $2
+        AND i.archived_at IS NULL
+        FOR SHARE`,
+    [contexto.universidadId, seccionId],
+  )
 
 // IDs repetidos en una lista, en el orden en que aparecen por primera vez.
 function repetidos(ids: string[]): string[] {
@@ -128,50 +203,15 @@ export class NotasService {
     const dobles = repetidos(notas.map((n) => n.alumnoId))
 
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
-      // Un guardado a la vez por evaluación: así la nota anterior que queda
-      // en la auditoría es la última guardada. Con un advisory lock y no con
-      // FOR UPDATE, porque la RLS de evaluacion solo deja modificarla (y
-      // bloquear sus filas) al profesor. La clave sigue el patrón de
-      // horarios.service.ts; el id va en minúsculas porque ParseUUIDPipe
-      // acepta mayúsculas y la clave se calcula sobre el texto.
-      await bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-        `notas:${evaluacionId.toLowerCase()}`,
-      ])
-      const [evaluacion] = await bd.query<{
-        id: string
-        es_ayudante: boolean
-      }>(
-        `SELECT e.id,
-                EXISTS (SELECT 1 FROM ayudante_seccion a
-                          JOIN usuario u ON u.id = a.usuario_id
-                         WHERE a.seccion_id = s.id AND a.usuario_id = $4
-                           AND a.archived_at IS NULL AND u.rol = 'AYUDANTE'
-                           AND u.archived_at IS NULL) AS es_ayudante
-           ${DESDE_EVALUACION}
-          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
-            AND e.archived_at IS NULL AND s.archived_at IS NULL
-            AND cu.archived_at IS NULL`,
-        [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
+      // NOT-08: una evaluación enviada a revisión o aprobada no se edita.
+      await bloquearEvaluacionEditable(
+        bd,
+        contexto,
+        usuarioId,
+        seccion,
+        evaluacionId,
       )
-      if (!evaluacion) {
-        throw new NotFoundException('La evaluación no existe')
-      }
-      // Se le quitó la sección después de que el guard la verificara.
-      if (!evaluacion.es_ayudante) {
-        throw new ForbiddenException(
-          'Solo un ayudante de la sección ingresa notas',
-        )
-      }
-
-      // Las inscripciones se leen fijadas (FOR SHARE), como en ASI-02: quitar
-      // a un alumno (GES-19) espera a que termine este guardado.
-      const inscritos = await bd.query<{ id: string }>(
-        `SELECT i.usuario_id AS id FROM inscripcion i
-          WHERE i.universidad_id = $1 AND i.seccion_id = $2
-            AND i.archived_at IS NULL
-            FOR SHARE`,
-        [contexto.universidadId, seccion.id],
-      )
+      const inscritos = await inscritosFijados(bd, contexto, seccion.id)
       const activos = new Set(inscritos.map((a) => a.id))
       const sobrantes = [
         ...new Set(
@@ -279,6 +319,103 @@ export class NotasService {
         [contexto.universidadId, seccion.id, evaluacionId],
       )
       return guardada
+    })
+  }
+
+  // NOT-08: envía a revisión las notas de la evaluación. Exige una nota
+  // válida para cada alumno con inscripción activa en este momento (400 con
+  // los que faltan), pasa revision_notas de BORRADOR o DEVUELTA a EN_REVISION
+  // y deja un evento ENVIO, todo en la misma transacción y con el lock de la
+  // evaluación: un guardado o un segundo envío esperan, y el segundo envío
+  // responde 409.
+  async enviar(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+  ): Promise<NotasEvaluacion> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await bloquearEvaluacionEditable(
+        bd,
+        contexto,
+        usuarioId,
+        seccion,
+        evaluacionId,
+      )
+      const inscritos = await inscritosFijados(bd, contexto, seccion.id)
+      if (inscritos.length === 0) {
+        throw new BadRequestException('La sección no tiene alumnos inscritos')
+      }
+      const notas = await bd.query<{ alumno_id: string; valor: string }>(
+        `SELECT alumno_id, valor FROM nota
+          WHERE universidad_id = $1 AND evaluacion_id = $2
+            AND archived_at IS NULL`,
+        [contexto.universidadId, evaluacionId],
+      )
+      // valor llega como texto (numeric): una nota guardada siempre cumple la
+      // escala, pero se vuelve a revisar antes de enviarla.
+      const conNota = new Set(
+        notas
+          .filter((n) => esNotaValida(Number(n.valor)))
+          .map((n) => n.alumno_id),
+      )
+      const faltantes = inscritos
+        .map((a) => a.id)
+        .filter((id) => !conNota.has(id))
+      if (faltantes.length) {
+        const error: ErrorNotasFaltantes = {
+          statusCode: 400,
+          message: 'Faltan notas',
+          faltantes,
+        }
+        throw new BadRequestException(error)
+      }
+
+      // Una evaluación cuyas notas no pasaron por el PUT aún no tiene fila.
+      await bd.query(
+        `INSERT INTO revision_notas (universidad_id, evaluacion_id, actualizado_por)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (evaluacion_id) DO NOTHING`,
+        [contexto.universidadId, evaluacionId, usuarioId],
+      )
+      // La RLS solo deja al ayudante pasar de BORRADOR o DEVUELTA a
+      // EN_REVISION, y omite sin error una fila que no alcanza: si el UPDATE
+      // no la modifica, se aborta en vez de responder 200 sin enviar.
+      const [{ filas }] = await bd.query<{ filas: number }>(
+        `WITH enviada AS (
+           UPDATE revision_notas SET estado = 'EN_REVISION', actualizado_por = $3
+            WHERE universidad_id = $1 AND evaluacion_id = $2
+              AND estado IN ('BORRADOR', 'DEVUELTA')
+           RETURNING 1)
+         SELECT count(*)::int AS filas FROM enviada`,
+        [contexto.universidadId, evaluacionId, usuarioId],
+      )
+      if (filas !== 1) {
+        this.logger.error({
+          mensaje: 'El UPDATE del envío no modificó revision_notas',
+          evaluacionId,
+          seccionId: seccion.id,
+          universidadId: contexto.universidadId,
+          filas,
+        })
+        throw new InternalServerErrorException(
+          'No se pudieron enviar las notas',
+        )
+      }
+      await this.auditoria.registrar(bd, {
+        universidadId: contexto.universidadId,
+        evaluacionId,
+        tipo: 'ENVIO',
+        responsableId: usuarioId,
+      })
+
+      const [enviada] = await bd.query<NotasEvaluacion>(
+        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+           ${DESDE_EVALUACION} ${CON_REVISION}
+          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
+        [contexto.universidadId, seccion.id, evaluacionId],
+      )
+      return enviada
     })
   }
 }

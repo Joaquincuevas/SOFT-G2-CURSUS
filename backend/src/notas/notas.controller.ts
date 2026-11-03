@@ -9,8 +9,10 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
+  Post,
   Put,
   Req,
 } from '@nestjs/common'
@@ -76,6 +78,31 @@ export class NotasController {
       seccion,
       evaluacionId,
       datos,
+    )
+  }
+
+  // NOT-08: envía las notas a revisión del profesor. 200 y no 201: cambia el
+  // estado de la evaluación, no crea un recurso. El mismo permiso que guardar.
+  @Puede('update', 'Nota')
+  @IntegranteDeSeccion()
+  @Post('envio')
+  @HttpCode(200)
+  enviar(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+  ): Promise<NotasEvaluacion> {
+    if (seccion.rol !== 'AYUDANTE') {
+      throw new ForbiddenException(
+        'Solo un ayudante de la sección envía las notas',
+      )
+    }
+    return this.notas.enviar(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
     )
   }
 }

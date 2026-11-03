@@ -1,4 +1,5 @@
 import {
+  type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EstadoNota,
   type EstadoRevisionNotas,
@@ -24,8 +25,9 @@ interface Props {
 // pocas y volver después por el resto. NOT-06: cada campo se valida al
 // escribir con la escala de 1,0 a 7,0 y se marca en rojo con su motivo; el
 // backend vuelve a validar y devuelve el motivo por alumno. NOT-07: lo
-// guardado es un borrador, que el profesor no ve como pendiente; enviarlo a
-// revisión es NOT-08.
+// guardado es un borrador, que el profesor no ve como pendiente. NOT-08: con
+// todas las notas guardadas se envía a revisión, y desde ahí los campos
+// quedan de solo lectura hasta que el profesor responda.
 export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar] = useDatos<NotasEvaluacion>(ruta)
@@ -59,9 +61,17 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
         </p>
       ) : (
         <FormularioNotas
+          // Un cambio de estado (el envío) reinicia el formulario con la
+          // recarga.
+          key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
+          editable={EDITABLE.includes(datos.estado)}
           alGuardar={() => setAviso('Borrador guardado.')}
+          alEnviar={() => {
+            setAviso('Notas enviadas a revisión.')
+            recargar()
+          }}
           alEditar={() => setAviso(null)}
         />
       )}
@@ -103,6 +113,9 @@ const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
   DEVUELTA: 'Devuelta',
 }
 
+// NOT-08: el ayudante escribe y envía solo en borrador o devuelta.
+const EDITABLE: readonly EstadoRevisionNotas[] = ['BORRADOR', 'DEVUELTA']
+
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',
   PUBLICADA: 'Publicada',
@@ -111,12 +124,16 @@ const ESTADO: Record<EstadoNota, string> = {
 function FormularioNotas({
   ruta,
   inicial,
+  editable,
   alGuardar,
+  alEnviar,
   alEditar,
 }: {
   ruta: string
   inicial: NotaAlumno[]
+  editable: boolean
   alGuardar: () => void
+  alEnviar: () => void
   alEditar: () => void
 }) {
   const { fetchConSesion } = useAuth()
@@ -146,6 +163,50 @@ function FormularioNotas({
     ]),
   )
   const hayInvalidas = alumnos.some((a) => motivos[a.id] !== null)
+  const [confirmando, setConfirmando] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  // Se envía lo guardado: todas las notas guardadas y nada pendiente.
+  const faltanNotas = alumnos.some((a) => a.nota === null)
+  const puedeEnviar =
+    !faltanNotas && cambios.length === 0 && !hayInvalidas && !guardando
+
+  async function enviar() {
+    setEnviando(true)
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${ruta}/envio`, { method: 'POST' })
+      if (res.ok) {
+        setConfirmando(false)
+        alEnviar()
+        return
+      }
+      const cuerpo = (await res.json().catch(() => null)) as
+        | (Partial<Pick<ErrorNotasFaltantes, 'faltantes'>> & {
+            message?: unknown
+          })
+        | null
+      // 400: otro ayudante cambió la lista o falta una nota; 409: ya se envió.
+      const faltantes = Array.isArray(cuerpo?.faltantes)
+        ? alumnos
+            .filter((a) => cuerpo.faltantes?.includes(a.id))
+            .map((a) => a.nombre)
+        : []
+      setError(
+        faltantes.length
+          ? `Faltan notas de: ${faltantes.join(', ')}.`
+          : (res.status === 400 || res.status === 409) &&
+              typeof cuerpo?.message === 'string'
+            ? `${cuerpo.message}.`
+            : 'No pudimos enviar las notas. Inténtalo nuevamente.',
+      )
+    } catch {
+      setError(
+        'No pudimos enviar las notas. Comprueba tu conexión e inténtalo nuevamente.',
+      )
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   function reiniciar(delServidor: NotaAlumno[]) {
     setAlumnos(delServidor)
@@ -262,6 +323,8 @@ function FormularioNotas({
                     // guarda tampoco: la recarga reinicia el formulario y
                     // borraría lo escrito después de enviar.
                     disabled={guardando || alumno.estado === 'PUBLICADA'}
+                    // NOT-08: enviada a revisión o aprobada, solo se lee.
+                    readOnly={!editable}
                     onChange={(event) => {
                       alEditar()
                       setValores((actuales) => ({
@@ -295,14 +358,58 @@ function FormularioNotas({
           })}
         </tbody>
       </table>
-      <button
-        className="notas__boton"
-        type="submit"
-        // NOT-06: mientras haya una nota inválida no se guarda ninguna.
-        disabled={cambios.length === 0 || guardando || hayInvalidas}
-      >
-        Guardar borrador
-      </button>
+      {editable && (
+        <div className="notas__acciones">
+          <button
+            className="notas__boton"
+            type="submit"
+            // NOT-06: mientras haya una nota inválida no se guarda ninguna.
+            disabled={
+              cambios.length === 0 || guardando || hayInvalidas || enviando
+            }
+          >
+            Guardar borrador
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={!puedeEnviar || enviando || confirmando}
+            onClick={() => setConfirmando(true)}
+          >
+            Enviar a revisión
+          </button>
+        </div>
+      )}
+      {editable && faltanNotas && (
+        <p className="dashboard__texto">
+          Para enviar a revisión, todos los alumnos deben tener una nota
+          guardada.
+        </p>
+      )}
+      {confirmando && (
+        <section className="notas__confirmacion" aria-label="Confirmar envío">
+          <p>
+            ¿Enviar las notas a revisión? No podrás editarlas hasta que el
+            profesor responda.
+          </p>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando}
+            onClick={() => void enviar()}
+          >
+            {enviando ? 'Enviando…' : 'Enviar'}
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando}
+            onClick={() => setConfirmando(false)}
+          >
+            Cancelar
+          </button>
+        </section>
+      )}
       {error && (
         <p className="notas__error" role="alert">
           {error}

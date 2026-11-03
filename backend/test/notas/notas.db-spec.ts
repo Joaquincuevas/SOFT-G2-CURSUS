@@ -1523,19 +1523,31 @@ describe('RLS de revision_notas (NOT-07)', () => {
     'DIRECTOR',
     'ALUMNO',
     'ADMINISTRATIVO',
-  ])('el %s no puede hacer UPDATE ni DELETE', async (rol) => {
-    for (const sql of [
-      `UPDATE revision_notas SET estado = 'EN_REVISION' WHERE evaluacion_id = $1`,
-      'DELETE FROM revision_notas WHERE evaluacion_id = $1',
-    ]) {
-      await comoApp({ universidadId: ids.norte, rol }, async (q) => {
-        await expect(q.query(sql, [evaluacion])).rejects.toMatchObject({
-          driverError: { code: SIN_PERMISO },
-        })
-      })
-    }
-    expect(await revisionDe(evaluacion)).toEqual([
-      expect.objectContaining({ estado: 'BORRADOR' }),
-    ])
+  ])('el %s no puede hacer DELETE', async (rol) => {
+    await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+      await expect(
+        q.query('DELETE FROM revision_notas WHERE evaluacion_id = $1', [
+          evaluacion,
+        ]),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
   })
+
+  // NOT-08: el UPDATE es solo del ayudante (ver RLS del envío).
+  it.each<Rol>(['PROFESOR', 'DIRECTOR', 'ALUMNO', 'ADMINISTRATIVO'])(
+    'el UPDATE del %s no alcanza la fila',
+    async (rol) => {
+      await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+        const [, modificadas] = await q.query<[unknown[], number]>(
+          `UPDATE revision_notas SET estado = 'EN_REVISION'
+            WHERE evaluacion_id = $1 RETURNING id`,
+          [evaluacion],
+        )
+        expect(modificadas).toBe(0)
+      })
+      expect(await revisionDe(evaluacion)).toEqual([
+        expect.objectContaining({ estado: 'BORRADOR' }),
+      ])
+    },
+  )
 })
