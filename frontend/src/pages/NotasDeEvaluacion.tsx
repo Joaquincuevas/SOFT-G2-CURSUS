@@ -30,7 +30,7 @@ interface Props {
 // quedan de solo lectura hasta que el profesor responda.
 export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
-  const [datos, recargar] = useDatos<NotasEvaluacion>(ruta)
+  const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
   const [aviso, setAviso] = useState<string | null>(null)
 
   if (datos === undefined) {
@@ -61,17 +61,21 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
         </p>
       ) : (
         <FormularioNotas
-          // Un cambio de estado (el envío) reinicia el formulario con la
-          // recarga.
+          // Un cambio de estado (el envío) reinicia el formulario con las
+          // notas que lo trajeron.
           key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
           editable={EDITABLE.includes(datos.estado)}
           alGuardar={() => setAviso('Borrador guardado.')}
-          alEnviar={() => {
+          // El POST devuelve la evaluación ya en revisión: se aplica sin
+          // esperar otra recarga, en la que los campos volverían a editarse.
+          alEnviar={(enviada) => {
             setAviso('Notas enviadas a revisión.')
-            recargar()
+            if (enviada) fijar(enviada)
+            else recargar()
           }}
+          alSincronizar={fijar}
           alEditar={() => setAviso(null)}
           // 409: otro ayudante la envió mientras tanto. La recarga la deja en
           // solo lectura y el aviso explica por qué.
@@ -137,6 +141,7 @@ function FormularioNotas({
   editable,
   alGuardar,
   alEnviar,
+  alSincronizar,
   alEditar,
   alBloquear,
 }: {
@@ -144,7 +149,8 @@ function FormularioNotas({
   inicial: NotaAlumno[]
   editable: boolean
   alGuardar: () => void
-  alEnviar: () => void
+  alEnviar: (enviada: NotasEvaluacion | null) => void
+  alSincronizar: (notas: NotasEvaluacion) => void
   alEditar: () => void
   alBloquear: (mensaje: string) => void
 }) {
@@ -188,8 +194,9 @@ function FormularioNotas({
     try {
       const res = await fetchConSesion(`${ruta}/envio`, { method: 'POST' })
       if (res.ok) {
-        setConfirmando(false)
-        alEnviar()
+        // La confirmación sigue abierta (y los campos en solo lectura) hasta
+        // que el estado nuevo reinicia el formulario.
+        alEnviar((await res.json().catch(() => null)) as NotasEvaluacion | null)
         return
       }
       const cuerpo = (await res.json().catch(() => null)) as
@@ -228,6 +235,13 @@ function FormularioNotas({
     setAlumnos(delServidor)
     setValores(valoresDe(delServidor))
     setRechazadas({})
+  }
+
+  // Aplica la respuesta completa: otro ayudante pudo enviar la evaluación
+  // entre el PUT y la recarga, y el estado nuevo la deja en solo lectura.
+  function sincronizar(notas: NotasEvaluacion) {
+    reiniciar(notas.alumnos)
+    alSincronizar(notas)
   }
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
@@ -282,15 +296,16 @@ function FormularioNotas({
       // El PUT devuelve las notas como quedaron; la recarga trae además lo que
       // otros guardaron después. Si la recarga falla, queda lo que confirmó el
       // PUT: ningún campo conserva un valor que el servidor no confirmó.
-      const guardadas =
-        ((await res.json().catch(() => null)) as NotasEvaluacion | null)
-          ?.alumnos ?? alumnos
+      const guardadas = (await res
+        .json()
+        .catch(() => null)) as NotasEvaluacion | null
       try {
         const recarga = await fetchConSesion(ruta)
         if (!recarga.ok) throw new Error(`GET ${recarga.status}`)
-        reiniciar(((await recarga.json()) as NotasEvaluacion).alumnos)
+        sincronizar((await recarga.json()) as NotasEvaluacion)
       } catch {
-        reiniciar(guardadas)
+        if (guardadas) sincronizar(guardadas)
+        else reiniciar(alumnos)
         setError(
           'Las notas se guardaron, pero no pudimos recargarlas. Vuelve a abrir la evaluación para ver la lista actualizada.',
         )
