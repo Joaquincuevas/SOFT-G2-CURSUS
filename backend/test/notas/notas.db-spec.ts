@@ -28,6 +28,7 @@ const BD_ORIGINAL = process.env.POSTGRES_DB
 const SIN_PERMISO = '42501'
 const CHECK = '23514'
 const FOREIGN_KEY = '23503'
+const UNIQUE = '23505'
 const NO_EXISTE = '00000000-0000-4000-8000-000000000000'
 
 const PROFESOR = 'profesor@norte.cursus.test'
@@ -1238,5 +1239,303 @@ describe('RLS de nota (NOT-05)', () => {
       .delete(ruta(secciones.s1, evaluacion))
       .set('Authorization', `Bearer ${token}`)
       .expect(404)
+  })
+})
+
+// NOT-07: estado de las notas de una evaluación (revision_notas), como dueño
+// de la tabla.
+const revisionDe = (evaluacionId: string) =>
+  bd.query<{ estado: string; actualizado_por: string }[]>(
+    `SELECT estado, actualizado_por FROM revision_notas
+      WHERE evaluacion_id = $1`,
+    [evaluacionId],
+  )
+
+const insertarRevision = async (evaluacionId: string, estado = 'BORRADOR') =>
+  bd.query<unknown>(
+    `INSERT INTO revision_notas (universidad_id, evaluacion_id, estado, actualizado_por)
+     VALUES ($1, $2, $3, $4)`,
+    [ids.norte, evaluacionId, estado, await idDe(AYUDANTE)],
+  )
+
+describe('borrador de notas (NOT-07)', () => {
+  it.each([
+    ['el ayudante', AYUDANTE],
+    ['el profesor', PROFESOR],
+    ['el Director de otra universidad', DIRECTOR_SUR],
+  ])(
+    'una evaluación sin fila en revision_notas responde BORRADOR a %s',
+    async (_caso, correo) => {
+      const evaluacion = await crearEvaluacion()
+      expect((await leer(correo, evaluacion, 200)).estado).toBe('BORRADOR')
+      expect(await revisionDe(evaluacion)).toEqual([])
+    },
+  )
+
+  it('el estado se lee de revision_notas (LEFT JOIN), no es fijo', async () => {
+    const evaluacion = await crearEvaluacion()
+    await insertarRevision(evaluacion, 'EN_REVISION')
+    expect((await leer(PROFESOR, evaluacion, 200)).estado).toBe('EN_REVISION')
+  })
+
+  it('guardar aunque falten alumnos deja un borrador y al volver se recuperan las notas', async () => {
+    const evaluacion = await crearEvaluacion()
+    const ayudante = await idDe(AYUDANTE)
+
+    const guardadas = await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe([[alumnos.ana, 5.5]]),
+      200,
+    )
+    expect(guardadas.estado).toBe('BORRADOR')
+    expect(await revisionDe(evaluacion)).toEqual([
+      { estado: 'BORRADOR', actualizado_por: ayudante },
+    ])
+
+    const releidas = await leer(AYUDANTE, evaluacion, 200)
+    expect(releidas.estado).toBe('BORRADOR')
+    expect(
+      releidas.alumnos.filter((a) => a.nota !== null).map((a) => a.id),
+    ).toEqual([alumnos.ana])
+
+    // Otro guardado, de otro ayudante, no crea otra fila ni la cambia.
+    await guardar(otroAyudante, evaluacion, notasDe([[alumnos.zoe, 4]]), 200)
+    expect(await revisionDe(evaluacion)).toEqual([
+      { estado: 'BORRADOR', actualizado_por: ayudante },
+    ])
+    // Solo eventos PROPUESTA: guardar un borrador no envía a revisión.
+    expect((await eventosDe(evaluacion)).map((e) => e.tipo)).toEqual([
+      'PROPUESTA',
+      'PROPUESTA',
+    ])
+  })
+
+  it('el profesor lee los valores del borrador, en estado BORRADOR (no pendiente)', async () => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.bruno, 6]]), 200)
+
+    const notas = await leer(PROFESOR, evaluacion, 200)
+    expect(notas.estado).toBe('BORRADOR')
+    expect(notas.alumnos.find((a) => a.id === alumnos.bruno)?.nota).toBe(6)
+  })
+
+  it.each([
+    ['una nota inválida', notasDe([[alumnos.ana, 8]]), 400],
+    ['un alumno no inscrito', notasDe([[alumnos.noInscrito, 5]]), 400],
+  ])(
+    'un guardado rechazado por %s no crea el borrador',
+    async (_caso, cuerpo, estado) => {
+      const evaluacion = await crearEvaluacion()
+      await guardar(AYUDANTE, evaluacion, cuerpo, estado)
+      expect(await revisionDe(evaluacion)).toEqual([])
+    },
+  )
+
+  it.each([
+    ['el profesor', PROFESOR, 403],
+    ['un ayudante de otra sección', () => ayudanteOtraSeccion, 403],
+    ['un ayudante de otra universidad', AYUDANTE_SUR, 404],
+  ])('%s no crea el borrador', async (_caso, correo, estado) => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(
+      typeof correo === 'function' ? correo() : correo,
+      evaluacion,
+      notasDe([[alumnos.ana, 5]]),
+      estado,
+    )
+    expect(await revisionDe(evaluacion)).toEqual([])
+  })
+
+  it('dos PUT a la vez sobre una evaluación sin fila crean una sola fila', async () => {
+    const evaluacion = await crearEvaluacion()
+    await tokenDe(AYUDANTE)
+    await tokenDe(otroAyudante)
+
+    // Como en NOT-05: las inscripciones fijadas hacen que los dos lleguen a la
+    // vez, sin que ninguno haya creado la fila.
+    const bloqueo = bd.createQueryRunner()
+    await bloqueo.startTransaction()
+    let guardados: Promise<unknown>[]
+    try {
+      await bloqueo.query(
+        'SELECT id FROM inscripcion WHERE seccion_id = $1 FOR UPDATE',
+        [secciones.s1],
+      )
+      guardados = [
+        guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 4.5]]), 200),
+        guardar(otroAyudante, evaluacion, notasDe([[alumnos.zoe, 5]]), 200),
+      ]
+      await esperarBloqueados(2)
+    } finally {
+      await bloqueo.commitTransaction()
+      await bloqueo.release()
+    }
+    await Promise.all(guardados)
+
+    expect(await revisionDe(evaluacion)).toHaveLength(1)
+    expect(await filasDe(evaluacion)).toHaveLength(2)
+  })
+
+  it('el alumno no ve el estado: 403 en el GET y nada en sus endpoints', async () => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.base, 6.7]]), 200)
+    await leer(ALUMNO, evaluacion, 403)
+    const token = await tokenDe(ALUMNO)
+
+    for (const ruta of [
+      `/api/espacio/secciones/${secciones.s1}/evaluaciones`,
+      `/api/espacio/secciones/${secciones.s1}/resumen`,
+      '/api/dashboard/secciones-alumno',
+    ]) {
+      const respuesta = await request(app.getHttpServer())
+        .get(ruta)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      expect(JSON.stringify(respuesta.body)).not.toContain('BORRADOR')
+    }
+  })
+})
+
+describe('restricciones de revision_notas (NOT-07)', () => {
+  it('rechaza un estado que no es de NOT-09', async () => {
+    await expect(
+      insertarRevision(await crearEvaluacion(), 'PUBLICADA'),
+    ).rejects.toMatchObject({ driverError: { code: CHECK } })
+  })
+
+  it('una sola fila por evaluación', async () => {
+    const evaluacion = await crearEvaluacion()
+    await insertarRevision(evaluacion)
+    await expect(insertarRevision(evaluacion)).rejects.toMatchObject({
+      driverError: { code: UNIQUE },
+    })
+  })
+
+  it('rechaza una evaluación de otra universidad (FK compuesta)', async () => {
+    const evaluacion = await crearEvaluacion()
+    await expect(
+      bd.query(
+        `INSERT INTO revision_notas (universidad_id, evaluacion_id, actualizado_por)
+         VALUES ($1, $2, $3)`,
+        [ids.sur, evaluacion, await idDe(AYUDANTE_SUR)],
+      ),
+    ).rejects.toMatchObject({ driverError: { code: FOREIGN_KEY } })
+  })
+})
+
+describe('RLS de revision_notas (NOT-07)', () => {
+  let evaluacion = ''
+  beforeAll(async () => {
+    evaluacion = await crearEvaluacion()
+    await insertarRevision(evaluacion)
+  })
+
+  const insertar = async (
+    q: QueryRunner,
+    estado = 'BORRADOR',
+  ): Promise<unknown> =>
+    q.query(
+      `INSERT INTO revision_notas (universidad_id, evaluacion_id, estado, actualizado_por)
+       VALUES ($1, $2, $3, $4)`,
+      [ids.norte, await crearEvaluacion(), estado, await idDe(AYUDANTE)],
+    )
+
+  it.each<Rol>(['PROFESOR', 'AYUDANTE'])(
+    'el %s de la universidad la lee',
+    async (rol) => {
+      await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+        const filas = await q.query<unknown[]>(
+          'SELECT id FROM revision_notas WHERE evaluacion_id = $1',
+          [evaluacion],
+        )
+        expect(filas).toHaveLength(1)
+      })
+    },
+  )
+
+  it('el Director la lee en cualquier universidad', async () => {
+    await comoApp({ universidadId: ids.sur, rol: 'DIRECTOR' }, async (q) => {
+      const filas = await q.query<unknown[]>(
+        'SELECT id FROM revision_notas WHERE evaluacion_id = $1',
+        [evaluacion],
+      )
+      expect(filas).toHaveLength(1)
+    })
+  })
+
+  it.each<[string, string, Rol]>([
+    ['el ALUMNO', 'norte', 'ALUMNO'],
+    ['el ADMINISTRATIVO', 'norte', 'ADMINISTRATIVO'],
+    ['el PROFESOR de otra universidad', 'sur', 'PROFESOR'],
+    ['el AYUDANTE de otra universidad', 'sur', 'AYUDANTE'],
+  ])('%s ve 0 filas', async (_caso, universidad, rol) => {
+    await comoApp(
+      { universidadId: universidad === 'norte' ? ids.norte : ids.sur, rol },
+      async (q) => {
+        expect(await q.query('SELECT id FROM revision_notas')).toEqual([])
+      },
+    )
+  })
+
+  it('el ayudante inserta un borrador (control positivo)', async () => {
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, (q) =>
+      insertar(q).then(() => undefined),
+    )
+  })
+
+  it.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO', 'DIRECTOR'])(
+    'el %s no puede insertar',
+    async (rol) => {
+      await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+        await expect(insertar(q)).rejects.toMatchObject({
+          driverError: { code: SIN_PERMISO },
+        })
+      })
+    },
+  )
+
+  it.each(['EN_REVISION', 'APROBADA', 'DEVUELTA'])(
+    'el ayudante no puede insertar en %s',
+    async (estado) => {
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          await expect(insertar(q, estado)).rejects.toMatchObject({
+            driverError: { code: SIN_PERMISO },
+          })
+        },
+      )
+    },
+  )
+
+  it('un ayudante de otra universidad no inserta en Norte', async () => {
+    await comoApp({ universidadId: ids.sur, rol: 'AYUDANTE' }, async (q) => {
+      await expect(insertar(q)).rejects.toMatchObject({
+        driverError: { code: SIN_PERMISO },
+      })
+    })
+  })
+
+  it.each<Rol>([
+    'AYUDANTE',
+    'PROFESOR',
+    'DIRECTOR',
+    'ALUMNO',
+    'ADMINISTRATIVO',
+  ])('el %s no puede hacer UPDATE ni DELETE', async (rol) => {
+    for (const sql of [
+      `UPDATE revision_notas SET estado = 'EN_REVISION' WHERE evaluacion_id = $1`,
+      'DELETE FROM revision_notas WHERE evaluacion_id = $1',
+    ]) {
+      await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+        await expect(q.query(sql, [evaluacion])).rejects.toMatchObject({
+          driverError: { code: SIN_PERMISO },
+        })
+      })
+    }
+    expect(await revisionDe(evaluacion)).toEqual([
+      expect.objectContaining({ estado: 'BORRADOR' }),
+    ])
   })
 })

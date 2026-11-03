@@ -49,6 +49,7 @@ const LISTA: EvaluacionesSeccion = {
 
 const SIN_NOTAS: NotasEvaluacion = {
   evaluacion: EVALUACION,
+  estado: 'BORRADOR',
   alumnos: [
     { id: 'a1', nombre: 'Ana Ávila', nota: null, estado: null },
     { id: 'a2', nombre: 'Bruno Díaz', nota: 5.5, estado: 'PROPUESTA' },
@@ -102,7 +103,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     expect(formulario.getByLabelText('Nota de Ana Ávila')).toHaveValue('')
     expect(formulario.getByLabelText('Nota de Bruno Díaz')).toHaveValue('5.5')
     expect(
-      formulario.getByRole('button', { name: 'Guardar notas' }),
+      formulario.getByRole('button', { name: 'Guardar borrador' }),
     ).toBeDisabled()
   })
 
@@ -136,12 +137,12 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     await abrirEvaluacion(panel)
 
     escribir(panel, 'Ana Ávila', '6.1')
-    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+    const guardar = panel.getByRole('button', { name: 'Guardar borrador' })
     expect(guardar).toBeEnabled()
     fireEvent.click(guardar)
 
     expect(await panel.findByRole('status')).toHaveTextContent(
-      'Notas guardadas como propuesta.',
+      'Borrador guardado.',
     )
     // Guardado parcial: Zoe sin nota y Bruno sin cambios no se envían.
     expect(enviados).toEqual([{ notas: [{ alumnoId: 'a1', nota: 6.1 }] }])
@@ -153,7 +154,9 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
           .find((texto) => texto?.startsWith('Ana Ávila')),
       ).toBe('Ana ÁvilaPropuesta'),
     )
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeDisabled()
   })
 
   test('después de guardar, Guardar queda deshabilitado mientras recarga', async () => {
@@ -172,7 +175,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     })
     await abrirEvaluacion(panel)
     escribir(panel, 'Zoe Ruiz', '4')
-    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+    const guardar = panel.getByRole('button', { name: 'Guardar borrador' })
     fireEvent.click(guardar)
 
     await waitFor(() => expect(puts).toBe(1))
@@ -208,7 +211,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     })
     await abrirEvaluacion(panel)
     escribir(panel, 'Bruno Díaz', '6.0')
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
 
     await waitFor(() => expect(terminarRecarga).toBeDefined())
     terminarRecarga!(SIN_NOTAS)
@@ -216,7 +219,9 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     const bruno = panel.getByLabelText('Nota de Bruno Díaz')
     await waitFor(() => expect(bruno).toBeEnabled())
     expect(bruno).toHaveValue('5.5')
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeDisabled()
   })
 
   test('si la recarga falla, se desbloquea con las notas del servidor y muestra el error', async () => {
@@ -232,7 +237,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     })
     await abrirEvaluacion(panel)
     escribir(panel, 'Bruno Díaz', '6.0')
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
 
     expect(await panel.findByRole('alert')).toHaveTextContent(
       'no pudimos recargarlas',
@@ -240,7 +245,9 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     const bruno = panel.getByLabelText('Nota de Bruno Díaz')
     expect(bruno).toBeEnabled()
     expect(bruno).toHaveValue('5.5')
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeDisabled()
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeDisabled()
   })
 
   test('mientras guarda no se puede escribir: la recarga borraría lo nuevo', async () => {
@@ -254,7 +261,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     )
     await abrirEvaluacion(panel)
     escribir(panel, 'Zoe Ruiz', '4')
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
 
     await waitFor(() =>
       expect(panel.getByLabelText('Nota de Ana Ávila')).toBeDisabled(),
@@ -275,7 +282,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       return SIN_NOTAS
     })
     await abrirEvaluacion(panel)
-    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+    const guardar = panel.getByRole('button', { name: 'Guardar borrador' })
 
     // Bruno ya tiene 5,5: guardarlo no cambiaría nada, así que no se envía.
     escribir(panel, 'Bruno Díaz', '5.50')
@@ -302,7 +309,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     async (texto, motivo) => {
       const panel = await abrirNotas('AYUDANTE')
       await abrirEvaluacion(panel)
-      const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+      const guardar = panel.getByRole('button', { name: 'Guardar borrador' })
       escribir(panel, 'Zoe Ruiz', '4')
       expect(guardar).toBeEnabled()
 
@@ -332,7 +339,9 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       escribir(panel, 'Ana Ávila', paso)
       expect(ana).not.toHaveAttribute('aria-invalid')
     }
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeEnabled()
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeEnabled()
   })
 
   test('un 400 sin notas inválidas muestra el mensaje sin marcar campos', async () => {
@@ -352,7 +361,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     )
     await abrirEvaluacion(panel)
     escribir(panel, 'Ana Ávila', '6')
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
 
     expect(await panel.findByRole('alert')).toHaveTextContent(
       'Solo se ingresan notas de alumnos inscritos, una por alumno.',
@@ -360,7 +369,9 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
       'aria-invalid',
     )
-    expect(panel.getByRole('button', { name: 'Guardar notas' })).toBeEnabled()
+    expect(
+      panel.getByRole('button', { name: 'Guardar borrador' }),
+    ).toBeEnabled()
   })
 
   test('acepta coma y punto como separador decimal', async () => {
@@ -378,7 +389,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     expect(panel.getByLabelText('Nota de Ana Ávila')).not.toHaveAttribute(
       'aria-invalid',
     )
-    fireEvent.click(panel.getByRole('button', { name: 'Guardar notas' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
 
     await waitFor(() =>
       expect(enviados).toEqual([
@@ -410,7 +421,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     await abrirEvaluacion(panel)
     escribir(panel, 'Ana Ávila', '6')
     escribir(panel, 'Zoe Ruiz', '4')
-    const guardar = panel.getByRole('button', { name: 'Guardar notas' })
+    const guardar = panel.getByRole('button', { name: 'Guardar borrador' })
     fireEvent.click(guardar)
 
     expect(await panel.findByRole('alert')).toHaveTextContent('Nota inválida.')
@@ -510,3 +521,57 @@ function sinIngresoDeNotas(panel: ReturnType<typeof within>) {
     panel.queryByRole('form', { name: 'Ingresar notas' }),
   ).not.toBeInTheDocument()
 }
+
+describe('borrador de notas (NOT-07)', () => {
+  test('Guardar borrador guarda aunque falten alumnos y al volver se recuperan', async () => {
+    // Backend simulado: el GET devuelve lo último que guardó el PUT.
+    let actuales = SIN_NOTAS
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        const { notas } = JSON.parse(init.body as string) as {
+          notas: { alumnoId: string; nota: number }[]
+        }
+        actuales = {
+          ...actuales,
+          alumnos: actuales.alumnos.map((a) => {
+            const nueva = notas.find((n) => n.alumnoId === a.id)
+            return nueva ? { ...a, nota: nueva.nota, estado: 'PROPUESTA' } : a
+          }),
+        }
+        return json(actuales)
+      }
+      return actuales
+    })
+    await abrirEvaluacion(panel)
+    expect(panel.getByText('Estado: Borrador')).toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Guardar notas' }),
+    ).not.toBeInTheDocument()
+
+    // Solo Ana: Zoe queda sin nota.
+    escribir(panel, 'Ana Ávila', '6,1')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
+    expect(await panel.findByRole('status')).toHaveTextContent(
+      'Borrador guardado.',
+    )
+
+    // Cerrar y volver a abrir la evaluación pide las notas de nuevo.
+    fireEvent.click(panel.getByRole('button', { name: 'Notas de Control 1' }))
+    expect(
+      panel.queryByRole('form', { name: 'Ingresar notas' }),
+    ).not.toBeInTheDocument()
+    await abrirEvaluacion(panel)
+    expect(await panel.findByLabelText('Nota de Ana Ávila')).toHaveValue('6.1')
+    expect(panel.getByLabelText('Nota de Bruno Díaz')).toHaveValue('5.5')
+    expect(panel.getByLabelText('Nota de Zoe Ruiz')).toHaveValue('')
+    expect(panel.getByText('Estado: Borrador')).toBeInTheDocument()
+  })
+
+  test('el profesor no ve la evaluación en borrador como pendiente de revisión', async () => {
+    const panel = await abrirNotas('PROFESOR')
+    expect(panel.getByText('Control 1')).toBeInTheDocument()
+    expect(panel.queryByText(/pendiente/i)).not.toBeInTheDocument()
+    expect(panel.queryByText(/borrador/i)).not.toBeInTheDocument()
+    expect(panel.queryByText(/en revisión/i)).not.toBeInTheDocument()
+  })
+})

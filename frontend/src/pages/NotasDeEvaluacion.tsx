@@ -1,6 +1,7 @@
 import {
   type ErrorNotasInvalidas,
   type EstadoNota,
+  type EstadoRevisionNotas,
   type GuardarNotas,
   MENSAJES_NOTA_INVALIDA,
   motivoNotaInvalida,
@@ -22,7 +23,9 @@ interface Props {
 // Se guardan como propuesta, que el alumno no ve; se pueden guardar unas
 // pocas y volver después por el resto. NOT-06: cada campo se valida al
 // escribir con la escala de 1,0 a 7,0 y se marca en rojo con su motivo; el
-// backend vuelve a validar y devuelve el motivo por alumno.
+// backend vuelve a validar y devuelve el motivo por alumno. NOT-07: lo
+// guardado es un borrador, que el profesor no ve como pendiente; enviarlo a
+// revisión es NOT-08.
 export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar] = useDatos<NotasEvaluacion>(ruta)
@@ -47,6 +50,9 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
       <h4 className="vista-seccion__subtitulo">
         Notas de {datos.evaluacion.nombre}
       </h4>
+      <p className="dashboard__texto">
+        Estado: {ESTADO_REVISION[datos.estado]}
+      </p>
       {datos.alumnos.length === 0 ? (
         <p className="dashboard__texto">
           La sección no tiene alumnos inscritos
@@ -55,7 +61,7 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
         <FormularioNotas
           ruta={ruta}
           inicial={datos.alumnos}
-          alGuardar={() => setAviso('Notas guardadas como propuesta.')}
+          alGuardar={() => setAviso('Borrador guardado.')}
           alEditar={() => setAviso(null)}
         />
       )}
@@ -88,6 +94,13 @@ function motivoDe(texto: string): string | null {
     ? motivoNotaInvalida(leerNota(limpio))
     : 'formato'
   return motivo && MENSAJES_NOTA_INVALIDA[motivo]
+}
+
+const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
+  BORRADOR: 'Borrador',
+  EN_REVISION: 'En revisión',
+  APROBADA: 'Aprobada',
+  DEVUELTA: 'Devuelta',
 }
 
 const ESTADO: Record<EstadoNota, string> = {
@@ -288,7 +301,7 @@ function FormularioNotas({
         // NOT-06: mientras haya una nota inválida no se guarda ninguna.
         disabled={cambios.length === 0 || guardando || hayInvalidas}
       >
-        Guardar notas
+        Guardar borrador
       </button>
       {error && (
         <p className="notas__error" role="alert">

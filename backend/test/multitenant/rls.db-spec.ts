@@ -369,6 +369,8 @@ describe('contrato del schema', () => {
         'actividad',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-05).
         'nota',
+        // Sin filas en el seed: su RLS la prueba test/notas (NOT-07).
+        'revision_notas',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
       ].sort(),
@@ -389,6 +391,8 @@ describe('contrato del schema', () => {
                   'anuncio_cambio',
                   'asistencia_cambio',
                   'lectura_anuncio',
+                  // NOT-07: aún sin transiciones de estado.
+                  'revision_notas',
                 ].includes(tabla.tabla)
               ? ['INSERT', 'SELECT']
               : ['INSERT', 'SELECT', 'UPDATE'],
