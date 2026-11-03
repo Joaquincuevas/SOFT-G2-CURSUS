@@ -1751,6 +1751,46 @@ describe('POST .../notas/envio (NOT-08)', () => {
     await enviar(AYUDANTE, await evaluacion(), 404)
   })
 
+  it('una sección sin alumnos activos responde 400 y no cambia nada', async () => {
+    // s2 sin inscripciones activas durante esta prueba.
+    const [archivadas] = await bd.query<[{ id: string }[], number]>(
+      `UPDATE inscripcion SET archived_at = now(), archivada_por = $2
+        WHERE seccion_id = $1 AND archived_at IS NULL RETURNING id`,
+      [secciones.s2, await idDe(ADMIN_INGENIERIA)],
+    )
+    try {
+      const evaluacion = await crearEvaluacion(secciones.s2)
+      const error = await enviar(
+        ayudanteOtraSeccion,
+        evaluacion,
+        400,
+        secciones.s2,
+      )
+      expect(error.message).toBe('La sección no tiene alumnos inscritos')
+      expect(await revisionDe(evaluacion)).toEqual([])
+      expect(await enviosDe(evaluacion)).toEqual([])
+    } finally {
+      await bd.query(
+        `UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL
+          WHERE id = ANY($1)`,
+        [archivadas.map((a) => a.id)],
+      )
+    }
+  })
+
+  it('el UPDATE del ayudante no cambia la evaluación de la fila (GRANT por columna)', async () => {
+    const evaluacion = await crearEvaluacion()
+    await fijarEstado(evaluacion, 'BORRADOR')
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `UPDATE revision_notas SET evaluacion_id = $2 WHERE evaluacion_id = $1`,
+          [evaluacion, await crearEvaluacion()],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
   it('dos envíos a la vez dejan un solo evento: uno responde 200 y el otro 409', async () => {
     const evaluacion = await evaluacionCompleta()
     await tokenDe(AYUDANTE)
