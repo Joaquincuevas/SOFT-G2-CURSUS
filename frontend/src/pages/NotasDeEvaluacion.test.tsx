@@ -812,6 +812,59 @@ describe('envío a revisión (NOT-08)', () => {
     ).not.toBeInTheDocument()
   })
 
+  // Caso de la revisión: con la recarga demorada, los campos volvían a
+  // editarse y lo escrito se perdía al llegar.
+  test('al confirmar el envío queda en solo lectura sin esperar la recarga', async () => {
+    let enviada = false
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => (enviada ? new Promise(() => {}) : COMPLETAS),
+      () => {
+        enviada = true
+        return { ...COMPLETAS, estado: 'EN_REVISION' }
+      },
+    )
+    await abrirEvaluacion(panel)
+    fireEvent.click(enviarARevision(panel))
+    fireEvent.click(
+      within(panel.getByRole('region', { name: 'Confirmar envío' })).getByRole(
+        'button',
+        { name: 'Enviar' },
+      ),
+    )
+
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    for (const campo of panel.getAllByLabelText(/^Nota de /)) {
+      expect(campo).toHaveAttribute('readonly')
+    }
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+  })
+
+  // Caso de la revisión: otro ayudante envía entre nuestro PUT y la recarga.
+  test('si la recarga después de guardar trae EN_REVISION, queda en solo lectura', async () => {
+    let puts = 0
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        puts++
+        return json(COMPLETAS)
+      }
+      return puts === 0 ? COMPLETAS : { ...COMPLETAS, estado: 'EN_REVISION' }
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Ana Ávila', '7')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
+
+    expect(await panel.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(panel.getByLabelText('Nota de Ana Ávila')).toHaveAttribute(
+      'readonly',
+    )
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+  })
+
   test('mientras se confirma el envío no se editan ni se guardan notas', async () => {
     const panel = await abrirNotas(
       'AYUDANTE',
