@@ -64,7 +64,7 @@ El envío, en una transacción:
 
 La migración `1792710000000-EnviarNotasRevision` no crea tablas:
 
-- `GRANT UPDATE ON revision_notas` y la política `pol_revision_notas_envio`. Solo el rol `AYUDANTE`, en su universidad, y solo de `BORRADOR` o `DEVUELTA` (`USING`) a `EN_REVISION` (`WITH CHECK`):
+- `GRANT UPDATE (estado, actualizado_por) ON revision_notas`, solo esas columnas: un UPDATE no mueve la fila a otra evaluación ni universidad. Y la política `pol_revision_notas_envio`. Solo el rol `AYUDANTE`, en su universidad, y solo de `BORRADOR` o `DEVUELTA` (`USING`) a `EN_REVISION` (`WITH CHECK`):
   - pasar a otro estado falla con un error de RLS;
   - el UPDATE de una evaluación en revisión o aprobada no la alcanza;
   - para los demás roles, el UPDATE no alcanza filas.
@@ -79,7 +79,11 @@ La migración `1792710000000-EnviarNotasRevision` no crea tablas:
 
   Sin fila, es un borrador (NOT-07). Con la evaluación en revisión o aprobada, un INSERT del ayudante falla con un error de RLS y su UPDATE no alcanza filas, así que el bloqueo no depende solo del servicio. La condición va solo en esas políticas del ayudante: publicar (NOT-11) agregará una política propia del profesor, que PostgreSQL combina con OR.
 
-- `down` deja las políticas de `nota` como en NOT-05, quita la política de envío y revoca el UPDATE.
+- `down` deja las políticas de `nota` como en NOT-05, quita la política de envío y revoca el UPDATE. No cambia las filas: una evaluación que quedó `EN_REVISION` volvería a editarse con el código de NOT-07.
+
+**Quien escriba notas debe tomar el lock `notas:<evaluacionId>`.** La condición de la RLS lee el estado al ejecutar la sentencia, sin bloquear la fila de `revision_notas`. Lo que impide que una nota cambie durante o después de un envío es el advisory lock. El PUT y el envío lo toman; NOT-11 (publicar) y NOT-15 (recorregir) deberán tomarlo también.
+
+**Alcance de la RLS: por universidad y rol, no por sección,** como en `nota` (NOT-05). Un ayudante con SQL directo como `cursus_app` podría enviar una evaluación de otra sección de su universidad. Por la API no es posible, porque el servicio exige ser ayudante de la sección. Se cerrará cuando exista `usuario_actual()`.
 
 **Auditoría:** `ENVIO` sin alumno ni notas, como exige `ck_nota_cambio_alcance` (NOT-04).
 
@@ -89,6 +93,8 @@ El envío exige nota para los alumnos activos **en ese momento**. Si después se
 
 - **NOT-12:** el profesor devuelve la evaluación, el ayudante agrega la nota y vuelve a enviar.
 - **NOT-10 y NOT-11:** la vista de pendientes y la publicación deberán mostrar o advertir a los alumnos sin nota.
+
+Una inscripción nueva no toma el lock de las notas, así que también puede quedar confirmada **durante** un envío: el envío se completa y ese alumno queda sin nota, igual que si se hubiera inscrito justo después.
 
 Lo mismo con un alumno retirado después del envío: su nota queda, pero no cuenta en la sección.
 
