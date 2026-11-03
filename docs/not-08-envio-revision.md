@@ -24,7 +24,7 @@ Tarjeta: [F4 · NOT-08](https://trello.com/c/zsei7Uyn). Depende de NOT-05 (ingre
 
 - Antes de enviar se pide **confirmación** en la misma página: "¿Enviar las notas a revisión? No podrás editarlas hasta que el profesor responda.", con **Enviar** y **Cancelar**.
 - **Al enviar:**
-  - la evaluación se recarga y se lee "Estado: En revisión";
+  - se aplica el estado que devuelve el POST, sin esperar otra recarga, y se lee "Estado: En revisión";
   - aparece el aviso "Notas enviadas a revisión.";
   - los campos quedan de solo lectura (`readonly`) y desaparecen los dos botones.
 
@@ -36,6 +36,7 @@ Tarjeta: [F4 · NOT-08](https://trello.com/c/zsei7Uyn). Depende de NOT-05 (ingre
   - un 400 con `faltantes` nombra a los alumnos sin nota;
   - un 409 muestra el mensaje del servidor.
 - Una evaluación **devuelta** (NOT-12) vuelve a editarse y a enviarse.
+- **Después de guardar**, la recarga aplica también el estado: si otro ayudante envió la evaluación entre el PUT y la recarga, queda en revisión y de solo lectura.
 
 ## API
 
@@ -131,6 +132,8 @@ npm run test:db --workspace=backend
   - el botón queda deshabilitado con notas faltantes o sin guardar;
   - la confirmación se puede cancelar;
   - el envío deja "Estado: En revisión", los campos en solo lectura y sin botones;
+  - con la recarga demorada, los campos quedan en solo lectura apenas responde el POST;
+  - si la recarga después de guardar trae `EN_REVISION`, la pantalla queda en revisión y de solo lectura;
   - una evaluación en revisión o aprobada se abre en solo lectura, y una devuelta se edita;
   - un error permite reintentar;
   - un 400 con `faltantes` nombra a los alumnos, y un 409 muestra el mensaje.
