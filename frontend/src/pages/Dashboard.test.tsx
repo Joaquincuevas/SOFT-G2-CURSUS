@@ -24,6 +24,7 @@ const SECCIONES: SeccionDashboard[] = [
       { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
     ],
     alumnos: 32,
+    pendientesRevision: 0,
   },
   {
     id: 'seccion-icc201-2',
@@ -35,6 +36,7 @@ const SECCIONES: SeccionDashboard[] = [
     },
     horario: [],
     alumnos: 1,
+    pendientesRevision: 0,
   },
 ]
 
