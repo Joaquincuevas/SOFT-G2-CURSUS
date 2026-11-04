@@ -1,4 +1,5 @@
 import {
+  type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EstadoNota,
   type EstadoRevisionNotas,
@@ -24,11 +25,12 @@ interface Props {
 // pocas y volver después por el resto. NOT-06: cada campo se valida al
 // escribir con la escala de 1,0 a 7,0 y se marca en rojo con su motivo; el
 // backend vuelve a validar y devuelve el motivo por alumno. NOT-07: lo
-// guardado es un borrador, que el profesor no ve como pendiente; enviarlo a
-// revisión es NOT-08.
+// guardado es un borrador, que el profesor no ve como pendiente. NOT-08: con
+// todas las notas guardadas se envía a revisión, y desde ahí los campos
+// quedan de solo lectura hasta que el profesor responda.
 export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
-  const [datos, recargar] = useDatos<NotasEvaluacion>(ruta)
+  const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
   const [aviso, setAviso] = useState<string | null>(null)
 
   if (datos === undefined) {
@@ -59,10 +61,29 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
         </p>
       ) : (
         <FormularioNotas
+          // Un cambio de estado (el envío) reinicia el formulario con las
+          // notas que lo trajeron.
+          key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
+          editable={EDITABLE.includes(datos.estado)}
           alGuardar={() => setAviso('Borrador guardado.')}
+          // El POST devuelve la evaluación ya en revisión: se aplica sin
+          // esperar otra recarga, en la que los campos volverían a editarse.
+          alEnviar={(enviada) => {
+            setAviso('Notas enviadas a revisión.')
+            if (enviada) fijar(enviada)
+            else recargar()
+          }}
+          alSincronizar={fijar}
           alEditar={() => setAviso(null)}
+          // 409: otro ayudante la envió mientras tanto. El formulario se
+          // bloquea al recibirlo; la recarga trae el estado nuevo y el aviso
+          // explica por qué.
+          alBloquear={(mensaje) => {
+            setAviso(mensaje)
+            recargar()
+          }}
         />
       )}
       {aviso && (
@@ -103,6 +124,13 @@ const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
   DEVUELTA: 'Devuelta',
 }
 
+// NOT-08: el ayudante escribe y envía solo en borrador o devuelta.
+const EDITABLE: readonly EstadoRevisionNotas[] = ['BORRADOR', 'DEVUELTA']
+
+// El mensaje del backend con punto final, o el dado si no trae uno.
+const mensajeDe = (cuerpo: { message?: unknown } | null, otro: string) =>
+  `${typeof cuerpo?.message === 'string' ? cuerpo.message : otro}.`
+
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',
   PUBLICADA: 'Publicada',
@@ -111,13 +139,21 @@ const ESTADO: Record<EstadoNota, string> = {
 function FormularioNotas({
   ruta,
   inicial,
+  editable: editableEnServidor,
   alGuardar,
+  alEnviar,
+  alSincronizar,
   alEditar,
+  alBloquear,
 }: {
   ruta: string
   inicial: NotaAlumno[]
+  editable: boolean
   alGuardar: () => void
+  alEnviar: (enviada: NotasEvaluacion | null) => void
+  alSincronizar: (notas: NotasEvaluacion) => void
   alEditar: () => void
+  alBloquear: (mensaje: string) => void
 }) {
   const { fetchConSesion } = useAuth()
   // Las notas como están en el servidor y lo que muestra cada campo. Después
@@ -128,6 +164,11 @@ function FormularioNotas({
     valoresDe(inicial),
   )
   const [guardando, setGuardando] = useState(false)
+  // Un 409 bloquea en el acto, sin esperar la recarga: el servidor ya no
+  // acepta cambios y lo escrito mientras tanto se perdería. Dura hasta que
+  // el estado nuevo reinicia el formulario.
+  const [bloqueada, setBloqueada] = useState(false)
+  const editable = editableEnServidor && !bloqueada
   const [error, setError] = useState<string | null>(null)
   // Motivos que devolvió el último 400, por alumno; se borra al editar el
   // campo.
@@ -146,6 +187,56 @@ function FormularioNotas({
     ]),
   )
   const hayInvalidas = alumnos.some((a) => motivos[a.id] !== null)
+  const [confirmando, setConfirmando] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  // Se envía lo guardado: todas las notas guardadas y nada pendiente.
+  const faltanNotas = alumnos.some((a) => a.nota === null)
+  const puedeEnviar =
+    !faltanNotas && cambios.length === 0 && !hayInvalidas && !guardando
+
+  async function enviar() {
+    setEnviando(true)
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${ruta}/envio`, { method: 'POST' })
+      if (res.ok) {
+        // La confirmación sigue abierta (y los campos en solo lectura) hasta
+        // que el estado nuevo reinicia el formulario.
+        alEnviar((await res.json().catch(() => null)) as NotasEvaluacion | null)
+        return
+      }
+      const cuerpo = (await res.json().catch(() => null)) as
+        | (Partial<Pick<ErrorNotasFaltantes, 'faltantes'>> & {
+            message?: unknown
+          })
+        | null
+      if (res.status === 409) {
+        setBloqueada(true)
+        setConfirmando(false)
+        alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden enviar'))
+        return
+      }
+      // 400: otro ayudante cambió la lista o falta una nota.
+      const faltantes = Array.isArray(cuerpo?.faltantes)
+        ? alumnos
+            .filter((a) => cuerpo.faltantes?.includes(a.id))
+            .map((a) => a.nombre)
+        : []
+      setError(
+        faltantes.length
+          ? `Faltan notas de: ${faltantes.join(', ')}.`
+          : res.status === 400 && typeof cuerpo?.message === 'string'
+            ? `${cuerpo.message}.`
+            : 'No pudimos enviar las notas. Inténtalo nuevamente.',
+      )
+    } catch {
+      setError(
+        'No pudimos enviar las notas. Comprueba tu conexión e inténtalo nuevamente.',
+      )
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   function reiniciar(delServidor: NotaAlumno[]) {
     setAlumnos(delServidor)
@@ -153,8 +244,17 @@ function FormularioNotas({
     setRechazadas({})
   }
 
+  // Aplica la respuesta completa: otro ayudante pudo enviar la evaluación
+  // entre el PUT y la recarga, y el estado nuevo la deja en solo lectura.
+  function sincronizar(notas: NotasEvaluacion) {
+    reiniciar(notas.alumnos)
+    alSincronizar(notas)
+  }
+
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    // Enter en un campo de solo lectura también envía el formulario.
+    if (!editable || confirmando || cambios.length === 0) return
     setGuardando(true)
     setError(null)
     const datos: GuardarNotas = {
@@ -175,6 +275,12 @@ function FormularioNotas({
               message?: unknown
             })
           | null
+        // NOT-08: 409, la evaluación se envió o se aprobó mientras tanto.
+        if (res.status === 409) {
+          setBloqueada(true)
+          alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden editar'))
+          return
+        }
         // 400: una nota inválida (con su motivo por alumno, NOT-06) o la lista
         // de alumnos cambió.
         if (res.status === 400 && Array.isArray(cuerpo?.invalidas)) {
@@ -198,15 +304,16 @@ function FormularioNotas({
       // El PUT devuelve las notas como quedaron; la recarga trae además lo que
       // otros guardaron después. Si la recarga falla, queda lo que confirmó el
       // PUT: ningún campo conserva un valor que el servidor no confirmó.
-      const guardadas =
-        ((await res.json().catch(() => null)) as NotasEvaluacion | null)
-          ?.alumnos ?? alumnos
+      const guardadas = (await res
+        .json()
+        .catch(() => null)) as NotasEvaluacion | null
       try {
         const recarga = await fetchConSesion(ruta)
         if (!recarga.ok) throw new Error(`GET ${recarga.status}`)
-        reiniciar(((await recarga.json()) as NotasEvaluacion).alumnos)
+        sincronizar((await recarga.json()) as NotasEvaluacion)
       } catch {
-        reiniciar(guardadas)
+        if (guardadas) sincronizar(guardadas)
+        else reiniciar(alumnos)
         setError(
           'Las notas se guardaron, pero no pudimos recargarlas. Vuelve a abrir la evaluación para ver la lista actualizada.',
         )
@@ -262,6 +369,10 @@ function FormularioNotas({
                     // guarda tampoco: la recarga reinicia el formulario y
                     // borraría lo escrito después de enviar.
                     disabled={guardando || alumno.estado === 'PUBLICADA'}
+                    // NOT-08: enviada a revisión o aprobada, solo se lee.
+                    // Tampoco mientras se confirma el envío: se envía lo
+                    // guardado.
+                    readOnly={!editable || confirmando}
                     onChange={(event) => {
                       alEditar()
                       setValores((actuales) => ({
@@ -295,14 +406,62 @@ function FormularioNotas({
           })}
         </tbody>
       </table>
-      <button
-        className="notas__boton"
-        type="submit"
-        // NOT-06: mientras haya una nota inválida no se guarda ninguna.
-        disabled={cambios.length === 0 || guardando || hayInvalidas}
-      >
-        Guardar borrador
-      </button>
+      {editable && (
+        <div className="notas__acciones">
+          <button
+            className="notas__boton"
+            type="submit"
+            // NOT-06: mientras haya una nota inválida no se guarda ninguna.
+            disabled={
+              cambios.length === 0 ||
+              guardando ||
+              hayInvalidas ||
+              enviando ||
+              confirmando
+            }
+          >
+            Guardar borrador
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={!puedeEnviar || enviando || confirmando}
+            onClick={() => setConfirmando(true)}
+          >
+            Enviar a revisión
+          </button>
+        </div>
+      )}
+      {editable && faltanNotas && (
+        <p className="dashboard__texto">
+          Para enviar a revisión, todos los alumnos deben tener una nota
+          guardada.
+        </p>
+      )}
+      {confirmando && (
+        <section className="notas__confirmacion" aria-label="Confirmar envío">
+          <p>
+            ¿Enviar las notas a revisión? No podrás editarlas hasta que el
+            profesor responda.
+          </p>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando || !puedeEnviar}
+            onClick={() => void enviar()}
+          >
+            {enviando ? 'Enviando…' : 'Enviar'}
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando}
+            onClick={() => setConfirmando(false)}
+          >
+            Cancelar
+          </button>
+        </section>
+      )}
       {error && (
         <p className="notas__error" role="alert">
           {error}

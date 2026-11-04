@@ -105,3 +105,33 @@ describe('guardar borrador (NOT-07)', () => {
     },
   )
 })
+
+// NOT-08: envío a revisión. El 404 de otra universidad necesita la base: está
+// en notas.db-spec.ts.
+describe('POST .../notas/envio (NOT-08)', () => {
+  const ENVIO = `${RUTA}/envio`
+
+  it('responde 401 sin sesión', async () => {
+    await request(app.getHttpServer()).post(ENVIO).expect(401)
+  })
+
+  it.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO', 'DIRECTOR'])(
+    '%s no tiene permiso CASL para enviar: 403',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .post(ENVIO)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    },
+  )
+
+  it.each(['get', 'put', 'patch', 'delete'] as const)(
+    'no hay ruta %s de envío',
+    async (metodo) => {
+      await request(app.getHttpServer())
+        [metodo](ENVIO)
+        .set('Authorization', sesion('AYUDANTE'))
+        .expect(404)
+    },
+  )
+})

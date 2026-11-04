@@ -1,5 +1,6 @@
 import {
   type ErrorListaNotas,
+  type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   MAX_NOTAS_GUARDADO,
   MENSAJES_NOTA_INVALIDA,
@@ -1523,19 +1524,435 @@ describe('RLS de revision_notas (NOT-07)', () => {
     'DIRECTOR',
     'ALUMNO',
     'ADMINISTRATIVO',
-  ])('el %s no puede hacer UPDATE ni DELETE', async (rol) => {
-    for (const sql of [
-      `UPDATE revision_notas SET estado = 'EN_REVISION' WHERE evaluacion_id = $1`,
-      'DELETE FROM revision_notas WHERE evaluacion_id = $1',
-    ]) {
+  ])('el %s no puede hacer DELETE', async (rol) => {
+    await comoApp({ universidadId: ids.norte, rol }, async (q) => {
+      await expect(
+        q.query('DELETE FROM revision_notas WHERE evaluacion_id = $1', [
+          evaluacion,
+        ]),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
+  // NOT-08: el UPDATE es solo del ayudante (ver RLS del envío).
+  it.each<Rol>(['PROFESOR', 'DIRECTOR', 'ALUMNO', 'ADMINISTRATIVO'])(
+    'el UPDATE del %s no alcanza la fila',
+    async (rol) => {
       await comoApp({ universidadId: ids.norte, rol }, async (q) => {
-        await expect(q.query(sql, [evaluacion])).rejects.toMatchObject({
-          driverError: { code: SIN_PERMISO },
-        })
+        const [, modificadas] = await q.query<[unknown[], number]>(
+          `UPDATE revision_notas SET estado = 'EN_REVISION'
+            WHERE evaluacion_id = $1 RETURNING id`,
+          [evaluacion],
+        )
+        expect(modificadas).toBe(0)
       })
+      expect(await revisionDe(evaluacion)).toEqual([
+        expect.objectContaining({ estado: 'BORRADOR' }),
+      ])
+    },
+  )
+})
+
+// NOT-08: envío a revisión.
+async function enviar(
+  correo: string,
+  evaluacionId: string,
+  estado: number,
+  seccionId = secciones.s1,
+) {
+  const token = await tokenDe(correo)
+  const respuesta = await request(app.getHttpServer())
+    .post(`${ruta(seccionId, evaluacionId)}/envio`)
+    .set('Authorization', `Bearer ${token}`)
+    .expect(estado)
+  return respuesta.body as NotasEvaluacion &
+    Partial<ErrorNotasFaltantes> & { message: string }
+}
+
+// Los cinco alumnos activos de s1 (el retirado no cuenta).
+const ACTIVOS = () => [
+  alumnos.base,
+  alumnos.ana,
+  alumnos.bruno,
+  alumnos.carla,
+  alumnos.zoe,
+]
+
+// Una evaluación nueva con nota para todos los activos de s1.
+async function evaluacionCompleta() {
+  const evaluacion = await crearEvaluacion()
+  await guardar(
+    AYUDANTE,
+    evaluacion,
+    notasDe(ACTIVOS().map((id) => [id, 5])),
+    200,
+  )
+  return evaluacion
+}
+
+// Deja la evaluación en el estado dado, como dueño de la tabla.
+const fijarEstado = async (evaluacionId: string, estado: string) =>
+  bd.query<unknown>(
+    `INSERT INTO revision_notas (universidad_id, evaluacion_id, estado, actualizado_por)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (evaluacion_id) DO UPDATE SET estado = EXCLUDED.estado`,
+    [ids.norte, evaluacionId, estado, await idDe(AYUDANTE)],
+  )
+
+const enviosDe = (evaluacionId: string) =>
+  bd.query<{ alumno_id: string | null; responsable_id: string; fecha: Date }[]>(
+    `SELECT alumno_id, responsable_id, fecha FROM nota_cambio
+      WHERE evaluacion_id = $1 AND tipo = 'ENVIO'`,
+    [evaluacionId],
+  )
+
+describe('POST .../notas/envio (NOT-08)', () => {
+  it('con todas las notas pasa a EN_REVISION y deja un evento ENVIO con fecha y ayudante', async () => {
+    const evaluacion = await evaluacionCompleta()
+    const ayudante = await idDe(AYUDANTE)
+    const antes = new Date()
+
+    const enviada = await enviar(AYUDANTE, evaluacion, 200)
+    expect(enviada.estado).toBe('EN_REVISION')
+    expect(enviada.alumnos.every((a) => a.nota === 5)).toBe(true)
+    expect(await revisionDe(evaluacion)).toEqual([
+      { estado: 'EN_REVISION', actualizado_por: ayudante },
+    ])
+    const envios = await enviosDe(evaluacion)
+    expect(envios).toHaveLength(1)
+    expect(envios[0]).toMatchObject({
+      alumno_id: null,
+      responsable_id: ayudante,
+    })
+    expect(envios[0].fecha.getTime()).toBeGreaterThanOrEqual(
+      antes.getTime() - 1000,
+    )
+    expect((await leer(PROFESOR, evaluacion, 200)).estado).toBe('EN_REVISION')
+  })
+
+  it('con una nota faltante responde 400 con los que faltan y no cambia nada', async () => {
+    const evaluacion = await crearEvaluacion()
+    await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe(
+        ACTIVOS()
+          .slice(0, 3)
+          .map((id) => [id, 6]),
+      ),
+      200,
+    )
+
+    const error = await enviar(AYUDANTE, evaluacion, 400)
+    expect(error.message).toBe('Faltan notas')
+    expect([...(error.faltantes ?? [])].sort()).toEqual(
+      ACTIVOS().slice(3).sort(),
+    )
+    expect(await revisionDe(evaluacion)).toEqual([
+      expect.objectContaining({ estado: 'BORRADOR' }),
+    ])
+    expect(await enviosDe(evaluacion)).toEqual([])
+  })
+
+  it('sin ninguna nota faltan todos los activos, sin el alumno retirado', async () => {
+    const evaluacion = await crearEvaluacion()
+    const error = await enviar(AYUDANTE, evaluacion, 400)
+    expect([...(error.faltantes ?? [])].sort()).toEqual(ACTIVOS().sort())
+    expect(await revisionDe(evaluacion)).toEqual([])
+  })
+
+  it('un segundo envío responde 409 y deja un solo evento', async () => {
+    const evaluacion = await evaluacionCompleta()
+    await enviar(AYUDANTE, evaluacion, 200)
+    const error = await enviar(otroAyudante, evaluacion, 409)
+    expect(error.message).toBe('Las notas están en revisión')
+    expect(await enviosDe(evaluacion)).toHaveLength(1)
+  })
+
+  it('una evaluación aprobada responde 409', async () => {
+    const evaluacion = await evaluacionCompleta()
+    await fijarEstado(evaluacion, 'APROBADA')
+    const error = await enviar(AYUDANTE, evaluacion, 409)
+    expect(error.message).toBe('Las notas ya fueron aprobadas')
+    expect(await enviosDe(evaluacion)).toEqual([])
+  })
+
+  it('una evaluación devuelta se puede volver a enviar', async () => {
+    const evaluacion = await evaluacionCompleta()
+    await fijarEstado(evaluacion, 'DEVUELTA')
+    expect((await enviar(AYUDANTE, evaluacion, 200)).estado).toBe('EN_REVISION')
+    expect(await enviosDe(evaluacion)).toHaveLength(1)
+  })
+
+  it('envía también si las notas no pasaron por el PUT (sin fila en revision_notas)', async () => {
+    const evaluacion = await crearEvaluacion()
+    for (const id of ACTIVOS()) {
+      await insertarDirecto(evaluacion, { alumno_id: id, valor: 4 })
     }
+    expect((await enviar(AYUDANTE, evaluacion, 200)).estado).toBe('EN_REVISION')
+  })
+
+  it.each([
+    ['en revisión', 'EN_REVISION', 'Las notas están en revisión'],
+    ['aprobada', 'APROBADA', 'Las notas ya fueron aprobadas'],
+  ])(
+    'el PUT de notas de una evaluación %s responde 409 y no cambia las notas',
+    async (_caso, estado, mensaje) => {
+      const evaluacion = await evaluacionCompleta()
+      await fijarEstado(evaluacion, estado)
+      const error = await guardar(
+        AYUDANTE,
+        evaluacion,
+        notasDe([[alumnos.ana, 7]]),
+        409,
+      )
+      expect(error.message).toBe(mensaje)
+      expect(
+        (await filasDe(evaluacion)).find((f) => f.alumno_id === alumnos.ana)
+          ?.valor,
+      ).toBe('5.0')
+      expect(
+        (await eventosDe(evaluacion)).filter((e) => e.nota_nueva === '7.0'),
+      ).toEqual([])
+    },
+  )
+
+  it('el PUT de una evaluación devuelta guarda', async () => {
+    const evaluacion = await evaluacionCompleta()
+    await fijarEstado(evaluacion, 'DEVUELTA')
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 7]]), 200)
+  })
+
+  it.each([
+    ['el profesor de la sección', PROFESOR, 403],
+    ['un alumno inscrito', ALUMNO, 403],
+    ['el Administrativo', ADMIN_INGENIERIA, 403],
+    ['el Director', DIRECTOR, 403],
+    ['un ayudante de otra sección', () => ayudanteOtraSeccion, 403],
+    ['un ayudante de otra universidad', AYUDANTE_SUR, 404],
+  ])('%s no envía (%#)', async (_caso, correo, estado) => {
+    const evaluacion = await evaluacionCompleta()
+    await enviar(
+      typeof correo === 'function' ? correo() : correo,
+      evaluacion,
+      estado,
+    )
+    expect(await revisionDe(evaluacion)).toEqual([
+      expect.objectContaining({ estado: 'BORRADOR' }),
+    ])
+    expect(await enviosDe(evaluacion)).toEqual([])
+  })
+
+  it.each([
+    ['de otra sección', () => crearEvaluacion(secciones.s2)],
+    ['archivada', () => crearEvaluacion(secciones.s1, { archivada: true })],
+    ['que no existe', () => Promise.resolve(NO_EXISTE)],
+  ])('una evaluación %s responde 404', async (_caso, evaluacion) => {
+    await enviar(AYUDANTE, await evaluacion(), 404)
+  })
+
+  it('una sección sin alumnos activos responde 400 y no cambia nada', async () => {
+    // s2 sin inscripciones activas durante esta prueba.
+    const [archivadas] = await bd.query<[{ id: string }[], number]>(
+      `UPDATE inscripcion SET archived_at = now(), archivada_por = $2
+        WHERE seccion_id = $1 AND archived_at IS NULL RETURNING id`,
+      [secciones.s2, await idDe(ADMIN_INGENIERIA)],
+    )
+    try {
+      const evaluacion = await crearEvaluacion(secciones.s2)
+      const error = await enviar(
+        ayudanteOtraSeccion,
+        evaluacion,
+        400,
+        secciones.s2,
+      )
+      expect(error.message).toBe('La sección no tiene alumnos inscritos')
+      expect(await revisionDe(evaluacion)).toEqual([])
+      expect(await enviosDe(evaluacion)).toEqual([])
+    } finally {
+      await bd.query(
+        `UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL
+          WHERE id = ANY($1)`,
+        [archivadas.map((a) => a.id)],
+      )
+    }
+  })
+
+  it('el UPDATE del ayudante no cambia la evaluación de la fila (GRANT por columna)', async () => {
+    const evaluacion = await crearEvaluacion()
+    await fijarEstado(evaluacion, 'BORRADOR')
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `UPDATE revision_notas SET evaluacion_id = $2 WHERE evaluacion_id = $1`,
+          [evaluacion, await crearEvaluacion()],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
+  it('dos envíos a la vez dejan un solo evento: uno responde 200 y el otro 409', async () => {
+    const evaluacion = await evaluacionCompleta()
+    await tokenDe(AYUDANTE)
+    await tokenDe(otroAyudante)
+
+    const bloqueo = bd.createQueryRunner()
+    await bloqueo.startTransaction()
+    let envios: Promise<unknown>[]
+    try {
+      await bloqueo.query(
+        'SELECT id FROM inscripcion WHERE seccion_id = $1 FOR UPDATE',
+        [secciones.s1],
+      )
+      const token = (correo: string) => tokenDe(correo)
+      envios = [AYUDANTE, otroAyudante].map(async (correo) =>
+        request(app.getHttpServer())
+          .post(`${ruta(secciones.s1, evaluacion)}/envio`)
+          .set('Authorization', `Bearer ${await token(correo)}`)
+          .then((r) => r.status),
+      )
+      await esperarBloqueados(2)
+    } finally {
+      await bloqueo.commitTransaction()
+      await bloqueo.release()
+    }
+    expect((await Promise.all(envios)).sort()).toEqual([200, 409])
+    expect(await enviosDe(evaluacion)).toHaveLength(1)
+  })
+})
+
+describe('RLS del envío a revisión (NOT-08)', () => {
+  // Filas modificadas: la RLS omite sin error las que no alcanza.
+  const actualizarRevision = async (
+    q: QueryRunner,
+    evaluacion: string,
+    estado: string,
+  ): Promise<number> => {
+    const [, filas] = await q.query<[unknown[], number]>(
+      `UPDATE revision_notas SET estado = $2 WHERE evaluacion_id = $1 RETURNING id`,
+      [evaluacion, estado],
+    )
+    return Number(filas)
+  }
+
+  it.each(['BORRADOR', 'DEVUELTA'])(
+    'el AYUDANTE pasa de %s a EN_REVISION',
+    async (desde) => {
+      const evaluacion = await crearEvaluacion()
+      await fijarEstado(evaluacion, desde)
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          expect(await actualizarRevision(q, evaluacion, 'EN_REVISION')).toBe(1)
+        },
+      )
+    },
+  )
+
+  it.each(['APROBADA', 'DEVUELTA', 'BORRADOR'])(
+    'el AYUDANTE no puede pasar un borrador a %s',
+    async (hacia) => {
+      const evaluacion = await crearEvaluacion()
+      await fijarEstado(evaluacion, 'BORRADOR')
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          await expect(
+            actualizarRevision(q, evaluacion, hacia),
+          ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+        },
+      )
+    },
+  )
+
+  it.each(['EN_REVISION', 'APROBADA'])(
+    'el UPDATE del AYUDANTE no alcanza una evaluación %s',
+    async (desde) => {
+      const evaluacion = await crearEvaluacion()
+      await fijarEstado(evaluacion, desde)
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          expect(await actualizarRevision(q, evaluacion, 'EN_REVISION')).toBe(0)
+        },
+      )
+    },
+  )
+
+  it('un AYUDANTE de otra universidad no envía las de Norte', async () => {
+    const evaluacion = await crearEvaluacion()
+    await fijarEstado(evaluacion, 'BORRADOR')
+    await comoApp({ universidadId: ids.sur, rol: 'AYUDANTE' }, async (q) => {
+      expect(await actualizarRevision(q, evaluacion, 'EN_REVISION')).toBe(0)
+    })
     expect(await revisionDe(evaluacion)).toEqual([
       expect.objectContaining({ estado: 'BORRADOR' }),
     ])
   })
+
+  // Las notas del AYUDANTE como cursus_app, según el estado de la evaluación
+  // (sin fila es un borrador).
+  const insertarNota = async (
+    q: QueryRunner,
+    evaluacion: string,
+  ): Promise<unknown> =>
+    q.query<unknown>(
+      `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por)
+       VALUES ($1, $2, $3, 4, $4)`,
+      [ids.norte, evaluacion, alumnos.zoe, await idDe(AYUDANTE)],
+    )
+  const actualizarNota = async (
+    q: QueryRunner,
+    evaluacion: string,
+  ): Promise<number> => {
+    const [, filas] = await q.query<[unknown[], number]>(
+      `UPDATE nota SET valor = 6 WHERE evaluacion_id = $1 AND alumno_id = $2
+           RETURNING id`,
+      [evaluacion, alumnos.ana],
+    )
+    return Number(filas)
+  }
+
+  async function evaluacionEn(estado: string | null) {
+    const evaluacion = await crearEvaluacion()
+    await insertarDirecto(evaluacion, { alumno_id: alumnos.ana, valor: 5 })
+    if (estado) await fijarEstado(evaluacion, estado)
+    return evaluacion
+  }
+
+  it.each([null, 'BORRADOR', 'DEVUELTA'])(
+    'en %s el AYUDANTE inserta y modifica notas',
+    async (estado) => {
+      const evaluacion = await evaluacionEn(estado)
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          await insertarNota(q, evaluacion)
+          expect(await actualizarNota(q, evaluacion)).toBe(1)
+        },
+      )
+    },
+  )
+
+  it.each(['EN_REVISION', 'APROBADA'])(
+    'en %s el INSERT del AYUDANTE falla y su UPDATE no alcanza filas',
+    async (estado) => {
+      const evaluacion = await evaluacionEn(estado)
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          await expect(insertarNota(q, evaluacion)).rejects.toMatchObject({
+            driverError: { code: SIN_PERMISO },
+          })
+        },
+      )
+      await comoApp(
+        { universidadId: ids.norte, rol: 'AYUDANTE' },
+        async (q) => {
+          expect(await actualizarNota(q, evaluacion)).toBe(0)
+        },
+      )
+      expect((await filasDe(evaluacion)).map((f) => f.valor)).toEqual(['5.0'])
+    },
+  )
 })

@@ -391,8 +391,6 @@ describe('contrato del schema', () => {
                   'anuncio_cambio',
                   'asistencia_cambio',
                   'lectura_anuncio',
-                  // NOT-07: aún sin transiciones de estado.
-                  'revision_notas',
                 ].includes(tabla.tabla)
               ? ['INSERT', 'SELECT']
               : ['INSERT', 'SELECT', 'UPDATE'],
