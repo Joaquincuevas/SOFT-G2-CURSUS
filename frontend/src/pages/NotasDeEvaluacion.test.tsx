@@ -865,6 +865,71 @@ describe('envío a revisión (NOT-08)', () => {
     ).not.toBeInTheDocument()
   })
 
+  // Caso de la revisión: tras un 409, con la recarga demorada, los campos
+  // seguían editables y lo escrito se perdía al llegar.
+  test('un 409 del envío bloquea los campos sin esperar la recarga', async () => {
+    let enviadaPorOtro = false
+    const panel = await abrirNotas(
+      'AYUDANTE',
+      () => (enviadaPorOtro ? new Promise(() => {}) : COMPLETAS),
+      () => {
+        enviadaPorOtro = true
+        return json(
+          { statusCode: 409, message: 'Las notas están en revisión' },
+          409,
+        )
+      },
+    )
+    await abrirEvaluacion(panel)
+    fireEvent.click(enviarARevision(panel))
+    fireEvent.click(
+      within(panel.getByRole('region', { name: 'Confirmar envío' })).getByRole(
+        'button',
+        { name: 'Enviar' },
+      ),
+    )
+
+    expect(await panel.findByRole('status')).toHaveTextContent(
+      'Las notas están en revisión.',
+    )
+    for (const campo of panel.getAllByLabelText(/^Nota de /)) {
+      expect(campo).toHaveAttribute('readonly')
+    }
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Enviar a revisión' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('un 409 del PUT bloquea los campos sin esperar la recarga', async () => {
+    let enviadaPorOtro = false
+    const panel = await abrirNotas('AYUDANTE', (init) => {
+      if (init?.method === 'PUT') {
+        enviadaPorOtro = true
+        return json(
+          { statusCode: 409, message: 'Las notas están en revisión' },
+          409,
+        )
+      }
+      return enviadaPorOtro ? new Promise(() => {}) : COMPLETAS
+    })
+    await abrirEvaluacion(panel)
+    escribir(panel, 'Ana Ávila', '7')
+    fireEvent.click(panel.getByRole('button', { name: 'Guardar borrador' }))
+
+    expect(await panel.findByRole('status')).toHaveTextContent(
+      'Las notas están en revisión.',
+    )
+    for (const campo of panel.getAllByLabelText(/^Nota de /)) {
+      expect(campo).toHaveAttribute('readonly')
+    }
+    expect(
+      panel.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+  })
+
   test('mientras se confirma el envío no se editan ni se guardan notas', async () => {
     const panel = await abrirNotas(
       'AYUDANTE',
