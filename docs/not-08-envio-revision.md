@@ -34,7 +34,7 @@ Tarjeta: [F4 · NOT-08](https://trello.com/c/zsei7Uyn). Depende de NOT-05 (ingre
   - el error se muestra con `role="alert"`;
   - la confirmación sigue abierta para reintentar;
   - un 400 con `faltantes` nombra a los alumnos sin nota;
-  - un 409 muestra el mensaje del servidor.
+  - un 409 muestra el mensaje del servidor y deja los campos en solo lectura en el acto, sin esperar la recarga que trae el estado nuevo.
 - Una evaluación **devuelta** (NOT-12) vuelve a editarse y a enviarse.
 - **Después de guardar**, la recarga aplica también el estado: si otro ayudante envió la evaluación entre el PUT y la recarga, queda en revisión y de solo lectura.
 
@@ -134,6 +134,7 @@ npm run test:db --workspace=backend
   - el envío deja "Estado: En revisión", los campos en solo lectura y sin botones;
   - con la recarga demorada, los campos quedan en solo lectura apenas responde el POST;
   - si la recarga después de guardar trae `EN_REVISION`, la pantalla queda en revisión y de solo lectura;
+  - un 409 del envío o del PUT, con la recarga demorada, deja los campos en solo lectura de inmediato;
   - una evaluación en revisión o aprobada se abre en solo lectura, y una devuelta se edita;
   - un error permite reintentar;
   - un 400 con `faltantes` nombra a los alumnos, y un 409 muestra el mensaje.
