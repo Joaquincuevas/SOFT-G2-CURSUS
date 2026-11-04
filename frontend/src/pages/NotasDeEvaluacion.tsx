@@ -77,8 +77,9 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
           }}
           alSincronizar={fijar}
           alEditar={() => setAviso(null)}
-          // 409: otro ayudante la envió mientras tanto. La recarga la deja en
-          // solo lectura y el aviso explica por qué.
+          // 409: otro ayudante la envió mientras tanto. El formulario se
+          // bloquea al recibirlo; la recarga trae el estado nuevo y el aviso
+          // explica por qué.
           alBloquear={(mensaje) => {
             setAviso(mensaje)
             recargar()
@@ -138,7 +139,7 @@ const ESTADO: Record<EstadoNota, string> = {
 function FormularioNotas({
   ruta,
   inicial,
-  editable,
+  editable: editableEnServidor,
   alGuardar,
   alEnviar,
   alSincronizar,
@@ -163,6 +164,11 @@ function FormularioNotas({
     valoresDe(inicial),
   )
   const [guardando, setGuardando] = useState(false)
+  // Un 409 bloquea en el acto, sin esperar la recarga: el servidor ya no
+  // acepta cambios y lo escrito mientras tanto se perdería. Dura hasta que
+  // el estado nuevo reinicia el formulario.
+  const [bloqueada, setBloqueada] = useState(false)
+  const editable = editableEnServidor && !bloqueada
   const [error, setError] = useState<string | null>(null)
   // Motivos que devolvió el último 400, por alumno; se borra al editar el
   // campo.
@@ -205,6 +211,7 @@ function FormularioNotas({
           })
         | null
       if (res.status === 409) {
+        setBloqueada(true)
         setConfirmando(false)
         alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden enviar'))
         return
@@ -270,6 +277,7 @@ function FormularioNotas({
           | null
         // NOT-08: 409, la evaluación se envió o se aprobó mientras tanto.
         if (res.status === 409) {
+          setBloqueada(true)
           alBloquear(mensajeDe(cuerpo, 'Las notas ya no se pueden editar'))
           return
         }
