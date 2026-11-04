@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
 - [ASI-04: corregir asistencia con motivo e historial, y guía de revisión](asi-04-corregir-asistencia.md)
 - [ASI-03: marcar todos presentes, ajustar excepciones y guía de revisión](asi-03-marcar-todos-presentes.md)
 - [GES-23: el superadmin gestiona universidades y facultades, y guía de revisión](ges-23-universidades-facultades.md)
