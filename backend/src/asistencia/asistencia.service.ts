@@ -3,6 +3,7 @@ import type {
   AsistenciaPropia,
   CambioAsistencia,
   ErrorListaAsistencia,
+  ResumenAsistenciaPropia,
   SeccionEspacio,
 } from '@cursus/shared'
 import {
@@ -201,6 +202,14 @@ export class AsistenciaService {
     alumnoId: string,
     seccion: SeccionEspacio,
   ): Promise<AsistenciaPropia[]> {
+    return (await this.resumenPropio(contexto, alumnoId, seccion)).clases
+  }
+
+  async resumenPropio(
+    contexto: ContextoUniversidad,
+    alumnoId: string,
+    seccion: SeccionEspacio,
+  ): Promise<ResumenAsistenciaPropia> {
     if (contexto.rol !== 'ALUMNO' || seccion.rol !== 'ALUMNO')
       throw new ForbiddenException()
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
@@ -208,17 +217,29 @@ export class AsistenciaService {
         `SELECT set_config('app.asistencia_alumno_id', $1, true)`,
         [alumnoId],
       )
-      return bd.query<AsistenciaPropia>(
-        `SELECT ${COLUMNAS_CLASE}, a.presente ${DESDE_CLASE}
+      // Una sentencia mantiene listado, numerador y denominador en el mismo
+      // snapshot. RLS y SQL filtran la identidad de la sesión antes de agregar.
+      // Solo cuentan clases con marca propia; no inferimos ausencias de una
+      // incorporación posterior ni leemos marcas de compañeros para contarlas.
+      const [resumen] = await bd.query<ResumenAsistenciaPropia>(
+        `WITH propias AS (
+          SELECT ${COLUMNAS_CLASE}, a.presente, c.fecha, c.inicio, c.id ${DESDE_CLASE}
            JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
           WHERE c.universidad_id = $1 AND s.id = $2 AND a.alumno_id = $3
             AND c.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
             AND a.archived_at IS NULL AND EXISTS (
               SELECT 1 FROM inscripcion i WHERE i.seccion_id = s.id AND i.universidad_id = s.universidad_id
                 AND i.usuario_id = $3 AND i.archived_at IS NULL)
-          ORDER BY c.fecha DESC, c.inicio DESC, c.id`,
+        )
+        SELECT COALESCE(json_agg(json_build_object('clase', clase, 'presente', presente)
+                 ORDER BY fecha DESC, inicio DESC, id), '[]'::json) AS clases,
+               count(*)::int AS registradas,
+               count(*) FILTER (WHERE presente)::int AS asistidas,
+               round(count(*) FILTER (WHERE presente)::numeric * 100 / NULLIF(count(*), 0), 2)::double precision AS porcentaje
+          FROM propias`,
         [contexto.universidadId, seccion.id, alumnoId],
       )
+      return resumen
     })
   }
 
