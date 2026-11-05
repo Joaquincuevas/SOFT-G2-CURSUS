@@ -77,6 +77,8 @@ La suite DB cubre ausencia de registros, 0/66,67/100 %, orden por fecha/bloque, 
 
 ## Evidencia local
 
+Validación del 5 de noviembre de 2026: build, lint y format:check locales aprobados; frontend 462/462, backend unitarios 484/484 y e2e 279/279. PostgreSQL local: 1298/1299, con un único timeout de 5 s en el comando real del seed GES-20 (sin ampliar su timeout ni modificar ese test). En el [CI de validación](https://github.com/Joaquincuevas/SOFT-G2-CURSUS/actions/runs/42071128467), PostgreSQL pasó 1299/1299, incluidos asistencia 89/89 y seed-facultad 12/12; las otras suites también pasaron: **2524 pruebas en total**.
+
 Capturas con Nest y PostgreSQL reales en una base temporal aislada, datos simulados, sesión de alumno. Tres clases marcadas y una pendiente en ICC101; ICC201 sin marcas. Se verificó Actualizar y navegación entre cursos, sin errores ni warnings de consola. La base temporal se eliminó al terminar.
 
 ![Marcas propias y 66,67 %](evidencias/asi-06-marcas.png)
