@@ -10,10 +10,30 @@ export interface SeccionDashboard {
   horario: BloqueHorario[]
   // Alumnos con inscripción activa.
   alumnos: number
+  // NOT-10: evaluaciones de la sección en revisión.
+  pendientesRevision: number
+}
+
+// NOT-10: evaluación enviada a revisión en una sección a cargo del profesor
+// (GET /api/dashboard/pendientes-revision), con el último envío.
+export interface PendienteRevision {
+  evaluacion: { id: string; nombre: string; fecha: string }
+  seccion: { id: string; numero: number }
+  curso: { id: string; codigo: string; nombre: string }
+  // Quién hizo el último envío y cuándo (ISO 8601): tras una devolución
+  // (NOT-12), el reenvío. Null solo si la fila se cambió fuera de la API, sin
+  // evento ENVIO.
+  ayudante: { id: string; nombre: string } | null
+  enviadaEl: string | null
+  // Alumnos activos sin nota: los inscritos después del envío (NOT-08).
+  sinNota: number
 }
 
 // ESP-03: una tarjeta por inscripción activa del alumno en el período activo.
-export interface SeccionAlumno extends Omit<SeccionDashboard, 'alumnos'> {
+export interface SeccionAlumno extends Omit<
+  SeccionDashboard,
+  'alumnos' | 'pendientesRevision'
+> {
   profesor: { id: string; nombre: string } | null
   anunciosNuevos: number
 }
