@@ -82,7 +82,7 @@ La migración `1792710000000-EnviarNotasRevision` no crea tablas:
 
 - `down` deja las políticas de `nota` como en NOT-05, quita la política de envío y revoca el UPDATE. No cambia las filas: una evaluación que quedó `EN_REVISION` volvería a editarse con el código de NOT-07.
 
-**Quien escriba notas debe tomar el lock `notas:<evaluacionId>`.** La condición de la RLS lee el estado al ejecutar la sentencia, sin bloquear la fila de `revision_notas`. Lo que impide que una nota cambie durante o después de un envío es el advisory lock. El PUT y el envío lo toman; NOT-11 (publicar) y NOT-15 (recorregir) deberán tomarlo también.
+**Quien escriba notas debe tomar el lock `notas:<evaluacionId>`.** La condición de la RLS lee el estado al ejecutar la sentencia, sin bloquear la fila de `revision_notas`. Lo que impide que una nota cambie durante o después de un envío es el advisory lock. El PUT y el envío lo toman; [NOT-11](not-11-aprobar-publicar.md) (publicar) también lo toma, y NOT-15 (recorregir) deberá hacerlo.
 
 **Alcance de la RLS: por universidad y rol, no por sección,** como en `nota` (NOT-05). Un ayudante con SQL directo como `cursus_app` podría enviar una evaluación de otra sección de su universidad. Por la API no es posible, porque el servicio exige ser ayudante de la sección. Se cerrará cuando exista `usuario_actual()`.
 

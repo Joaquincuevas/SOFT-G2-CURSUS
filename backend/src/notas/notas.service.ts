@@ -1,6 +1,7 @@
 import {
   esNotaValida,
   type ErrorListaNotas,
+  type ErrorEstadoAprobacion,
   type ErrorNotasFaltantes,
   type EstadoRevisionNotas,
   type GuardarNotas,
@@ -20,6 +21,7 @@ import {
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
 
@@ -59,7 +61,24 @@ const NO_EDITABLE: Partial<Record<EstadoRevisionNotas, string>> = {
   APROBADA: 'Las notas ya fueron aprobadas',
 }
 
+// NOT-11: el profesor aprueba solo en EN_REVISION.
+const NO_APROBABLE: Record<
+  Exclude<EstadoRevisionNotas, 'EN_REVISION'>,
+  string
+> = {
+  BORRADOR: 'Las notas aún no se envían a revisión',
+  DEVUELTA: 'Las notas fueron devueltas al ayudante',
+  APROBADA: 'Las notas ya fueron aprobadas',
+}
+
 type Consulta = Pick<BaseDeDatos, 'query'>
+
+// Un guardado, envío o aprobación a la vez por evaluación (ver
+// bloquearEvaluacionEditable).
+const bloquearNotasDe = (bd: Consulta, evaluacionId: string) =>
+  bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+    `notas:${evaluacionId.toLowerCase()}`,
+  ])
 
 // Dentro de la transacción de un guardado o un envío: toma el lock de la
 // evaluación y comprueba que existe, que quien escribe sigue siendo ayudante
@@ -78,9 +97,7 @@ async function bloquearEvaluacionEditable(
   // clave sigue el patrón de horarios.service.ts; el id va en minúsculas
   // porque ParseUUIDPipe acepta mayúsculas y la clave se calcula sobre el
   // texto.
-  await bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-    `notas:${evaluacionId.toLowerCase()}`,
-  ])
+  await bloquearNotasDe(bd, evaluacionId)
   const [evaluacion] = await bd.query<{
     es_ayudante: boolean
     estado: EstadoRevisionNotas
@@ -416,6 +433,125 @@ export class NotasService {
         [contexto.universidadId, seccion.id, evaluacionId],
       )
       return enviada
+    })
+  }
+
+  // NOT-11: el profesor de la sección aprueba las notas en revisión y las
+  // publica. Con el lock de la evaluación y en una transacción: cada nota
+  // PROPUESTA pasa a PUBLICADA con su evento PUBLICACION, y la revisión a
+  // APROBADA con un evento APROBACION. Una segunda aprobación espera el lock
+  // y responde 409. La RLS (usuario_actual()) exige lo mismo sin el servicio.
+  async aprobar(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+  ): Promise<NotasEvaluacion> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      await bloquearNotasDe(bd, evaluacionId)
+      const [evaluacion] = await bd.query<{
+        es_profesor: boolean
+        estado: EstadoRevisionNotas
+      }>(
+        `SELECT ${ESTADO_REVISION}, s.profesor_id = $4 AS es_profesor
+           ${DESDE_EVALUACION} ${CON_REVISION}
+          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+            AND e.archived_at IS NULL AND s.archived_at IS NULL
+            AND cu.archived_at IS NULL`,
+        [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
+      )
+      if (!evaluacion) {
+        throw new NotFoundException('La evaluación no existe')
+      }
+      // Se le quitó la sección después de que el guard la verificara.
+      if (!evaluacion.es_profesor) {
+        throw new ForbiddenException(
+          'Solo el profesor de la sección aprueba las notas',
+        )
+      }
+      if (evaluacion.estado !== 'EN_REVISION') {
+        const error: ErrorEstadoAprobacion = {
+          statusCode: 409,
+          message: NO_APROBABLE[evaluacion.estado],
+          estado: evaluacion.estado,
+        }
+        throw new ConflictException(error)
+      }
+
+      // En revisión, toda nota activa es una propuesta en la escala: el
+      // ayudante no publica y ck_nota_valor fija el rango. Se revisa igual
+      // antes de publicar, y la RLS lo vuelve a exigir en el UPDATE.
+      const [{ invalidas }] = await bd.query<{ invalidas: number }>(
+        `SELECT count(*)::int AS invalidas FROM nota
+          WHERE universidad_id = $1 AND evaluacion_id = $2
+            AND archived_at IS NULL
+            AND (estado <> 'PROPUESTA' OR valor NOT BETWEEN 1.0 AND 7.0)`,
+        [contexto.universidadId, evaluacionId],
+      )
+      if (invalidas > 0) {
+        throw new ConflictException(
+          'Hay notas que no están propuestas en la escala de 1,0 a 7,0',
+        )
+      }
+      const publicadas = await bd.query<{ alumno_id: string; valor: string }>(
+        `WITH publicadas AS (
+           UPDATE nota SET estado = 'PUBLICADA'
+            WHERE universidad_id = $1 AND evaluacion_id = $2
+              AND archived_at IS NULL AND estado = 'PROPUESTA'
+           RETURNING alumno_id, valor)
+         SELECT alumno_id, valor FROM publicadas ORDER BY alumno_id`,
+        [contexto.universidadId, evaluacionId],
+      )
+      if (publicadas.length === 0) {
+        throw new ConflictException('La evaluación no tiene notas que publicar')
+      }
+      // Como en el envío: si la RLS omite la fila, se aborta todo.
+      const [{ filas }] = await bd.query<{ filas: number }>(
+        `WITH aprobada AS (
+           UPDATE revision_notas SET estado = 'APROBADA', actualizado_por = $3
+            WHERE universidad_id = $1 AND evaluacion_id = $2
+              AND estado = 'EN_REVISION'
+           RETURNING 1)
+         SELECT count(*)::int AS filas FROM aprobada`,
+        [contexto.universidadId, evaluacionId, usuarioId],
+      )
+      if (filas !== 1) {
+        this.logger.error({
+          mensaje: 'El UPDATE de la aprobación no modificó revision_notas',
+          evaluacionId,
+          seccionId: seccion.id,
+          universidadId: contexto.universidadId,
+          filas,
+        })
+        throw new InternalServerErrorException(
+          'No se pudieron aprobar las notas',
+        )
+      }
+      for (const nota of publicadas) {
+        await this.auditoria.registrar(bd, {
+          universidadId: contexto.universidadId,
+          evaluacionId,
+          alumnoId: nota.alumno_id,
+          tipo: 'PUBLICACION',
+          notaNueva: nota.valor,
+          responsableId: usuarioId,
+        })
+      }
+      await this.auditoria.registrar(bd, {
+        universidadId: contexto.universidadId,
+        evaluacionId,
+        tipo: 'APROBACION',
+        responsableId: usuarioId,
+      })
+
+      const [aprobada] = await bd.query<NotasEvaluacion>(
+        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+           ${DESDE_EVALUACION} ${CON_REVISION}
+          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
+        [contexto.universidadId, seccion.id, evaluacionId],
+      )
+      return aprobada
     })
   }
 }

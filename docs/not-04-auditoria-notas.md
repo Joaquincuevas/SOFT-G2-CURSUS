@@ -13,6 +13,7 @@ Esta tarjeta deja la tabla y el servicio que la usan; las tarjetas de notas regi
 | `PROPUESTA`    | NOT-05 y NOT-07 (cada nota ingresada) | Un alumno     | Opcional¹     | Obligatoria | —           |
 | `ENVIO`        | NOT-08 (envío a revisión)             | La evaluación | —             | —           | —           |
 | `APROBACION`   | NOT-11 (aprobar y publicar)           | La evaluación | —             | —           | —           |
+| `PUBLICACION`  | NOT-11 (cada nota publicada)          | Un alumno     | —             | Obligatoria | —           |
 | `DEVOLUCION`   | NOT-12 (devolver al ayudante)         | La evaluación | —             | —           | Obligatorio |
 | `RECORRECCION` | NOT-15 (cambiar una nota publicada)   | Un alumno     | Obligatoria   | Obligatoria | Obligatorio |
 

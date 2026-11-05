@@ -105,4 +105,29 @@ export class NotasController {
       evaluacionId,
     )
   }
+
+  // NOT-11: el profesor de la sección aprueba y publica las notas en revisión.
+  // 200 y no 201, como el envío.
+  @Puede('update', 'RevisionNotas')
+  @IntegranteDeSeccion()
+  @Post('aprobacion')
+  @HttpCode(200)
+  aprobar(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+  ): Promise<NotasEvaluacion> {
+    if (seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo el profesor de la sección aprueba las notas',
+      )
+    }
+    return this.notas.aprobar(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+    )
+  }
 }

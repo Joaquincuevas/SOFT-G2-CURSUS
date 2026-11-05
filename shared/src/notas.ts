@@ -49,14 +49,15 @@ export interface CrearEvaluacion {
 }
 
 // NOT-04 (RN-12): tipos de evento de la auditoría de notas (tabla
-// nota_cambio). PROPUESTA y RECORRECCION son de la nota de un alumno; ENVIO,
-// APROBACION y DEVOLUCION, de toda la evaluación.
+// nota_cambio). PROPUESTA, PUBLICACION (NOT-11) y RECORRECCION son de la nota
+// de un alumno; ENVIO, APROBACION y DEVOLUCION, de toda la evaluación.
 export const TIPOS_EVENTO_NOTA = [
   'PROPUESTA',
   'ENVIO',
   'APROBACION',
   'DEVOLUCION',
   'RECORRECCION',
+  'PUBLICACION',
 ] as const
 
 export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
@@ -150,6 +151,16 @@ export interface ErrorNotasInvalidas {
   statusCode: 400
   message: 'Nota inválida'
   invalidas: { alumnoId: string; motivo: string }[]
+}
+
+// NOT-11: 409 de la aprobación cuando la evaluación ya no está en revisión,
+// con su estado actual: el cliente la saca de pendientes. Los otros 409 de la
+// aprobación (notas que no están propuestas, sin notas) no traen estado: la
+// evaluación sigue en revisión.
+export interface ErrorEstadoAprobacion {
+  statusCode: 409
+  message: string
+  estado: Exclude<EstadoRevisionNotas, 'EN_REVISION'>
 }
 
 // NOT-08: 400 del envío a revisión cuando algún alumno con inscripción

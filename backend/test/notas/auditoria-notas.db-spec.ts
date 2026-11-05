@@ -199,6 +199,22 @@ describe('AuditoriaNotasService.registrar (NOT-04)', () => {
     })
   })
 
+  it('PUBLICACION (NOT-11): la nota publicada de un alumno, sin nota anterior', async () => {
+    const id = await registrar('PROFESOR', {
+      tipo: 'PUBLICACION',
+      alumnoId: ids.alumno,
+      notaNueva: '6.0',
+    })
+
+    expect(await eventoDe(id as string)).toMatchObject({
+      tipo: 'PUBLICACION',
+      alumno_id: ids.alumno,
+      nota_anterior: null,
+      nota_nueva: '6.0',
+      responsable_id: ids.profesor,
+    })
+  })
+
   it.each([
     ['ENVIO', 'AYUDANTE', undefined],
     ['APROBACION', 'PROFESOR', undefined],
@@ -460,6 +476,18 @@ describe('restricciones de nota_cambio (NOT-04)', () => {
     ],
     ['ENVIO con alumno', { tipo: 'ENVIO', alumno_id: 'alumno' }],
     ['APROBACION con nota', { tipo: 'APROBACION', nota_nueva: 5 }],
+    // NOT-11: la nota publicada de un alumno, sin nota anterior.
+    ['PUBLICACION sin alumno', { tipo: 'PUBLICACION', nota_nueva: 5 }],
+    ['PUBLICACION sin nota', { tipo: 'PUBLICACION', alumno_id: 'alumno' }],
+    [
+      'PUBLICACION con nota anterior',
+      {
+        tipo: 'PUBLICACION',
+        alumno_id: 'alumno',
+        nota_anterior: 4,
+        nota_nueva: 5,
+      },
+    ],
   ])('rechaza %s (CHECK)', async (_caso, columnas) => {
     const fila = { ...columnas } as Record<string, unknown>
     if (fila.alumno_id === 'alumno') fila.alumno_id = ids.alumno

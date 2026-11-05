@@ -118,8 +118,8 @@ export const generarPasswordProvisoria = () =>
   )
 
 // El correo de una cuenta nueva debe ser del dominio de su universidad
-// (GES-15 y GES-21). El correo ya viene en minúsculas desde el DTO.
-function exigirDominio(correo: string, dominio: string) {
+// (GES-15, GES-21 y GES-24). El correo ya viene en minúsculas desde el DTO.
+export function exigirDominio(correo: string, dominio: string) {
   if (correo.split('@')[1] !== dominio) {
     throw conMotivo(
       new BadRequestException(`El correo debe ser @${dominio}`),
