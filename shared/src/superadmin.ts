@@ -71,3 +71,41 @@ export interface UsuariosAfectados {
 export interface GuardarFacultad {
   nombre: string
 }
+
+// GES-24: roles de las cuentas que crea el superadmin. Otro superadmin solo se
+// crea con el comando de MT-04.
+export const ROLES_CUENTA = [
+  'DIRECTOR',
+  'ADMINISTRATIVO',
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+] as const
+export type RolCuenta = (typeof ROLES_CUENTA)[number]
+
+// Body de POST /api/superadmin/universidades/:id/cuentas y de
+// PATCH /api/superadmin/universidades/:id/cuentas/:cuentaId. La facultad se
+// envía solo para un Administrativo, que debe tener una.
+export interface GuardarCuenta {
+  nombre: string
+  correo: string
+  rol: RolCuenta
+  facultadId?: string
+}
+
+// Elemento de GET /api/superadmin/universidades/:id/cuentas: las cuentas
+// vigentes de la universidad.
+export interface CuentaUniversidad {
+  id: string
+  nombre: string
+  correo: string
+  rol: RolCuenta
+  facultad: FacultadElegible | null
+}
+
+// Respuesta de POST .../cuentas. La contraseña provisoria solo va en esta
+// respuesta y no se puede volver a pedir.
+export interface CuentaCreada {
+  cuenta: CuentaUniversidad
+  passwordProvisoria: string
+}
