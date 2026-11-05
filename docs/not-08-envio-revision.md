@@ -92,7 +92,7 @@ La migración `1792710000000-EnviarNotasRevision` no crea tablas:
 
 El envío exige nota para los alumnos activos **en ese momento**. Si después se inscribe otro alumno, queda **sin nota**: la evaluación sigue en revisión y el ayudante no puede agregarla, porque el PUT responde 409 y la RLS lo impide. Se resuelve cuando el profesor responda:
 
-- **NOT-12:** el profesor devuelve la evaluación, el ayudante agrega la nota y vuelve a enviar.
+- **[NOT-12](not-12-devolver-envio.md):** el profesor devuelve la evaluación, el ayudante agrega la nota y vuelve a enviar.
 - **NOT-10 y NOT-11:** la vista de pendientes y la publicación deberán mostrar o advertir a los alumnos sin nota.
 
 Una inscripción nueva no toma el lock de las notas, así que también puede quedar confirmada **durante** un envío: el envío se completa y ese alumno queda sin nota, igual que si se hubiera inscrito justo después.

@@ -150,3 +150,25 @@
 .notas__motivo:empty {
   margin-top: 0;
 }
+
+/* NOT-12: comentario de la devolución. */
+.notas__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.notas__campo textarea {
+  min-height: 5rem;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.notas__contador {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--font-caption);
+}

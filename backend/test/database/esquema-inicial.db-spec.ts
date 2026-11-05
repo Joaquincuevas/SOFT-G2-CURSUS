@@ -180,6 +180,26 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
+    // del comentario, su UPDATE y la columna.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ restosDevolucion }] = await bd.query<
+      { restosDevolucion: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_policies
+                WHERE policyname = 'pol_revision_notas_devolucion')
+            + (SELECT count(*) FROM pg_trigger
+                WHERE tgname = 'tg_revision_notas_comentario_al_devolver')
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname = 'revision_notas_comentario_al_devolver')
+            + (SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'revision_notas'
+                  AND column_name = 'comentario_devolucion')
+              AS "restosDevolucion"`,
+    )
+    expect(Number(restosDevolucion)).toBe(0)
+
     // NOT-11: no crea tablas. Quita las políticas de la aprobación, el
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.

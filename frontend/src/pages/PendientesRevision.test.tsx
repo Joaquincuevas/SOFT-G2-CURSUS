@@ -417,3 +417,192 @@ describe('aprobar y publicar (NOT-11)', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+describe('devolver al ayudante (NOT-12)', () => {
+  const DEVOLUCION = `${NOTAS}/devolucion`
+
+  // Abre la pendiente Control 1 con la devolución dada; la lista quita la
+  // evaluación una vez devuelta.
+  async function abrirPendiente(devolucion: (init?: RequestInit) => unknown) {
+    let devuelta = false
+    const posts: (RequestInit | undefined)[] = []
+    await renderConSesion('PROFESOR', PAGINA, {
+      [RUTA]: () => (devuelta ? PENDIENTES.slice(1) : PENDIENTES),
+      [NOTAS]: () => EN_REVISION,
+      [DEVOLUCION]: async (init) => {
+        posts.push(init)
+        const respuesta = await devolucion(init)
+        if (!(respuesta instanceof Response) || respuesta.ok) devuelta = true
+        return respuesta
+      },
+    })
+    const vista = await pagina()
+    fireEvent.click(
+      await vista.findByRole('button', {
+        name: 'Notas de Control 1 (ICC101, sección 1)',
+      }),
+    )
+    await vista.findByText('Estado: En revisión')
+    fireEvent.click(vista.getByRole('button', { name: 'Devolver' }))
+    return { vista, posts }
+  }
+  const formulario = (vista: ReturnType<typeof within>) =>
+    within(vista.getByRole('region', { name: 'Devolver al ayudante' }))
+  const comentar = (vista: ReturnType<typeof within>, texto: string) =>
+    fireEvent.change(
+      formulario(vista).getByLabelText(
+        'Comentario para el ayudante (obligatorio)',
+      ),
+      { target: { value: texto } },
+    )
+  const confirmar = (vista: ReturnType<typeof within>) =>
+    formulario(vista).getByRole('button', { name: 'Confirmar devolución' })
+
+  test('el comentario es obligatorio, con contador, y cancelar no devuelve', async () => {
+    const { vista, posts } = await abrirPendiente(() => ({
+      ...EN_REVISION,
+      estado: 'DEVUELTA',
+    }))
+
+    expect(formulario(vista).getByText('0/500 caracteres')).toBeInTheDocument()
+    expect(confirmar(vista)).toBeDisabled()
+    comentar(vista, '   ')
+    expect(confirmar(vista)).toBeDisabled()
+    comentar(vista, 'Revisa')
+    expect(formulario(vista).getByText('6/500 caracteres')).toBeInTheDocument()
+    expect(confirmar(vista)).toBeEnabled()
+
+    fireEvent.click(formulario(vista).getByRole('button', { name: 'Cancelar' }))
+    expect(
+      vista.queryByRole('region', { name: 'Devolver al ayudante' }),
+    ).not.toBeInTheDocument()
+    expect(posts).toEqual([])
+  })
+
+  test('al confirmar envía el comentario sin espacios, avisa y la evaluación sale de la lista', async () => {
+    const { vista, posts } = await abrirPendiente(() => ({
+      ...EN_REVISION,
+      estado: 'DEVUELTA',
+    }))
+    comentar(vista, '  Revisa la pregunta 3  ')
+    fireEvent.click(confirmar(vista))
+
+    expect(await vista.findByRole('status')).toHaveTextContent(
+      'Control 1: Notas devueltas al ayudante.',
+    )
+    expect(posts.map((p) => [p?.method, p?.body])).toEqual([
+      ['POST', JSON.stringify({ comentario: 'Revisa la pregunta 3' })],
+    ])
+    await waitFor(() =>
+      expect(vista.queryByText('Control 1')).not.toBeInTheDocument(),
+    )
+  })
+
+  test('mientras devuelve todo queda bloqueado y un error lo desbloquea', async () => {
+    let terminar!: (respuesta: unknown) => void
+    const { vista } = await abrirPendiente(
+      () =>
+        new Promise((resolver) => {
+          terminar = resolver
+        }),
+    )
+    comentar(vista, 'Revisa')
+    fireEvent.click(confirmar(vista))
+
+    expect(
+      await formulario(vista).findByRole('button', { name: 'Devolviendo…' }),
+    ).toBeDisabled()
+    expect(
+      formulario(vista).getByLabelText(
+        'Comentario para el ayudante (obligatorio)',
+      ),
+    ).toBeDisabled()
+    expect(
+      formulario(vista).getByRole('button', { name: 'Cancelar' }),
+    ).toBeDisabled()
+    expect(
+      vista.getByRole('button', { name: 'Aprobar y publicar' }),
+    ).toBeDisabled()
+
+    terminar(json({}, 500))
+    expect(await vista.findByRole('alert')).toHaveTextContent(
+      'No pudimos devolver las notas. Inténtalo nuevamente.',
+    )
+    expect(confirmar(vista)).toBeEnabled()
+    // El comentario escrito se conserva para reintentar.
+    expect(
+      formulario(vista).getByLabelText(
+        'Comentario para el ayudante (obligatorio)',
+      ),
+    ).toHaveValue('Revisa')
+  })
+
+  test('un fallo de red muestra el error y desbloquea', async () => {
+    const { vista } = await abrirPendiente(() =>
+      Promise.reject(new TypeError('Failed to fetch')),
+    )
+    comentar(vista, 'Revisa')
+    fireEvent.click(confirmar(vista))
+
+    expect(await vista.findByRole('alert')).toHaveTextContent(
+      'No pudimos devolver las notas. Comprueba tu conexión e inténtalo nuevamente.',
+    )
+    expect(confirmar(vista)).toBeEnabled()
+  })
+
+  test('un 400 muestra el primer mensaje de la validación', async () => {
+    const { vista } = await abrirPendiente(() =>
+      json(
+        {
+          statusCode: 400,
+          message: ['El comentario contiene caracteres no permitidos'],
+        },
+        400,
+      ),
+    )
+    comentar(vista, 'Revisa')
+    fireEvent.click(confirmar(vista))
+
+    expect(await vista.findByRole('alert')).toHaveTextContent(
+      'El comentario contiene caracteres no permitidos.',
+    )
+    expect(confirmar(vista)).toBeEnabled()
+  })
+
+  test('un 409 de estado (ya aprobada) cierra el panel y recarga la lista', async () => {
+    const { vista } = await abrirPendiente(() =>
+      json(
+        {
+          statusCode: 409,
+          message: 'Las notas ya fueron aprobadas',
+          estado: 'APROBADA',
+        },
+        409,
+      ),
+    )
+    comentar(vista, 'Revisa')
+    fireEvent.click(confirmar(vista))
+
+    expect(await vista.findByRole('status')).toHaveTextContent(
+      'Control 1: Las notas ya fueron aprobadas.',
+    )
+    expect(
+      vista.queryByRole('region', { name: 'Devolver al ayudante' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('un 409 sin estado deja el panel abierto, muestra el mensaje y desbloquea', async () => {
+    const { vista } = await abrirPendiente(() =>
+      json({ statusCode: 409, message: 'No se pudo devolver ahora' }, 409),
+    )
+    comentar(vista, 'Revisa')
+    fireEvent.click(confirmar(vista))
+
+    expect(await vista.findByRole('alert')).toHaveTextContent(
+      'No se pudo devolver ahora.',
+    )
+    expect(vista.getByText('Estado: En revisión')).toBeInTheDocument()
+    expect(confirmar(vista)).toBeEnabled()
+    expect(vista.queryByRole('status')).not.toBeInTheDocument()
+  })
+})
