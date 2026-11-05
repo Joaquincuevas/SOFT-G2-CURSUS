@@ -235,17 +235,15 @@ describe('NOT-02: condición transaccional de la futura nota final', () => {
     s: string,
     publicar: (conexion: Pick<BaseDeDatos, 'query'>) => Promise<T>,
   ) =>
-    app
-      .get(PonderacionesService)
-      .conNotaFinalValidada(
-        {
-          universidadId: await universidadDe('norte.cursus.test'),
-          rol: 'PROFESOR',
-        },
-        await idDe(PROFESOR),
-        s,
-        publicar,
-      )
+    app.get(PonderacionesService).conNotaFinalValidada(
+      {
+        universidadId: await universidadDe('norte.cursus.test'),
+        rol: 'PROFESOR',
+      },
+      await idDe(PROFESOR),
+      s,
+      publicar,
+    )
 
   it.each([
     [[], 0, 100, 0],
@@ -276,7 +274,13 @@ describe('NOT-02: condición transaccional de la futura nota final', () => {
       archivada.id,
     ])
     expect((await listar(PROFESOR, s, 200)).sumaPonderaciones).toBe(100)
-    const publicar = vi.fn(() => Promise.resolve('publicada'))
+    const publicar = vi.fn(async (conexion: Pick<BaseDeDatos, 'query'>) => {
+      const [{ id }] = await conexion.query<{ id: string }>(
+        'SELECT usuario_actual() AS id',
+      )
+      expect(id).toBe(await idDe(PROFESOR))
+      return 'publicada'
+    })
     expect(await validar(s, publicar)).toBe('publicada')
     expect(publicar).toHaveBeenCalledTimes(1)
   })
@@ -310,7 +314,7 @@ describe('NOT-02: condición transaccional de la futura nota final', () => {
       await continuar
       return 'publicada'
     })
-    await dentroDePublicacion
+    await Promise.race([dentroDePublicacion, publicacion])
     const creacion = crear(
       PROFESOR,
       s,

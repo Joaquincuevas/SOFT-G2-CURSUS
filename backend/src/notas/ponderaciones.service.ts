@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common'
 import {
   BaseDeDatos,
+  fijarUsuario,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 
@@ -43,6 +44,7 @@ export class PonderacionesService {
   ): Promise<T> {
     if (contexto.rol !== 'PROFESOR') throw new ForbiddenException()
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, profesorId)
       await bloquearPonderaciones(bd, contexto, seccionId)
       const [seccion] = await bd.query<{ esProfesor: boolean }>(
         `SELECT (s.profesor_id = $3 AND pr.rol = 'PROFESOR' AND pr.archived_at IS NULL) AS "esProfesor"
