@@ -6,11 +6,17 @@ export const RUTA_UNIVERSIDADES = '/api/superadmin/universidades'
 export const rutaAdministrarUniversidad = (id: string) =>
   `/superadmin/universidades/${id}`
 
+// GES-24: página para administrar las cuentas de una universidad (fuera del
+// menú).
+export const rutaCuentasUniversidad = (id: string) =>
+  `${rutaAdministrarUniversidad(id)}/cuentas`
+
 export type Resultado<T> = { ok: true; datos: T } | { ok: false; error: string }
 
 // Envía un cambio a la API. Un 409 trae el motivo en el mensaje (nombre
 // repetido, dominio con usuarios, facultad en uso): se muestra tal cual. Un
-// 400 es un dato inválido, y el resto, un error genérico.
+// 400 con un mensaje de texto (por ejemplo, el dominio del correo) también. Si
+// no, es un dato inválido, y el resto, un error genérico.
 export async function enviar<T>(
   fetchConSesion: (ruta: string, init?: RequestInit) => Promise<Response>,
   ruta: string,
@@ -35,7 +41,10 @@ export async function enviar<T>(
     const { message } = (await respuesta.json().catch(() => ({}))) as {
       message?: unknown
     }
-    if (respuesta.status === 409 && typeof message === 'string') {
+    if (
+      (respuesta.status === 409 || respuesta.status === 400) &&
+      typeof message === 'string'
+    ) {
       return { ok: false, error: message }
     }
     return {
