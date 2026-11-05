@@ -180,6 +180,28 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-11: no crea tablas. Quita las políticas de la aprobación, el
+    // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
+    // los tipos de NOT-04.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ restosAprobacion }] = await bd.query<
+      { restosAprobacion: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_policies
+                WHERE policyname IN ('pol_nota_publicacion',
+                                     'pol_revision_notas_aprobacion'))
+            + (SELECT count(*) FROM pg_trigger
+                WHERE tgname = 'tg_nota_publicar_sin_cambios')
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname IN ('usuario_actual', 'nota_publicar_sin_cambios'))
+            + (SELECT count(*) FROM pg_constraint
+                WHERE conname = 'ck_nota_cambio_tipo'
+                  AND pg_get_constraintdef(oid) LIKE '%PUBLICACION%')
+              AS "restosAprobacion"`,
+    )
+    expect(Number(restosAprobacion)).toBe(0)
+
     // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
     // revision_notas, y deja las políticas del ayudante en nota sin la
     // condición del estado.
