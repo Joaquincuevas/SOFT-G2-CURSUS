@@ -215,6 +215,45 @@ describe('BaseDeDatos.escribirComoSuperadmin (GES-23)', () => {
   })
 })
 
+describe('BaseDeDatos.enUniversidadComoSuperadmin (GES-24)', () => {
+  const UNIVERSIDAD = '00000000-0000-0000-0000-00000000000a'
+
+  it('fija la universidad, el rol ADMINISTRATIVO y su id, sin facultad', async () => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await bd.enUniversidadComoSuperadmin(
+      { id: SUPERADMIN, rol: 'SUPERADMIN' },
+      UNIVERSIDAD,
+      (tx) => tx.query('SELECT 1'),
+    )
+
+    expect(consultas.mock.calls).toEqual([
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [
+        expect.stringContaining("set_config('app.superadmin_id', $3, true)"),
+        [UNIVERSIDAD, 'ADMINISTRATIVO', SUPERADMIN, ''],
+      ],
+      ['SELECT 1'],
+    ])
+  })
+
+  it.each(['DIRECTOR', 'ADMINISTRATIVO', 'PROFESOR', undefined] as const)(
+    'responde 403 con el rol %s, sin consultar',
+    async (rol) => {
+      const { bd, consultas } = crearBaseDeDatos()
+
+      await expect(
+        bd.enUniversidadComoSuperadmin(
+          { id: SUPERADMIN, rol },
+          UNIVERSIDAD,
+          (tx) => tx.query('SELECT 1'),
+        ),
+      ).rejects.toThrow(ForbiddenException)
+      expect(consultas).not.toHaveBeenCalled()
+    },
+  )
+})
+
 describe('fijarMotivo (MT-04)', () => {
   it('fija app.motivo solo para la transacción', async () => {
     const consultas = vi.fn(() => Promise.resolve([]))
