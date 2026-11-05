@@ -12,9 +12,14 @@ import { DataSource, type QueryRunner } from 'typeorm'
 import { AppModule } from '../../src/app.module.js'
 import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
-import { ROL_APP } from '../../src/database/base-de-datos.service.js'
+import {
+  ROL_APP,
+  type BaseDeDatos,
+} from '../../src/database/base-de-datos.service.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
+import { PonderacionesService } from '../../src/notas/ponderaciones.service.js'
+import { vi } from 'vitest'
 
 // NOT-01: base propia con el seed cargado, que se crea y se borra en cada
 // ejecución. Todos los usuarios del seed comparten la contraseña.
@@ -206,6 +211,180 @@ afterAll(async () => {
     await admin.query(`DROP DATABASE IF EXISTS "${BD_TEST}" WITH (FORCE)`)
     await admin.destroy()
   }
+})
+
+describe('NOT-02: condición transaccional de la futura nota final', () => {
+  let numero = 10
+  async function escenario(ponderaciones: number[]) {
+    const [s] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion(universidad_id,curso_id,numero,profesor_id)
+       SELECT universidad_id,curso_id,$2,$3 FROM seccion WHERE id=$1 RETURNING id`,
+      [secciones.s1, numero++, await idDe(PROFESOR)],
+    )
+    for (const [n, ponderacion] of ponderaciones.entries()) {
+      await crear(
+        PROFESOR,
+        s.id,
+        { nombre: `Evaluación ${n}`, fecha: dentro(n), ponderacion },
+        201,
+      )
+    }
+    return s.id
+  }
+  const validar = async <T>(
+    s: string,
+    publicar: (conexion: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ) =>
+    app
+      .get(PonderacionesService)
+      .conNotaFinalValidada(
+        {
+          universidadId: await universidadDe('norte.cursus.test'),
+          rol: 'PROFESOR',
+        },
+        await idDe(PROFESOR),
+        s,
+        publicar,
+      )
+
+  it.each([
+    [[], 0, 100, 0],
+    [[40, 59], 99, 1, 0],
+    [[50, 51], 101, 0, 1],
+    [[100, 100], 200, 0, 100],
+  ])(
+    'con ponderaciones %j rechaza publicar y no ejecuta la escritura',
+    async (pesos, suma, faltan, sobran) => {
+      const s = await escenario(pesos)
+      const publicar = vi.fn(() => Promise.resolve('publicada'))
+      await expect(validar(s, publicar)).rejects.toMatchObject({
+        response: { statusCode: 409, sumaPonderaciones: suma, faltan, sobran },
+      })
+      expect(publicar).not.toHaveBeenCalled()
+    },
+  )
+  it('con exactamente 100 permite la operación y excluye otra sección y evaluaciones archivadas', async () => {
+    const s = await escenario([40, 60])
+    await escenario([100])
+    const archivada = await crear(
+      PROFESOR,
+      s,
+      { nombre: 'Archivada', fecha: dentro(3), ponderacion: 50 },
+      201,
+    )
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [
+      archivada.id,
+    ])
+    expect((await listar(PROFESOR, s, 200)).sumaPonderaciones).toBe(100)
+    const publicar = vi.fn(() => Promise.resolve('publicada'))
+    expect(await validar(s, publicar)).toBe('publicada')
+    expect(publicar).toHaveBeenCalledTimes(1)
+  })
+  it('revierte la operación entera si falla el callback', async () => {
+    const s = await escenario([100])
+    await expect(
+      validar(s, async (conexion) => {
+        await conexion.query(
+          `INSERT INTO evaluacion(universidad_id,seccion_id,nombre,fecha,ponderacion,creada_por)
+       SELECT universidad_id,id,'Operación a revertir',$2::date,10,$3 FROM seccion WHERE id=$1`,
+          [s, dentro(4), await idDe(PROFESOR)],
+        )
+        throw new Error('fallo simulado')
+      }),
+    ).rejects.toThrow('fallo simulado')
+    expect((await listar(PROFESOR, s, 200)).sumaPonderaciones).toBe(100)
+  })
+  it('la creación espera a que termine la publicación y la siguiente validación ve el total nuevo', async () => {
+    const s = await escenario([100])
+    await tokenDe(PROFESOR)
+    let entro!: () => void
+    const dentroDePublicacion = new Promise<void>((r) => {
+      entro = r
+    })
+    let liberar!: () => void
+    const continuar = new Promise<void>((r) => {
+      liberar = r
+    })
+    const publicacion = validar(s, async () => {
+      entro()
+      await continuar
+      return 'publicada'
+    })
+    await dentroDePublicacion
+    const creacion = crear(
+      PROFESOR,
+      s,
+      { nombre: 'Posterior', fecha: dentro(5), ponderacion: 10 },
+      201,
+    )
+    try {
+      await vi.waitFor(
+        async () => {
+          const [{ espera }] = await bd.query<
+            { espera: boolean }[]
+          >(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+          WHERE datname=current_database() AND wait_event='advisory' AND pid<>pg_backend_pid()) AS espera`)
+          expect(espera).toBe(true)
+        },
+        { timeout: 2000 },
+      )
+    } finally {
+      liberar()
+      await publicacion
+      await creacion
+    }
+    await expect(validar(s, () => Promise.resolve())).rejects.toMatchObject({
+      response: { sumaPonderaciones: 110, sobran: 10 },
+    })
+  })
+  it.each<Rol>([
+    'AYUDANTE',
+    'ALUMNO',
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'SUPERADMIN',
+  ])('%s no publica una nota final', async (rol) => {
+    const publicar = vi.fn(() => Promise.resolve())
+    await expect(
+      app
+        .get(PonderacionesService)
+        .conNotaFinalValidada(
+          { universidadId: await universidadDe('norte.cursus.test'), rol },
+          await idDe(PROFESOR),
+          secciones.s1,
+          publicar,
+        ),
+    ).rejects.toMatchObject({ status: 403 })
+    expect(publicar).not.toHaveBeenCalled()
+  })
+  it('niega otro profesor, otra universidad y sección archivada', async () => {
+    const s = await escenario([100])
+    const servicio = app.get(PonderacionesService)
+    const norte = await universidadDe('norte.cursus.test')
+    const publicar = vi.fn(() => Promise.resolve())
+    await expect(
+      servicio.conNotaFinalValidada(
+        { universidadId: norte, rol: 'PROFESOR' },
+        await idDe(profesorOtraSeccion),
+        s,
+        publicar,
+      ),
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      servicio.conNotaFinalValidada(
+        {
+          universidadId: await universidadDe('sur.cursus.test'),
+          rol: 'PROFESOR',
+        },
+        await idDe(PROFESOR),
+        s,
+        publicar,
+      ),
+    ).rejects.toMatchObject({ status: 404 })
+    await bd.query('UPDATE seccion SET archived_at=now() WHERE id=$1', [s])
+    await expect(validar(s, publicar)).rejects.toMatchObject({ status: 404 })
+    expect(publicar).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /api/espacio/secciones/:id/evaluaciones (NOT-01)', () => {
