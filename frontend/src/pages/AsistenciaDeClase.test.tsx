@@ -766,6 +766,7 @@ describe('ASI-04: corrección de marcas', () => {
       '/api/espacio/secciones/seccion-1/mi-asistencia/resumen': () => ({
         clases: [{ clase: CLASE, presente }],
         registradas: 1,
+        sinMarca: 0,
         asistidas: presente ? 1 : 0,
         porcentaje: presente ? 100 : 0,
       }),
@@ -794,7 +795,13 @@ describe('ASI-04: corrección de marcas', () => {
       '/api/espacio/secciones/seccion-1/mi-asistencia/resumen': () =>
         ++intento === 1
           ? json({}, 500)
-          : { clases: [], registradas: 0, asistidas: 0, porcentaje: null },
+          : {
+              clases: [],
+              registradas: 0,
+              asistidas: 0,
+              sinMarca: 0,
+              porcentaje: null,
+            },
     })
     fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
     expect(

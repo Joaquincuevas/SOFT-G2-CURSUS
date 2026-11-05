@@ -1028,7 +1028,13 @@ describe('ASI-06: el alumno consulta solo su asistencia por curso', () => {
 
   it('sin clases y con clases pendientes devuelve lista vacía y porcentaje null', async () => {
     const s = await escenario()
-    const vacio = { clases: [], registradas: 0, asistidas: 0, porcentaje: null }
+    const vacio = {
+      clases: [],
+      registradas: 0,
+      asistidas: 0,
+      sinMarca: 0,
+      porcentaje: null,
+    }
     expect(await resumen(s)).toEqual(vacio)
     await crearClase(s, 0)
     expect(await resumen(s)).toEqual(vacio)
@@ -1125,6 +1131,7 @@ describe('ASI-06: el alumno consulta solo su asistencia por curso', () => {
       'clases',
       'porcentaje',
       'registradas',
+      'sinMarca',
     ])
     expect(Object.keys(datos.clases[0]).sort()).toEqual(['clase', 'presente'])
     expect(JSON.stringify(datos)).not.toContain(alumnos.ana)
@@ -1151,8 +1158,116 @@ describe('ASI-06: el alumno consulta solo su asistencia por curso', () => {
       archivada,
     ])
     const datos = await resumen(s)
-    expect(datos).toMatchObject({ registradas: 1, asistidas: 0, porcentaje: 0 })
+    expect(datos).toMatchObject({
+      registradas: 2,
+      asistidas: 0,
+      sinMarca: 1,
+      porcentaje: 0,
+    })
     expect(datos.clases.map((a) => a.clase.id)).toEqual([vigente])
+  })
+  it('coincide con ASI-05: 8 presentes, 10 clases registradas, 2 sin marca = 80 %', async () => {
+    const s = await escenario()
+    for (let semana = 0; semana < 10; semana++) {
+      const clase = await registrar(s, semana)
+      if (semana >= 8)
+        await bd.query(
+          'UPDATE asistencia SET archived_at=now() WHERE clase_id=$1 AND alumno_id=$2',
+          [clase, alumnos.base],
+        )
+    }
+    const alumno = await resumen(s)
+    const token = await tokenDe(PROFESOR)
+    const res = await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${s}/asistencia/resumen`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+    const profesor = res.body as ResumenAsistenciaSeccion
+    const fila = profesor.alumnos.find((a) => a.id === alumnos.base)
+    expect(alumno).toMatchObject({
+      registradas: 10,
+      asistidas: 8,
+      sinMarca: 2,
+      porcentaje: 80,
+    })
+    expect(alumno.clases).toHaveLength(8)
+    expect(alumno.clases.every((a) => a.presente)).toBe(true)
+    expect(alumno.registradas).toBe(profesor.clasesRegistradas)
+    expect(alumno.porcentaje).toBe(fila?.porcentaje)
+    expect(alumno.sinMarca).toBe(fila?.sinMarca)
+    // Ninguna marca propia: no confundirlo con sección sin registros.
+    await bd.query(
+      'UPDATE asistencia SET archived_at=now() WHERE alumno_id=$1 AND clase_id IN (SELECT id FROM clase WHERE seccion_id=$2)',
+      [alumnos.base, s],
+    )
+    expect(await resumen(s)).toEqual({
+      clases: [],
+      registradas: 10,
+      asistidas: 0,
+      sinMarca: 10,
+      porcentaje: 0,
+    })
+  })
+  it('el conteo agregado respeta universidad, identidad, rol e inscripción, sin abrir la RLS de marcas', async () => {
+    const s = await escenario()
+    const clase = await registrar(s, 0)
+    const norte = await universidadDe('norte.cursus.test')
+    const total = async (q: QueryRunner) => {
+      const [fila] = (await q.query(
+        'SELECT public.total_clases_asistencia($1) AS n',
+        [s],
+      )) as { n: number }[]
+      return fila.n
+    }
+    await comoApp({ universidadId: norte, rol: 'ALUMNO' }, async (q) => {
+      await q.query("SELECT set_config('app.asistencia_alumno_id', '', true)")
+      expect(await total(q)).toBe(0)
+      await q.query("SELECT set_config('app.asistencia_alumno_id', $1, true)", [
+        alumnos.base,
+      ])
+      expect(await total(q)).toBe(1)
+      const marcas = await q.query<{ alumno_id: string }[]>(
+        'SELECT alumno_id FROM asistencia WHERE clase_id=$1',
+        [clase],
+      )
+      expect(marcas).toEqual([{ alumno_id: alumnos.base }])
+      await q.query("SELECT set_config('app.asistencia_alumno_id', $1, true)", [
+        alumnos.noInscrito,
+      ])
+      expect(await total(q)).toBe(0)
+    })
+    await comoApp(
+      { universidadId: await universidadDe('sur.cursus.test'), rol: 'ALUMNO' },
+      async (q) => {
+        await q.query(
+          "SELECT set_config('app.asistencia_alumno_id', $1, true)",
+          [alumnos.base],
+        )
+        expect(await total(q)).toBe(0)
+      },
+    )
+    for (const rol of [
+      'AYUDANTE',
+      'DIRECTOR',
+      'ADMINISTRATIVO',
+      'SUPERADMIN',
+    ] as const) {
+      await comoApp({ universidadId: norte, rol }, async (q) =>
+        expect(await total(q)).toBe(0),
+      )
+    }
+    await archivarInscripcion(s, alumnos.base)
+    await comoApp({ universidadId: norte, rol: 'ALUMNO' }, async (q) => {
+      await q.query("SELECT set_config('app.asistencia_alumno_id', $1, true)", [
+        alumnos.base,
+      ])
+      expect(await total(q)).toBe(0)
+    })
+    const [{ publico }] = await bd.query<{ publico: number }[]>(
+      `SELECT count(*)::int AS publico FROM pg_proc p, LATERAL aclexplode(p.proacl) a
+        WHERE p.oid='public.total_clases_asistencia(uuid)'::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE'`,
+    )
+    expect(publico).toBe(0)
   })
   it('niega la lectura al quitar la inscripción y al archivar la sección o curso', async () => {
     const s = await escenario()

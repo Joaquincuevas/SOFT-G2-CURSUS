@@ -30,6 +30,7 @@ const resumen: ResumenAsistenciaPropia = {
   ],
   registradas: 3,
   asistidas: 2,
+  sinMarca: 0,
   porcentaje: 66.67,
 }
 async function abrir(respuesta: RutaSimulada) {
@@ -42,6 +43,37 @@ async function abrir(respuesta: RutaSimulada) {
 }
 
 describe('ASI-06: asistencia propia por curso', () => {
+  test('expone el denominador de la sección y las clases sin marca sin inventar filas Ausente', async () => {
+    await abrir(() => ({
+      ...resumen,
+      registradas: 10,
+      asistidas: 8,
+      sinMarca: 2,
+      porcentaje: 80,
+      clases: [{ clase, presente: true }],
+    }))
+    expect(await screen.findByText('80 %')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '8 de 10 clases con asistencia registrada en la sección.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('2 clases sin marca.')).toBeInTheDocument()
+    expect(screen.queryByText('Ausente')).not.toBeInTheDocument()
+  })
+  test('sin marcas propias pero con clases registradas muestra 0 % y el faltante, no Sin registros', async () => {
+    await abrir(() => ({
+      clases: [],
+      registradas: 2,
+      asistidas: 0,
+      sinMarca: 2,
+      porcentaje: 0,
+    }))
+    expect(await screen.findByText('0 %')).toBeInTheDocument()
+    expect(screen.getByText('2 clases sin marca.')).toBeInTheDocument()
+    expect(screen.queryByText('Sin registros')).not.toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
   test('muestra las marcas por fecha, porcentaje y fracción recibidos sin pedir listas de otros alumnos', async () => {
     const fetch = await abrir(() => resumen)
     const tabla = await screen.findByRole('table', {
@@ -49,7 +81,9 @@ describe('ASI-06: asistencia propia por curso', () => {
     })
     expect(screen.getByText('66,67 %')).toBeInTheDocument()
     expect(
-      screen.getByText('2 de 3 clases con marca propia registrada.'),
+      screen.getByText(
+        '2 de 3 clases con asistencia registrada en la sección.',
+      ),
     ).toBeInTheDocument()
     const filas = within(tabla).getAllByRole('row').slice(1)
     expect(filas.map((f) => f.textContent)).toEqual([
@@ -76,6 +110,7 @@ describe('ASI-06: asistencia propia por curso', () => {
   test('sin marcas muestra Sin registros y no 0 %', async () => {
     await abrir(() => ({
       clases: [],
+      sinMarca: 0,
       registradas: 0,
       asistidas: 0,
       porcentaje: null,
@@ -113,7 +148,9 @@ describe('ASI-06: asistencia propia por curso', () => {
     expect(await screen.findByText('100 %')).toBeInTheDocument()
     expect(screen.queryByText('Ausente')).not.toBeInTheDocument()
     expect(
-      screen.getByText('3 de 3 clases con marca propia registrada.'),
+      screen.getByText(
+        '3 de 3 clases con asistencia registrada en la sección.',
+      ),
     ).toBeInTheDocument()
   })
   test('no conserva marcas visibles ante un 403 en la recarga y permite reintentar', async () => {
