@@ -355,9 +355,16 @@ describe('aprobar y publicar (NOT-11)', () => {
     },
   )
 
-  test('un 409 (ya aprobada) muestra el mensaje del servidor y recarga la lista', async () => {
+  test('un 409 de estado (ya aprobada) muestra el mensaje del servidor y recarga la lista', async () => {
     const { vista } = await abrirPendiente(() =>
-      json({ statusCode: 409, message: 'Las notas ya fueron aprobadas' }, 409),
+      json(
+        {
+          statusCode: 409,
+          message: 'Las notas ya fueron aprobadas',
+          estado: 'APROBADA',
+        },
+        409,
+      ),
     )
     fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
     fireEvent.click(
@@ -368,6 +375,30 @@ describe('aprobar y publicar (NOT-11)', () => {
       'Control 1: Las notas ya fueron aprobadas.',
     )
   })
+
+  // Estos 409 dejan la evaluación en revisión: el panel sigue abierto.
+  test.each([
+    'Hay notas que no están propuestas en la escala de 1,0 a 7,0',
+    'La evaluación no tiene notas que publicar',
+  ])(
+    'un 409 sin estado ("%s") deja el panel abierto, muestra el mensaje y desbloquea',
+    async (mensaje) => {
+      const { vista } = await abrirPendiente(() =>
+        json({ statusCode: 409, message: mensaje }, 409),
+      )
+      fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+      fireEvent.click(
+        confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+      )
+
+      expect(await vista.findByRole('alert')).toHaveTextContent(`${mensaje}.`)
+      expect(vista.getByText('Estado: En revisión')).toBeInTheDocument()
+      expect(
+        confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+      ).toBeEnabled()
+      expect(vista.queryByRole('status')).not.toBeInTheDocument()
+    },
+  )
 
   test('una evaluación ya aprobada no muestra el botón', async () => {
     await renderConSesion('PROFESOR', PAGINA, {

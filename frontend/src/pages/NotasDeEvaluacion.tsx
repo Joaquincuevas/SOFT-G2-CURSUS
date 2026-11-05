@@ -1,4 +1,5 @@
 import {
+  type ErrorEstadoAprobacion,
   type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EstadoNota,
@@ -109,8 +110,9 @@ export function NotasDeEvaluacion({
 }
 
 // NOT-11: el profesor aprueba y publica, con confirmación. Si falla, la
-// confirmación sigue abierta para reintentar; un 409 (otra pestaña ya la
-// aprobó) se avisa como el éxito, porque la evaluación ya no está pendiente.
+// confirmación sigue abierta para reintentar. Solo el 409 de estado (ya
+// aprobada, o ya no en revisión) se avisa como el éxito, porque la evaluación
+// ya no está pendiente; los otros 409 la dejan en revisión y se muestran aquí.
 function AprobarNotas({
   ruta,
   alTerminar,
@@ -134,14 +136,20 @@ function AprobarNotas({
         alTerminar('Notas aprobadas y publicadas.')
         return
       }
-      const cuerpo = (await res.json().catch(() => null)) as {
-        message?: unknown
-      } | null
-      if (res.status === 409) {
+      const cuerpo = (await res.json().catch(() => null)) as
+        | (Partial<Pick<ErrorEstadoAprobacion, 'estado'>> & {
+            message?: unknown
+          })
+        | null
+      if (res.status === 409 && cuerpo?.estado) {
         alTerminar(mensajeDe(cuerpo, 'Las notas ya no se pueden aprobar'))
         return
       }
-      setError('No pudimos aprobar las notas. Inténtalo nuevamente.')
+      setError(
+        res.status === 409
+          ? mensajeDe(cuerpo, 'No se pudieron aprobar las notas')
+          : 'No pudimos aprobar las notas. Inténtalo nuevamente.',
+      )
     } catch {
       setError(
         'No pudimos aprobar las notas. Comprueba tu conexión e inténtalo nuevamente.',

@@ -1,6 +1,7 @@
 import {
   esNotaValida,
   type ErrorListaNotas,
+  type ErrorEstadoAprobacion,
   type ErrorNotasFaltantes,
   type EstadoRevisionNotas,
   type GuardarNotas,
@@ -470,7 +471,12 @@ export class NotasService {
         )
       }
       if (evaluacion.estado !== 'EN_REVISION') {
-        throw new ConflictException(NO_APROBABLE[evaluacion.estado])
+        const error: ErrorEstadoAprobacion = {
+          statusCode: 409,
+          message: NO_APROBABLE[evaluacion.estado],
+          estado: evaluacion.estado,
+        }
+        throw new ConflictException(error)
       }
 
       // En revisión, toda nota activa es una propuesta en la escala: el

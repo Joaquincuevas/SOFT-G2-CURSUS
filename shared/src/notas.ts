@@ -134,6 +134,16 @@ export interface ErrorNotasInvalidas {
   invalidas: { alumnoId: string; motivo: string }[]
 }
 
+// NOT-11: 409 de la aprobación cuando la evaluación ya no está en revisión,
+// con su estado actual: el cliente la saca de pendientes. Los otros 409 de la
+// aprobación (notas que no están propuestas, sin notas) no traen estado: la
+// evaluación sigue en revisión.
+export interface ErrorEstadoAprobacion {
+  statusCode: 409
+  message: string
+  estado: Exclude<EstadoRevisionNotas, 'EN_REVISION'>
+}
+
 // NOT-08: 400 del envío a revisión cuando algún alumno con inscripción
 // activa no tiene nota válida (sus ids). No cambia nada.
 export interface ErrorNotasFaltantes {

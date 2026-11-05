@@ -1969,7 +1969,10 @@ async function aprobar(
     .post(`${ruta(seccionId, evaluacionId)}/aprobacion`)
     .set('Authorization', `Bearer ${token}`)
     .expect(estado)
-  return respuesta.body as NotasEvaluacion & { message: string }
+  return respuesta.body as NotasEvaluacion & {
+    message: string
+    estado?: string
+  }
 }
 
 // Una evaluación con nota para todos los activos de s1, enviada a revisión.
@@ -2071,7 +2074,11 @@ describe('POST .../notas/aprobacion (NOT-11)', () => {
 
       const respuesta = await aprobar(PROFESOR, evaluacion, 409)
 
-      expect(respuesta.message).toBe(mensaje)
+      // El 409 de estado lo trae: el cliente saca la evaluación de pendientes.
+      expect(respuesta).toMatchObject({
+        message: mensaje,
+        estado: estado ?? 'BORRADOR',
+      })
       expect(
         (await filasDe(evaluacion)).every((f) => f.estado === 'PROPUESTA'),
       ).toBe(true)
@@ -2132,9 +2139,11 @@ describe('POST .../notas/aprobacion (NOT-11)', () => {
 
     const respuesta = await aprobar(PROFESOR, evaluacion, 409)
 
+    // Sin estado: la evaluación sigue en revisión.
     expect(respuesta.message).toBe(
       'Hay notas que no están propuestas en la escala de 1,0 a 7,0',
     )
+    expect(respuesta).not.toHaveProperty('estado')
     expect(
       (await filasDe(evaluacion)).filter((f) => f.estado === 'PROPUESTA'),
     ).toHaveLength(ACTIVOS().length - 1)
