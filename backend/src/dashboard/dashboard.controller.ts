@@ -1,4 +1,5 @@
 import type {
+  PendienteRevision,
   SeccionAlumno,
   SeccionAyudante,
   SeccionDashboard,
@@ -32,6 +33,20 @@ export class DashboardController {
     @Req() req: RequestConUsuario,
   ): Promise<SeccionDashboard[]> {
     return this.dashboard.misSecciones(contexto, req.usuario?.sub as string)
+  }
+
+  // NOT-10: solo el profesor (403 para los demás roles, en el servicio); la
+  // consulta filtra por el usuario de la sesión.
+  @SoloSesion()
+  @Get('pendientes-revision')
+  pendientesRevision(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+  ): Promise<PendienteRevision[]> {
+    return this.dashboard.pendientesRevision(
+      contexto,
+      req.usuario?.sub as string,
+    )
   }
 
   // ESP-02: igual que mis-secciones, filtra por el usuario de la sesión.
