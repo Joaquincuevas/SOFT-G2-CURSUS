@@ -12,7 +12,8 @@ import type { BaseDeDatos } from '../database/base-de-datos.service.js'
 export interface EventoNota {
   universidadId: string
   evaluacionId: string
-  // Solo en PROPUESTA y RECORRECCION; nulo en los eventos de la evaluación.
+  // Solo en PROPUESTA, PUBLICACION y RECORRECCION; nulo en los eventos de
+  // la evaluación.
   alumnoId?: string | null
   tipo: TipoEventoNota
   notaAnterior?: number | string | null

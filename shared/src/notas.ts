@@ -30,14 +30,15 @@ export interface CrearEvaluacion {
 }
 
 // NOT-04 (RN-12): tipos de evento de la auditoría de notas (tabla
-// nota_cambio). PROPUESTA y RECORRECCION son de la nota de un alumno; ENVIO,
-// APROBACION y DEVOLUCION, de toda la evaluación.
+// nota_cambio). PROPUESTA, PUBLICACION (NOT-11) y RECORRECCION son de la nota
+// de un alumno; ENVIO, APROBACION y DEVOLUCION, de toda la evaluación.
 export const TIPOS_EVENTO_NOTA = [
   'PROPUESTA',
   'ENVIO',
   'APROBACION',
   'DEVOLUCION',
   'RECORRECCION',
+  'PUBLICACION',
 ] as const
 
 export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
