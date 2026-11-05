@@ -32,8 +32,8 @@ const ALCANCE = (publicacion: string) => `
 // cada nota PROPUESTA pasa a PUBLICADA con un evento PUBLICACION (la nota
 // publicada de ese alumno) y la revisión pasa a APROBADA con un evento
 // APROBACION. La RLS lo exige también sin pasar por el servicio.
-export class AprobarNotas1792720000000 implements MigrationInterface {
-  name = 'AprobarNotas1792720000000'
+export class AprobarNotas1792730000000 implements MigrationInterface {
+  name = 'AprobarNotas1792730000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Quien hace la acción, como universidad_actual() y rol_actual(). Nulo si

@@ -61,7 +61,7 @@ Con dos aprobaciones a la vez, una responde 200 y la otra 409, y la auditoría q
 
 ## Datos
 
-La migración `1792720000000-AprobarNotas` no crea tablas.
+La migración `1792730000000-AprobarNotas` no crea tablas.
 
 - **`usuario_actual()`**, como `universidad_actual()` y `rol_actual()`: lee `app.usuario_id`.
   - La API lo fija solo en la transacción de la aprobación, con `fijarUsuario` de `base-de-datos.service.ts`.
