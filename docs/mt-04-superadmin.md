@@ -11,7 +11,7 @@ Tarjeta: [F4 · MT-04 Superadmin con acceso total a todas las universidades](htt
 5. Una barra sobre el contenido muestra dónde está trabajando, con "Cambiar" (vuelve al Dashboard, que marca la facultad actual) y "Salir de la universidad" (vuelve a la vista global). La elección vale para esa sesión: otra sesión del mismo superadmin elige la suya. Si la facultad o la universidad elegida se archiva, debe elegir otra.
 6. Todo lo que crea o modifica queda en `superadmin_cambio`.
 
-Crear y editar universidades y facultades es [GES-23](ges-23-universidades-facultades.md), que también agrega el Dashboard, la barra de contexto y salir de la universidad. Crear usuarios de cualquier rol es GES-24.
+Crear y editar universidades y facultades es [GES-23](ges-23-universidades-facultades.md), que también agrega el Dashboard, la barra de contexto y salir de la universidad. Crear usuarios de cualquier rol es [GES-24](ges-24-cuentas-superadmin.md).
 
 ## API
 
