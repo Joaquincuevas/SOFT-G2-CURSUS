@@ -246,6 +246,8 @@ describe('GET /api/dashboard/mis-secciones (ESP-01)', () => {
       ],
       // Sin la inscripción archivada.
       alumnos: 2,
+      // NOT-10: sin evaluaciones en revisión.
+      pendientesRevision: 0,
     } satisfies SeccionDashboard)
   })
 

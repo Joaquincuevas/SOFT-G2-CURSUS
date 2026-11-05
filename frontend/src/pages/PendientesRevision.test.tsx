@@ -1,0 +1,227 @@
+import type {
+  NotasEvaluacion,
+  PendienteRevision,
+  SeccionDashboard,
+} from '@cursus/shared'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { describe, expect, test } from 'vitest'
+import { json, renderConSesion } from '../test/sesion'
+
+const RUTA = '/api/dashboard/pendientes-revision'
+const PAGINA = '/mis-cursos/pendientes-revision'
+const NOTAS = '/api/espacio/secciones/seccion-1/evaluaciones/e1/notas'
+
+const PENDIENTES: PendienteRevision[] = [
+  {
+    evaluacion: { id: 'e1', nombre: 'Control 1', fecha: '2026-09-01' },
+    seccion: { id: 'seccion-1', numero: 1 },
+    curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
+    ayudante: { id: 'ayudante-1', nombre: 'Diego Muñoz' },
+    enviadaEl: '2026-09-10T15:30:00.000Z',
+    sinNota: 0,
+  },
+  {
+    evaluacion: { id: 'e2', nombre: 'Tarea 1', fecha: '2026-09-05' },
+    seccion: { id: 'seccion-2', numero: 2 },
+    curso: { id: 'curso-2', codigo: 'ICC201', nombre: 'Estructuras' },
+    ayudante: { id: 'ayudante-2', nombre: 'Elena Paz' },
+    enviadaEl: '2026-09-12T09:00:00.000Z',
+    sinNota: 1,
+  },
+]
+
+const EN_REVISION: NotasEvaluacion = {
+  evaluacion: {
+    id: 'e1',
+    nombre: 'Control 1',
+    fecha: '2026-09-01',
+    ponderacion: 20,
+  },
+  estado: 'EN_REVISION',
+  alumnos: [
+    { id: 'a1', nombre: 'Ana Ávila', nota: 6.1, estado: 'PROPUESTA' },
+    { id: 'a2', nombre: 'Bruno Díaz', nota: 5.5, estado: 'PROPUESTA' },
+  ],
+}
+
+const pagina = async () =>
+  within(await screen.findByRole('region', { name: 'Pendientes de revisión' }))
+
+describe('pendientes de revisión del profesor (NOT-10)', () => {
+  test('lista curso, sección, evaluación, ayudante, fecha y alumnos sin nota', async () => {
+    await renderConSesion('PROFESOR', PAGINA, { [RUTA]: () => PENDIENTES })
+    const vista = await pagina()
+
+    const filas = (await vista.findAllByRole('row')).slice(1)
+    expect(
+      filas.map((fila) =>
+        within(fila)
+          .getAllByRole('cell')
+          .slice(0, 5)
+          .map((celda) => celda.textContent),
+      ),
+    ).toEqual([
+      [
+        'ICC101 Programación',
+        '1',
+        'Control 1',
+        'Diego Muñoz',
+        new Date(PENDIENTES[0].enviadaEl as string).toLocaleString('es-CL', {
+          dateStyle: 'long',
+          timeStyle: 'short',
+        }),
+      ],
+      [
+        'ICC201 Estructuras',
+        '2',
+        'Tarea 1 (1 alumno sin nota)',
+        'Elena Paz',
+        new Date(PENDIENTES[1].enviadaEl as string).toLocaleString('es-CL', {
+          dateStyle: 'long',
+          timeStyle: 'short',
+        }),
+      ],
+    ])
+  })
+
+  test('sin pendientes lo dice', async () => {
+    await renderConSesion('PROFESOR', PAGINA, { [RUTA]: () => [] })
+    expect(
+      await (
+        await pagina()
+      ).findByText('No tienes evaluaciones pendientes de revisión.'),
+    ).toBeInTheDocument()
+  })
+
+  test('si la lista falla muestra el error y Reintentar la vuelve a pedir', async () => {
+    let intentos = 0
+    await renderConSesion('PROFESOR', PAGINA, {
+      [RUTA]: () => (++intentos === 1 ? json({}, 500) : PENDIENTES),
+    })
+    const vista = await pagina()
+
+    expect(
+      await vista.findByText('No pudimos cargar las evaluaciones pendientes.'),
+    ).toBeInTheDocument()
+    fireEvent.click(vista.getByRole('button', { name: 'Reintentar' }))
+    expect(await vista.findByText('Control 1')).toBeInTheDocument()
+    expect(intentos).toBe(2)
+  })
+
+  test('otro rol que entra por la URL recibe 403 y no se le ofrece reintentar', async () => {
+    await renderConSesion('AYUDANTE', PAGINA, {
+      [RUTA]: () => json({ statusCode: 403 }, 403),
+    })
+    const vista = await pagina()
+    expect(
+      await vista.findByText(
+        'Solo el profesor ve las evaluaciones pendientes de revisión.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      vista.queryByRole('button', { name: 'Reintentar' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('al abrir una pendiente se ven todas las notas propuestas en solo lectura', async () => {
+    await renderConSesion('PROFESOR', PAGINA, {
+      [RUTA]: () => PENDIENTES,
+      [NOTAS]: () => EN_REVISION,
+    })
+    const vista = await pagina()
+
+    const abrir = await vista.findByRole('button', {
+      name: 'Notas de Control 1 (ICC101, sección 1)',
+    })
+    fireEvent.click(abrir)
+
+    expect(await vista.findByText('Estado: En revisión')).toBeInTheDocument()
+    expect(vista.getByLabelText('Nota de Ana Ávila')).toHaveValue('6.1')
+    expect(vista.getByLabelText('Nota de Bruno Díaz')).toHaveValue('5.5')
+    for (const campo of vista.getAllByLabelText(/^Nota de /)) {
+      expect(campo).toHaveAttribute('readonly')
+    }
+    expect(
+      vista.queryByRole('button', { name: 'Guardar borrador' }),
+    ).not.toBeInTheDocument()
+    expect(
+      vista.queryByRole('button', { name: 'Enviar a revisión' }),
+    ).not.toBeInTheDocument()
+
+    // Volver a pulsar la cierra.
+    fireEvent.click(abrir)
+    expect(vista.queryByText('Estado: En revisión')).not.toBeInTheDocument()
+  })
+})
+
+describe('contador de pendientes en el dashboard del profesor (NOT-10)', () => {
+  const seccion = (
+    id: string,
+    codigo: string,
+    pendientesRevision: number,
+  ): SeccionDashboard => ({
+    id,
+    numero: 1,
+    curso: { id: `curso-${id}`, codigo, nombre: codigo },
+    horario: [],
+    alumnos: 3,
+    pendientesRevision,
+  })
+
+  test('muestra el total de la misma consulta y enlaza a la lista', async () => {
+    const pedidas: string[] = []
+    await renderConSesion('PROFESOR', '/', {
+      '/api/dashboard/mis-secciones': () => [
+        seccion('s1', 'ICC101', 2),
+        seccion('s2', 'ICC201', 0),
+        seccion('s3', 'ICC301', 1),
+      ],
+      [RUTA]: () => {
+        pedidas.push(RUTA)
+        return PENDIENTES
+      },
+    })
+
+    const aviso = await screen.findByText(
+      /3 evaluaciones pendientes de revisión/,
+    )
+    // Cada tarjeta con pendientes dice cuántas tiene.
+    expect(
+      screen.getByText('2 evaluaciones pendientes de revisión'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('1 evaluación pendiente de revisión'),
+    ).toBeInTheDocument()
+    // El dashboard no pide la lista: el total viene con las secciones.
+    expect(pedidas).toEqual([])
+
+    const enlace = within(aviso).getByRole('link', { name: 'Ver pendientes' })
+    expect(enlace).toHaveAttribute('href', PAGINA)
+    fireEvent.click(enlace)
+    expect(await (await pagina()).findByText('Control 1')).toBeInTheDocument()
+  })
+
+  test('sin pendientes lo dice, sin enlace', async () => {
+    await renderConSesion('PROFESOR', '/', {
+      '/api/dashboard/mis-secciones': () => [seccion('s1', 'ICC101', 0)],
+    })
+    expect(
+      await screen.findByText('No tienes evaluaciones pendientes de revisión.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Ver pendientes' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('sin secciones no muestra el aviso de pendientes', async () => {
+    await renderConSesion('PROFESOR', '/', {
+      '/api/dashboard/mis-secciones': () => [],
+    })
+    expect(
+      await screen.findByText(
+        'No tienes secciones a tu cargo en el período activo.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/pendientes de revisión/)).not.toBeInTheDocument()
+  })
+})
