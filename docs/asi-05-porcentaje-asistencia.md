@@ -16,6 +16,8 @@ Definiciones de alcance:
 
 La consulta calcula numeradores y denominador en una sola sentencia/snapshot, sin una consulta por alumno. No hay porcentajes almacenados ni caché de cálculo. Excluye otras secciones/universidades y clases/marcas archivadas. Si todas las marcas de una clase se archivan, deja de contar como registrada, coherente con la lectura de ASI-02.
 
+Desde ASI-06, el denominador usa `public.total_clases_asistencia(seccion)` y el redondeo usa la expresión compartida `porcentaje.sql.ts`, también utilizados por la vista propia del alumno. Así ambos muestran el mismo porcentaje, incluso con clases sin marca. La migración y los límites de acceso de la función agregada se explican en la [guía ASI-06](asi-06-asistencia-alumno.md#migración-y-conteo-seguro).
+
 ## Permisos y API
 
 `GET /api/espacio/secciones/:id/asistencia/resumen` devuelve `ResumenAsistenciaSeccion`:

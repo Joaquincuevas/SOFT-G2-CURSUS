@@ -77,6 +77,16 @@ export interface AsistenciaPropia {
   presente: boolean
 }
 
+// ASI-06: porcentaje por sección con el mismo denominador que ASI-05.
+// Las clases sin marca propia cuentan en el total y se informan por separado.
+export interface ResumenAsistenciaPropia {
+  clases: AsistenciaPropia[]
+  registradas: number
+  asistidas: number
+  sinMarca: number
+  porcentaje: number | null
+}
+
 // ASI-05: calculado en SQL sobre las clases activas con asistencia guardada.
 // Sin registros, el porcentaje es null (no se presenta como una inasistencia).
 export interface PorcentajeAsistenciaAlumno {

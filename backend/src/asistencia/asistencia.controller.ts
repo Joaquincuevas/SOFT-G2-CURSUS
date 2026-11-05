@@ -3,6 +3,7 @@ import type {
   AsistenciaPropia,
   CambioAsistencia,
   Rol,
+  ResumenAsistenciaPropia,
   SeccionEspacio,
 } from '@cursus/shared'
 import {
@@ -122,11 +123,26 @@ export class AsistenciaController {
   }
 }
 
-// Lectura mínima de ASI-04: ALUMNO ve solo sus marcas vigentes. No habilita
+// ASI-04/ASI-06: ALUMNO ve solo sus marcas vigentes. No habilita
 // el GET de la lista completa ni la lectura del historial de correcciones.
 @Controller('espacio/secciones/:id/mi-asistencia')
 export class AsistenciaPropiaController {
   constructor(private readonly asistencia: AsistenciaService) {}
+
+  @Puede('read', 'Seccion')
+  @IntegranteDeSeccion()
+  @Get('resumen')
+  resumen(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+  ): Promise<ResumenAsistenciaPropia> {
+    return this.asistencia.resumenPropio(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+    )
+  }
 
   @Puede('read', 'Seccion')
   @IntegranteDeSeccion()
