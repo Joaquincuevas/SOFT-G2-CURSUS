@@ -6,9 +6,9 @@
 
 Desde Dashboard o Mis Cursos, el alumno abre su sección y la pestaña **Asistencia**. Ve cada marca propia vigente con fecha, bloque y Presente/Ausente, de fecha más reciente a más antigua; en un mismo día, el bloque más reciente primero. El contexto del curso y la sección permanece visible.
 
-El backend devuelve el porcentaje redondeado a dos decimales, junto con la fracción de clases asistidas y registradas. Por ejemplo: dos presentes y un ausente → **66,67 %**, **2 de 3**. Sin marcas devuelve `null`, que se presenta como **Sin registros**, nunca como 0 %. El navegador solo aplica el formato español al número recibido.
+El backend devuelve el porcentaje **por sección**, redondeado a dos decimales, junto con la fracción de clases asistidas y registradas y **N clases sin marca**. No combina las secciones de un curso ni distintos períodos. Por ejemplo: dos presentes y un ausente → **66,67 %**, **2 de 3**. Sin clases con asistencia registrada en la sección devuelve `null`, presentado como **Sin registros**. Si existen clases registradas pero ninguna marca propia, muestra **0 %** y el número de clases sin marca. El navegador solo aplica formato al número recibido.
 
-**Denominador explícito para revisión funcional:** son las clases con una marca propia activa del alumno en esa sección; una clase pendiente o sin marca propia (por ejemplo, anterior a su inscripción) no se inventa como Ausente ni entra en el porcentaje. Las marcas y clases archivadas se excluyen. ASI-05 usa el total común de clases registradas de la sección y expone `sinMarca`: ambos porcentajes coinciden si el alumno tiene marca en todas ellas, pero pueden diferir para una incorporación tardía. La interfaz explica el alcance. No se modifica el criterio de ASI-05 en esta tarjeta; validar con el cliente si se desea unificarlo en el futuro.
+**Cálculo compartido con ASI-05:** `100 × presentes propios / clases activas con asistencia registrada en la sección`. Una clase se cuenta una sola vez si tiene al menos una marca activa de cualquier alumno. Las clases pendientes o archivadas no cuentan. `sinMarca = total de clases registradas − marcas propias activas`. Con 10 clases registradas y 8 presentes propios, profesor y alumno ven **80 %**, **8 de 10** y **2 clases sin marca**. Las clases sin marca entran en el denominador pero no se inventan filas Ausente: se informan por separado, también para incorporaciones tardías. La función SQL de conteo y la expresión de redondeo son comunes a ambas vistas.
 
 **Actualizar asistencia** vuelve a consultar las marcas y el porcentaje; también se consultan al volver a abrir la pestaña. Así se reciben guardados y correcciones de ASI-02/ASI-04 sin persistir un porcentaje derivado. No hay sincronización automática entre navegadores. Carga, error y reintento conservan los estados del sistema. Ante un error de recarga se retira la tabla hasta un reintento exitoso. Cambiar de sección remonta la vista para no conservar datos del curso anterior.
 
@@ -32,15 +32,26 @@ El backend devuelve el porcentaje redondeado a dos decimales, junto con la fracc
   ],
   "registradas": 1,
   "asistidas": 1,
+  "sinMarca": 0,
   "porcentaje": 100
 }
 ```
 
-Requiere sesión, rol ALUMNO y pertenencia activa a la sección. El guard de ESP-06 verifica acceso; el servicio comprueba el rol de sesión y de sección, y SQL revalida inscripción y curso/sección/clase activos. Universidad e identidad salen de la sesión, no de parámetros de consulta. Los JOIN incluyen universidad. Una sola sentencia SQL agrega únicamente las filas propias y produce lista, contadores y porcentaje en el mismo snapshot. El `numeric` redondeado se convierte a `double precision` para entregar un número JSON.
+Requiere sesión, rol ALUMNO y pertenencia activa a la sección. El guard de ESP-06 verifica acceso; el servicio comprueba el rol de sesión y de sección, y SQL revalida inscripción y usuario/curso/sección/clase activos. Universidad e identidad salen de la sesión, no de parámetros de consulta. Los JOIN incluyen universidad. Una sola sentencia SQL combina el listado y los presentes propios con el conteo agregado de la sección para producir lista, contadores y porcentaje en el mismo snapshot. El `numeric` redondeado se convierte a `double precision` para entregar un número JSON.
 
 Se conserva RLS de ASI-04: `app.asistencia_alumno_id` se fija desde la sesión en la transacción y se combina con universidad/rol. El alumno no recibe nombres, correos, marcas ajenas, responsable, motivos ni historial de correcciones. Los endpoints completos del profesor continúan denegados. Sin sesión: 401; sección mal formada: 400; sin acceso: 403; sección/curso archivados o sección de otra universidad: 404, según ESP-06.
 
-El GET anterior `/mi-asistencia` sigue devolviendo `AsistenciaPropia[]`, reutilizando la consulta del resumen. No se requieren migraciones, seed nuevo, cambios de RLS ni permisos nuevos.
+El GET anterior `/mi-asistencia` sigue devolviendo `AsistenciaPropia[]` por compatibilidad con ASI-04: comparte el filtro de marcas propias, pero consulta solo el listado, sin calcular agregados. El frontend usa `/mi-asistencia/resumen`.
+
+## Migración y conteo seguro
+
+Aplicar `1792720000000-ContarClasesAsistencia` antes de iniciar el backend actualizado (`npm run migration:run --workspace=backend`). No modifica marcas, datos existentes ni la política RLS. El timestamp se comprobó contra develop y las migraciones de los PR abiertos.
+
+`public.total_clases_asistencia(seccion uuid)` devuelve exclusivamente un entero. Usa `SECURITY DEFINER` para contar también clases sin marca propia sin abrir al alumno la lectura de las marcas ajenas. Es `STABLE`, por lo que el conteo y el listado pertenecen al mismo snapshot de la sentencia. Tiene `search_path = pg_catalog`, tablas y funciones del sistema de contexto calificadas con `public`, sin SQL dinámico. Se revoca EXECUTE de PUBLIC y solo se concede a `cursus_app`.
+
+La función filtra universidad de sesión y clase/sección/curso activos. Para ALUMNO exige además identidad fijada desde sesión, usuario activo y una inscripción vigente en la sección. Sin contexto, con otra universidad, rol distinto de ALUMNO/PROFESOR o sin inscripción, devuelve 0. Para PROFESOR mantiene el alcance de lectura institucional existente; el guard y el servicio siguen exigiendo que sea el profesor vigente de esa sección antes de devolver el resumen. Esta función no reemplaza los controles de acceso de los endpoints ni devuelve ids de clase, marcas o identidades de compañeros.
+
+`down` elimina únicamente la función. Para revertir funcionalmente, desplegar también la versión anterior del backend; los datos y la RLS quedan intactos. La prueba de esquema revierte y vuelve a aplicar toda la cadena.
 
 ## Pruebas automatizadas
 
@@ -63,7 +74,7 @@ npm run test --workspace=frontend -- src/pages/MiAsistencia.test.tsx src/pages/A
 npm run test:db --workspace=backend -- test/asistencia/asistencia.db-spec.ts
 ```
 
-La suite DB cubre ausencia de registros, 0/66,67/100 %, orden por fecha/bloque, clases pendientes, archivo, inscripción retirada, guardado/corrección mediante HTTP real, ids de alumno/universidad manipulados, otra sección del mismo curso, otra universidad y roles no autorizados. Conserva las pruebas directas de RLS de ASI-04 (sin identidad, solo marca propia y denegación del historial). Frontend verifica fracción, formato, porcentaje recibido sin recalcular, estados vacíos/error/reintento, Actualizar, reapertura y ausencia de solicitudes a listas de compañeros.
+La suite DB cubre ausencia de registros, 0/66,67/100 %, orden por fecha/bloque, clases pendientes, archivo, inscripción retirada, guardado/corrección mediante HTTP real, ids manipulados y aislamiento de sección/universidad/rol. La regresión consulta ambos endpoints con 10 clases, 8 presentes y 2 sin marca y exige 80 % en ambos; después retira todas las marcas propias y verifica 0 %, 10 sin marca y listado vacío. También invoca el conteo bajo el rol real de la API para comprobar universidad, identidad, inscripción y roles, denegación de EXECUTE a PUBLIC y que SELECT de asistencia siga devolviendo solo la marca propia. Conserva los tests directos de RLS de ASI-04. Frontend verifica el contador sin marca separado de Ausente, fracción, formato, porcentaje recibido, estados vacíos/error/reintento, Actualizar y reapertura.
 
 ## Pasos para el compañero que revisa
 
@@ -74,13 +85,14 @@ La suite DB cubre ausencia de registros, 0/66,67/100 %, orden por fecha/bloque, 
 5. Abrir otro curso inscrito sin marcas. Esperar **Sin registros**, **0 de 0** y mensaje vacío; no quedan marcas del curso anterior. Para un curso con una única marca Ausente, esperar **0 %**.
 6. En Red, repetir el GET propio agregando `?alumnoId=<B>&universidadId=<otra>`: sigue entregando solo A. Cambiar el id de sección a una sin inscripción debe negar acceso; a otra universidad, 404. Como A no se puede consultar la lista completa del profesor ni historial. Una sesión cerrada responde 401.
 7. Retirar la inscripción de A en el entorno de pruebas y reintentar: acceso denegado. Simular un error de red: mensaje y Reintentar; al recuperar la conexión vuelve a cargar. Revisar consola sin errores no manejados.
+8. Para el caso bloqueante: registrar dos clases para B antes de inscribir a A; inscribir a A y registrar otras ocho como Presente para A. Abrir el resumen del profesor y Asistencia de A: ambos deben mostrar **80 %**, **8 de 10** y **2 clases sin marca**. El alumno ve únicamente sus ocho filas. Una clase adicional pendiente no altera el cálculo. Si se archivan todas las marcas de una clase, deja de contar para ambos.
 
 ## Evidencia local
 
-Validación del 5 de noviembre de 2026: build, lint y format:check locales aprobados; frontend 462/462, backend unitarios 484/484 y e2e 279/279. PostgreSQL local: 1298/1299, con un único timeout de 5 s en el comando real del seed GES-20 (sin ampliar su timeout ni modificar ese test). En el [CI de validación](https://github.com/Joaquincuevas/SOFT-G2-CURSUS/actions/runs/42071128467), PostgreSQL pasó 1299/1299, incluidos asistencia 89/89 y seed-facultad 12/12; las otras suites también pasaron: **2524 pruebas en total**.
+La revisión del denominador se verifica con las suites de asistencia (ASI-02/04/05/06) y de reversión completa de migraciones, además del CI del PR. Los resultados de la revisión se registran en la descripción del PR.
 
-Capturas con Nest y PostgreSQL reales en una base temporal aislada, datos simulados, sesión de alumno. Tres clases marcadas y una pendiente en ICC101; ICC201 sin marcas. Se verificó Actualizar y navegación entre cursos, sin errores ni warnings de consola. La base temporal se eliminó al terminar.
+Capturas con Nest y PostgreSQL reales en una base temporal aislada, datos simulados, sesión de alumno. Diez clases con asistencia registrada, ocho presentes propios, dos sin marca propia y una pendiente en ICC101; ICC201 sin registros. Se verificó Actualizar y navegación entre cursos. La base temporal se elimina al terminar.
 
-![Marcas propias y 66,67 %](evidencias/asi-06-marcas.png)
+![Ocho presentes de diez clases, 80 % y dos sin marca](evidencias/asi-06-marcas.png)
 
 ![Otro curso sin registros](evidencias/asi-06-sin-registros.png)
