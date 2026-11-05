@@ -1,6 +1,6 @@
 # NOT-11: el profesor aprueba y publica las notas
 
-Tarjeta: NOT-11. Depende de NOT-04 (auditoría), NOT-05 (notas), NOT-07 y NOT-08 (revisión y envío) y NOT-10 (pendientes), ya integradas en `develop`.
+Tarjeta: [F4 · NOT-11](https://trello.com/c/n4sEgUPQ). Depende de NOT-04 (auditoría), NOT-05 (notas), NOT-07 y NOT-08 (revisión y envío) y NOT-10 (pendientes), ya integradas en `develop`.
 
 **Como** profesor, **quiero** aprobar y publicar las notas de una evaluación, **para** que cada alumno vea la suya.
 
@@ -21,7 +21,8 @@ En **Evaluaciones pendientes de revisión** (NOT-10), al abrir una con **Ver not
 - mientras publica, **Publicando…** y **Cancelar** quedan deshabilitados. Se desbloquean siempre (en un `finally`), también si la respuesta no llega;
 - **con éxito**, la tabla se cierra, arriba de la lista se lee "Control 1: Notas aprobadas y publicadas." y la lista se recarga: la evaluación ya no está pendiente;
 - **con un error** (500 o sin conexión) aparece el mensaje con `role="alert"` y la confirmación sigue abierta para reintentar;
-- **con un 409** (por ejemplo, ya se aprobó desde otra pestaña) se muestra el mensaje del servidor como aviso y la lista se recarga.
+- **con un 409 de estado** (por ejemplo, ya se aprobó desde otra pestaña) se muestra el mensaje del servidor como aviso, la tabla se cierra y la lista se recarga: la evaluación ya no está pendiente;
+- **con los otros 409** ("Hay notas que no están propuestas…" o "La evaluación no tiene notas que publicar") la evaluación sigue en revisión: el panel queda abierto con el mensaje (`role="alert"`) y **Publicar** se desbloquea.
 
 El botón solo aparece en la vista de pendientes y con la evaluación en revisión. En la pestaña Notas de la sección no cambia nada.
 
@@ -58,6 +59,8 @@ La aprobación, en una transacción:
 5. Registra un `PUBLICACION` por nota (alumno y nota publicada) y un `APROBACION` de la evaluación.
 
 Con dos aprobaciones a la vez, una responde 200 y la otra 409, y la auditoría queda una sola vez.
+
+**Los 409 de estado** (`BORRADOR`, `DEVUELTA` y `APROBADA`) traen además `estado` en el cuerpo (`ErrorEstadoAprobacion` en `@cursus/shared`). Así el cliente distingue una evaluación que ya no está pendiente de los otros 409, que no traen `estado` porque la evaluación sigue en revisión.
 
 ## Datos
 
@@ -123,7 +126,8 @@ npm run test:db --workspace=backend
   - la confirmación se puede cancelar sin aprobar, y al publicar aparece el aviso y la evaluación sale de la lista;
   - mientras publica, los botones quedan bloqueados;
   - un 500 o un fallo de red muestran el error, desbloquean y permiten reintentar;
-  - un 409 muestra el mensaje del servidor;
+  - un 409 de estado muestra el mensaje del servidor y recarga la lista;
+  - cada uno de los otros dos 409 deja el panel abierto, muestra el mensaje y desbloquea **Publicar**;
   - una evaluación aprobada no muestra el botón.
 
 ## Revisión en local
