@@ -1,4 +1,5 @@
 import {
+  type ErrorEstadoAprobacion,
   type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EstadoNota,
@@ -18,6 +19,10 @@ import { useDatos } from './useDatos'
 interface Props {
   seccionId: string
   evaluacionId: string
+  // NOT-11: en la vista de pendientes del profesor, muestra "Aprobar y
+  // publicar" mientras la evaluación está en revisión. Recibe el aviso para
+  // quien la abrió (éxito o el 409 del servidor), que recarga su lista.
+  alAprobar?: (aviso: string) => void
 }
 
 // NOT-05 (RN-10): el ayudante ingresa la nota de cada alumno de la sección.
@@ -28,7 +33,11 @@ interface Props {
 // guardado es un borrador, que el profesor no ve como pendiente. NOT-08: con
 // todas las notas guardadas se envía a revisión, y desde ahí los campos
 // quedan de solo lectura hasta que el profesor responda.
-export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
+export function NotasDeEvaluacion({
+  seccionId,
+  evaluacionId,
+  alAprobar,
+}: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -86,12 +95,116 @@ export function NotasDeEvaluacion({ seccionId, evaluacionId }: Props) {
           }}
         />
       )}
+      {alAprobar &&
+        datos.estado === 'EN_REVISION' &&
+        datos.alumnos.length > 0 && (
+          <AprobarNotas ruta={ruta} alTerminar={alAprobar} />
+        )}
       {aviso && (
         <p className="notas__aviso" role="status">
           {aviso}
         </p>
       )}
     </section>
+  )
+}
+
+// NOT-11: el profesor aprueba y publica, con confirmación. Si falla, la
+// confirmación sigue abierta para reintentar. Solo el 409 de estado (ya
+// aprobada, o ya no en revisión) se avisa como el éxito, porque la evaluación
+// ya no está pendiente; los otros 409 la dejan en revisión y se muestran aquí.
+function AprobarNotas({
+  ruta,
+  alTerminar,
+}: {
+  ruta: string
+  alTerminar: (aviso: string) => void
+}) {
+  const { fetchConSesion } = useAuth()
+  const [confirmando, setConfirmando] = useState(false)
+  const [aprobando, setAprobando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function aprobar() {
+    setAprobando(true)
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${ruta}/aprobacion`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        alTerminar('Notas aprobadas y publicadas.')
+        return
+      }
+      const cuerpo = (await res.json().catch(() => null)) as
+        | (Partial<Pick<ErrorEstadoAprobacion, 'estado'>> & {
+            message?: unknown
+          })
+        | null
+      if (res.status === 409 && cuerpo?.estado) {
+        alTerminar(mensajeDe(cuerpo, 'Las notas ya no se pueden aprobar'))
+        return
+      }
+      setError(
+        res.status === 409
+          ? mensajeDe(cuerpo, 'No se pudieron aprobar las notas')
+          : 'No pudimos aprobar las notas. Inténtalo nuevamente.',
+      )
+    } catch {
+      setError(
+        'No pudimos aprobar las notas. Comprueba tu conexión e inténtalo nuevamente.',
+      )
+    } finally {
+      // Siempre se desbloquea, también si la respuesta no llegó.
+      setAprobando(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="notas__acciones">
+        <button
+          className="notas__boton"
+          type="button"
+          disabled={confirmando}
+          onClick={() => setConfirmando(true)}
+        >
+          Aprobar y publicar
+        </button>
+      </div>
+      {confirmando && (
+        <section
+          className="notas__confirmacion"
+          aria-label="Confirmar aprobación"
+        >
+          <p>
+            ¿Aprobar y publicar las notas? Los alumnos podrán verlas y ya no se
+            podrán editar.
+          </p>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={aprobando}
+            onClick={() => void aprobar()}
+          >
+            {aprobando ? 'Publicando…' : 'Publicar'}
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={aprobando}
+            onClick={() => setConfirmando(false)}
+          >
+            Cancelar
+          </button>
+        </section>
+      )}
+      {error && (
+        <p className="notas__error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   )
 }
 

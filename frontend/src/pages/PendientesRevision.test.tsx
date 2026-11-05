@@ -3,7 +3,7 @@ import type {
   PendienteRevision,
   SeccionDashboard,
 } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
@@ -223,5 +223,197 @@ describe('contador de pendientes en el dashboard del profesor (NOT-10)', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/pendientes de revisión/)).not.toBeInTheDocument()
+  })
+})
+
+describe('aprobar y publicar (NOT-11)', () => {
+  const APROBACION = `${NOTAS}/aprobacion`
+
+  // Abre la pendiente Control 1 con la aprobación dada; la lista quita la
+  // evaluación una vez aprobada.
+  async function abrirPendiente(aprobacion: (init?: RequestInit) => unknown) {
+    let aprobada = false
+    const posts: (RequestInit | undefined)[] = []
+    await renderConSesion('PROFESOR', PAGINA, {
+      [RUTA]: () => (aprobada ? PENDIENTES.slice(1) : PENDIENTES),
+      [NOTAS]: () => EN_REVISION,
+      [APROBACION]: async (init) => {
+        posts.push(init)
+        const respuesta = await aprobacion(init)
+        if (!(respuesta instanceof Response) || respuesta.ok) aprobada = true
+        return respuesta
+      },
+    })
+    const vista = await pagina()
+    fireEvent.click(
+      await vista.findByRole('button', {
+        name: 'Notas de Control 1 (ICC101, sección 1)',
+      }),
+    )
+    await vista.findByText('Estado: En revisión')
+    return { vista, posts }
+  }
+  const confirmacion = (vista: ReturnType<typeof within>) =>
+    within(vista.getByRole('region', { name: 'Confirmar aprobación' }))
+
+  test('pide confirmación; al publicar avisa y la evaluación sale de la lista', async () => {
+    const { vista, posts } = await abrirPendiente(() => ({
+      ...EN_REVISION,
+      estado: 'APROBADA',
+    }))
+
+    // Cancelar no aprueba.
+    fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+    expect(
+      confirmacion(vista).getByText(
+        '¿Aprobar y publicar las notas? Los alumnos podrán verlas y ya no se podrán editar.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      confirmacion(vista).getByRole('button', { name: 'Cancelar' }),
+    )
+    expect(
+      vista.queryByRole('region', { name: 'Confirmar aprobación' }),
+    ).not.toBeInTheDocument()
+    expect(posts).toEqual([])
+
+    fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+    fireEvent.click(
+      confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+    )
+
+    expect(await vista.findByRole('status')).toHaveTextContent(
+      'Control 1: Notas aprobadas y publicadas.',
+    )
+    expect(posts.map((p) => p?.method)).toEqual(['POST'])
+    await waitFor(() =>
+      expect(vista.queryByText('Control 1')).not.toBeInTheDocument(),
+    )
+    expect(vista.getByText('Tarea 1')).toBeInTheDocument()
+  })
+
+  test('mientras publica los botones quedan bloqueados', async () => {
+    let terminar!: (respuesta: unknown) => void
+    const { vista } = await abrirPendiente(
+      () =>
+        new Promise((resolver) => {
+          terminar = resolver
+        }),
+    )
+    fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+    fireEvent.click(
+      confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+    )
+
+    expect(
+      await confirmacion(vista).findByRole('button', { name: 'Publicando…' }),
+    ).toBeDisabled()
+    expect(
+      confirmacion(vista).getByRole('button', { name: 'Cancelar' }),
+    ).toBeDisabled()
+    terminar(json({}, 500))
+    expect(
+      await confirmacion(vista).findByRole('button', { name: 'Publicar' }),
+    ).toBeEnabled()
+  })
+
+  test.each([
+    [
+      'un error del servidor',
+      () => json({}, 500),
+      'No pudimos aprobar las notas. Inténtalo nuevamente.',
+    ],
+    [
+      'un fallo de red',
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      'No pudimos aprobar las notas. Comprueba tu conexión e inténtalo nuevamente.',
+    ],
+  ])(
+    'con %s muestra el error, se desbloquea y permite reintentar',
+    async (_caso, falla, mensaje) => {
+      let intentos = 0
+      const { vista } = await abrirPendiente(() =>
+        ++intentos === 1 ? falla() : { ...EN_REVISION, estado: 'APROBADA' },
+      )
+      fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+      fireEvent.click(
+        confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+      )
+
+      expect(await vista.findByRole('alert')).toHaveTextContent(mensaje)
+      // La confirmación sigue abierta y desbloqueada: Publicar reintenta.
+      const publicar = confirmacion(vista).getByRole('button', {
+        name: 'Publicar',
+      })
+      expect(publicar).toBeEnabled()
+      expect(vista.getByText('Control 1')).toBeInTheDocument()
+      fireEvent.click(publicar)
+      expect(await vista.findByRole('status')).toHaveTextContent(
+        'Control 1: Notas aprobadas y publicadas.',
+      )
+      expect(intentos).toBe(2)
+    },
+  )
+
+  test('un 409 de estado (ya aprobada) muestra el mensaje del servidor y recarga la lista', async () => {
+    const { vista } = await abrirPendiente(() =>
+      json(
+        {
+          statusCode: 409,
+          message: 'Las notas ya fueron aprobadas',
+          estado: 'APROBADA',
+        },
+        409,
+      ),
+    )
+    fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+    fireEvent.click(
+      confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+    )
+
+    expect(await vista.findByRole('status')).toHaveTextContent(
+      'Control 1: Las notas ya fueron aprobadas.',
+    )
+  })
+
+  // Estos 409 dejan la evaluación en revisión: el panel sigue abierto.
+  test.each([
+    'Hay notas que no están propuestas en la escala de 1,0 a 7,0',
+    'La evaluación no tiene notas que publicar',
+  ])(
+    'un 409 sin estado ("%s") deja el panel abierto, muestra el mensaje y desbloquea',
+    async (mensaje) => {
+      const { vista } = await abrirPendiente(() =>
+        json({ statusCode: 409, message: mensaje }, 409),
+      )
+      fireEvent.click(vista.getByRole('button', { name: 'Aprobar y publicar' }))
+      fireEvent.click(
+        confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+      )
+
+      expect(await vista.findByRole('alert')).toHaveTextContent(`${mensaje}.`)
+      expect(vista.getByText('Estado: En revisión')).toBeInTheDocument()
+      expect(
+        confirmacion(vista).getByRole('button', { name: 'Publicar' }),
+      ).toBeEnabled()
+      expect(vista.queryByRole('status')).not.toBeInTheDocument()
+    },
+  )
+
+  test('una evaluación ya aprobada no muestra el botón', async () => {
+    await renderConSesion('PROFESOR', PAGINA, {
+      [RUTA]: () => PENDIENTES,
+      [NOTAS]: () => ({ ...EN_REVISION, estado: 'APROBADA' }),
+    })
+    const vista = await pagina()
+    fireEvent.click(
+      await vista.findByRole('button', {
+        name: 'Notas de Control 1 (ICC101, sección 1)',
+      }),
+    )
+    await vista.findByText('Estado: Aprobada')
+    expect(
+      vista.queryByRole('button', { name: 'Aprobar y publicar' }),
+    ).not.toBeInTheDocument()
   })
 })

@@ -330,7 +330,9 @@ describe('contrato del schema', () => {
       { tabla: string; rls: boolean; comandos: string[] }[]
     >(
       `SELECT c.relname AS tabla, c.relrowsecurity AS rls,
-              ARRAY(SELECT p.cmd FROM pg_policies p
+              -- Sin repetir: una tabla puede tener varias políticas para un
+              -- comando (NOT-11: el UPDATE del ayudante y el del profesor).
+              ARRAY(SELECT DISTINCT p.cmd FROM pg_policies p
                      WHERE p.schemaname = 'public' AND p.tablename = c.relname
                        AND $1 = ANY (p.roles)
                      ORDER BY p.cmd) AS comandos
@@ -423,6 +425,30 @@ describe('contrato del schema', () => {
         ORDER BY c.relname`,
     )
     expect(sinTrigger).toEqual([])
+  })
+
+  // NOT-11: la auditoría de notas sigue siendo de solo adición con el tipo
+  // nuevo, y las políticas que exigen usuario_actual() son solo las de la
+  // aprobación del profesor. Si otra migración empieza a usarlo, este test
+  // obliga a revisar que la API lo fije (fijarUsuario).
+  it('las políticas con usuario_actual() son solo las de la aprobación (NOT-11)', async () => {
+    const politicas = await bd.query<
+      { tabla: string; politica: string; comando: string }[]
+    >(
+      `SELECT tablename AS tabla, policyname AS politica, cmd AS comando
+         FROM pg_policies
+        WHERE schemaname = 'public'
+          AND (coalesce(qual, '') || coalesce(with_check, '')) LIKE '%usuario_actual()%'
+        ORDER BY tablename`,
+    )
+    expect(politicas).toEqual([
+      { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
+      {
+        tabla: 'revision_notas',
+        politica: 'pol_revision_notas_aprobacion',
+        comando: 'UPDATE',
+      },
+    ])
   })
 
   it('el rol de la API no tiene DELETE sobre ninguna tabla', async () => {

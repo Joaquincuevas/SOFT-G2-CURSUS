@@ -30,7 +30,7 @@ Tarjeta: [F4 · NOT-10](https://trello.com/c/i8ArJRxi). Depende de NOT-07 (`revi
 
 - **Ver notas** abre la tabla de la evaluación bajo su fila, con "Estado: En revisión" y todas las notas propuestas en solo lectura. Volver a pulsar la cierra.
 
-Aprobar y devolver quedan para NOT-11 y NOT-12.
+Aprobar y publicar es [NOT-11](not-11-aprobar-publicar.md); devolver queda para NOT-12.
 
 ## API
 

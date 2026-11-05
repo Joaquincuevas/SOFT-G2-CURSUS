@@ -242,3 +242,14 @@ export async function fijarMotivo(
 ): Promise<void> {
   await bd.query(`SELECT set_config('app.motivo', $1, true)`, [motivo])
 }
+
+// NOT-11. Usuario de la sesión para las políticas que lo exigen
+// (usuario_actual(), por ejemplo la aprobación de notas del profesor de la
+// sección). Se llama dentro de enTransaccionEnUniversidad, antes de escribir,
+// y dura solo esa transacción.
+export async function fijarUsuario(
+  bd: Pick<BaseDeDatos, 'query'>,
+  usuarioId: string,
+): Promise<void> {
+  await bd.query(`SELECT set_config('app.usuario_id', $1, true)`, [usuarioId])
+}

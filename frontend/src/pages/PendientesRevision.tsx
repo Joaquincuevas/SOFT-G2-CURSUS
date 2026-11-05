@@ -10,16 +10,24 @@ import { useDatos } from './useDatos'
 
 // NOT-10: evaluaciones enviadas a revisión en las secciones del profesor, de
 // la más antigua a la más nueva. Al abrir una se ven todas las notas
-// propuestas en solo lectura; NOT-11 y NOT-12 agregarán aprobar y devolver.
+// propuestas en solo lectura y, NOT-11, aprobarlas y publicarlas (NOT-12
+// agregará devolverlas).
 export function PendientesRevision() {
   const [pendientes, recargar, status] = useDatos<PendienteRevision[]>(
     RUTA_PENDIENTES_REVISION,
   )
   const [abierta, setAbierta] = useState<PendienteRevision | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
 
   return (
     <section className="notas" aria-label="Pendientes de revisión">
       <h2 className="dashboard__titulo">Evaluaciones pendientes de revisión</h2>
+      {/* Fuera de la lista: sigue visible cuando la recarga la saca. */}
+      {aviso && (
+        <p className="notas__aviso" role="status">
+          {aviso}
+        </p>
+      )}
       {pendientes === undefined ? (
         <Cargando texto="Cargando pendientes…" />
       ) : pendientes === null && status === 403 ? (
@@ -81,7 +89,10 @@ export function PendientesRevision() {
                         className="notas__enlace"
                         aria-pressed={esAbierta}
                         aria-label={`Notas de ${p.evaluacion.nombre} (${p.curso.codigo}, sección ${p.seccion.numero})`}
-                        onClick={() => setAbierta(esAbierta ? null : p)}
+                        onClick={() => {
+                          setAviso(null)
+                          setAbierta(esAbierta ? null : p)
+                        }}
                       >
                         {esAbierta ? 'Ocultar' : 'Ver notas'}
                       </button>
@@ -94,6 +105,13 @@ export function PendientesRevision() {
                         <NotasDeEvaluacion
                           seccionId={p.seccion.id}
                           evaluacionId={p.evaluacion.id}
+                          // Aprobada (o ya no pendiente): se cierra y la
+                          // recarga la saca de la lista.
+                          alAprobar={(texto) => {
+                            setAviso(`${p.evaluacion.nombre}: ${texto}`)
+                            setAbierta(null)
+                            recargar()
+                          }}
                         />
                       </td>
                     </tr>

@@ -32,6 +32,7 @@ export type SujetoTabla =
   | 'Evaluacion'
   | 'Actividad'
   | 'Nota'
+  | 'RevisionNotas'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -163,6 +164,13 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // Administrativo no reciben nada. Nadie las borra.
   if (usuario.rol === 'AYUDANTE') can('update', 'Nota')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
+
+  // NOT-11: revisión de las notas de una evaluación (revision_notas). La
+  // aprueba el profesor (el controlador exige además que sea el de esa
+  // sección); la leen los mismos que las notas. El envío del ayudante
+  // (NOT-08) va con update de Nota, porque es parte de ingresarlas.
+  if (usuario.rol === 'PROFESOR') can('update', 'RevisionNotas')
+  if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'RevisionNotas')
 
   return build()
 }
