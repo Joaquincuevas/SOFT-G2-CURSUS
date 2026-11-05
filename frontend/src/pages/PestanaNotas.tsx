@@ -25,7 +25,10 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const [datos, recargar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
   const ingresaNotas = rol === 'AYUDANTE'
-  const aviso = datos ? avisoPonderaciones(datos.sumaPonderaciones) : null
+  const aviso =
+    rol === 'PROFESOR' && datos
+      ? avisoPonderaciones(datos.sumaPonderaciones)
+      : null
 
   return (
     <section className="notas" aria-label="Evaluaciones">

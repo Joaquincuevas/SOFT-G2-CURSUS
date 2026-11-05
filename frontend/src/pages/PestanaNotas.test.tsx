@@ -147,6 +147,9 @@ describe('pestaña Notas (NOT-01)', () => {
       expect(await panel.findByText('Control 1')).toBeInTheDocument()
       expect(panel.getByText('50 %')).toBeInTheDocument()
       expect(
+        panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+      ).not.toBeInTheDocument()
+      expect(
         panel.queryByRole('form', { name: 'Nueva evaluación' }),
       ).not.toBeInTheDocument()
       expect(
