@@ -2,6 +2,7 @@ import {
   LARGO_NOMBRE_EVALUACION,
   PONDERACION_MAXIMA,
   PONDERACION_MINIMA,
+  avisoPonderaciones,
   type CrearEvaluacion,
   type EvaluacionesSeccion,
 } from '@cursus/shared'
@@ -16,7 +17,7 @@ import type { PropsPestana } from './VistaSeccion'
 
 // NOT-01 (RN-10): evaluaciones de la sección con su ponderación y la suma
 // total. Las crea solo el profesor de la sección; el ayudante, el alumno y
-// el Director ven la lista. El aviso de que no suman 100 % es NOT-02.
+// el Director ven la lista. NOT-02 advierte cuánto falta o sobra para 100 %.
 // NOT-05: el ayudante abre cada evaluación para ingresar las notas; el
 // profesor las revisa en NOT-10.
 export function PestanaNotas({ seccionId, rol }: PropsPestana) {
@@ -24,12 +25,22 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const [datos, recargar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
   const ingresaNotas = rol === 'AYUDANTE'
+  const aviso = datos ? avisoPonderaciones(datos.sumaPonderaciones) : null
 
   return (
     <section className="notas" aria-label="Evaluaciones">
       <h3 className="vista-seccion__subtitulo">Evaluaciones</h3>
       {rol === 'PROFESOR' && (
         <FormularioEvaluacion ruta={ruta} alCrear={recargar} />
+      )}
+      {aviso && (
+        <p
+          className="notas__ponderaciones"
+          role="status"
+          aria-label="Aviso de ponderaciones"
+        >
+          {aviso}
+        </p>
       )}
       {datos === undefined ? (
         <Cargando texto="Cargando evaluaciones…" />

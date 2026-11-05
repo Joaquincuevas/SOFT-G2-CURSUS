@@ -14,6 +14,7 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 import type { CrearEvaluacionDto } from './crear-evaluacion.dto.js'
+import { bloquearPonderaciones } from './ponderaciones.service.js'
 
 // La base devuelve las fechas como YYYY-MM-DD, sin conversión de zona horaria.
 const COLUMNAS = `e.id, e.nombre, to_char(e.fecha, 'YYYY-MM-DD') AS fecha,
@@ -62,6 +63,7 @@ export class EvaluacionesService {
     datos: CrearEvaluacionDto,
   ): Promise<Evaluacion> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await bloquearPonderaciones(bd, contexto, seccion.id)
       const [creada] = await bd.query<Evaluacion>(
         `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
          SELECT $1, s.id, $3, $4::date, $5, $6

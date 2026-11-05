@@ -7,6 +7,25 @@ export const LARGO_NOMBRE_EVALUACION = 100
 export const PONDERACION_MINIMA = 1
 export const PONDERACION_MAXIMA = 100
 
+// RN-10/NOT-02: se pueden preparar evaluaciones con un total distinto de
+// 100; ese total impide publicar la nota final, no crear evaluaciones.
+export const SUMA_PONDERACIONES_REQUERIDA = 100
+
+export function avisoPonderaciones(suma: number): string | null {
+  const diferencia = SUMA_PONDERACIONES_REQUERIDA - suma
+  if (diferencia === 0) return null
+  const cantidad = Math.abs(diferencia)
+  const verbo =
+    diferencia > 0
+      ? cantidad === 1
+        ? 'Falta'
+        : 'Faltan'
+      : cantidad === 1
+        ? 'Sobra'
+        : 'Sobran'
+  return `Las ponderaciones suman ${suma} %. ${verbo} ${cantidad} ${cantidad === 1 ? 'punto porcentual' : 'puntos porcentuales'} para completar ${SUMA_PONDERACIONES_REQUERIDA} %.`
+}
+
 export interface Evaluacion {
   id: string
   nombre: string
