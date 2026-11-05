@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
 - [ASI-04: corregir asistencia con motivo e historial, y guía de revisión](asi-04-corregir-asistencia.md)
 - [ASI-03: marcar todos presentes, ajustar excepciones y guía de revisión](asi-03-marcar-todos-presentes.md)

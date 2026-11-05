@@ -106,6 +106,25 @@ describe('resumen de asistencia del profesor (ASI-05)', () => {
   )
 })
 
+describe('resumen de asistencia propia (ASI-06)', () => {
+  const ruta = RUTA.replace('/clases', '/mi-asistencia/resumen')
+  it('requiere sesión', async () => {
+    await request(app.getHttpServer()).get(ruta).expect(401)
+  })
+  it('valida el id de sección antes de consultar la base', async () => {
+    await request(app.getHttpServer())
+      .get('/api/espacio/secciones/no-uuid/mi-asistencia/resumen')
+      .set('Authorization', sesion('ALUMNO'))
+      .expect(400)
+  })
+  it('SUPERADMIN sin facultad no tiene permiso', async () => {
+    await request(app.getHttpServer())
+      .get(ruta)
+      .set('Authorization', sesion('SUPERADMIN'))
+      .expect(403)
+  })
+})
+
 describe('asistencia de una clase sin llegar a la base (ASI-02)', () => {
   const ASISTENCIA = `${RUTA}/00000000-0000-4000-8000-000000000020/asistencia`
   const MARCAS = {

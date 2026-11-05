@@ -202,6 +202,14 @@ describe('migraciones', () => {
     )
     expect(Number(restosAprobacion)).toBe(0)
 
+    // ASI-06: solo retira el conteo agregado, no toca marcas ni RLS.
+    await bd.undoLastMigration()
+    const [{ funcion }] = await bd.query<{ funcion: string | null }[]>(
+      `SELECT to_regprocedure('public.total_clases_asistencia(uuid)')::text AS funcion`,
+    )
+    expect(funcion).toBeNull()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
     // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
     // revision_notas, y deja las políticas del ayudante en nota sin la
     // condición del estado.
