@@ -46,6 +46,14 @@ export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
 // Motivo de una devolución o una recorrección (NOT-12 y NOT-15).
 export const LARGO_MOTIVO_NOTA = 500
 
+// NOT-12: cuerpo de POST .../notas/devolucion. El comentario para el ayudante
+// es obligatorio; queda en revision_notas y como motivo del evento
+// DEVOLUCION, con el mismo largo.
+export interface DevolverNotas {
+  comentario: string
+}
+export const LARGO_COMENTARIO_DEVOLUCION = LARGO_MOTIVO_NOTA
+
 // Notas de 1,0 a 7,0 con un decimal (NOT-06).
 export const NOTA_MINIMA = 1
 export const NOTA_MAXIMA = 7
@@ -134,11 +142,11 @@ export interface ErrorNotasInvalidas {
   invalidas: { alumnoId: string; motivo: string }[]
 }
 
-// NOT-11: 409 de la aprobación cuando la evaluación ya no está en revisión,
-// con su estado actual: el cliente la saca de pendientes. Los otros 409 de la
-// aprobación (notas que no están propuestas, sin notas) no traen estado: la
-// evaluación sigue en revisión.
-export interface ErrorEstadoAprobacion {
+// NOT-11 y NOT-12: 409 de la aprobación o la devolución cuando la evaluación
+// ya no está en revisión, con su estado actual: el cliente la saca de
+// pendientes. Los otros 409 de la aprobación (notas que no están propuestas,
+// sin notas) no traen estado: la evaluación sigue en revisión.
+export interface ErrorEstadoRevision {
   statusCode: 409
   message: string
   estado: Exclude<EstadoRevisionNotas, 'EN_REVISION'>
