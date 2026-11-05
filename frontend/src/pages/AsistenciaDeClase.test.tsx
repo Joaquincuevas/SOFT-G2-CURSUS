@@ -763,9 +763,12 @@ describe('ASI-04: corrección de marcas', () => {
     let presente = true
     await renderConSesion('ALUMNO', VISTA, {
       [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'ALUMNO' }),
-      '/api/espacio/secciones/seccion-1/mi-asistencia': () => [
-        { clase: CLASE, presente },
-      ],
+      '/api/espacio/secciones/seccion-1/mi-asistencia/resumen': () => ({
+        clases: [{ clase: CLASE, presente }],
+        registradas: 1,
+        asistidas: presente ? 1 : 0,
+        porcentaje: presente ? 100 : 0,
+      }),
     })
     fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
     const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
@@ -788,8 +791,10 @@ describe('ASI-04: corrección de marcas', () => {
     let intento = 0
     await renderConSesion('ALUMNO', VISTA, {
       [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'ALUMNO' }),
-      '/api/espacio/secciones/seccion-1/mi-asistencia': () =>
-        ++intento === 1 ? json({}, 500) : [],
+      '/api/espacio/secciones/seccion-1/mi-asistencia/resumen': () =>
+        ++intento === 1
+          ? json({}, 500)
+          : { clases: [], registradas: 0, asistidas: 0, porcentaje: null },
     })
     fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
     expect(
