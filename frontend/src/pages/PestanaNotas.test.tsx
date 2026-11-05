@@ -147,6 +147,9 @@ describe('pestaña Notas (NOT-01)', () => {
       expect(await panel.findByText('Control 1')).toBeInTheDocument()
       expect(panel.getByText('50 %')).toBeInTheDocument()
       expect(
+        panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+      ).not.toBeInTheDocument()
+      expect(
         panel.queryByRole('form', { name: 'Nueva evaluación' }),
       ).not.toBeInTheDocument()
       expect(
@@ -189,5 +192,87 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Control 1')).toBeInTheDocument()
+  })
+})
+
+describe('NOT-02: aviso de ponderaciones', () => {
+  test.each([
+    [0, 'Faltan 100 puntos porcentuales'],
+    [50, 'Faltan 50 puntos porcentuales'],
+    [99, 'Falta 1 punto porcentual'],
+    [101, 'Sobra 1 punto porcentual'],
+    [130, 'Sobran 30 puntos porcentuales'],
+  ])(
+    'con suma %s indica el total y cuánto falta o sobra',
+    async (suma, texto) => {
+      const { panel } = await abrirNotas('PROFESOR', () => ({
+        evaluaciones: suma === 0 ? [] : LISTA.evaluaciones,
+        sumaPonderaciones: suma,
+      }))
+      const aviso = await panel.findByRole('status', {
+        name: 'Aviso de ponderaciones',
+      })
+      expect(aviso).toHaveTextContent(`Las ponderaciones suman ${suma} %.`)
+      expect(aviso).toHaveTextContent(texto)
+      if (suma === 0)
+        expect(panel.getByText('Aún no hay evaluaciones')).toBeInTheDocument()
+      expect(
+        panel.getByRole('button', { name: 'Crear evaluación' }),
+      ).toBeEnabled()
+    },
+  )
+  test('no muestra aviso cuando la suma es exactamente 100 %', async () => {
+    const { panel } = await abrirNotas('PROFESOR', () => ({
+      ...LISTA,
+      sumaPonderaciones: 100,
+    }))
+    await panel.findByText('Control 1')
+    expect(
+      panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).not.toBeInTheDocument()
+  })
+  test('el aviso desaparece al completar 100 % y vuelve si se supera al crear otra evaluación', async () => {
+    let suma = 50
+    const { panel } = await abrirNotas('PROFESOR', (init) => {
+      if (init?.method === 'POST') {
+        suma += 50
+        return json(
+          { id: 'nueva', nombre: 'Otra', fecha: '2026-10-12', ponderacion: 50 },
+          201,
+        )
+      }
+      return { ...LISTA, sumaPonderaciones: suma }
+    })
+    expect(
+      await panel.findByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).toHaveTextContent('Faltan 50')
+    const crear = () => {
+      fireEvent.change(panel.getByLabelText('Nombre'), {
+        target: { value: 'Otra' },
+      })
+      fireEvent.change(panel.getByLabelText('Fecha'), {
+        target: { value: '2026-10-12' },
+      })
+      fireEvent.change(panel.getByLabelText('Ponderación (%)'), {
+        target: { value: '50' },
+      })
+      fireEvent.click(panel.getByRole('button', { name: 'Crear evaluación' }))
+    }
+    crear()
+    await panel.findByText('100 %')
+    expect(
+      panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).not.toBeInTheDocument()
+    crear()
+    expect(
+      await panel.findByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).toHaveTextContent('Sobran 50')
+  })
+  test('no inventa una suma ni muestra el aviso si falla la carga', async () => {
+    const { panel } = await abrirNotas('PROFESOR', () => json({}, 500))
+    await panel.findByText('No pudimos cargar las evaluaciones.')
+    expect(
+      panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).not.toBeInTheDocument()
   })
 })

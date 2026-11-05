@@ -5,6 +5,7 @@ import { EvaluacionesController } from './evaluaciones.controller.js'
 import { EvaluacionesService } from './evaluaciones.service.js'
 import { NotasController } from './notas.controller.js'
 import { NotasService } from './notas.service.js'
+import { PonderacionesService } from './ponderaciones.service.js'
 
 // Notas (F4). Importa EspacioModule por IntegranteSeccionGuard. Exporta la
 // auditoría (NOT-04) para que las tarjetas de notas la usen en su
@@ -12,7 +13,12 @@ import { NotasService } from './notas.service.js'
 @Module({
   imports: [EspacioModule],
   controllers: [EvaluacionesController, NotasController],
-  providers: [EvaluacionesService, AuditoriaNotasService, NotasService],
-  exports: [AuditoriaNotasService],
+  providers: [
+    EvaluacionesService,
+    AuditoriaNotasService,
+    NotasService,
+    PonderacionesService,
+  ],
+  exports: [AuditoriaNotasService, PonderacionesService],
 })
 export class NotasModule {}
