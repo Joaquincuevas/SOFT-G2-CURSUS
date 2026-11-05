@@ -181,6 +181,30 @@ export class BaseDeDatos implements OnModuleDestroy {
     })
   }
 
+  // GES-24. Transacción del superadmin sobre los usuarios de una universidad,
+  // desde su vista global. A diferencia de escribirComoSuperadmin, fija esa
+  // universidad, porque la RLS de usuario la exige. Como al trabajar en una
+  // facultad (MT-04), va con el rol ADMINISTRATIVO y su id, así que la base
+  // audita los cambios, pero sin facultad elegida. Responde 403 a cualquier
+  // otro rol.
+  async enUniversidadComoSuperadmin<T>(
+    superadmin: { id: string; rol: Rol | undefined },
+    universidadId: string,
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    if (superadmin.rol !== 'SUPERADMIN' || !superadmin.id) {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccionEnUniversidad(
+      {
+        universidadId,
+        rol: 'ADMINISTRATIVO',
+        superadmin: { id: superadmin.id, facultadId: '' },
+      },
+      tarea,
+    )
+  }
+
   // Un recurso de la universidad de la sesión. Responde 404 si no existe o es
   // de otra universidad: desde fuera no se distinguen.
   async obtenerEnUniversidad<T>(

@@ -1,0 +1,28 @@
+/* GES-24: los selectores, con el mismo borde que los campos de Carreras. */
+.cuentas__select,
+.cuentas__filtros input,
+.cuentas__filtros select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: var(--input-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+  background: var(--color-background);
+}
+
+.cuentas__filtros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.cuentas__filtros label {
+  display: grid;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}

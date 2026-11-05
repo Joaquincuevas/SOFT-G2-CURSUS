@@ -23,7 +23,12 @@ import { pedirUsuario, useSession } from '../session/session'
 import './AdministrarUniversidad.css'
 import './Carreras.css'
 import { FormularioUniversidad } from './FormularioUniversidad'
-import { enviar, RUTA_UNIVERSIDADES } from './superadmin'
+import { CuentasUniversidad } from './CuentasUniversidad'
+import {
+  enviar,
+  RUTA_UNIVERSIDADES,
+  rutaCuentasUniversidad,
+} from './superadmin'
 import { useDatos } from './useDatos'
 
 // GES-23: el superadmin edita los datos de una universidad, la archiva y
@@ -83,9 +88,17 @@ export function AdministrarUniversidad() {
             Correos @{universidad.dominioCorreo}. Cada cambio queda registrado.
           </p>
         </div>
-        <Link className="administrar-universidad__volver" to="/">
-          Volver al Dashboard
-        </Link>
+        <div className="carreras__acciones">
+          <Link
+            className="administrar-universidad__volver"
+            to={rutaCuentasUniversidad(universidad.id)}
+          >
+            Administrar cuentas
+          </Link>
+          <Link className="administrar-universidad__volver" to="/">
+            Volver al Dashboard
+          </Link>
+        </div>
       </div>
       {aviso && (
         <p className="carreras__aviso" role="status">
@@ -424,11 +437,15 @@ function Facultades({
   )
 }
 
-// Subrutas de /superadmin: por ahora, solo administrar una universidad.
+// Subrutas de /superadmin: administrar una universidad y sus cuentas.
 export function RutasSuperadmin() {
   return (
     <Routes>
       <Route path="universidades/:id" element={<AdministrarUniversidad />} />
+      <Route
+        path="universidades/:id/cuentas"
+        element={<CuentasUniversidad />}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

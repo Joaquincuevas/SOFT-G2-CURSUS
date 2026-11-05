@@ -268,6 +268,23 @@ export class AuthService {
     return 'cambiada'
   }
 
+  // GES-24. Cierra todas las sesiones de un usuario: el JWT guarda el rol, así
+  // que tras cambiarlo debe volver a iniciar sesión. Como cambiarPassword, no
+  // usa consultarEnUniversidad: sesion_auth y refresh_token no son tablas
+  // institucionales.
+  async revocarSesiones(usuarioId: string): Promise<void> {
+    await this.bd.query(
+      `UPDATE sesion_auth SET revocado_en = now()
+        WHERE usuario_id = $1 AND revocado_en IS NULL`,
+      [usuarioId],
+    )
+    await this.bd.query(
+      `UPDATE refresh_token SET revocado_en = now()
+        WHERE usuario_id = $1 AND revocado_en IS NULL`,
+      [usuarioId],
+    )
+  }
+
   // null si la sesión ya no sirve. También corta la sesión de un usuario
   // archivado o de una universidad archivada (GES-23), sin esperar a que
   // venza su JWT. Devuelve además, en la misma
