@@ -20,6 +20,7 @@ import {
 import { ALUMNOS_SECCION } from '../gestion/alumnos.sql.js'
 import type { GuardarAsistenciaDto } from './guardar-asistencia.dto.js'
 import type { CorregirAsistenciaDto } from './corregir-asistencia.dto.js'
+import { porcentajeAsistenciaSql } from './porcentaje.sql.js'
 
 // Código de PostgreSQL para una restricción única violada.
 const UNIQUE = '23505'
@@ -50,6 +51,17 @@ const DESDE_CLASE = `
   FROM clase c
   JOIN seccion s ON s.id = c.seccion_id AND s.universidad_id = c.universidad_id
   JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id`
+
+const MARCAS_PROPIAS = `SELECT ${COLUMNAS_CLASE}, a.presente, c.fecha, c.inicio, c.id ${DESDE_CLASE}
+  JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
+ WHERE c.universidad_id = $1 AND s.id = $2 AND a.alumno_id = $3
+   AND c.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+   AND a.archived_at IS NULL AND EXISTS (
+     SELECT 1 FROM inscripcion i
+     JOIN usuario u ON u.id = i.usuario_id AND u.universidad_id = i.universidad_id
+     WHERE i.seccion_id = s.id AND i.universidad_id = s.universidad_id
+       AND i.usuario_id = $3 AND i.archived_at IS NULL
+       AND u.rol = 'ALUMNO' AND u.archived_at IS NULL)`
 
 interface FilaAsistencia {
   clase: AsistenciaClase['clase']
@@ -202,7 +214,13 @@ export class AsistenciaService {
     alumnoId: string,
     seccion: SeccionEspacio,
   ): Promise<AsistenciaPropia[]> {
-    return (await this.resumenPropio(contexto, alumnoId, seccion)).clases
+    // Compatibilidad con ASI-04: listado solo, sin calcular agregados.
+    return this.consultarPropia<AsistenciaPropia>(
+      contexto,
+      alumnoId,
+      seccion,
+      `SELECT clase, presente FROM (${MARCAS_PROPIAS}) propias ORDER BY fecha DESC, inicio DESC, id`,
+    )
   }
 
   async resumenPropio(
@@ -210,6 +228,33 @@ export class AsistenciaService {
     alumnoId: string,
     seccion: SeccionEspacio,
   ): Promise<ResumenAsistenciaPropia> {
+    // Listado y conteo comparten snapshot. El conteo común no devuelve marcas
+    // ajenas; el listado y los presentes siguen sujetos a la RLS del alumno.
+    const [resumen] = await this.consultarPropia<ResumenAsistenciaPropia>(
+      contexto,
+      alumnoId,
+      seccion,
+      `WITH propias AS (${MARCAS_PROPIAS}), total AS (
+         SELECT public.total_clases_asistencia($2) AS n
+       )
+       SELECT COALESCE((SELECT json_agg(json_build_object('clase', clase, 'presente', presente)
+                ORDER BY fecha DESC, inicio DESC, id) FROM propias), '[]'::json) AS clases,
+              t.n AS registradas,
+              m.asistidas, t.n - m.marcadas AS "sinMarca",
+              ${porcentajeAsistenciaSql('m.asistidas', 't.n')} AS porcentaje
+         FROM total t CROSS JOIN (
+           SELECT count(*)::int AS marcadas, count(*) FILTER (WHERE presente)::int AS asistidas FROM propias
+         ) m`,
+    )
+    return resumen
+  }
+
+  private consultarPropia<T>(
+    contexto: ContextoUniversidad,
+    alumnoId: string,
+    seccion: SeccionEspacio,
+    sql: string,
+  ): Promise<T[]> {
     if (contexto.rol !== 'ALUMNO' || seccion.rol !== 'ALUMNO')
       throw new ForbiddenException()
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
@@ -217,29 +262,7 @@ export class AsistenciaService {
         `SELECT set_config('app.asistencia_alumno_id', $1, true)`,
         [alumnoId],
       )
-      // Una sentencia mantiene listado, numerador y denominador en el mismo
-      // snapshot. RLS y SQL filtran la identidad de la sesión antes de agregar.
-      // Solo cuentan clases con marca propia; no inferimos ausencias de una
-      // incorporación posterior ni leemos marcas de compañeros para contarlas.
-      const [resumen] = await bd.query<ResumenAsistenciaPropia>(
-        `WITH propias AS (
-          SELECT ${COLUMNAS_CLASE}, a.presente, c.fecha, c.inicio, c.id ${DESDE_CLASE}
-           JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
-          WHERE c.universidad_id = $1 AND s.id = $2 AND a.alumno_id = $3
-            AND c.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
-            AND a.archived_at IS NULL AND EXISTS (
-              SELECT 1 FROM inscripcion i WHERE i.seccion_id = s.id AND i.universidad_id = s.universidad_id
-                AND i.usuario_id = $3 AND i.archived_at IS NULL)
-        )
-        SELECT COALESCE(json_agg(json_build_object('clase', clase, 'presente', presente)
-                 ORDER BY fecha DESC, inicio DESC, id), '[]'::json) AS clases,
-               count(*)::int AS registradas,
-               count(*) FILTER (WHERE presente)::int AS asistidas,
-               round(count(*) FILTER (WHERE presente)::numeric * 100 / NULLIF(count(*), 0), 2)::double precision AS porcentaje
-          FROM propias`,
-        [contexto.universidadId, seccion.id, alumnoId],
-      )
-      return resumen
+      return bd.query<T>(sql, [contexto.universidadId, seccion.id, alumnoId])
     })
   }
 

@@ -27,12 +27,15 @@ export function MiAsistencia({ seccionId }: { seccionId: string }) {
         </strong>
       </p>
       <p>
-        {datos.asistidas} de {datos.registradas} clases con marca propia
-        registrada.
+        {datos.asistidas} de {datos.registradas} clases con asistencia
+        registrada en la sección.
       </p>
+      <p>{datos.sinMarca} clases sin marca.</p>
       <p className="dashboard__texto asistencia__nota">
-        Las clases sin una marca registrada para ti no se cuentan como
-        ausencias. Si detectas un error, comunícaselo a tu profesor.
+        El porcentaje usa todas las clases con asistencia registrada en esta
+        sección, igual que la vista del profesor. Las clases sin marca se
+        informan por separado de las ausencias. Si detectas un error,
+        comunícaselo a tu profesor.
       </p>
       <button className="asistencia__boton" type="button" onClick={recargar}>
         Actualizar asistencia

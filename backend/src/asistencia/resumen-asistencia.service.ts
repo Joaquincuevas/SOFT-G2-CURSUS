@@ -4,6 +4,7 @@ import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { porcentajeAsistenciaSql } from './porcentaje.sql.js'
 
 @Injectable()
 export class ResumenAsistenciaService {
@@ -37,7 +38,7 @@ export class ResumenAsistenciaService {
             AND a.universidad_id = c.universidad_id AND a.archived_at IS NULL
         )
       ), total AS (
-        SELECT count(*)::int AS n FROM registradas
+        SELECT public.total_clases_asistencia($2) AS n
       ), marcas AS (
         SELECT a.alumno_id, count(*) FILTER (WHERE a.presente)::int AS asistidas,
                count(*)::int AS marcadas
@@ -49,7 +50,7 @@ export class ResumenAsistenciaService {
           'id', u.id, 'nombre', u.nombre,
           'asistidas', COALESCE(m.asistidas, 0),
           'sinMarca', t.n - COALESCE(m.marcadas, 0),
-          'porcentaje', round(COALESCE(m.asistidas, 0)::numeric * 100 / NULLIF(t.n, 0), 2)
+          'porcentaje', ${porcentajeAsistenciaSql('COALESCE(m.asistidas, 0)', 't.n')}
         ) ORDER BY u.nombre COLLATE "es-CL-x-icu", u.id)
         FROM usuario u LEFT JOIN marcas m ON m.alumno_id = u.id
         WHERE u.universidad_id = s.universidad_id AND u.archived_at IS NULL AND u.rol = 'ALUMNO'

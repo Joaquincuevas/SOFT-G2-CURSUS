@@ -77,12 +77,13 @@ export interface AsistenciaPropia {
   presente: boolean
 }
 
-// ASI-06: solo las marcas vigentes del alumno de la sesión. Las clases sin
-// marca propia no se cuentan como ausencias. Porcentaje calculado en SQL.
+// ASI-06: porcentaje por sección con el mismo denominador que ASI-05.
+// Las clases sin marca propia cuentan en el total y se informan por separado.
 export interface ResumenAsistenciaPropia {
   clases: AsistenciaPropia[]
   registradas: number
   asistidas: number
+  sinMarca: number
   porcentaje: number | null
 }
 
