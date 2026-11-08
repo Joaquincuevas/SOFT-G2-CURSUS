@@ -19,7 +19,10 @@ En **Evaluaciones pendientes de revisión** (NOT-10), al abrir una con **Ver not
 **Devolver** abre en la misma página:
 
 - el texto "Las notas vuelven al ayudante para que las corrija y las envíe de nuevo. No se publica nada.";
-- el campo **Comentario para el ayudante (obligatorio)**, con un contador "n/500 caracteres" (`aria-describedby`) y `maxLength` de 500;
+- el campo **Comentario para el ayudante (obligatorio)**, con un contador "n/500 caracteres" (`aria-describedby`):
+  - el contador cuenta caracteres como el backend (`Array.from`), no unidades UTF-16: un emoji cuenta uno;
+  - el campo no tiene `maxLength`, que cuenta unidades UTF-16 y cortaría antes de los 500 que acepta el backend;
+  - pasado el límite, sin contar los espacios de los extremos, aparece "El comentario puede tener hasta 500 caracteres.", el campo queda `aria-invalid` y no se puede confirmar;
 - **Confirmar devolución**, deshabilitado mientras el comentario esté vacío o tenga solo espacios, y **Cancelar**.
 
 Al confirmar:
@@ -113,6 +116,7 @@ npm run test:db --workspace=backend
   - 403 para un profesor que entra a la sección con otro rol.
 - `frontend/src/pages/PendientesRevision.test.tsx`:
   - el comentario es obligatorio y tiene contador, y cancelar no devuelve;
+  - el contador cuenta un emoji como un carácter y acepta 500 emojis; con 501 avisa y no deja confirmar;
   - al confirmar se envía sin espacios, aparece el aviso y la evaluación sale de la lista;
   - mientras devuelve todo queda bloqueado, y un error lo desbloquea y conserva el comentario;
   - un fallo de red y un 400 muestran el error;
