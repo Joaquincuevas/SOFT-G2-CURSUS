@@ -167,8 +167,9 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
 
   // NOT-11 y NOT-12: revisión de las notas de una evaluación
   // (revision_notas). La aprueba o la devuelve el profesor (el controlador
-  // exige además que sea el de esa sección); la leen los mismos que las notas. El envío del ayudante
-  // (NOT-08) va con update de Nota, porque es parte de ingresarlas.
+  // exige además que sea el de esa sección); la leen los mismos que las
+  // notas. El envío del ayudante (NOT-08) va con update de Nota, porque es
+  // parte de ingresarlas.
   if (usuario.rol === 'PROFESOR') can('update', 'RevisionNotas')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'RevisionNotas')
 
