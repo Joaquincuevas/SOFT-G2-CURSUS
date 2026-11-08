@@ -375,6 +375,8 @@ describe('contrato del schema', () => {
         'revision_notas',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
+        // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).
+        'archivo',
       ].sort(),
     )
     for (const tabla of tablas) {
