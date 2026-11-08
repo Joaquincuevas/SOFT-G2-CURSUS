@@ -52,11 +52,11 @@ git switch develop
 npm install
 # 3. Crea tu archivo de variables de entorno
 cp .env.example .env
-# 4. Levanta PostgreSQL (vuelve cuando la base está lista)
+# 4. Levanta PostgreSQL y el S3 local (vuelve cuando los dos están listos)
 docker compose up -d --wait
 ```
 
-Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto que definas en `POSTGRES_PORT`). Luego levanta las apps:
+Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto que definas en `POSTGRES_PORT`) y el S3 local de los archivos en `localhost:4566` (ver "Archivos local (S3)"). Luego levanta las apps:
 
 ```bash
 npm run dev:front    # frontend en http://localhost:5173
@@ -78,6 +78,15 @@ docker compose down -v                                     # detiene y borra los
 - En la consola SQL, `-U cursus -d cursus` son los valores de `.env.example`. Si cambiaste `POSTGRES_USER` o `POSTGRES_DB` en tu `.env`, usa los tuyos.
 - Si el puerto 5432 ya está ocupado, cambia `POSTGRES_PORT` en `.env` y vuelve a ejecutar `docker compose up -d --wait`.
 - Usuario, contraseña y nombre de la base solo se aplican al crear el volumen. Si los cambias en `.env` después, ejecuta `docker compose down -v` y levanta de nuevo.
+
+### Archivos local (S3)
+
+Los archivos de los cursos (MAT-01) se guardan en un bucket S3. En local, `docker compose` levanta [LocalStack](https://github.com/localstack/localstack) 4.9.2, un S3 de prueba, y crea el bucket `cursus-archivos` al arrancar ([infra/localstack/crear-bucket.sh](infra/localstack/crear-bucket.sh)). Las variables `S3_*` de `.env.example` apuntan a él, con llaves de prueba que no son credenciales reales.
+
+- LocalStack **no guarda nada entre reinicios**: al reiniciar el contenedor, el bucket se crea vacío y los archivos subidos antes dejan de existir (las filas de `archivo` quedan).
+- La versión está fija porque las más nuevas de LocalStack piden una cuenta. MinIO ya no publica imágenes.
+- LocalStack no aplica permisos: una URL sin firma también descarga. En AWS el bucket es privado y solo responde a URLs firmadas.
+- Sin `S3_BUCKET`, la API arranca igual, pero subir y descargar archivos responde 503.
 
 ### Migraciones
 
@@ -164,6 +173,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de su entorno (`develop` en Preview y `main` en Production) y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen, así que se usa a través de Vercel; solo `/api/health` responde sin el header.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
+- **Archivos:** bucket S3 privado `cursus-<entorno>-archivos-<cuenta>` (MAT-01), cifrado, con versionado y solo HTTPS. Nada es público: el navegador sube y descarga directo con URLs firmadas que genera el backend, que entra con el rol de la tarea (`cursus-<entorno>-ecs-tarea`, solo `GetObject` y `PutObject`). El bucket se conserva aunque se borre el stack. Ver [docs/mat-01-bucket-archivos.md](docs/mat-01-bucket-archivos.md).
 - **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. Las dos dejan un snapshot si se borran o se reemplazan y guardan respaldos de 1 día (el máximo del plan gratuito de AWS; con el plan de pago, producción debería guardar 7). La de producción además está protegida contra borrado y conserva sus respaldos si se borra la instancia.
 - **Infraestructura:** la misma plantilla de CloudFormation ([infra/aws/cursus.yml](infra/aws/cursus.yml)) con el parámetro `Entorno`. Los stacks (`cursus-staging` y `cursus-production`) nunca se borran.
 
@@ -282,7 +292,7 @@ bash infra/aws/superadmin.sh production <correo> "<nombre>"
 
 ### Límites conocidos
 
-- API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
+- API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Por eso los archivos (hasta 20 MB) van directo entre el navegador y S3 con URLs firmadas (MAT-01), sin pasar por la API.
 
 ## Convención de idioma
 
