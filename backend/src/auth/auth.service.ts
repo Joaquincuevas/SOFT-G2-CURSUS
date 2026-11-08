@@ -56,6 +56,7 @@ interface FilaUsuario {
   rol: Rol
   universidad_id: string
   universidad_nombre: string
+  universidad_color: string
   facultad_nombre: string | null
   credencial_provisoria: boolean
 }
@@ -370,6 +371,7 @@ export class AuthService {
       contexto,
       `SELECT u.id, u.nombre, u.correo, u.rol, u.universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
+              un.color AS universidad_color,
               u.credencial_provisoria
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
@@ -388,6 +390,7 @@ export class AuthService {
       universidadId: fila.universidad_id,
       universidadNombre:
         fila.rol === 'DIRECTOR' ? NOMBRE_DIRECTORIO : fila.universidad_nombre,
+      universidadColor: fila.rol === 'DIRECTOR' ? null : fila.universidad_color,
       facultadNombre: fila.facultad_nombre,
       debeCambiarPassword: fila.credencial_provisoria,
       periodoActivo: await this.periodoActivo(contexto),
@@ -403,13 +406,18 @@ export class AuthService {
     contexto: ContextoUniversidad | null,
   ): Promise<UsuarioSesion | null> {
     const [fila] = await this.bd.query<
-      Omit<FilaUsuario, 'universidad_id' | 'universidad_nombre'> & {
+      Omit<
+        FilaUsuario,
+        'universidad_id' | 'universidad_nombre' | 'universidad_color'
+      > & {
         universidad_id: string | null
         universidad_nombre: string | null
+        universidad_color: string | null
       }
     >(
       `SELECT u.id, u.nombre, u.correo, u.rol, un.id AS universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
+              un.color AS universidad_color,
               u.credencial_provisoria
          FROM usuario u
          LEFT JOIN universidad un ON un.id = $2
@@ -431,6 +439,7 @@ export class AuthService {
       rol: fila.rol,
       universidadId: fila.universidad_id,
       universidadNombre: fila.universidad_nombre ?? NOMBRE_PLATAFORMA,
+      universidadColor: fila.universidad_color,
       facultadNombre: fila.facultad_nombre,
       debeCambiarPassword: fila.credencial_provisoria,
       periodoActivo: contexto ? await this.periodoActivo(contexto) : null,

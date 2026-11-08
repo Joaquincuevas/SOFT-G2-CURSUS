@@ -6,6 +6,7 @@ import {
   renderConSesion,
   type RutaSimulada,
   superadminSinElegir,
+  usuarioDePrueba,
 } from '../test/sesion'
 
 // GES-23: el superadmin crea universidades desde su Dashboard y administra
@@ -58,6 +59,36 @@ const escribir = (etiqueta: string, valor: string, dentro?: HTMLElement) =>
   )
 
 describe('Dashboard: nueva universidad (GES-23)', () => {
+  test('rechaza un color sin contraste antes de enviar y permite corregirlo', async () => {
+    const { pedidas, ruta } = registrar((init) =>
+      init?.method === 'POST' ? { ...NORTE, nombre: 'Nueva' } : [NORTE],
+    )
+    await abrir('/', { '/api/superadmin/universidades': ruta })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Nueva universidad' }),
+    )
+    const form = screen.getByRole('form', { name: 'Nueva universidad' })
+    escribir('Nombre', 'Nueva', form)
+    escribir('Dominio del correo', 'nueva.cl', form)
+    escribir('Color', '#ffff00', form)
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Crear universidad' }),
+    )
+    expect(await within(form).findByRole('alert')).toHaveTextContent(
+      'contraste mínimo 4,5:1',
+    )
+    expect(pedidas.some((p) => p.metodo === 'POST')).toBe(false)
+    escribir('Color', '#0a5c36', form)
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Crear universidad' }),
+    )
+    await waitFor(() =>
+      expect(pedidas.find((p) => p.metodo === 'POST')?.cuerpo).toMatchObject({
+        color: '#0a5c36',
+      }),
+    )
+  })
+
   test('crea una universidad con nombre, dominio y color', async () => {
     const creada: UniversidadElegible = {
       id: 'universidad-pacifico',
@@ -141,6 +172,32 @@ describe('Dashboard: nueva universidad (GES-23)', () => {
 })
 
 describe('Administrar una universidad (GES-23)', () => {
+  test('aplica inmediatamente el color guardado si es la universidad elegida', async () => {
+    let universidad = NORTE
+    await abrir(
+      RUTA_NORTE,
+      {
+        '/api/superadmin/universidades': () => [universidad],
+        [API_NORTE]: (init) => {
+          universidad = { ...NORTE, ...JSON.parse(String(init?.body)) }
+          return universidad
+        },
+      },
+      usuarioDePrueba('SUPERADMIN'),
+    )
+    const form = await screen.findByRole('form', {
+      name: 'Datos de la universidad',
+    })
+    escribir('Color', '#6b2d84', form)
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Guardar cambios' }),
+    )
+    await screen.findByText('Datos de la universidad guardados')
+    expect(
+      document.documentElement.style.getPropertyValue('--color-primary'),
+    ).toBe('#6b2d84')
+  })
+
   test('funciona sin facultad elegida y muestra sus datos y facultades', async () => {
     await abrir(RUTA_NORTE)
 

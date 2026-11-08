@@ -38,6 +38,7 @@ import { useDatos } from './useDatos'
 export function AdministrarUniversidad() {
   const { id } = useParams()
   const { fetchConSesion } = useAuth()
+  const { user, reemplazarUsuario } = useSession()
   const [universidades, recargar] =
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -74,6 +75,15 @@ export function AdministrarUniversidad() {
       datos,
     )
     if (!resultado.ok) return resultado.error
+    // UI-04: si está trabajando en esta universidad, el cambio de color se
+    // ve de inmediato. Las sesiones de otros usuarios lo leen al recargar.
+    if (user.universidadId === resultado.datos.id) {
+      reemplazarUsuario({
+        ...user,
+        universidadNombre: resultado.datos.nombre,
+        universidadColor: resultado.datos.color,
+      })
+    }
     setAviso('Datos de la universidad guardados')
     recargar()
     return null

@@ -180,6 +180,10 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // UI-04: inicializa colores; al revertir conserva los datos elegidos.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+
     // NOT-11: no crea tablas. Quita las políticas de la aprobación, el
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.

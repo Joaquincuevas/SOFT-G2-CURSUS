@@ -29,7 +29,7 @@
 
 .header__title {
   font: var(--font-h3);
-  color: var(--color-text-primary);
+  color: var(--color-primary);
 }
 
 .header__subtitle,

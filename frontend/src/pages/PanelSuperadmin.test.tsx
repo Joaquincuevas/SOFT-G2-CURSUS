@@ -36,6 +36,7 @@ const EN_SALUD_SUR: UsuarioSesion = {
   ...usuarioDePrueba('SUPERADMIN'),
   universidadId: 'universidad-sur',
   universidadNombre: 'Universidad Demo Sur',
+  universidadColor: '#0a5c36',
   facultadNombre: 'Facultad de Ciencias de la Salud',
 }
 
@@ -131,6 +132,9 @@ describe('superadmin: Dashboard de universidades (MT-04)', () => {
       universidadId: 'universidad-sur',
       facultadId: 'salud-sur',
     })
+    expect(
+      document.documentElement.style.getPropertyValue('--color-primary'),
+    ).toBe('#0a5c36')
     // El encabezado y la barra muestran la facultad elegida.
     expect(
       screen.getByText('Facultad de Ciencias de la Salud · Semestre 2026-2'),
@@ -182,12 +186,15 @@ describe('superadmin: Dashboard de universidades (MT-04)', () => {
 
   test('al salir de la universidad vuelve a la vista global', async () => {
     let metodo: string | undefined
-    await abrir('/cursos', usuarioDePrueba('SUPERADMIN'), {
+    await abrir('/cursos', EN_SALUD_SUR, {
       '/api/superadmin/contexto': (init) => {
         metodo = init?.method
         return superadminSinElegir()
       },
     })
+    expect(
+      document.documentElement.style.getPropertyValue('--color-primary'),
+    ).toBe('#0a5c36')
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Salir de la universidad' }),
@@ -199,6 +206,9 @@ describe('superadmin: Dashboard de universidades (MT-04)', () => {
       ),
     ).toBeInTheDocument()
     expect(metodo).toBe('DELETE')
+    expect(
+      document.documentElement.style.getPropertyValue('--color-primary'),
+    ).toBe('')
     expect(
       await screen.findByRole('region', { name: 'Universidad Demo Norte' }),
     ).toBeInTheDocument()
