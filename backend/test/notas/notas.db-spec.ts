@@ -2014,6 +2014,14 @@ describe('POST .../notas/aprobacion (NOT-11)', () => {
   it('publica todas las notas, aprueba la revisión y deja la auditoría con fecha y profesor', async () => {
     const evaluacion = await evaluacionEnRevision()
     const profesor = await idDe(PROFESOR)
+    // NOT-02 solo bloquea la nota final. La publicación de una evaluación
+    // debe seguir funcionando con ponderaciones distintas de 100 %.
+    const [{ suma }] = await bd.query<{ suma: number }[]>(
+      `SELECT sum(ponderacion)::int AS suma FROM evaluacion
+        WHERE seccion_id = $1 AND archived_at IS NULL`,
+      [secciones.s1],
+    )
+    expect(suma).not.toBe(100)
     const antes = new Date()
 
     const aprobada = await aprobar(PROFESOR, evaluacion, 200)
