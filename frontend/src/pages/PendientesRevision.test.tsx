@@ -479,6 +479,57 @@ describe('devolver al ayudante (NOT-12)', () => {
     expect(posts).toEqual([])
   })
 
+  test('el contador cuenta caracteres como el backend, no unidades UTF-16', async () => {
+    const { vista } = await abrirPendiente(() => ({
+      ...EN_REVISION,
+      estado: 'DEVUELTA',
+    }))
+    const campo = formulario(vista).getByLabelText(
+      'Comentario para el ayudante (obligatorio)',
+    )
+    // Sin maxLength: la caja no corta antes de los 500 que acepta el backend.
+    expect(campo).not.toHaveAttribute('maxlength')
+
+    comentar(vista, '😀😀😀')
+    expect(formulario(vista).getByText('3/500 caracteres')).toBeInTheDocument()
+
+    // 500 emojis son 1000 unidades UTF-16, pero 500 caracteres: se aceptan.
+    comentar(vista, '😀'.repeat(500))
+    expect(
+      formulario(vista).getByText('500/500 caracteres'),
+    ).toBeInTheDocument()
+    expect(confirmar(vista)).toBeEnabled()
+    expect(campo).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  test('pasado el límite avisa y no deja confirmar', async () => {
+    const { vista, posts } = await abrirPendiente(() => ({
+      ...EN_REVISION,
+      estado: 'DEVUELTA',
+    }))
+    comentar(vista, '😀'.repeat(501))
+
+    expect(
+      formulario(vista).getByText('501/500 caracteres'),
+    ).toBeInTheDocument()
+    expect(
+      formulario(vista).getByText(
+        'El comentario puede tener hasta 500 caracteres.',
+      ),
+    ).toBeInTheDocument()
+    expect(confirmar(vista)).toBeDisabled()
+    expect(
+      formulario(vista).getByLabelText(
+        'Comentario para el ayudante (obligatorio)',
+      ),
+    ).toHaveAttribute('aria-invalid', 'true')
+
+    // Los espacios de los extremos no se envían ni cuentan para el límite.
+    comentar(vista, ` ${'a'.repeat(500)}  `)
+    expect(confirmar(vista)).toBeEnabled()
+    expect(posts).toEqual([])
+  })
+
   test('al confirmar envía el comentario sin espacios, avisa y la evaluación sale de la lista', async () => {
     const { vista, posts } = await abrirPendiente(() => ({
       ...EN_REVISION,
