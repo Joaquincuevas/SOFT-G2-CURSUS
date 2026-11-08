@@ -130,6 +130,13 @@ function RevisarNotas({
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const idContador = useId()
+  const idExceso = useId()
+  // En caracteres, como el backend (DTO y CHECK) y length() de PostgreSQL,
+  // no en unidades UTF-16 como .length y maxLength: un emoji cuenta uno. El
+  // límite se revisa sin los espacios de los extremos, que no se envían.
+  const largo = Array.from(comentario).length
+  const excedido =
+    Array.from(comentario.trim()).length > LARGO_COMENTARIO_DEVOLUCION
 
   async function revisar(
     destino: string,
@@ -250,18 +257,26 @@ function RevisarNotas({
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
               required
-              maxLength={LARGO_COMENTARIO_DEVOLUCION}
-              aria-describedby={idContador}
+              aria-invalid={excedido}
+              aria-describedby={
+                excedido ? `${idContador} ${idExceso}` : idContador
+              }
               disabled={enviando}
             />
           </label>
           <p id={idContador} className="notas__contador">
-            {comentario.length}/{LARGO_COMENTARIO_DEVOLUCION} caracteres
+            {largo}/{LARGO_COMENTARIO_DEVOLUCION} caracteres
           </p>
+          {excedido && (
+            <p id={idExceso} className="notas__error">
+              El comentario puede tener hasta {LARGO_COMENTARIO_DEVOLUCION}{' '}
+              caracteres.
+            </p>
+          )}
           <button
             className="notas__boton"
             type="button"
-            disabled={enviando || !comentario.trim()}
+            disabled={enviando || !comentario.trim() || excedido}
             onClick={() => void devolver()}
           >
             {enviando ? 'Devolviendo…' : 'Confirmar devolución'}
