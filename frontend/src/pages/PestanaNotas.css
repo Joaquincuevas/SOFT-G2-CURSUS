@@ -165,13 +165,7 @@
   font-weight: 600;
 }
 
-/* NOT-12: comentario de la devolución. */
-.notas__campo {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
+/* NOT-12: comentario de la devolución (el label es .notas__campo). */
 .notas__campo textarea {
   min-height: 5rem;
   max-width: 100%;
