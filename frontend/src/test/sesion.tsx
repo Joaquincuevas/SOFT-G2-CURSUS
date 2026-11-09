@@ -115,6 +115,11 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
       porcentaje: null,
     }),
   ],
+  // Notas propias del alumno (NOT-13).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
+    () => ({ evaluaciones: [] }),
+  ],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
     () => ({ total: 0, alumnos: [] }),
