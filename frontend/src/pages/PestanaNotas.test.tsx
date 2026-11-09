@@ -52,9 +52,9 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
     expect(filas).toEqual([
-      'EvaluaciónFechaPonderación',
-      'Control 12026-09-0120 %',
-      'Solemne 12026-10-0530 %',
+      'EvaluaciónFechaPonderaciónEdición',
+      'Control 12026-09-0120 %Editar',
+      'Solemne 12026-10-0530 %Editar',
       'Suma de ponderaciones50 %',
     ])
   })
@@ -192,6 +192,106 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Control 1')).toBeInTheDocument()
+  })
+})
+
+describe('NOT-03: edición de evaluaciones', () => {
+  const EDICION = `${EVALUACIONES}/e1`
+
+  async function abrirEdicion(
+    guardar: (init?: RequestInit) => Response,
+    listar = () => LISTA,
+  ) {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => RESUMEN,
+      [EVALUACIONES]: listar,
+      [EDICION]: guardar,
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Editar Control 1' }),
+    )
+    return within(screen.getByRole('form', { name: 'Editar Control 1' }))
+  }
+
+  test('precarga y guarda los tres campos, y actualiza el total', async () => {
+    const cambios: unknown[] = []
+    let lista = LISTA
+    const nuevo = {
+      nombre: 'Control corregido',
+      fecha: '2026-09-02',
+      ponderacion: 40,
+    }
+    const form = await abrirEdicion(
+      (init) => {
+        expect(init?.method).toBe('PUT')
+        cambios.push(JSON.parse(String(init?.body)))
+        lista = {
+          evaluaciones: [{ id: 'e1', ...nuevo }, LISTA.evaluaciones[1]],
+          sumaPonderaciones: 70,
+        }
+        return json({ id: 'e1', ...nuevo })
+      },
+      () => lista,
+    )
+    expect(form.getByLabelText('Nombre')).toHaveValue('Control 1')
+    expect(form.getByLabelText('Fecha')).toHaveValue('2026-09-01')
+    expect(form.getByLabelText('Ponderación (%)')).toHaveValue(20)
+    fireEvent.change(form.getByLabelText('Nombre'), {
+      target: { value: nuevo.nombre },
+    })
+    fireEvent.change(form.getByLabelText('Fecha'), {
+      target: { value: nuevo.fecha },
+    })
+    fireEvent.change(form.getByLabelText('Ponderación (%)'), {
+      target: { value: '40' },
+    })
+    fireEvent.click(form.getByRole('button', { name: 'Guardar cambios' }))
+    expect(
+      await screen.findByText('Evaluación actualizada.'),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Control corregido')).toBeInTheDocument()
+    expect(screen.getByText('70 %')).toBeInTheDocument()
+    expect(cambios).toEqual([nuevo])
+  })
+
+  test('explica el bloqueo al cargar una evaluación que ya tiene notas', async () => {
+    const { panel } = await abrirNotas('PROFESOR', () => ({
+      ...LISTA,
+      evaluaciones: LISTA.evaluaciones.map((e) => ({ ...e, tieneNotas: true })),
+    }))
+    expect(await panel.findAllByText(/ya tiene notas ingresadas/)).toHaveLength(
+      2,
+    )
+    expect(
+      panel.queryByRole('button', { name: /Editar/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('un 409 concurrente conserva el motivo y deshabilita el guardado', async () => {
+    let tieneNotas = false
+    const form = await abrirEdicion(
+      () => {
+        tieneNotas = true
+        return json({ statusCode: 409 }, 409)
+      },
+      () => ({
+        ...LISTA,
+        evaluaciones: [
+          { ...LISTA.evaluaciones[0], tieneNotas },
+          LISTA.evaluaciones[1],
+        ],
+      }),
+    )
+    fireEvent.click(form.getByRole('button', { name: 'Guardar cambios' }))
+    expect(await form.findByRole('alert')).toHaveTextContent(
+      'ya tiene notas ingresadas',
+    )
+    expect(form.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
+    fireEvent.click(form.getByRole('button', { name: 'Cancelar' }))
+    expect(
+      screen.queryByRole('button', { name: 'Editar Control 1' }),
+    ).not.toBeInTheDocument()
   })
 })
 

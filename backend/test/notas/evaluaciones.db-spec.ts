@@ -391,6 +391,170 @@ describe('NOT-02: condición transaccional de la futura nota final', () => {
   })
 })
 
+describe('PUT de una evaluación (NOT-03)', () => {
+  const inicial = () => ({
+    nombre: 'Control editable',
+    fecha: dentro(4),
+    ponderacion: 20,
+  })
+  const nuevos = () => ({
+    nombre: 'Examen corregido',
+    fecha: dentro(7),
+    ponderacion: 35,
+  })
+  const ruta = (seccion: string, id: string) =>
+    `/api/espacio/secciones/${seccion}/evaluaciones/${id}`
+  const preparar = () => crear(PROFESOR, secciones.s1, inicial(), 201)
+  async function editar(
+    id: string,
+    estado: number,
+    datos = nuevos(),
+    correo = PROFESOR,
+    seccion = secciones.s1,
+  ) {
+    const token = await tokenDe(correo)
+    return request(app.getHttpServer())
+      .put(ruta(seccion, id))
+      .set('Authorization', `Bearer ${token}`)
+      .send(datos)
+      .expect(estado)
+  }
+  const historial = (id: string) =>
+    bd.query<
+      {
+        responsable_id: string
+        fecha: Date
+        anterior: CrearEvaluacion
+        nuevo: CrearEvaluacion
+      }[]
+    >(
+      'SELECT responsable_id, fecha, anterior, nuevo FROM evaluacion_cambio WHERE evaluacion_id=$1',
+      [id],
+    )
+  async function ingresarNota(id: string, conexion: QueryRunner) {
+    await conexion.query(
+      `INSERT INTO nota (universidad_id,evaluacion_id,alumno_id,valor,propuesta_por)
+       SELECT universidad_id,id,$2,5,$3 FROM evaluacion WHERE id=$1`,
+      [id, await idDe(ALUMNO), await idDe(AYUDANTE)],
+    )
+  }
+
+  it('actualiza los tres campos y la suma, y registra fecha, actor y valores reales una sola vez', async () => {
+    const { id } = await preparar()
+    const antes = (await listar(PROFESOR, secciones.s1, 200)).sumaPonderaciones
+    const [{ momento }] = await bd.query<{ momento: Date }[]>(
+      'SELECT clock_timestamp() AS momento',
+    )
+    const res = await editar(id, 200, {
+      ...nuevos(),
+      nombre: '  Examen   corregido ',
+    })
+    expect(res.body).toEqual({ id, ...nuevos() })
+    await editar(id, 200)
+    const lista = await listar(PROFESOR, secciones.s1, 200)
+    expect(lista.sumaPonderaciones).toBe(antes + 15)
+    expect(lista.evaluaciones.find((e) => e.id === id)).toEqual({
+      id,
+      ...nuevos(),
+      tieneNotas: false,
+    })
+    const cambios = await historial(id)
+    expect(cambios).toMatchObject([
+      {
+        responsable_id: await idDe(PROFESOR),
+        anterior: inicial(),
+        nuevo: nuevos(),
+      },
+    ])
+    expect(cambios[0].fecha.getTime()).toBeGreaterThanOrEqual(momento.getTime())
+    expect(
+      (await listar(ALUMNO, secciones.s1, 200)).evaluaciones.find(
+        (e) => e.id === id,
+      ),
+    ).not.toHaveProperty('tieneNotas')
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+  })
+
+  it('una propuesta guardada primero bloquea la edición, incluso si se archiva luego', async () => {
+    const { id } = await preparar()
+    const q = bd.createQueryRunner()
+    await q.startTransaction()
+    let edicion: Promise<unknown> | undefined
+    try {
+      await q.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `notas:${id}`,
+      ])
+      await ingresarNota(id, q)
+      await tokenDe(PROFESOR)
+      edicion = editar(id, 409).then((res) => {
+        expect((res.body as { message: string }).message).toContain(
+          'ya tiene notas ingresadas',
+        )
+      })
+      await vi.waitFor(
+        async () => {
+          const [{ espera }] = await bd.query<
+            { espera: boolean }[]
+          >(`SELECT EXISTS (
+          SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+            AND wait_event='advisory' AND pid<>pg_backend_pid()
+        ) AS espera`)
+          expect(espera).toBe(true)
+        },
+        { timeout: 2000 },
+      )
+    } finally {
+      await q.commitTransaction()
+      await q.release()
+      await edicion
+    }
+    const lista = await listar(PROFESOR, secciones.s1, 200)
+    expect(lista.evaluaciones.find((e) => e.id === id)).toEqual({
+      id,
+      ...inicial(),
+      tieneNotas: true,
+    })
+    await bd.query('UPDATE nota SET archived_at=now() WHERE evaluacion_id=$1', [
+      id,
+    ])
+    await editar(id, 409)
+    expect(await historial(id)).toEqual([])
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+  })
+
+  it('rechaza datos inválidos, otra sección y roles sin permiso sin dejar historial', async () => {
+    const { id } = await preparar()
+    await editar(id, 400, { ...nuevos(), ponderacion: 10.5 })
+    await editar(id, 400, { ...nuevos(), fecha: '2030-01-01' })
+    await editar(id, 403, nuevos(), AYUDANTE)
+    await editar(id, 403, nuevos(), ALUMNO)
+    await editar(id, 403, nuevos(), profesorOtraSeccion)
+    await editar(id, 404, nuevos(), profesorOtraSeccion, secciones.s2)
+    await editar(id, 404, nuevos(), PROFESOR_SUR)
+    expect(await historial(id)).toEqual([])
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+    await editar(id, 404)
+  })
+
+  it('RLS rechaza registrar un responsable distinto al profesor de sesión', async () => {
+    const { id } = await preparar()
+    const universidadId = await universidadDe('norte.cursus.test')
+    await comoApp({ universidadId, rol: 'PROFESOR' }, async (q) => {
+      await q.query("SELECT set_config('app.usuario_id', $1, true)", [
+        await idDe(PROFESOR),
+      ])
+      await expect(
+        q.query(
+          `INSERT INTO evaluacion_cambio (universidad_id,evaluacion_id,responsable_id,anterior,nuevo)
+         VALUES ($1,$2,$3,'{"ponderacion":20}','{"ponderacion":30}')`,
+          [universidadId, id, await idDe(profesorOtraSeccion)],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+  })
+})
+
 describe('POST /api/espacio/secciones/:id/evaluaciones (NOT-01)', () => {
   it('el profesor de la sección crea una evaluación y queda como creada_por', async () => {
     const creada = await crear(
