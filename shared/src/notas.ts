@@ -179,3 +179,20 @@ export interface ErrorListaNotas {
   sobrantes: string[]
   repetidos: string[]
 }
+
+// NOT-13 (RE-02): las notas propias del alumno en una sección
+// (/api/espacio/secciones/:id/mis-notas). Cada evaluación activa de la
+// sección, por fecha, con la nota del alumno solo si está publicada: null si
+// aún no hay nota o está propuesta (en borrador, en revisión o devuelta).
+export interface NotaPropia {
+  evaluacionId: string
+  nombre: string
+  // YYYY-MM-DD.
+  fecha: string
+  ponderacion: number
+  nota: number | null
+}
+
+export interface MisNotasSeccion {
+  evaluaciones: NotaPropia[]
+}
