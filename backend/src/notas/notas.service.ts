@@ -25,6 +25,7 @@ import {
   fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
+import { bloquearNotasDe } from './bloqueo-notas.js'
 
 // La evaluación se llama e en la consulta.
 const COLUMNAS_EVALUACION = `json_build_object(
@@ -73,13 +74,6 @@ const FUERA_DE_REVISION: Record<
 }
 
 type Consulta = Pick<BaseDeDatos, 'query'>
-
-// Un guardado, envío, aprobación o devolución a la vez por evaluación (ver
-// bloquearEvaluacionEditable).
-const bloquearNotasDe = (bd: Consulta, evaluacionId: string) =>
-  bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-    `notas:${evaluacionId.toLowerCase()}`,
-  ])
 
 // NOT-11 y NOT-12: dentro de la transacción de una aprobación o una
 // devolución. Fija el usuario para la RLS (usuario_actual()), toma el lock de

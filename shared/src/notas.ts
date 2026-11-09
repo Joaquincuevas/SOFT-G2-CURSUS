@@ -32,7 +32,12 @@ export interface Evaluacion {
   // YYYY-MM-DD, dentro del período del curso.
   fecha: string
   ponderacion: number
+  // Solo en el listado del profesor. La escritura vuelve a verificarlo.
+  tieneNotas?: boolean
 }
+
+export const EVALUACION_CON_NOTAS =
+  'Esta evaluación ya tiene notas ingresadas y no se puede editar.'
 
 // GET: evaluaciones activas por fecha, con la suma de sus ponderaciones (el
 // aviso de que no suman 100 % es NOT-02).

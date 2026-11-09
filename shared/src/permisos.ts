@@ -148,7 +148,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // controlador exige además que sea el profesor de esa sección) y las leen
   // el ayudante, el alumno y el Director, este en solo lectura. Editar es
   // NOT-03; nadie las borra.
-  if (usuario.rol === 'PROFESOR') can('create', 'Evaluacion')
+  if (usuario.rol === 'PROFESOR') can(['create', 'update'], 'Evaluacion')
   if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
 
   // MAT-08 (RN-08): actividades de entrega de una sección. Las crea el
