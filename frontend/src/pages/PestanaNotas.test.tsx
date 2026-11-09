@@ -139,36 +139,33 @@ describe('pestaña Notas (NOT-01)', () => {
 
   // El Director lee por la API (db-spec), pero no tiene ruta a esta vista:
   // /mis-cursos no está en su menú.
-  test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
-    '%s ve la lista pero no el formulario',
-    async (rol) => {
-      const { panel } = await abrirNotas(rol)
+  // El alumno ve sus notas en vez de la lista (NOT-13, MisNotas.test.tsx).
+  test('el ayudante ve la lista pero no el formulario', async () => {
+    const { panel } = await abrirNotas('AYUDANTE')
 
-      expect(await panel.findByText('Control 1')).toBeInTheDocument()
-      expect(panel.getByText('50 %')).toBeInTheDocument()
-      expect(
-        panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
-      ).not.toBeInTheDocument()
-      expect(
-        panel.queryByRole('form', { name: 'Nueva evaluación' }),
-      ).not.toBeInTheDocument()
-      expect(
-        panel.queryByRole('button', { name: 'Crear evaluación' }),
-      ).not.toBeInTheDocument()
-      // NOT-05: el ayudante tiene exactamente un botón por evaluación para
-      // ingresar sus notas, y ningún otro; el alumno, ninguno.
-      const esperados =
-        rol === 'AYUDANTE' ? ['Notas de Control 1', 'Notas de Solemne 1'] : []
-      const botones = panel.queryAllByRole('button')
-      expect(botones).toHaveLength(esperados.length)
-      botones.forEach((boton, indice) =>
-        expect(boton).toHaveAccessibleName(esperados[indice]),
-      )
-      expect(botones.map((boton) => boton.textContent)).toEqual(
-        esperados.map(() => 'Ingresar notas'),
-      )
-    },
-  )
+    expect(await panel.findByText('Control 1')).toBeInTheDocument()
+    expect(panel.getByText('50 %')).toBeInTheDocument()
+    expect(
+      panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('form', { name: 'Nueva evaluación' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Crear evaluación' }),
+    ).not.toBeInTheDocument()
+    // NOT-05: el ayudante tiene exactamente un botón por evaluación para
+    // ingresar sus notas, y ningún otro.
+    const esperados = ['Notas de Control 1', 'Notas de Solemne 1']
+    const botones = panel.queryAllByRole('button')
+    expect(botones).toHaveLength(esperados.length)
+    botones.forEach((boton, indice) =>
+      expect(boton).toHaveAccessibleName(esperados[indice]),
+    )
+    expect(botones.map((boton) => boton.textContent)).toEqual(
+      esperados.map(() => 'Ingresar notas'),
+    )
+  })
 
   test('sin evaluaciones muestra el estado vacío', async () => {
     const { panel } = await abrirNotas('AYUDANTE', () => ({
@@ -183,7 +180,7 @@ describe('pestaña Notas (NOT-01)', () => {
 
   test('si falla la carga permite reintentar', async () => {
     let intentos = 0
-    const { panel } = await abrirNotas('ALUMNO', () =>
+    const { panel } = await abrirNotas('AYUDANTE', () =>
       ++intentos === 1 ? json({}, 500) : LISTA,
     )
 

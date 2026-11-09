@@ -180,6 +180,15 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ lecturaAlumno }] = await bd.query<{ lecturaAlumno: string }[]>(
+      `SELECT count(*) AS "lecturaAlumno" FROM pg_policies
+        WHERE policyname = 'pol_nota_lectura_alumno'`,
+    )
+    expect(Number(lecturaAlumno)).toBe(0)
+
     // NOT-11: no crea tablas. Quita las políticas de la aprobación, el
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.

@@ -3,6 +3,7 @@ import {
   type ErrorNotasInvalidas,
   type EvaluacionesSeccion,
   MENSAJES_NOTA_INVALIDA,
+  type MisNotasSeccion,
   type NotasEvaluacion,
   type Rol,
   type SeccionResumen,
@@ -23,6 +24,7 @@ import { PestanaNotas } from './PestanaNotas'
 const VISTA = '/mis-cursos/secciones/seccion-1'
 const RESUMEN_RUTA = '/api/espacio/secciones/seccion-1/resumen'
 const EVALUACIONES = '/api/espacio/secciones/seccion-1/evaluaciones'
+const MIS_NOTAS = '/api/espacio/secciones/seccion-1/mis-notas'
 const NOTAS = '/api/espacio/secciones/seccion-1/evaluaciones/e1/notas'
 
 const RESUMEN: SeccionResumen = {
@@ -48,6 +50,18 @@ const LISTA: EvaluacionesSeccion = {
   sumaPonderaciones: 20,
 }
 
+const MIS_NOTAS_ALUMNO: MisNotasSeccion = {
+  evaluaciones: [
+    {
+      evaluacionId: 'e1',
+      nombre: 'Control 1',
+      fecha: '2026-09-01',
+      ponderacion: 20,
+      nota: 5,
+    },
+  ],
+}
+
 const SIN_NOTAS: NotasEvaluacion = {
   evaluacion: EVALUACION,
   estado: 'BORRADOR',
@@ -67,6 +81,8 @@ async function abrirNotas(
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [EVALUACIONES]: () => LISTA,
+    // NOT-13: el alumno ve sus notas en vez de la lista de evaluaciones.
+    [MIS_NOTAS]: () => MIS_NOTAS_ALUMNO,
     [NOTAS]: notas,
     ...(envio && { [`${NOTAS}/envio`]: envio }),
   })
