@@ -463,6 +463,36 @@ describe('MAT-01: confirmar la subida', () => {
     await confirmar(demo.alumno2, secciones.s1, archivo.id, 404)
   })
 
+  it('responde 403 si quien lo subió ya no pertenece a la sección', async () => {
+    const { archivo } = await pedirSubida(demo.alumno2, secciones.s1, BODY)
+    almacenamiento.objetos.set(await claveDe(archivo.id), {
+      tamano: 100,
+      tipo: 'application/pdf',
+    })
+    const alumno = await idDe(demo.alumno2)
+    await bd.query(
+      `UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+        WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL`,
+      [secciones.s1, alumno, await idDe(ADMIN_INGENIERIA)],
+    )
+    try {
+      // El guard ya lo rechaza; el servicio lo vuelve a revisar por si
+      // cambió entre el guard y la confirmación (ver SIGUE_INTEGRANTE).
+      await confirmar(demo.alumno2, secciones.s1, archivo.id, 403)
+    } finally {
+      await bd.query(
+        `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+         SELECT universidad_id, $1, $2 FROM seccion WHERE id = $1`,
+        [secciones.s1, alumno],
+      )
+    }
+    const [{ subido_at }] = await bd.query<{ subido_at: Date | null }[]>(
+      'SELECT subido_at FROM archivo WHERE id = $1',
+      [archivo.id],
+    )
+    expect(subido_at).toBeNull()
+  })
+
   it('responde 404 si el archivo es de otra sección', async () => {
     const { archivo } = await pedirSubida(PROFESOR, secciones.s1, BODY)
     // El profesor de la sección 2 confirma desde la suya un id de la 1.
@@ -528,8 +558,10 @@ describe('MAT-01: descargar un archivo', () => {
 })
 
 describe('MAT-01: RLS y restricciones de archivo', () => {
+  // Como la API: rol cursus_app, universidad y rol de la sesión, y el usuario
+  // que fija fijarUsuario (app.usuario_id), si se indica.
   async function comoApp(
-    sesion: { universidadId: string; rol: string },
+    sesion: { universidadId: string; rol: string; usuarioId?: string },
     prueba: (q: QueryRunner) => Promise<void>,
   ) {
     const q = bd.createQueryRunner()
@@ -537,8 +569,9 @@ describe('MAT-01: RLS y restricciones de archivo', () => {
     try {
       await q.query('SET LOCAL ROLE cursus_app')
       await q.query(
-        `SELECT set_config('app.universidad_id', $1, true), set_config('app.rol', $2, true)`,
-        [sesion.universidadId, sesion.rol],
+        `SELECT set_config('app.universidad_id', $1, true), set_config('app.rol', $2, true),
+                set_config('app.usuario_id', $3, true)`,
+        [sesion.universidadId, sesion.rol, sesion.usuarioId ?? ''],
       )
       await prueba(q)
     } finally {
@@ -616,6 +649,89 @@ describe('MAT-01: RLS y restricciones de archivo', () => {
         code: SIN_PERMISO,
       })
     })
+  })
+
+  it('el profesor registra un archivo propio con su usuario fijado', async () => {
+    const { universidad, valores } = await filaValida()
+    await comoApp(
+      {
+        universidadId: universidad,
+        rol: 'PROFESOR',
+        usuarioId: await idDe(PROFESOR),
+      },
+      async (q) => {
+        await q.query(INSERTAR, valores)
+      },
+    )
+  })
+
+  it.each([
+    ['sin usuario fijado', () => Promise.resolve(undefined)],
+    ['a nombre de otro usuario', () => idDe(ALUMNO)],
+  ])('con SQL directo nadie registra un archivo %s', async (_caso, usuario) => {
+    const { universidad, valores } = await filaValida()
+    const usuarioId = await usuario()
+    // La fila dice subido_por = profesor, pero quien escribe es otro.
+    await comoApp(
+      { universidadId: universidad, rol: 'ALUMNO', usuarioId },
+      async (q) => {
+        await expect(q.query(INSERTAR, valores)).rejects.toMatchObject({
+          code: SIN_PERMISO,
+        })
+      },
+    )
+  })
+
+  it('con SQL directo nadie modifica un archivo ajeno', async () => {
+    const universidad = await universidadDe('norte.cursus.test')
+    const [ajeno] = await bd.query<{ id: string; nombre: string }[]>(
+      `SELECT id, nombre FROM archivo
+        WHERE subido_por = $1 AND subido_at IS NOT NULL AND archived_at IS NULL
+        LIMIT 1`,
+      [await idDe(PROFESOR)],
+    )
+    await comoApp(
+      {
+        universidadId: universidad,
+        rol: 'ALUMNO',
+        usuarioId: await idDe(ALUMNO),
+      },
+      async (q) => {
+        const cambiadas = await q.query<{ id: string }[]>(
+          `WITH cambio AS (
+             UPDATE archivo SET archived_at = now(), nombre = 'otro.pdf'
+              WHERE id = $1 RETURNING id
+           )
+           SELECT id FROM cambio`,
+          [ajeno.id],
+        )
+        expect(cambiadas).toEqual([])
+      },
+    )
+    const [despues] = await bd.query<
+      { nombre: string; archived_at: Date | null }[]
+    >('SELECT nombre, archived_at FROM archivo WHERE id = $1', [ajeno.id])
+    expect(despues).toEqual({ nombre: ajeno.nombre, archived_at: null })
+  })
+
+  it('con SQL directo nadie pasa un archivo propio a nombre de otro', async () => {
+    const universidad = await universidadDe('norte.cursus.test')
+    const alumno = await idDe(ALUMNO)
+    const [propio] = await bd.query<{ id: string }[]>(
+      'SELECT id FROM archivo WHERE subido_por = $1 LIMIT 1',
+      [alumno],
+    )
+    await comoApp(
+      { universidadId: universidad, rol: 'ALUMNO', usuarioId: alumno },
+      async (q) => {
+        await expect(
+          q.query('UPDATE archivo SET subido_por = $2 WHERE id = $1', [
+            propio.id,
+            await idDe(demo.alumno2),
+          ]),
+        ).rejects.toMatchObject({ code: SIN_PERMISO })
+      },
+    )
   })
 
   it('la API no puede borrar archivos', async () => {
