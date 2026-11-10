@@ -377,6 +377,8 @@ describe('contrato del schema', () => {
         'seccion_profesor',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
+        // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).
+        'archivo',
       ].sort(),
     )
     for (const tabla of tablas) {
@@ -429,10 +431,11 @@ describe('contrato del schema', () => {
     expect(sinTrigger).toEqual([])
   })
 
-  // NOT-11 y NOT-12: las políticas que exigen usuario_actual() son solo las
-  // de la aprobación y la devolución del profesor. Si otra migración empieza a usarlo, este test
-  // obliga a revisar que la API lo fije (fijarUsuario).
-  it('las políticas con usuario_actual() son solo las de la aprobación y la devolución (NOT-11 y NOT-12)', async () => {
+  // NOT-11 y NOT-12: las políticas que exigen usuario_actual() son las de la
+  // aprobación y la devolución del profesor, y MAT-01 las de escritura de
+  // archivo (solo archivos propios). Si otra migración empieza a usarlo, este
+  // test obliga a revisar que la API lo fije (fijarUsuario).
+  it('las políticas con usuario_actual() son solo las revisadas (NOT-11, NOT-12 y MAT-01)', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
     >(
@@ -443,6 +446,16 @@ describe('contrato del schema', () => {
         ORDER BY tablename, policyname`,
     )
     expect(politicas).toEqual([
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_modificacion',
+        comando: 'UPDATE',
+      },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
       {
         tabla: 'revision_notas',
