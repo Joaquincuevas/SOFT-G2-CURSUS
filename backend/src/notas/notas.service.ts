@@ -108,7 +108,7 @@ async function bloquearEvaluacionEnRevision(
     es_profesor: boolean
     estado: EstadoRevisionNotas
   }>(
-    `SELECT ${ESTADO_REVISION}, s.profesor_id = $4 AS es_profesor
+    `SELECT ${ESTADO_REVISION}, es_profesor_de_seccion(s.id, $4) AS es_profesor
        ${DESDE_EVALUACION} ${CON_REVISION}
       WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
         AND e.archived_at IS NULL AND s.archived_at IS NULL

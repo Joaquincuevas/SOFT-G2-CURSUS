@@ -38,7 +38,7 @@ const DESDE_SECCION = `
 // que para el superadmin es la que eligió: MT-04).
 const ROL_EN_SECCION = `
   CASE
-    WHEN s.profesor_id = $3 THEN 'PROFESOR'
+    WHEN es_profesor_de_seccion(s.id, $3) THEN 'PROFESOR'
     WHEN EXISTS (SELECT 1 FROM ayudante_seccion a
                   WHERE a.seccion_id = s.id AND a.usuario_id = $3
                     AND a.archived_at IS NULL) THEN 'AYUDANTE'
