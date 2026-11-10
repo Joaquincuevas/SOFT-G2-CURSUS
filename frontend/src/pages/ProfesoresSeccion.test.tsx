@@ -399,4 +399,71 @@ describe('profesores con un backend anterior (GES-25)', () => {
     ).toBeInTheDocument()
     expect(filaDeLaTabla()).toBe('Sin asignar')
   })
+
+  test('tras reemplazar o quitar, al cerrar y reabrir el diálogo usa la asignación nueva', async () => {
+    const patches: unknown[] = []
+    const { dialogo } = await abrirAnterior({
+      '/api/secciones/seccion-1/profesor': () => ({
+        ...ANTERIOR.secciones[0],
+        profesor: 'Bruno Docente',
+        profesorId: 'profesor-2',
+      }),
+      '/api/secciones/seccion-1/profesor/quitar': (init) => {
+        patches.push(JSON.parse(String(init?.body)))
+        return {
+          quitado: { id: 'profesor-2', nombre: 'Bruno Docente' },
+          quitadoEn: '2026-11-10T12:00:00.000Z',
+          quitadoPor: { id: 'admin', nombre: 'Administrativo' },
+          motivo: 'Error',
+        }
+      },
+    })
+    fireEvent.change(await dialogo.findByLabelText('Profesor a agregar'), {
+      target: { value: 'profesor-2' },
+    })
+    fireEvent.click(dialogo.getByRole('button', { name: 'Reemplazar' }))
+    await dialogo.findByRole('status')
+
+    const reabrir = async () => {
+      fireEvent.click(dialogo.getByRole('button', { name: 'Cerrar' }))
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'Profesores de la sección 1',
+        }),
+      )
+      return within(
+        await screen.findByRole('dialog', {
+          name: 'Profesores de la sección 1',
+        }),
+      )
+    }
+    let otraVez = await reabrir()
+    expect(
+      await otraVez.findByRole('button', { name: 'Quitar a Bruno Docente' }),
+    ).toBeInTheDocument()
+    expect(
+      otraVez.queryByRole('button', { name: 'Quitar a Ana Profesora' }),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      otraVez.getByRole('button', { name: 'Quitar a Bruno Docente' }),
+    )
+    fireEvent.change(otraVez.getByLabelText('Motivo'), {
+      target: { value: 'Error' },
+    })
+    fireEvent.click(otraVez.getByRole('button', { name: 'Quitar profesor' }))
+    await otraVez.findByRole('status')
+    expect(patches).toEqual([{ motivo: 'Error', profesorId: 'profesor-2' }])
+
+    fireEvent.click(otraVez.getByRole('button', { name: 'Cerrar' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Profesores de la sección 1' }),
+    )
+    otraVez = within(
+      await screen.findByRole('dialog', { name: 'Profesores de la sección 1' }),
+    )
+    expect(
+      await otraVez.findByText('La sección 1 no tiene profesores asignados.'),
+    ).toBeInTheDocument()
+  })
 })
