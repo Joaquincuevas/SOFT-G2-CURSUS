@@ -15,6 +15,7 @@ import { NotasModule } from './notas/notas.module.js'
 import { AnunciosModule } from './anuncios/anuncios.module.js'
 import { MaterialesModule } from './materiales/materiales.module.js'
 import { SuperadminModule } from './superadmin/superadmin.module.js'
+import { ArchivosModule } from './archivos/archivos.module.js'
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SuperadminModule } from './superadmin/superadmin.module.js'
     AnunciosModule,
     MaterialesModule,
     SuperadminModule,
+    ArchivosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
