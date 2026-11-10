@@ -31,6 +31,7 @@ import type { CrearCursoDto } from './crear-curso.dto.js'
 import type { CrearDocenteDto } from './crear-docente.dto.js'
 import { resumirHorario } from '@cursus/shared'
 import { ALUMNOS_SECCION } from './alumnos.sql.js'
+import { NOMBRES_PROFESORES } from '../espacio/profesores.sql.js'
 import { BLOQUES_HORARIO } from './horarios.sql.js'
 
 // Código de PostgreSQL para una restricción única violada.
@@ -64,6 +65,7 @@ const LISTA_SECCIONES = `
   COALESCE((SELECT json_agg(json_build_object(
                      'id', s.id, 'numero', s.numero, 'profesor', pr.nombre,
                      'profesorId', pr.id,
+                     'profesores', ${NOMBRES_PROFESORES()},
                      'bloquesHorario', ${BLOQUES_HORARIO},
                      'ayudantes', (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
                                      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
@@ -84,6 +86,7 @@ interface FilaSeccion {
   numero: number
   profesor?: string | null
   profesorId?: string | null
+  profesores?: string[]
   ayudantes?: string[]
   alumnos?: number
   bloquesHorario?: BloqueHorario[]
@@ -95,6 +98,7 @@ const seccionDetalle = ({
   numero,
   profesor = null,
   profesorId = null,
+  profesores = [],
   ayudantes = [],
   alumnos = 0,
   bloquesHorario = [],
@@ -104,6 +108,7 @@ const seccionDetalle = ({
   horario: resumirHorario(bloquesHorario),
   profesor,
   profesorId,
+  profesores,
   ayudantes,
   alumnos,
 })
@@ -359,8 +364,10 @@ export class GestionService {
     )
   }
 
-  // GES-12. Asigna el profesor a cargo de la sección, en una sola consulta.
-  // Si ya tenía uno, lo reemplaza: la confirmación se pide en el frontend. La
+  // GES-12. Asigna el profesor a cargo de la sección (el primero, desde
+  // GES-25). Si ya tenía uno, lo reemplaza: la confirmación se pide en el
+  // frontend. GES-25 agrega más profesores con POST
+  // /secciones/:id/profesores; este endpoint queda por compatibilidad. La
   // sección debe ser de un curso de la facultad del usuario, y ni ella ni su
   // curso pueden estar archivados; el profesor debe ser de su universidad,
   // con el rol PROFESOR y sin archivar. Si no, no cambia nada y responde 404.
@@ -370,37 +377,49 @@ export class GestionService {
     seccionId: string,
     profesorId: string,
   ): Promise<SeccionDetalle> {
-    const [fila] = await this.bd.consultarEnUniversidad<FilaSeccion>(
-      contexto,
-      `WITH profesor AS (
-         SELECT id, nombre FROM usuario
-          WHERE universidad_id = $1 AND id = $3 AND rol = 'PROFESOR'
-            AND archived_at IS NULL
-       ), asignada AS (
-         UPDATE seccion s SET profesor_id = profesor.id
-           FROM profesor, curso c JOIN carrera ca ON ca.id = c.carrera_id
-          WHERE s.universidad_id = $1 AND s.id = $2 AND s.archived_at IS NULL
-            AND c.id = s.curso_id AND c.archived_at IS NULL
-            AND ca.facultad_id = ${facultadDe('$4')}
-         RETURNING s.id, s.numero
-       )
-       SELECT asignada.id, asignada.numero, profesor.nombre AS profesor,
-              profesor.id AS "profesorId",
-              ${BLOQUES_HORARIO} AS "bloquesHorario",
-              (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
-                 FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
-                WHERE a.seccion_id = asignada.id AND a.archived_at IS NULL
-                  AND u.archived_at IS NULL AND u.rol = 'AYUDANTE') AS ayudantes,
-              (SELECT count(*)::int FROM inscripcion i
-                WHERE i.seccion_id = asignada.id
-                  AND i.archived_at IS NULL) AS alumnos
-         FROM asignada JOIN seccion s ON s.id = asignada.id CROSS JOIN profesor`,
-      [seccionId, profesorId, usuarioId],
-    )
-    if (!fila) {
-      throw new NotFoundException('La sección o el profesor no existen')
-    }
-    return seccionDetalle(fila)
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      const universidad = contexto.universidadId
+      // GES-25: escribe profesor_id, como antes. El trigger
+      // tg_seccion_sincronizar_profesor archiva al anterior en
+      // seccion_profesor y agrega al nuevo, sin tocar a los demás profesores.
+      const asignada = await bd.query<{ id: string }>(
+        `WITH profesor AS (
+           SELECT id FROM usuario
+            WHERE universidad_id = $1 AND id = $3 AND rol = 'PROFESOR'
+              AND archived_at IS NULL
+         ), asignada AS (
+           UPDATE seccion s SET profesor_id = profesor.id
+             FROM profesor, curso c JOIN carrera ca ON ca.id = c.carrera_id
+            WHERE s.universidad_id = $1 AND s.id = $2 AND s.archived_at IS NULL
+              AND c.id = s.curso_id AND c.archived_at IS NULL
+              AND ca.facultad_id = ${facultadDe('$4')}
+           RETURNING s.id
+         )
+         SELECT id FROM asignada`,
+        [universidad, seccionId, profesorId, usuarioId],
+      )
+      if (asignada.length === 0) {
+        throw new NotFoundException('La sección o el profesor no existen')
+      }
+      // En otra consulta: la anterior no ve lo que escribió el trigger.
+      const [fila] = await bd.query<FilaSeccion>(
+        `SELECT s.id, s.numero, pr.nombre AS profesor, pr.id AS "profesorId",
+                ${NOMBRES_PROFESORES()} AS profesores,
+                ${BLOQUES_HORARIO} AS "bloquesHorario",
+                (SELECT COALESCE(json_agg(u.nombre ORDER BY u.nombre, u.correo, u.id), '[]')
+                   FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
+                  WHERE a.seccion_id = s.id AND a.archived_at IS NULL
+                    AND u.archived_at IS NULL AND u.rol = 'AYUDANTE') AS ayudantes,
+                (SELECT count(*)::int FROM inscripcion i
+                  WHERE i.seccion_id = s.id
+                    AND i.archived_at IS NULL) AS alumnos
+           FROM seccion s
+           LEFT JOIN usuario pr ON pr.id = s.profesor_id
+          WHERE s.universidad_id = $1 AND s.id = $2`,
+        [universidad, seccionId],
+      )
+      return seccionDetalle(fila)
+    })
   }
 
   // GES-18. Alumnos inscritos en una sección vigente, con el mismo criterio

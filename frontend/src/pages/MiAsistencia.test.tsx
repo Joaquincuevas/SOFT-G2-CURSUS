@@ -13,6 +13,7 @@ const seccion: SeccionResumen = {
   rol: 'ALUMNO',
   horario: [],
   profesor: { id: 'p1', nombre: 'Camila' },
+  profesores: ['Camila'],
   ayudantes: [],
 }
 const clase = {

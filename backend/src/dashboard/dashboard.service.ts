@@ -9,6 +9,7 @@ import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { NOMBRES_PROFESORES } from '../espacio/profesores.sql.js'
 import { BLOQUES_HORARIO } from '../gestion/horarios.sql.js'
 import { anuncioPendiente, anunciosVisibles } from '../anuncios/anuncios.sql.js'
 import {
@@ -34,6 +35,7 @@ interface FilaSeccionAyudante {
   codigo: string
   curso_nombre: string
   profesor_id: string | null
+  profesores: string[]
   profesor_nombre: string | null
 }
 
@@ -54,6 +56,7 @@ export class DashboardService {
               ${BLOQUES_HORARIO} AS horario,
               CASE WHEN pr.id IS NULL THEN NULL
                 ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor,
+              ${NOMBRES_PROFESORES()} AS profesores,
               (SELECT count(*)::int FROM anuncio a
                 WHERE ${anunciosVisibles('c.id', 's.id')}
                   AND ${anuncioPendiente('$2')}) AS "anunciosNuevos"
@@ -173,7 +176,8 @@ export class DashboardService {
       contexto,
       `SELECT s.id, s.numero, c.id AS curso_id, c.codigo,
               c.nombre AS curso_nombre, pr.id AS profesor_id,
-              pr.nombre AS profesor_nombre
+              pr.nombre AS profesor_nombre,
+              ${NOMBRES_PROFESORES()} AS profesores
          FROM ayudante_seccion a
          JOIN seccion s ON s.id = a.seccion_id
          JOIN curso c ON c.id = s.curso_id
@@ -197,6 +201,7 @@ export class DashboardService {
         fila.profesor_id && fila.profesor_nombre
           ? { id: fila.profesor_id, nombre: fila.profesor_nombre }
           : null,
+      profesores: fila.profesores,
     }))
   }
 }

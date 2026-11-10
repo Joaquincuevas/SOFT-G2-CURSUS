@@ -47,10 +47,9 @@ export class PonderacionesService {
       await fijarUsuario(bd, profesorId)
       await bloquearPonderaciones(bd, contexto, seccionId)
       const [seccion] = await bd.query<{ esProfesor: boolean }>(
-        `SELECT (s.profesor_id = $3 AND pr.rol = 'PROFESOR' AND pr.archived_at IS NULL) AS "esProfesor"
+        `SELECT es_profesor_de_seccion(s.id, $3) AS "esProfesor"
            FROM seccion s
            JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
-           LEFT JOIN usuario pr ON pr.id = s.profesor_id AND pr.universidad_id = s.universidad_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL
           FOR SHARE OF s, c`,

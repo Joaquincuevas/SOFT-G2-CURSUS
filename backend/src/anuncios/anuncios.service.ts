@@ -70,10 +70,15 @@ export class AnunciosService {
     const vigentes = await bd.query<{ id: string }>(
       `SELECT sv.id FROM seccion sv
       JOIN curso c ON c.id=sv.curso_id AND c.universidad_id=sv.universidad_id
-      JOIN usuario u ON u.id=sv.profesor_id AND u.universidad_id=sv.universidad_id
-      WHERE sv.universidad_id=$1 AND sv.id=$2 AND sv.profesor_id=$3
+      JOIN seccion_profesor sp ON sp.seccion_id=sv.id AND sp.universidad_id=sv.universidad_id
+        AND sp.usuario_id=$3 AND sp.archived_at IS NULL
+      JOIN usuario u ON u.id=sp.usuario_id AND u.universidad_id=sp.universidad_id
+      WHERE sv.universidad_id=$1 AND sv.id=$2
         AND sv.archived_at IS NULL AND c.archived_at IS NULL
         AND u.archived_at IS NULL AND u.rol='PROFESOR'
+      -- Sin sp: bloquear seccion_profesor exige su política de UPDATE, que es
+      -- del Administrativo. Quitar a un profesor (GES-14/25) toma FOR UPDATE
+      -- de la sección, así que espera a este FOR SHARE OF sv.
       FOR SHARE OF sv,c,u`,
       [contexto.universidadId, seccion.id, usuarioId],
     )
@@ -253,7 +258,7 @@ export class AnunciosService {
              FROM seccion s JOIN curso c ON c.id = s.curso_id
             WHERE s.universidad_id = $1 AND s.id = $2
               AND s.archived_at IS NULL AND c.archived_at IS NULL
-              AND s.profesor_id = $3
+              AND es_profesor_de_seccion(s.id, $3)
            RETURNING *
          )
          SELECT ${COLUMNAS} FROM nuevo a JOIN usuario u ON u.id = a.autor_id AND u.universidad_id = a.universidad_id
@@ -272,7 +277,7 @@ export class AnunciosService {
         return anuncioDe(fila)
       }
       const [vigente] = await bd.query<{ es_profesor: boolean }>(
-        `SELECT s.profesor_id IS NOT DISTINCT FROM $3::uuid AS es_profesor
+        `SELECT es_profesor_de_seccion(s.id, $3::uuid) AS es_profesor
            FROM seccion s JOIN curso c ON c.id = s.curso_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL`,

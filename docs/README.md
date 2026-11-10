@@ -9,6 +9,7 @@ Documentación del proyecto:
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
 - [ASI-04: corregir asistencia con motivo e historial, y guía de revisión](asi-04-corregir-asistencia.md)
 - [ASI-03: marcar todos presentes, ajustar excepciones y guía de revisión](asi-03-marcar-todos-presentes.md)
+- [GES-25: una sección puede tener varios profesores y guía de revisión](ges-25-varios-profesores.md)
 - [GES-24: el superadmin crea cuentas de cualquier rol, y guía de revisión](ges-24-cuentas-superadmin.md)
 - [GES-23: el superadmin gestiona universidades y facultades, y guía de revisión](ges-23-universidades-facultades.md)
 - [NOT-06: rechazo de notas fuera de la escala 1,0 a 7,0 y guía de revisión](not-06-escala-notas.md)

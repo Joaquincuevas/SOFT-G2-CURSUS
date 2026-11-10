@@ -48,7 +48,7 @@ Permisos en tres capas:
 
 - **CASL:** `@Puede('update', 'RevisionNotas')`, un sujeto nuevo para la tabla `revision_notas`. Lo tiene solo el profesor, y leen los mismos que las notas. El envío del ayudante (NOT-08) sigue con `update` de `Nota`.
 - **Sección:** `IntegranteSeccionGuard` y el rol de la sección (`PROFESOR`).
-- **Servicio:** dentro de la transacción vuelve a comprobar que `seccion.profesor_id` sea el usuario.
+- **Servicio:** dentro de la transacción vuelve a comprobar que el usuario sea profesor de la sección (desde [GES-25](ges-25-varios-profesores.md), cualquiera de sus profesores vigentes).
 
 La aprobación, en una transacción:
 
@@ -71,7 +71,7 @@ La migración `1792730000000-AprobarNotas` no crea tablas.
   - Sin él, ninguna política del profesor alcanza filas.
   - Las políticas que lo usan son solo estas dos; `rls.db-spec.ts` lo comprueba.
 - **`pol_nota_publicacion`** (UPDATE de `nota`), solo para el rol `PROFESOR`:
-  - `USING`: una nota `PROPUESTA` activa, de su universidad, de una evaluación `EN_REVISION` cuya sección tiene como profesor a `usuario_actual()`.
+  - `USING`: una nota `PROPUESTA` activa, de su universidad, de una evaluación `EN_REVISION` cuya sección tiene como profesor a `usuario_actual()` (desde [GES-25](ges-25-varios-profesores.md), cualquiera de sus profesores vigentes): `es_profesor_de_seccion`.
   - `WITH CHECK`: queda `PUBLICADA`, activa, en la escala y en la misma condición de sección.
   - Las políticas del ayudante exigen `PROPUESTA`, así que una nota publicada no la modifica nadie. Recorregirla será NOT-15.
 - **`tg_nota_publicar_sin_cambios`**: la política no ve la fila anterior, así que un trigger impide que publicar cambie algo más que el estado: el valor, el alumno, la evaluación, la universidad, quién la propuso o `archived_at` (`check_violation`), también para el dueño de la tabla.
