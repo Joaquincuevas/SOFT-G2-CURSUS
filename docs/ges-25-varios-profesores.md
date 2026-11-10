@@ -46,7 +46,12 @@ Las tres exigen `@Puede('update', 'Seccion')` (el Administrativo de la facultad)
 
 **Respuestas con profesores:** `SeccionDetalle`, `SeccionAlumno`, `SeccionAyudante` y `SeccionResumen` agregan `profesores: string[]` (todos los vigentes, por nombre). `profesor` y `profesorId` quedan deprecados hasta el retiro de `profesor_id`.
 
-**Deploys desfasados:** el frontend (Vercel) y el backend se despliegan por separado. Si el frontend nuevo recibe una respuesta sin `profesores` (de un backend anterior), usa el campo deprecado (`nombresProfesores` en `misSecciones.ts`) en vez de fallar. Lo cubre un test de `CursoDetalle.test.tsx`.
+**Deploys desfasados:** el frontend (Vercel) y el backend se despliegan por separado. Si el frontend nuevo recibe una respuesta sin `profesores` (de un backend anterior):
+
+- muestra el campo deprecado (`nombresProfesores` en `misSecciones.ts`) en vez de fallar;
+- el diálogo **Profesores** pasa al modo anterior: pide las opciones a `GET /api/profesores`, agrega con `PUT /api/secciones/:id/profesor` (con un profesor asignado, el botón dice **Reemplazar** y lo avisa) y quita con `PATCH /api/secciones/:id/profesor/quitar`. Así el Administrativo no se queda sin acciones mientras llega el backend nuevo.
+
+Lo cubren tests de `CursoDetalle.test.tsx` y `ProfesoresSeccion.test.tsx`.
 
 ## Datos
 
@@ -76,6 +81,8 @@ Dos triggers con funciones `SECURITY DEFINER` (`search_path = pg_catalog`, nombr
 
   Como escribe `seccion_profesor` sin su RLS, primero exige que quien cambia `profesor_id` sea el Administrativo, o el dueño sin rol (migraciones y seed); si no, responde 42501. La política de UPDATE de `seccion` deja modificarla a otros roles, y sin este chequeo un profesor podría asignarse a sí mismo escribiendo `profesor_id`.
 
+  Si el nuevo `profesor_id` ya es el primer profesor vigente, no hace nada: el cambio vino de la otra sincronización o ya estaba al día. Sin este corte, al reemplazar con el código anterior a A por C (con A, B y C asignados), la otra sincronización deja B, y esta archivaría a C para volver a crearlo con otro id y otra antigüedad.
+
   El orden importa: agregando primero, la otra sincronización volvería a poner al anterior y archivaría al nuevo.
 
 **Con co-profesores**, si un deploy anterior cambia `profesor_id`, el que escribió queda asignado. Pero `profesor_id` termina en el primer vigente por antigüedad, que puede ser otro co-profesor: es lo que exige la invariante "`profesor_id` = primer profesor vigente". Un deploy anterior solo ve a ese profesor.
@@ -84,7 +91,7 @@ Dos triggers con funciones `SECURITY DEFINER` (`search_path = pg_catalog`, nombr
 
 Todo lo que leía `profesor_id` usa la función o `seccion_profesor`:
 
-- acceso a la sección (ESP-06);
+- acceso a la sección (ESP-06) y archivos de la sección (MAT-01: pedir y confirmar una subida);
 - notas: aprobar y devolver (NOT-11/12), nota final (NOT-02), evaluaciones (NOT-01);
 - asistencia (ASI-01/02/04/05), anuncios (ANU-01/05) y actividades (MAT-08);
 - pendientes (NOT-10) y cuentas del superadmin (GES-24, cuenta las asignaciones vigentes);
@@ -106,7 +113,7 @@ En un deploy posterior, cuando ningún deploy anterior siga en uso:
    - un `down` que vuelva a crear la columna y la rellene con el primer profesor vigente.
 3. En `@cursus/shared`, quitar los campos deprecados: `profesor` y `profesorId` de `SeccionDetalle`, `profesor` de `SeccionAlumno`, `SeccionAyudante` y `SeccionResumen`, y `QuitarProfesor`/`ProfesorCambiado`. Quitar también sus columnas en las consultas (`LEFT JOIN usuario pr ON pr.id = s.profesor_id`).
 4. Ajustar los tests que arman escenarios con `UPDATE seccion SET profesor_id`, para que usen `seccion_profesor`.
-5. En el frontend, quitar el respaldo de `nombresProfesores` al campo deprecado.
+5. En el frontend, quitar el respaldo de `nombresProfesores` al campo deprecado y el modo anterior del diálogo **Profesores** (`anterior`).
 
 Falta crear la tarjeta en Trello para este deploy.
 
@@ -129,12 +136,14 @@ npm run test:db --workspace=backend
     - quitar al primero lo pasa al siguiente, y quitar al último lo deja `NULL`;
     - el código anterior agrega al nuevo y archiva solo al anterior, sin tocar al co-profesor, con exactamente una fila nueva;
     - el código anterior sin co-profesores reemplaza al profesor, y dejar `profesor_id` en `NULL` archiva solo al anterior;
+    - con A, B y C asignados, el reemplazo anterior de A por C archiva solo a A y conserva la asignación de C (mismo id y antigüedad, sin filas nuevas);
   - gestión:
     - agregar varios y listarlos, el 409 por duplicado y el 404 de un profesor de otra universidad u otro rol;
     - quitar sin motivo (400), con motivo (registra `asignacion_cambio`) y de nuevo (404);
     - el endpoint anterior de quitar con varios profesores y su 409;
     - el ayudante y el profesor no gestionan (403);
   - un segundo profesor: entra con el rol `PROFESOR`, publica anuncios, crea actividades, corrige asistencia (trigger de ASI-04), aprueba y devuelve notas, y como `cursus_app` los dos alcanzan las filas de las tres políticas reescritas;
+- `backend/test/archivos/archivos.db-spec.ts`: un segundo profesor pide y confirma una subida (MAT-01), y al quitarlo recibe 403 en las dos.
   - un profesor quitado ya no entra a la sección, no aprueba y la RLS no le alcanza filas; el que sigue mantiene el acceso;
   - RLS de `seccion_profesor`:
     - otra universidad no ve filas, su INSERT falla (42501) y su UPDATE no alcanza filas;
@@ -153,7 +162,8 @@ npm run test:db --workspace=backend
   - quitar exige motivo y deja a los demás, y cancelar no envía;
   - muestra la lista vacía y el error con reintento;
   - un 409 o un fallo de red muestran el error y desbloquean, y un 404 al quitar recarga la lista;
-  - el Director no ve el botón.
+  - el Director no ve el botón;
+  - con un backend anterior, reemplazar usa el `PUT` y quitar el `PATCH` de GES-12 y GES-14, sin pedir los endpoints nuevos.
 - Los tests existentes siguen pasando sin reescribirse: el trigger inverso refleja en `seccion_profesor` cada `UPDATE seccion SET profesor_id`.
 
 ## Revisión en local
