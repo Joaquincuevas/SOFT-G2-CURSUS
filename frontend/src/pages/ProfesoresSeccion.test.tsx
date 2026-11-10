@@ -291,3 +291,112 @@ describe('profesores de una sección (GES-25)', () => {
     ).not.toBeInTheDocument()
   })
 })
+
+// GES-25: con el frontend desplegado antes que el backend, el curso llega sin
+// profesores y el diálogo usa los endpoints anteriores (un solo profesor).
+describe('profesores con un backend anterior (GES-25)', () => {
+  // La respuesta de un backend anterior: las secciones sin profesores.
+  const ANTERIOR = {
+    ...CURSO,
+    secciones: CURSO.secciones.map((seccion) => {
+      const anterior: Partial<typeof seccion> = { ...seccion }
+      delete anterior.profesores
+      return anterior
+    }),
+  }
+
+  const PROFESORES = [
+    { id: 'profesor-1', nombre: 'Ana Profesora' },
+    { id: 'profesor-2', nombre: 'Bruno Docente' },
+  ]
+
+  async function abrirAnterior(rutas: Record<string, RutaSimulada>) {
+    let pidioNueva = false
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      '/api/cursos/curso-1': () => ANTERIOR,
+      '/api/profesores': () => PROFESORES,
+      [RUTA]: () => {
+        pidioNueva = true
+        return json({ statusCode: 404, message: 'Cannot GET' }, 404)
+      },
+      ...rutas,
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Profesores de la sección 1' }),
+    )
+    const dialogo = within(
+      await screen.findByRole('dialog', { name: 'Profesores de la sección 1' }),
+    )
+    return { dialogo, pidioNueva: () => pidioNueva }
+  }
+
+  test('muestra al profesor actual y reemplazarlo usa el PUT anterior', async () => {
+    const puts: unknown[] = []
+    const { dialogo, pidioNueva } = await abrirAnterior({
+      '/api/secciones/seccion-1/profesor': (init) => {
+        puts.push({
+          metodo: init?.method,
+          cuerpo: JSON.parse(String(init?.body)),
+        })
+        return {
+          ...ANTERIOR.secciones[0],
+          profesor: 'Bruno Docente',
+          profesorId: 'profesor-2',
+        }
+      },
+    })
+
+    expect(
+      await dialogo.findByRole('button', { name: 'Quitar a Ana Profesora' }),
+    ).toBeInTheDocument()
+    expect(
+      dialogo.getByText(
+        'Por ahora la sección admite un solo profesor: agregar otro reemplaza a Ana Profesora.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.change(dialogo.getByLabelText('Profesor a agregar'), {
+      target: { value: 'profesor-2' },
+    })
+    fireEvent.click(dialogo.getByRole('button', { name: 'Reemplazar' }))
+
+    expect(await dialogo.findByRole('status')).toHaveTextContent(
+      'Bruno Docente quedó como profesor de la sección 1.',
+    )
+    expect(puts).toEqual([
+      { metodo: 'PUT', cuerpo: { profesorId: 'profesor-2' } },
+    ])
+    expect(filaDeLaTabla()).toBe('Bruno Docente')
+    expect(pidioNueva()).toBe(false)
+  })
+
+  test('quitar usa el PATCH anterior con el profesor confirmado', async () => {
+    const patches: unknown[] = []
+    const { dialogo } = await abrirAnterior({
+      '/api/secciones/seccion-1/profesor/quitar': (init) => {
+        patches.push(JSON.parse(String(init?.body)))
+        return {
+          quitado: { id: 'profesor-1', nombre: 'Ana Profesora' },
+          quitadoEn: '2026-11-10T12:00:00.000Z',
+          quitadoPor: { id: 'admin', nombre: 'Administrativo' },
+          motivo: 'Error',
+        }
+      },
+    })
+    fireEvent.click(
+      await dialogo.findByRole('button', { name: 'Quitar a Ana Profesora' }),
+    )
+    fireEvent.change(dialogo.getByLabelText('Motivo'), {
+      target: { value: 'Error' },
+    })
+    fireEvent.click(dialogo.getByRole('button', { name: 'Quitar profesor' }))
+
+    expect(await dialogo.findByRole('status')).toHaveTextContent(
+      'Ana Profesora ya no es profesor de la sección 1.',
+    )
+    expect(patches).toEqual([{ motivo: 'Error', profesorId: 'profesor-1' }])
+    expect(
+      dialogo.getByText('La sección 1 no tiene profesores asignados.'),
+    ).toBeInTheDocument()
+    expect(filaDeLaTabla()).toBe('Sin asignar')
+  })
+})
