@@ -46,6 +46,9 @@ const PROFESOR_S1 = 'profesor.s1@norte.cursus.test'
 const PROFESOR_OTRO_CURSO = 'profesor.otro@norte.cursus.test'
 const ALUMNO_S2 = 'alumno.s2@norte.cursus.test'
 const ALUMNO_FUERA = 'alumno.fuera@norte.cursus.test'
+// Cuenta de profesor que en ICC101-1 es ayudante: su rol en la sección no es
+// PROFESOR.
+const PROFESOR_AYUDANTE = 'profesor.ayudante@norte.cursus.test'
 
 // S3 en memoria, como en MAT-01: firma sin red y guarda lo que "subió" el
 // navegador.
@@ -281,7 +284,12 @@ async function armarEscenario() {
          FROM usuario WHERE correo = $2`,
       [correo, plantilla],
     )
-  for (const correo of [PROFESOR_S2, PROFESOR_S1, PROFESOR_OTRO_CURSO]) {
+  for (const correo of [
+    PROFESOR_S2,
+    PROFESOR_S1,
+    PROFESOR_OTRO_CURSO,
+    PROFESOR_AYUDANTE,
+  ]) {
     await crearUsuario(correo, PROFESOR)
   }
   for (const correo of [ALUMNO_S2, ALUMNO_FUERA]) {
@@ -312,6 +320,11 @@ async function armarEscenario() {
         SELECT 1 FROM ayudante_seccion a
          WHERE a.seccion_id = s.id AND a.usuario_id = $2 AND a.archived_at IS NULL)`,
     [secciones.s1, await idDe(AYUDANTE)],
+  )
+  await bd.query(
+    `INSERT INTO ayudante_seccion (universidad_id, seccion_id, usuario_id)
+     SELECT universidad_id, id, $2 FROM seccion WHERE id = $1`,
+    [secciones.s1, await idDe(PROFESOR_AYUDANTE)],
   )
 
   // El alumno base en ICC101-1, el alumnoS2 en ICC101-2 y alumnoFuera en
@@ -619,6 +632,10 @@ describe('POST /api/espacio/secciones/:id/materiales (MAT-04)', () => {
       ['el Director', DIRECTOR],
       ['un profesor de otra sección', PROFESOR_S2],
       ['un profesor de otro curso', PROFESOR_OTRO_CURSO],
+      [
+        'una cuenta de profesor que es ayudante de la sección',
+        PROFESOR_AYUDANTE,
+      ],
     ])('%s', async (_quien, correo) => {
       const archivoId = await subir(PROFESOR, secciones.s1)
       const antes = await materialesEnBase()
@@ -901,6 +918,22 @@ describe('RLS y restricciones de material (SQL directo)', () => {
           },
         )
       }
+    })
+
+    it('exige que la sesión sea de un profesor: 42501 con otro rol aunque el usuario lo sea', async () => {
+      const archivoId = await archivoSql(secciones.s1, PROFESOR)
+      await comoApp(
+        {
+          universidadId: norte,
+          rol: 'ADMINISTRATIVO',
+          usuarioId: usuarios[PROFESOR],
+        },
+        async (q) => {
+          await expect(insertar(q, archivoId)).rejects.toMatchObject({
+            code: SIN_PERMISO,
+          })
+        },
+      )
     })
 
     it('exige subido_por = el usuario de la sesión: 42501 a nombre de otro o sin usuario fijado', async () => {
