@@ -423,6 +423,17 @@ function Detalle({ id }: { id: string }) {
         <ProfesoresSeccionDialogo
           seccionId={profesoresEn.id}
           numero={profesoresEn.numero}
+          // Backend anterior a GES-25 (deploy desfasado): la sección llegó
+          // sin profesores y el diálogo usa los endpoints de GES-12 y GES-14.
+          anterior={
+            [...curso.secciones, ...nuevas].find(
+              (s) => s.id === profesoresEn.id,
+            )?.profesores === undefined
+              ? profesoresEn.profesorId && profesoresEn.profesor
+                ? { id: profesoresEn.profesorId, nombre: profesoresEn.profesor }
+                : null
+              : undefined
+          }
           onCambio={(profesores) =>
             setProfesoresCambiados((anteriores) => ({
               ...anteriores,

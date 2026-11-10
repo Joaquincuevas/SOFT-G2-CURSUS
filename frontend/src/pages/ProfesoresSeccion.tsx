@@ -2,9 +2,12 @@ import {
   type AsignarProfesor,
   LARGO_MOTIVO_ASIGNACION,
   type ProfesorAsignable,
+  type ProfesorOpcion,
   type ProfesorQuitado,
   type ProfesorResumen,
   type QuitarAsignacion,
+  type QuitarProfesor,
+  type SeccionDetalle,
 } from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
@@ -21,20 +24,42 @@ function mensajeDe(cuerpo: { message?: unknown }): string | null {
 // GES-25: profesores de una sección. Lista los asignados, agrega otro y quita
 // uno con motivo (queda en el historial, GES-14). onCambio recibe los nombres
 // de los asignados después de cada cambio, para la tabla del curso.
+//
+// Con anterior (el curso llegó sin profesores: un backend anterior a GES-25
+// durante un deploy desfasado), usa los endpoints de GES-12 y GES-14, que
+// admiten un solo profesor: agregar reemplaza al actual. Se retira junto con
+// seccion.profesor_id (docs/ges-25-varios-profesores.md).
 export function ProfesoresSeccionDialogo({
   seccionId,
   numero,
+  anterior,
   onCambio,
   onCerrar,
 }: {
   seccionId: string
   numero: number
+  anterior?: ProfesorOpcion | null
   onCambio: (profesores: string[]) => void
   onCerrar: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const ruta = `/api/secciones/${seccionId}/profesores`
-  const [opciones, recargar] = useDatos<ProfesorAsignable[]>(ruta)
+  const esAnterior = anterior !== undefined
+  const [respuesta, recargar] = useDatos<
+    (ProfesorAsignable | ProfesorOpcion)[]
+  >(esAnterior ? '/api/profesores' : ruta)
+  // GET /api/profesores (GES-12) no trae correo ni asignado.
+  // undefined mientras carga y null si falló, como useDatos.
+  const opciones: ProfesorAsignable[] | null | undefined =
+    respuesta === null
+      ? null
+      : respuesta?.map((opcion) => ({
+          correo: '',
+          ...opcion,
+          asignado: esAnterior
+            ? opcion.id === anterior?.id
+            : (opcion as ProfesorAsignable).asignado,
+        }))
   const dialogo = useRef<HTMLDialogElement>(null)
   // Los asignados después de agregar o quitar; antes, los de las opciones.
   const [asignados, setAsignados] = useState<ProfesorResumen[] | null>(null)
@@ -102,16 +127,28 @@ export function ProfesoresSeccionDialogo({
     event.preventDefault()
     const elegido = disponibles.find((p) => p.id === nuevoId)
     if (!elegido) return
+    const body = JSON.stringify({
+      profesorId: nuevoId,
+    } satisfies AsignarProfesor)
     void enviar(
-      ruta,
-      {
-        method: 'POST',
-        body: JSON.stringify({ profesorId: nuevoId } satisfies AsignarProfesor),
-      },
+      esAnterior ? `/api/secciones/${seccionId}/profesor` : ruta,
+      { method: esAnterior ? 'PUT' : 'POST', body },
       (cuerpo) => {
         setNuevoId('')
+        // PUT anterior: la sección con su único profesor.
+        const seccion = cuerpo as SeccionDetalle
         actualizar(
-          cuerpo as ProfesorResumen[],
+          esAnterior
+            ? seccion.profesorId && seccion.profesor
+              ? [
+                  {
+                    id: seccion.profesorId,
+                    nombre: seccion.profesor,
+                    correo: '',
+                  },
+                ]
+              : []
+            : (cuerpo as ProfesorResumen[]),
           `${elegido.nombre} quedó como profesor de la sección ${numero}.`,
         )
       },
@@ -123,17 +160,24 @@ export function ProfesoresSeccionDialogo({
     event.preventDefault()
     if (!quitando || !motivo.trim()) return
     void enviar(
-      `${ruta}/${quitando.id}/quitar`,
+      esAnterior
+        ? `/api/secciones/${seccionId}/profesor/quitar`
+        : `${ruta}/${quitando.id}/quitar`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ motivo } satisfies QuitarAsignacion),
+        body: JSON.stringify(
+          esAnterior
+            ? ({ motivo, profesorId: quitando.id } satisfies QuitarProfesor)
+            : ({ motivo } satisfies QuitarAsignacion),
+        ),
       },
       (cuerpo) => {
         const resultado = cuerpo as ProfesorQuitado
         setQuitando(null)
         setMotivo('')
         actualizar(
-          resultado.profesores,
+          // PATCH anterior: la sección queda sin profesor.
+          resultado.profesores ?? [],
           `${resultado.quitado.nombre} ya no es profesor de la sección ${numero}.`,
         )
       },
@@ -167,9 +211,11 @@ export function ProfesoresSeccionDialogo({
               <li key={profesor.id}>
                 <span>
                   {profesor.nombre}
-                  <span className="cursos__correo-ayudante">
-                    {profesor.correo}
-                  </span>
+                  {profesor.correo && (
+                    <span className="cursos__correo-ayudante">
+                      {profesor.correo}
+                    </span>
+                  )}
                 </span>
                 <button
                   className="cursos__boton cursos__boton--secundario"
@@ -265,8 +311,18 @@ export function ProfesoresSeccionDialogo({
               type="submit"
               disabled={enviando || !nuevoId}
             >
-              {enviando ? 'Agregando…' : 'Agregar'}
+              {enviando
+                ? 'Agregando…'
+                : esAnterior && lista.length > 0
+                  ? 'Reemplazar'
+                  : 'Agregar'}
             </button>
+            {esAnterior && lista.length > 0 && (
+              <p className="cursos__mensaje">
+                Por ahora la sección admite un solo profesor: agregar otro
+                reemplaza a {lista[0].nombre}.
+              </p>
+            )}
           </form>
         )}
       </>
