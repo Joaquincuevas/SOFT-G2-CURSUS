@@ -1613,7 +1613,10 @@ describe('POST .../notas/envio (NOT-08)', () => {
   it('con todas las notas pasa a EN_REVISION y deja un evento ENVIO con fecha y ayudante', async () => {
     const evaluacion = await evaluacionCompleta()
     const ayudante = await idDe(AYUDANTE)
-    const antes = new Date()
+    // El evento y esta referencia usan el mismo reloj, el de PostgreSQL.
+    const [{ antes }] = await bd.query<{ antes: Date }[]>(
+      'SELECT clock_timestamp() AS antes',
+    )
 
     const enviada = await enviar(AYUDANTE, evaluacion, 200)
     expect(enviada.estado).toBe('EN_REVISION')
@@ -1627,9 +1630,7 @@ describe('POST .../notas/envio (NOT-08)', () => {
       alumno_id: null,
       responsable_id: ayudante,
     })
-    expect(envios[0].fecha.getTime()).toBeGreaterThanOrEqual(
-      antes.getTime() - 1000,
-    )
+    expect(envios[0].fecha.getTime()).toBeGreaterThanOrEqual(antes.getTime())
     expect((await leer(PROFESOR, evaluacion, 200)).estado).toBe('EN_REVISION')
   })
 
@@ -2024,7 +2025,9 @@ describe('POST .../notas/aprobacion (NOT-11)', () => {
       [secciones.s1],
     )
     expect(suma).not.toBe(100)
-    const antes = new Date()
+    const [{ antes }] = await bd.query<{ antes: Date }[]>(
+      'SELECT clock_timestamp() AS antes',
+    )
 
     const aprobada = await aprobar(PROFESOR, evaluacion, 200)
 
@@ -2065,9 +2068,7 @@ describe('POST .../notas/aprobacion (NOT-11)', () => {
       })),
     ])
     for (const evento of eventos) {
-      expect(evento.fecha.getTime()).toBeGreaterThanOrEqual(
-        antes.getTime() - 1000,
-      )
+      expect(evento.fecha.getTime()).toBeGreaterThanOrEqual(antes.getTime())
     }
   })
 
@@ -2446,7 +2447,9 @@ describe('POST .../notas/devolucion (NOT-12)', () => {
   it('pasa a DEVUELTA con el comentario, deja las notas en PROPUESTA y registra DEVOLUCION con fecha, profesor y comentario', async () => {
     const evaluacion = await evaluacionEnRevision()
     const profesor = await idDe(PROFESOR)
-    const antes = new Date()
+    const [{ antes }] = await bd.query<{ antes: Date }[]>(
+      'SELECT clock_timestamp() AS antes',
+    )
 
     const devuelta = await devolver(PROFESOR, evaluacion, 200, {
       comentario: `  ${COMENTARIO}\n  `,
@@ -2471,9 +2474,7 @@ describe('POST .../notas/devolucion (NOT-12)', () => {
       ['DEVOLUCION', COMENTARIO],
     ])
     expect(vueltas[1].responsable_id).toBe(profesor)
-    expect(vueltas[1].fecha.getTime()).toBeGreaterThanOrEqual(
-      antes.getTime() - 1000,
-    )
+    expect(vueltas[1].fecha.getTime()).toBeGreaterThanOrEqual(antes.getTime())
   })
 
   it.each([

@@ -27,6 +27,7 @@ const TABLAS = [
   'curso',
   'curso_cambio',
   'evaluacion',
+  'evaluacion_cambio',
   'facultad',
   'horario_seccion',
   'inscripcion',
@@ -182,6 +183,28 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
+    const SIN_EDICION_EVALUACION = TABLAS.filter(
+      (tabla) => tabla !== 'evaluacion_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    const [edicionRevertida] = await bd.query<
+      {
+        auditoria: string | null
+        bloqueo: string | null
+        updateTabla: boolean
+      }[]
+    >(`
+      SELECT to_regprocedure('public.validar_y_auditar_edicion_evaluacion()') AS auditoria,
+             to_regprocedure('public.bloquear_nueva_nota_para_edicion()') AS bloqueo,
+             has_table_privilege('cursus_app', 'evaluacion', 'UPDATE') AS "updateTabla"
+    `)
+    expect(edicionRevertida).toEqual({
+      auditoria: null,
+      bloqueo: null,
+      updateTabla: true,
+    })
+
     // GES-25: quita seccion_profesor, la función, los triggers de
     // sincronización, y deja las políticas de NOT-11/12 y el trigger de ASI-04
     // con s.profesor_id. Revertir, aplicar y revertir de nuevo deja
@@ -200,7 +223,9 @@ describe('migraciones', () => {
          ORDER BY 1`,
       )
     await bd.undoLastMigration()
-    const SIN_SECCION_PROFESOR = TABLAS.filter((t) => t !== 'seccion_profesor')
+    const SIN_SECCION_PROFESOR = SIN_EDICION_EVALUACION.filter(
+      (t) => t !== 'seccion_profesor',
+    )
     expect(await tablasExistentes()).toEqual(SIN_SECCION_PROFESOR)
     const anteriores = await definiciones()
     expect(anteriores).toHaveLength(4)
@@ -223,7 +248,10 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
+    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
     await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_SECCION_PROFESOR)
     expect(await definiciones()).toEqual(anteriores)
 
     // CrearArchivo (MAT-01): solo quita su tabla.
@@ -591,6 +619,7 @@ describe('migraciones', () => {
         t !== 'nota_cambio' &&
         t !== 'anuncio_cambio' &&
         t !== 'asistencia_cambio' &&
+        t !== 'evaluacion_cambio' &&
         t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {

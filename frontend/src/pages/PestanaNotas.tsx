@@ -1,9 +1,11 @@
 import {
+  EVALUACION_CON_NOTAS,
   LARGO_NOMBRE_EVALUACION,
   PONDERACION_MAXIMA,
   PONDERACION_MINIMA,
   avisoPonderaciones,
   type CrearEvaluacion,
+  type Evaluacion,
   type EvaluacionesSeccion,
 } from '@cursus/shared'
 import { useState, type FormEvent } from 'react'
@@ -26,7 +28,10 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
+  const [edicion, setEdicion] = useState<Evaluacion | null>(null)
+  const [avisoEdicion, setAvisoEdicion] = useState(false)
   const ingresaNotas = rol === 'AYUDANTE'
+  const editaEvaluaciones = rol === 'PROFESOR'
   const aviso =
     rol === 'PROFESOR' && datos
       ? avisoPonderaciones(datos.sumaPonderaciones)
@@ -35,8 +40,8 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   return (
     <section className="notas" aria-label="Evaluaciones">
       <h3 className="vista-seccion__subtitulo">Evaluaciones</h3>
-      {rol === 'PROFESOR' && (
-        <FormularioEvaluacion ruta={ruta} alCrear={recargar} />
+      {editaEvaluaciones && (
+        <FormularioEvaluacion ruta={ruta} alGuardar={recargar} />
       )}
       {aviso && (
         <p
@@ -66,6 +71,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                 <th scope="col">Ponderación</th>
                 {ingresaNotas && <th scope="col">Estado del envío</th>}
                 {ingresaNotas && <th scope="col">Notas</th>}
+                {editaEvaluaciones && <th scope="col">Edición</th>}
               </tr>
             </thead>
             <tbody>
@@ -74,6 +80,26 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                   <td>{evaluacion.nombre}</td>
                   <td>{evaluacion.fecha}</td>
                   <td>{evaluacion.ponderacion} %</td>
+                  {editaEvaluaciones && (
+                    <td>
+                      {evaluacion.tieneNotas ? (
+                        <span>{EVALUACION_CON_NOTAS}</span>
+                      ) : (
+                        <button
+                          className="notas__enlace"
+                          type="button"
+                          aria-label={`Editar ${evaluacion.nombre}`}
+                          disabled={edicion !== null}
+                          onClick={() => {
+                            setAvisoEdicion(false)
+                            setEdicion(evaluacion)
+                          }}
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </td>
+                  )}
                   {ingresaNotas && (
                     <td>
                       <span
@@ -124,6 +150,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                   Suma de ponderaciones
                 </th>
                 <td>{datos.sumaPonderaciones} %</td>
+                {editaEvaluaciones && <td />}
                 {ingresaNotas && (
                   <>
                     <td />
@@ -134,6 +161,25 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
             </tfoot>
           </table>
         </div>
+      )}
+      {editaEvaluaciones && edicion && (
+        <FormularioEvaluacion
+          key={edicion.id}
+          evaluacion={edicion}
+          ruta={`${ruta}/${edicion.id}`}
+          alCancelar={() => setEdicion(null)}
+          alBloquear={recargar}
+          alGuardar={() => {
+            setEdicion(null)
+            setAvisoEdicion(true)
+            recargar()
+          }}
+        />
+      )}
+      {avisoEdicion && (
+        <p className="notas__aviso" role="status">
+          Evaluación actualizada.
+        </p>
       )}
       {ingresaNotas && elegida && (
         <NotasDeEvaluacion
@@ -170,19 +216,35 @@ const VACIO = { nombre: '', fecha: '', ponderacion: '' }
 
 function FormularioEvaluacion({
   ruta,
-  alCrear,
+  evaluacion,
+  alGuardar,
+  alCancelar,
+  alBloquear,
 }: {
   ruta: string
-  alCrear: () => void
+  evaluacion?: Evaluacion
+  alGuardar: () => void
+  alCancelar?: () => void
+  alBloquear?: () => void
 }) {
   const { fetchConSesion } = useAuth()
-  const [campos, setCampos] = useState(VACIO)
+  const [campos, setCampos] = useState(
+    evaluacion
+      ? {
+          nombre: evaluacion.nombre,
+          fecha: evaluacion.fecha,
+          ponderacion: String(evaluacion.ponderacion),
+        }
+      : VACIO,
+  )
   const [guardando, setGuardando] = useState(false)
+  const [bloqueada, setBloqueada] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
 
-  async function crear(event: FormEvent<HTMLFormElement>) {
+  async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (guardando || bloqueada) return
     setGuardando(true)
     setError(null)
     setAviso(null)
@@ -193,7 +255,7 @@ function FormularioEvaluacion({
     }
     try {
       const res = await fetchConSesion(ruta, {
-        method: 'POST',
+        method: evaluacion ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(datos),
       })
@@ -202,19 +264,27 @@ function FormularioEvaluacion({
         const cuerpo = (await res.json().catch(() => null)) as {
           message?: unknown
         } | null
+        if (evaluacion && res.status === 409) {
+          setBloqueada(true)
+          setError(EVALUACION_CON_NOTAS)
+          alBloquear?.()
+          return
+        }
         setError(
           res.status === 400 && typeof cuerpo?.message === 'string'
             ? cuerpo.message
-            : 'No pudimos crear la evaluación. Revisa los datos e inténtalo nuevamente.',
+            : 'No pudimos guardar la evaluación. Revisa los datos e inténtalo nuevamente.',
         )
         return
       }
-      setCampos(VACIO)
-      setAviso('Evaluación creada')
-      alCrear()
+      if (!evaluacion) {
+        setCampos(VACIO)
+        setAviso('Evaluación creada')
+      }
+      alGuardar()
     } catch {
       setError(
-        'No pudimos crear la evaluación. Comprueba tu conexión e inténtalo nuevamente.',
+        'No pudimos guardar la evaluación. Comprueba tu conexión e inténtalo nuevamente.',
       )
     } finally {
       setGuardando(false)
@@ -231,12 +301,16 @@ function FormularioEvaluacion({
   return (
     <form
       className="notas__formulario"
-      aria-label="Nueva evaluación"
-      onSubmit={(event) => void crear(event)}
+      aria-label={
+        evaluacion ? `Editar ${evaluacion.nombre}` : 'Nueva evaluación'
+      }
+      onSubmit={(event) => void guardar(event)}
     >
       <label className="notas__campo">
         Nombre
         <input
+          autoFocus={Boolean(evaluacion)}
+          disabled={guardando || bloqueada}
           value={campos.nombre}
           onChange={cambiar('nombre')}
           maxLength={LARGO_NOMBRE_EVALUACION}
@@ -246,6 +320,7 @@ function FormularioEvaluacion({
       <label className="notas__campo">
         Fecha
         <input
+          disabled={guardando || bloqueada}
           type="date"
           value={campos.fecha}
           onChange={cambiar('fecha')}
@@ -255,6 +330,7 @@ function FormularioEvaluacion({
       <label className="notas__campo">
         Ponderación (%)
         <input
+          disabled={guardando || bloqueada}
           type="number"
           value={campos.ponderacion}
           onChange={cambiar('ponderacion')}
@@ -264,9 +340,23 @@ function FormularioEvaluacion({
           required
         />
       </label>
-      <button className="notas__boton" type="submit" disabled={guardando}>
-        Crear evaluación
+      <button
+        className="notas__boton"
+        type="submit"
+        disabled={guardando || bloqueada}
+      >
+        {evaluacion ? 'Guardar cambios' : 'Crear evaluación'}
       </button>
+      {alCancelar && (
+        <button
+          className="notas__enlace"
+          type="button"
+          disabled={guardando}
+          onClick={alCancelar}
+        >
+          Cancelar
+        </button>
+      )}
       {error && (
         <p className="notas__error" role="alert">
           {error}
