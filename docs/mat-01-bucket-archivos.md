@@ -38,7 +38,7 @@ Rutas del espacio de la sección (ESP-06: `@IntegranteDeSeccion()`):
 
 Permisos (CASL, `Archivo`): el profesor, el ayudante y el alumno tienen `create` y `read`, y el Director, `read`. El controlador exige además el rol en la sección.
 
-La migración `1792740000000-CrearArchivo` crea `archivo`:
+La migración `1792770000000-CrearArchivo` crea `archivo`:
 
 | Columna       | Detalle                                                                                      |
 | ------------- | -------------------------------------------------------------------------------------------- |
@@ -52,8 +52,9 @@ La migración `1792740000000-CrearArchivo` crea `archivo`:
 | `subido_at`   | Cuándo se confirmó la subida; `NULL` mientras no se confirma                                 |
 
 - La llave no usa el nombre que escribe el usuario, así que no puede apuntar a otra carpeta del bucket.
-- RLS con el patrón de `anuncio`: cada universidad lee sus archivos y el Director los de todas; solo el profesor, el ayudante y el alumno registran o confirman, en su universidad. Sin DELETE.
-- Al pedir la subida, el `INSERT` vuelve a revisar que el usuario siga siendo integrante con ese rol, por si cambió después del guard.
+- RLS con el patrón de `anuncio`: cada universidad lee sus archivos y el Director los de todas. Solo el profesor, el ayudante y el alumno registran o confirman, en su universidad, y **solo archivos propios**: el `INSERT` y el `UPDATE` exigen `subido_por = usuario_actual()`, el usuario que fija la API con `fijarUsuario`. Así nadie registra un archivo a nombre de otro ni modifica uno ajeno (`subido_at`, `archived_at`, `nombre`), ni con SQL directo. Sin DELETE.
+- Al pedir la subida y al confirmarla se vuelve a revisar que el usuario siga siendo integrante con ese rol, por si cambió después del guard (al confirmar, si ya no lo es, 403).
+- La regla del alumno al descargar va en el `WHERE` de la consulta, no en código: si el archivo es la entrega de otro alumno, no hay fila y responde 404.
 
 ## Infraestructura
 
@@ -76,6 +77,11 @@ El orden respecto del merge no importa: sin `S3_BUCKET`, la API arranca igual y 
 
 En local, el bucket lo da LocalStack (ver "Archivos local (S3)" en el README principal).
 
+## Pendientes
+
+- **Filas sin confirmar y objetos huérfanos.** Si el navegador pide una subida y no la termina, queda una fila de `archivo` sin `subido_at`. Si sube el objeto y no confirma, queda además el objeto en S3. Nada los limpia todavía: no molestan (no se descargan ni se listan), pero ocupan espacio. Queda pendiente una limpieza periódica, por ejemplo archivar las filas sin confirmar de más de un día y quitar sus objetos con una regla de ciclo de vida del bucket.
+- **La RLS de lectura deja ver la metadata de todos los archivos de la universidad** (nombre, tipo, tamaño), no solo los de las secciones del usuario. La API nunca la expone así (las rutas filtran por sección y rol), pero la RLS es más amplia que la regla. Conviene acotarla cuando existan los listados de MAT-05 (materiales) y MAT-10 (entregas), que definen quién ve qué.
+
 ## Verificación
 
 Desde la raíz, con Node 24.15+, dependencias instaladas y PostgreSQL disponible:
@@ -89,7 +95,7 @@ npm run build
 ```
 
 - `backend/src/archivos/almacenamiento.service.spec.ts`: la política firmada exige la llave, el tamaño exacto y el tipo, y vence a los 10 minutos; la descarga vence a los 5 minutos y entrega el nombre original; 503 sin bucket; tipos por extensión. Firmar no usa la red.
-- `backend/test/archivos/archivos.db-spec.ts`: pedir, confirmar y descargar por rol; un alumno no descarga la entrega de otro; validación del body; 503 sin almacenamiento; RLS y restricciones de la tabla. Usa un almacenamiento en memoria en vez de S3, así que el CI no necesita LocalStack.
+- `backend/test/archivos/archivos.db-spec.ts`: pedir, confirmar y descargar por rol; un alumno no descarga la entrega de otro; validación del body; 503 sin almacenamiento; confirmar después de dejar la sección (403); RLS y restricciones de la tabla, con SQL directo: nadie registra un archivo sin usuario fijado o a nombre de otro, ni modifica uno ajeno, ni lo pasa a nombre de otro. Usa un almacenamiento en memoria en vez de S3, así que el CI no necesita LocalStack.
 - `backend/test/archivos/archivos.e2e-spec.ts`: permisos por rol, sesión y que no hay DELETE.
 - `infra/aws/cursus.yml` pasa `cfn-lint`.
 
