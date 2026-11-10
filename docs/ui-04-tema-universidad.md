@@ -24,7 +24,9 @@ El color sigue siendo `#rrggbb`, normalizado a minúsculas por GES-23. Se conser
 
 El fondo claro del avatar se deriva del principal y se aclara hasta mantener ese contraste con su texto. La variante oscura del menú conserva contraste con texto blanco y claro. Los colores semánticos de error, éxito y advertencia no cambian.
 
-Ejemplos: se aceptan `#1b4f72`, `#0a5c36`, `#6b2d84`; se rechazan `#ffffff`, `#ffff00`, `#00ff00`, `#ff0000` y `#777777`. Un color antiguo inválido o ausente usa CURSUS como respaldo. La validación corresponde a la API y al formulario; la restricción de la base sigue validando el formato hexadecimal.
+Ejemplos: se aceptan `#1b4f72`, `#0a5c36`, `#6b2d84`; se rechazan `#ffffff`, `#ffff00`, `#00ff00`, `#ff0000` y `#777777`. Un color antiguo inválido o ausente usa CURSUS como respaldo. **El contraste se valida en los DTO `CrearUniversidadDto` y `EditarUniversidadDto` y en el formulario, no en la base de datos.** PostgreSQL solo comprueba el formato hexadecimal con `ck_universidad_color`; no tiene un CHECK de contraste.
+
+Si una universidad ya tenía un color personalizado sin contraste suficiente, la migración lo conserva. **Administrar universidad** avisa al superadmin de que se está usando CURSUS como respaldo e indica dónde corregirlo. Al guardar un color válido, el aviso desaparece y la sesión activa en esa universidad aplica el color nuevo.
 
 ## Sesión y actualización
 
@@ -38,6 +40,8 @@ Ejemplos: se aceptan `#1b4f72`, `#0a5c36`, `#6b2d84`; se rechazan `#ffffff`, `#f
 ## Migración y seed
 
 Aplicar las migraciones con el procedimiento habitual. La nueva migración solo inicializa datos: no cambia tablas, permisos ni políticas de notas o archivos. Ordena las universidades por dominio, evita repetir colores personalizados y dispone de tonos oscuros adicionales si se agota la paleta inicial.
+
+El orden es `AprobarNotas (1792730000000)` → `DevolverNotas (1792740000000)` → `InicializarColoresUniversidad (1792750000000)`. Al revertir, la inicialización de colores sale primero y después se revierte la devolución de notas; los timestamps no se modifican.
 
 El `down` conserva los colores: deshacer una migración no debe pisar una elección posterior del superadmin. Esta decisión también se comprueba en la prueba de migración. El seed solo asigna el color al insertar una universidad y conserva las personalizaciones al ejecutarse otra vez.
 
@@ -62,3 +66,4 @@ El `down` conserva los colores: deshacer una migración no debe pisar una elecci
 ![Tema de Universidad Demo Sur](evidencias/ui-04-sur.png)
 ![Menú de Sur en móvil](evidencias/ui-04-sur-movil.png)
 ![Rechazo de color sin contraste](evidencias/ui-04-contraste.png)
+![Aviso al superadmin de un color antiguo sin contraste](evidencias/ui-04-color-antiguo.png)

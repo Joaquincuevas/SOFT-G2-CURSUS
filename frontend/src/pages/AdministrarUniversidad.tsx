@@ -1,4 +1,5 @@
 import {
+  colorConContraste,
   type CrearUniversidad,
   type FacultadElegible,
   LARGO_MOTIVO_ARCHIVAR,
@@ -113,6 +114,17 @@ export function AdministrarUniversidad() {
       {aviso && (
         <p className="carreras__aviso" role="status">
           {aviso}
+        </p>
+      )}
+      {!colorConContraste(universidad.color) && (
+        <p
+          className="carreras__aviso"
+          role="status"
+          aria-label="Color institucional"
+        >
+          El color guardado no tiene contraste suficiente. Las sesiones de esta
+          universidad usan el tema de CURSUS como respaldo. Elige un color más
+          oscuro en Datos de la universidad.
         </p>
       )}
       <div className="carreras__columnas">
