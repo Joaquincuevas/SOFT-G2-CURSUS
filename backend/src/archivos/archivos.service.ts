@@ -51,7 +51,8 @@ const SIGUE_INTEGRANTE = `
      WHERE s.universidad_id = $1 AND s.id = $2
        AND s.archived_at IS NULL AND c.archived_at IS NULL
        AND CASE $4::text
-             WHEN 'PROFESOR' THEN s.profesor_id = $3
+             -- GES-25: cualquiera de los profesores vigentes.
+             WHEN 'PROFESOR' THEN es_profesor_de_seccion(s.id, $3)
              WHEN 'AYUDANTE' THEN EXISTS (
                SELECT 1 FROM ayudante_seccion a
                 WHERE a.seccion_id = s.id AND a.usuario_id = $3

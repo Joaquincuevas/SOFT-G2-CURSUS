@@ -23,7 +23,7 @@ Se puede seguir preparando evaluaciones con cualquier suma. El aviso no bloquea 
 
 `NotasModule` exporta `PonderacionesService`. El futuro servicio de publicación deberá ejecutar la escritura de la nota final y su auditoría dentro del callback de `conNotaFinalValidada(contexto, profesorId, seccionId, publicar)`, usando la conexión que recibe el callback. `contexto` y `profesorId` deben salir de la sesión; la sección, del acceso validado por ESP-06. Esta validación no es un endpoint de comprobación previo a una escritura separada.
 
-- Exige rol PROFESOR y valida en SQL al profesor activo asignado, la universidad y el curso/sección vigentes. Fija el usuario de sesión en la transacción para las políticas y la auditoría que lo requieran.
+- Exige rol PROFESOR y valida en SQL al profesor activo asignado (desde [GES-25](ges-25-varios-profesores.md), cualquiera de los profesores vigentes de la sección, con `es_profesor_de_seccion`), la universidad y el curso/sección vigentes. Fija el usuario de sesión en la transacción para las políticas y la auditoría que lo requieran.
 - Suma en PostgreSQL todas las ponderaciones de evaluaciones activas de esa sección, bajo RLS. Si no suma 100, devuelve `ConflictException` (409) con `sumaPonderaciones`, `faltan`, `sobran` y el aviso; el callback no se ejecuta. Con 100 ejecuta el callback, y cualquier fallo revierte su escritura.
 - Crear evaluaciones (NOT-01) y validar la nota final comparten un advisory lock de transacción por universidad y sección. La escritura queda dentro del mismo bloqueo que la suma. Las futuras ediciones/archivos de evaluaciones deberán tomar `bloquearPonderaciones` antes de fijar filas, usando la misma conexión; las publicaciones por evaluación mantienen su propio bloqueo de NOT-11.
 

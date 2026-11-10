@@ -96,7 +96,7 @@ export class EvaluacionesService {
            JOIN periodo p ON p.id = c.periodo_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL
-            AND s.profesor_id = $6
+            AND es_profesor_de_seccion(s.id, $6)
             AND $4::date BETWEEN p.fecha_inicio AND p.fecha_termino
          RETURNING id, nombre, to_char(fecha, 'YYYY-MM-DD') AS fecha, ponderacion`,
         [
@@ -116,7 +116,7 @@ export class EvaluacionesService {
         termino: string
         es_profesor: boolean
       }>(
-        `SELECT s.profesor_id = $3 AS es_profesor,
+        `SELECT es_profesor_de_seccion(s.id, $3) AS es_profesor,
                 to_char(p.fecha_inicio, 'YYYY-MM-DD') AS inicio,
                 to_char(p.fecha_termino, 'YYYY-MM-DD') AS termino
            FROM seccion s
@@ -158,13 +158,13 @@ export class EvaluacionesService {
       await bloquearNotasDe(bd, evaluacionId)
       const [actual] = await bd.query<
         Evaluacion & {
-          profesorId: string | null
+          es_profesor: boolean
           inicio: string
           termino: string
         }
       >(
         `SELECT ${COLUMNAS}, ${TIENE_NOTAS},
-                s.profesor_id AS "profesorId",
+                es_profesor_de_seccion(s.id, $4) AS es_profesor,
                 to_char(p.fecha_inicio, 'YYYY-MM-DD') AS inicio,
                 to_char(p.fecha_termino, 'YYYY-MM-DD') AS termino
            FROM evaluacion e
@@ -175,10 +175,10 @@ export class EvaluacionesService {
             AND e.archived_at IS NULL AND s.archived_at IS NULL
             AND c.archived_at IS NULL
           FOR SHARE OF s, c, p`,
-        [contexto.universidadId, seccion.id, evaluacionId],
+        [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
       )
       if (!actual) throw new NotFoundException('La evaluación no existe')
-      if (actual.profesorId !== usuarioId)
+      if (!actual.es_profesor)
         throw new ForbiddenException(
           'Solo el profesor de la sección edita evaluaciones',
         )

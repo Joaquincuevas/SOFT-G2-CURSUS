@@ -375,6 +375,8 @@ describe('contrato del schema', () => {
         'nota',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-07).
         'revision_notas',
+        // GES-25: su RLS la prueba test/gestion/profesores-seccion.
+        'seccion_profesor',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
         // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).

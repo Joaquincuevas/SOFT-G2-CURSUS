@@ -7,7 +7,8 @@ const PROFESOR_DE_SECCION = `${PROFESOR} AND archived_at IS NULL
     SELECT 1 FROM seccion s
      WHERE s.id = evaluacion.seccion_id
        AND s.universidad_id = evaluacion.universidad_id
-       AND s.profesor_id = usuario_actual() AND s.archived_at IS NULL
+       AND s.archived_at IS NULL
+       AND es_profesor_de_seccion(s.id, usuario_actual())
   )`
 
 // Misma clave que bloquearNotasDe. El SQL directo puede llegar al trigger
@@ -21,8 +22,8 @@ const BLOQUEAR_NOTAS = (id: string) => `
 
 // NOT-03: protege la edición también por SQL y registra la versión
 // reemplazada con el usuario de sesión en la misma transacción.
-export class CrearEvaluacionCambio1792790000000 implements MigrationInterface {
-  name = 'CrearEvaluacionCambio1792790000000'
+export class CrearEvaluacionCambio1792800000000 implements MigrationInterface {
+  name = 'CrearEvaluacionCambio1792800000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`
@@ -63,15 +64,23 @@ export class CrearEvaluacionCambio1792790000000 implements MigrationInterface {
       DECLARE
         responsable uuid := public.usuario_actual();
       BEGIN
-        -- Fija la asignación y la comprueba con datos actuales, incluso si
-        -- hubo una reasignación después de evaluar la política de UPDATE.
+        -- Fija la sección, la asignación vigente y la cuenta antes de
+        -- comprobar el permiso. Quitar un co-profesor puede no tocar seccion.
+        -- En SQL directo la evaluación ya está bloqueada; NOWAIT evita
+        -- esperar en orden inverso al servicio, que bloquea primero la sección.
         PERFORM 1 FROM public.seccion s
+          JOIN public.seccion_profesor sp
+            ON sp.seccion_id = s.id AND sp.universidad_id = s.universidad_id
+          JOIN public.usuario u
+            ON u.id = sp.usuario_id AND u.universidad_id = sp.universidad_id
          WHERE s.id = OLD.seccion_id AND s.universidad_id = OLD.universidad_id
-           AND s.profesor_id = responsable AND s.archived_at IS NULL
-         FOR SHARE;
+           AND s.archived_at IS NULL
+           AND sp.usuario_id = responsable AND sp.archived_at IS NULL
+         FOR SHARE OF s, sp, u NOWAIT;
         IF NOT FOUND OR OLD.archived_at IS NOT NULL
           OR OLD.universidad_id IS DISTINCT FROM public.universidad_actual()
-          OR public.rol_actual() IS DISTINCT FROM 'PROFESOR' THEN
+          OR public.rol_actual() IS DISTINCT FROM 'PROFESOR'
+          OR NOT public.es_profesor_de_seccion(OLD.seccion_id, responsable) THEN
           RAISE EXCEPTION 'Solo el profesor de la sección edita evaluaciones'
             USING ERRCODE = '42501';
         END IF;

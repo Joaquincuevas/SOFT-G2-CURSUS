@@ -576,6 +576,80 @@ describe('PUT de una evaluación (NOT-03)', () => {
     await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
   })
 
+  it('los dos profesores vigentes editan con su propia auditoría y el retirado pierde el permiso', async () => {
+    const { id } = await preparar()
+    const titular = await sesionProfesor()
+    const segundo = await sesionProfesor(profesorOtraSeccion)
+    const [{ id: asignacion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [segundo.universidadId, secciones.s1, segundo.usuarioId],
+    )
+    try {
+      // GES-25 conserva al primer profesor en seccion.profesor_id.
+      expect(
+        await bd.query('SELECT profesor_id FROM seccion WHERE id=$1', [
+          secciones.s1,
+        ]),
+      ).toEqual([{ profesor_id: titular.usuarioId }])
+      expect(
+        (await listar(profesorOtraSeccion, secciones.s1, 200)).evaluaciones,
+      ).toContainEqual({ id, ...inicial(), tieneNotas: false })
+      await comoApp(segundo, async (q) => {
+        expect(await editarPorSql(q, id)).toEqual([{ id }])
+        // Retirar al segundo profesor necesita esta fila, aunque no cambie
+        // seccion.profesor_id. El trigger la mantiene fijada hasta el rollback.
+        await expect(
+          bd.query(
+            'SELECT id FROM seccion_profesor WHERE id=$1 FOR UPDATE NOWAIT',
+            [asignacion],
+          ),
+        ).rejects.toMatchObject({ driverError: { code: '55P03' } })
+      })
+      expect(
+        (await editar(id, 200, nuevos(), profesorOtraSeccion)).body,
+      ).toEqual({
+        id,
+        ...nuevos(),
+      })
+      expect((await editar(id, 200, inicial())).body).toEqual({
+        id,
+        ...inicial(),
+      })
+
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [asignacion],
+      )
+      await editar(id, 403, nuevos(), profesorOtraSeccion)
+      await comoApp(segundo, async (q) => {
+        expect(await editarPorSql(q, id)).toEqual([])
+      })
+      const cambios = await historial(id)
+      expect(cambios).toHaveLength(2)
+      expect(
+        cambios.find((c) => c.responsable_id === segundo.usuarioId),
+      ).toMatchObject({
+        anterior: inicial(),
+        nuevo: nuevos(),
+      })
+      expect(
+        cambios.find((c) => c.responsable_id === titular.usuarioId),
+      ).toMatchObject({
+        anterior: nuevos(),
+        nuevo: inicial(),
+      })
+    } finally {
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1 AND archived_at IS NULL',
+        [asignacion],
+      )
+      await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [
+        id,
+      ])
+    }
+  })
+
   it.each([
     ['nombre', () => nuevos().nombre, false],
     ['fecha', () => nuevos().fecha, false],

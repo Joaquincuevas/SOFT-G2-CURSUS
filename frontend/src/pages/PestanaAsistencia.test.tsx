@@ -34,6 +34,7 @@ const RESUMEN: SeccionResumen = {
   rol: 'PROFESOR',
   horario: HORARIO,
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [],
 }
 

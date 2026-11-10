@@ -21,6 +21,7 @@ const RESUMEN: SeccionResumen = {
     { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
   ],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [
     { id: 'ayudante-1', nombre: 'Diego Muñoz' },
     { id: 'ayudante-2', nombre: 'Sofía Pérez' },
@@ -116,6 +117,7 @@ describe('vista de la sección (ESP-04)', () => {
         ...RESUMEN,
         horario: [],
         profesor: null,
+        profesores: [],
         ayudantes: [],
       }),
     })
