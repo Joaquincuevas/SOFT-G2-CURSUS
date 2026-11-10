@@ -1,6 +1,7 @@
 import {
-  type ErrorEstadoAprobacion,
+  type ErrorEstadoRevision,
   type ErrorNotasFaltantes,
+  LARGO_COMENTARIO_DEVOLUCION,
   type ErrorNotasInvalidas,
   type EstadoNota,
   type EstadoRevisionNotas,
@@ -19,10 +20,11 @@ import { useDatos } from './useDatos'
 interface Props {
   seccionId: string
   evaluacionId: string
-  // NOT-11: en la vista de pendientes del profesor, muestra "Aprobar y
-  // publicar" mientras la evaluación está en revisión. Recibe el aviso para
-  // quien la abrió (éxito o el 409 del servidor), que recarga su lista.
-  alAprobar?: (aviso: string) => void
+  // NOT-11 y NOT-12: en la vista de pendientes del profesor, muestra
+  // "Aprobar y publicar" y "Devolver" mientras la evaluación está en
+  // revisión. Recibe el aviso para quien la abrió (éxito o el 409 de estado),
+  // que recarga su lista.
+  alRevisar?: (aviso: string) => void
 }
 
 // NOT-05 (RN-10): el ayudante ingresa la nota de cada alumno de la sección.
@@ -36,7 +38,7 @@ interface Props {
 export function NotasDeEvaluacion({
   seccionId,
   evaluacionId,
-  alAprobar,
+  alRevisar,
 }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
@@ -95,10 +97,10 @@ export function NotasDeEvaluacion({
           }}
         />
       )}
-      {alAprobar &&
+      {alRevisar &&
         datos.estado === 'EN_REVISION' &&
         datos.alumnos.length > 0 && (
-          <AprobarNotas ruta={ruta} alTerminar={alAprobar} />
+          <RevisarNotas ruta={ruta} alTerminar={alRevisar} />
         )}
       {aviso && (
         <p className="notas__aviso" role="status">
@@ -109,11 +111,13 @@ export function NotasDeEvaluacion({
   )
 }
 
-// NOT-11: el profesor aprueba y publica, con confirmación. Si falla, la
+// NOT-11 y NOT-12: el profesor aprueba y publica, o devuelve al ayudante con
+// un comentario obligatorio, siempre con confirmación. Si falla, la
 // confirmación sigue abierta para reintentar. Solo el 409 de estado (ya
-// aprobada, o ya no en revisión) se avisa como el éxito, porque la evaluación
-// ya no está pendiente; los otros 409 la dejan en revisión y se muestran aquí.
-function AprobarNotas({
+// aprobada o devuelta, o ya no en revisión) se avisa como el éxito, porque la
+// evaluación ya no está pendiente; los otros 409 la dejan en revisión y se
+// muestran aquí.
+function RevisarNotas({
   ruta,
   alTerminar,
 }: {
@@ -121,43 +125,74 @@ function AprobarNotas({
   alTerminar: (aviso: string) => void
 }) {
   const { fetchConSesion } = useAuth()
-  const [confirmando, setConfirmando] = useState(false)
-  const [aprobando, setAprobando] = useState(false)
+  const [accion, setAccion] = useState<'aprobar' | 'devolver' | null>(null)
+  const [comentario, setComentario] = useState('')
+  const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const idContador = useId()
+  const idExceso = useId()
+  // En caracteres, como el backend (DTO y CHECK) y length() de PostgreSQL,
+  // no en unidades UTF-16 como .length y maxLength: un emoji cuenta uno. El
+  // límite se revisa sin los espacios de los extremos, que no se envían.
+  const largo = Array.from(comentario).length
+  const excedido =
+    Array.from(comentario.trim()).length > LARGO_COMENTARIO_DEVOLUCION
 
-  async function aprobar() {
-    setAprobando(true)
+  async function revisar(
+    destino: string,
+    init: RequestInit,
+    textos: { exito: string; error: string },
+  ) {
+    setEnviando(true)
     setError(null)
     try {
-      const res = await fetchConSesion(`${ruta}/aprobacion`, {
-        method: 'POST',
-      })
+      const res = await fetchConSesion(destino, { method: 'POST', ...init })
       if (res.ok) {
-        alTerminar('Notas aprobadas y publicadas.')
+        alTerminar(textos.exito)
         return
       }
       const cuerpo = (await res.json().catch(() => null)) as
-        | (Partial<Pick<ErrorEstadoAprobacion, 'estado'>> & {
+        | (Partial<Pick<ErrorEstadoRevision, 'estado'>> & {
             message?: unknown
           })
         | null
       if (res.status === 409 && cuerpo?.estado) {
-        alTerminar(mensajeDe(cuerpo, 'Las notas ya no se pueden aprobar'))
+        alTerminar(mensajeDe(cuerpo, 'Las notas ya no están en revisión'))
         return
       }
       setError(
-        res.status === 409
-          ? mensajeDe(cuerpo, 'No se pudieron aprobar las notas')
-          : 'No pudimos aprobar las notas. Inténtalo nuevamente.',
+        res.status === 409 || res.status === 400
+          ? mensajeDe(cuerpo, `No se pudieron ${textos.error} las notas`)
+          : `No pudimos ${textos.error} las notas. Inténtalo nuevamente.`,
       )
     } catch {
       setError(
-        'No pudimos aprobar las notas. Comprueba tu conexión e inténtalo nuevamente.',
+        `No pudimos ${textos.error} las notas. Comprueba tu conexión e inténtalo nuevamente.`,
       )
     } finally {
       // Siempre se desbloquea, también si la respuesta no llegó.
-      setAprobando(false)
+      setEnviando(false)
     }
+  }
+
+  const aprobar = () =>
+    revisar(
+      `${ruta}/aprobacion`,
+      {},
+      { exito: 'Notas aprobadas y publicadas.', error: 'aprobar' },
+    )
+  const devolver = () =>
+    revisar(
+      `${ruta}/devolucion`,
+      {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comentario: comentario.trim() }),
+      },
+      { exito: 'Notas devueltas al ayudante.', error: 'devolver' },
+    )
+  const cancelar = () => {
+    setAccion(null)
+    setError(null)
   }
 
   return (
@@ -166,13 +201,21 @@ function AprobarNotas({
         <button
           className="notas__boton"
           type="button"
-          disabled={confirmando}
-          onClick={() => setConfirmando(true)}
+          disabled={accion !== null}
+          onClick={() => setAccion('aprobar')}
         >
           Aprobar y publicar
         </button>
+        <button
+          className="notas__boton"
+          type="button"
+          disabled={accion !== null}
+          onClick={() => setAccion('devolver')}
+        >
+          Devolver
+        </button>
       </div>
-      {confirmando && (
+      {accion === 'aprobar' && (
         <section
           className="notas__confirmacion"
           aria-label="Confirmar aprobación"
@@ -184,16 +227,65 @@ function AprobarNotas({
           <button
             className="notas__boton"
             type="button"
-            disabled={aprobando}
+            disabled={enviando}
             onClick={() => void aprobar()}
           >
-            {aprobando ? 'Publicando…' : 'Publicar'}
+            {enviando ? 'Publicando…' : 'Publicar'}
           </button>
           <button
             className="notas__boton"
             type="button"
-            disabled={aprobando}
-            onClick={() => setConfirmando(false)}
+            disabled={enviando}
+            onClick={cancelar}
+          >
+            Cancelar
+          </button>
+        </section>
+      )}
+      {accion === 'devolver' && (
+        <section
+          className="notas__confirmacion"
+          aria-label="Devolver al ayudante"
+        >
+          <p>
+            Las notas vuelven al ayudante para que las corrija y las envíe de
+            nuevo. No se publica nada.
+          </p>
+          <label className="notas__campo">
+            Comentario para el ayudante (obligatorio)
+            <textarea
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              required
+              aria-invalid={excedido}
+              aria-describedby={
+                excedido ? `${idContador} ${idExceso}` : idContador
+              }
+              disabled={enviando}
+            />
+          </label>
+          <p id={idContador} className="notas__contador">
+            {largo}/{LARGO_COMENTARIO_DEVOLUCION} caracteres
+          </p>
+          {excedido && (
+            <p id={idExceso} className="notas__error">
+              El comentario puede tener hasta {LARGO_COMENTARIO_DEVOLUCION}{' '}
+              caracteres.
+            </p>
+          )}
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando || !comentario.trim() || excedido}
+            onClick={() => void devolver()}
+          >
+            {enviando ? 'Devolviendo…' : 'Confirmar devolución'}
+          </button>
+          <button
+            className="notas__boton"
+            type="button"
+            disabled={enviando}
+            onClick={cancelar}
           >
             Cancelar
           </button>
@@ -240,9 +332,14 @@ const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
 // NOT-08: el ayudante escribe y envía solo en borrador o devuelta.
 const EDITABLE: readonly EstadoRevisionNotas[] = ['BORRADOR', 'DEVUELTA']
 
-// El mensaje del backend con punto final, o el dado si no trae uno.
-const mensajeDe = (cuerpo: { message?: unknown } | null, otro: string) =>
-  `${typeof cuerpo?.message === 'string' ? cuerpo.message : otro}.`
+// El mensaje del backend con punto final, o el dado si no trae uno. La
+// validación del cuerpo (NOT-12) trae una lista: se muestra el primero.
+function mensajeDe(cuerpo: { message?: unknown } | null, otro: string) {
+  const mensaje = Array.isArray(cuerpo?.message)
+    ? (cuerpo.message as unknown[])[0]
+    : cuerpo?.message
+  return `${typeof mensaje === 'string' ? mensaje : otro}.`
+}
 
 const ESTADO: Record<EstadoNota, string> = {
   PROPUESTA: 'Propuesta',

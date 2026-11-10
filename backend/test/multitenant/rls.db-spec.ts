@@ -427,11 +427,10 @@ describe('contrato del schema', () => {
     expect(sinTrigger).toEqual([])
   })
 
-  // NOT-11: la auditoría de notas sigue siendo de solo adición con el tipo
-  // nuevo, y las políticas que exigen usuario_actual() son solo las de la
-  // aprobación del profesor. Si otra migración empieza a usarlo, este test
+  // NOT-11 y NOT-12: las políticas que exigen usuario_actual() son solo las
+  // de la aprobación y la devolución del profesor. Si otra migración empieza a usarlo, este test
   // obliga a revisar que la API lo fije (fijarUsuario).
-  it('las políticas con usuario_actual() son solo las de la aprobación (NOT-11)', async () => {
+  it('las políticas con usuario_actual() son solo las de la aprobación y la devolución (NOT-11 y NOT-12)', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
     >(
@@ -439,13 +438,18 @@ describe('contrato del schema', () => {
          FROM pg_policies
         WHERE schemaname = 'public'
           AND (coalesce(qual, '') || coalesce(with_check, '')) LIKE '%usuario_actual()%'
-        ORDER BY tablename`,
+        ORDER BY tablename, policyname`,
     )
     expect(politicas).toEqual([
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
       {
         tabla: 'revision_notas',
         politica: 'pol_revision_notas_aprobacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'revision_notas',
+        politica: 'pol_revision_notas_devolucion',
         comando: 'UPDATE',
       },
     ])

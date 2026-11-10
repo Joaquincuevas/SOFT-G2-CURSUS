@@ -24,6 +24,7 @@ import {
   IntegranteDeSeccion,
   SeccionActual,
 } from '../espacio/integrante-seccion.guard.js'
+import { DevolverNotasDto } from './devolver-notas.dto.js'
 import { validarGuardarNotas } from './guardar-notas.dto.js'
 import { NotasService } from './notas.service.js'
 
@@ -128,6 +129,33 @@ export class NotasController {
       req.usuario?.sub as string,
       seccion,
       evaluacionId,
+    )
+  }
+
+  // NOT-12: el profesor de la sección devuelve las notas en revisión al
+  // ayudante, con un comentario obligatorio. 200, como la aprobación.
+  @Puede('update', 'RevisionNotas')
+  @IntegranteDeSeccion()
+  @Post('devolucion')
+  @HttpCode(200)
+  devolver(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+    @Body() datos: DevolverNotasDto,
+  ): Promise<NotasEvaluacion> {
+    if (seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo el profesor de la sección devuelve las notas',
+      )
+    }
+    return this.notas.devolver(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+      datos,
     )
   }
 }

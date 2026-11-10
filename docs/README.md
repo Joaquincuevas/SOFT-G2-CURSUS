@@ -15,6 +15,7 @@ Documentación del proyecto:
 - [NOT-08: el ayudante envía las notas a revisión y guía de revisión](not-08-envio-revision.md)
 - [NOT-10: el profesor ve las evaluaciones pendientes de revisión y guía de revisión](not-10-pendientes-revision.md)
 - [NOT-11: el profesor aprueba y publica las notas y guía de revisión](not-11-aprobar-publicar.md)
+- [NOT-12: el profesor devuelve un envío de notas al ayudante y guía de revisión](not-12-devolver-envio.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))
