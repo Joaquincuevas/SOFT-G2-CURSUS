@@ -1,4 +1,10 @@
-import type { EvaluacionesSeccion, Rol, SeccionResumen } from '@cursus/shared'
+import type {
+  EvaluacionesSeccion,
+  HistorialNota,
+  NotasEvaluacion,
+  Rol,
+  SeccionResumen,
+} from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
@@ -53,9 +59,9 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
     expect(filas).toEqual([
-      'EvaluaciónFechaPonderaciónEdición',
-      'Control 12026-09-0120 %Editar',
-      'Solemne 12026-10-0530 %Editar',
+      'EvaluaciónFechaPonderaciónAcciones',
+      'Control 12026-09-0120 %EditarVer historial',
+      'Solemne 12026-10-0530 %EditarVer historial',
       'Suma de ponderaciones50 %',
     ])
   })
@@ -194,6 +200,129 @@ describe('pestaña Notas (NOT-01)', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Control 1')).toBeInTheDocument()
   })
+})
+
+describe('historial de una nota (NOT-16)', () => {
+  const NOTAS = `${EVALUACIONES}/e1/notas`
+  const ANA = `${NOTAS}/a1/historial`
+  const BRUNO = `${NOTAS}/a2/historial`
+  const alumnos: NotasEvaluacion = {
+    evaluacion: LISTA.evaluaciones[0],
+    estado: 'APROBADA',
+    alumnos: [
+      { id: 'a1', nombre: 'Ana Ávila', nota: 6.5, estado: 'PUBLICADA' },
+      { id: 'a2', nombre: 'Bruno Díaz', nota: null, estado: null },
+    ],
+  }
+  const fecha = '2026-10-02T13:00:00Z'
+  const historial: HistorialNota = {
+    eventos: [
+      {
+        id: '1',
+        tipo: 'PROPUESTA',
+        fecha,
+        responsable: { id: 'a', nombre: 'Lucía Reyes' },
+        notaAnterior: null,
+        notaNueva: 5.5,
+        motivo: null,
+      },
+      {
+        id: '2',
+        tipo: 'APROBACION',
+        fecha: '2026-10-03T13:00:00Z',
+        responsable: { id: 'p', nombre: 'Camila Rojas' },
+        notaAnterior: null,
+        notaNueva: null,
+        motivo: null,
+      },
+      {
+        id: '3',
+        tipo: 'RECORRECCION',
+        fecha: '2026-10-04T13:00:00Z',
+        responsable: { id: 'p', nombre: 'Camila Rojas' },
+        notaAnterior: 5.5,
+        notaNueva: 6.5,
+        motivo: 'Se revisó la rúbrica.',
+      },
+    ],
+  }
+
+  test('consulta al seleccionar un alumno y muestra sus eventos en una tabla de solo lectura', async () => {
+    const peticiones: string[] = []
+    let intentoBruno = 0
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => RESUMEN,
+      [EVALUACIONES]: () => LISTA,
+      [NOTAS]: () => alumnos,
+      [ANA]: (init) => {
+        peticiones.push(init?.method ?? 'GET')
+        return historial
+      },
+      [BRUNO]: (init) => {
+        peticiones.push(init?.method ?? 'GET')
+        return intentoBruno++ === 0 ? json({}, 503) : { eventos: [] }
+      },
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    const abrir = await screen.findByRole('button', {
+      name: 'Historial de notas de Control 1',
+    })
+    expect(peticiones).toEqual([])
+    fireEvent.click(abrir)
+    expect(abrir).toHaveAttribute('aria-expanded', 'true')
+    const seleccion = await screen.findByRole('combobox', {
+      name: 'Alumno para consultar',
+    })
+    expect(peticiones).toEqual([])
+    fireEvent.change(seleccion, { target: { value: 'a1' } })
+    const tabla = await screen.findByRole('table', {
+      name: 'Historial de Ana Ávila',
+    })
+    const filas = within(tabla).getAllByRole('row').slice(1)
+    expect(
+      filas.map((fila) =>
+        within(fila)
+          .getAllByRole('cell')
+          .slice(1)
+          .map((celda) => celda.textContent),
+      ),
+    ).toEqual([
+      ['Lucía Reyes', 'Propuesta', '—', '5,5', '—'],
+      ['Camila Rojas', 'Aprobación', '—', '—', '—'],
+      ['Camila Rojas', 'Recorrección', '5,5', '6,5', 'Se revisó la rúbrica.'],
+    ])
+    expect(filas[0].querySelector('time')).toHaveAttribute('datetime', fecha)
+    expect(within(tabla).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(tabla).queryByRole('button')).not.toBeInTheDocument()
+
+    fireEvent.change(seleccion, { target: { value: 'a2' } })
+    expect(
+      screen.queryByRole('table', { name: 'Historial de Ana Ávila' }),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('No pudimos cargar el historial de esta nota.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByText(
+        'Este alumno aún no tiene cambios de nota registrados.',
+      ),
+    ).toBeInTheDocument()
+    expect(peticiones).toEqual(['GET', 'GET', 'GET'])
+  })
+
+  test.each(['AYUDANTE', 'ALUMNO'] as const)(
+    'no ofrece historial al rol %s',
+    async (rol) => {
+      const { panel } = await abrirNotas(rol)
+      await panel.findByText('Control 1')
+      expect(
+        panel.queryByRole('button', {
+          name: 'Historial de notas de Control 1',
+        }),
+      ).not.toBeInTheDocument()
+    },
+  )
 })
 
 describe('NOT-03: edición de evaluaciones', () => {
