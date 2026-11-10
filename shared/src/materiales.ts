@@ -5,6 +5,10 @@
 export const LARGO_TITULO_ACTIVIDAD = 100
 export const LARGO_INSTRUCCIONES_ACTIVIDAD = 2000
 
+export interface SilaboVigente {
+  silabo: { version: number; subidoEn: string } | null
+}
+
 // Elemento de GET y respuesta del POST.
 export interface Actividad {
   id: string

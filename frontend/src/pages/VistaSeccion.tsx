@@ -11,6 +11,7 @@ import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
+import { SilaboDelCurso } from './SilaboDelCurso'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
@@ -84,6 +85,10 @@ export function VistaSeccion() {
       <h2 className="dashboard__titulo">{curso.nombre}</h2>
       <p className="dashboard__seccion">Sección {numero}</p>
       <p className="dashboard__texto">Entras como {ROL_LABEL[rol]}</p>
+
+      {['ALUMNO', 'AYUDANTE', 'PROFESOR'].includes(rol) && (
+        <SilaboDelCurso key={id} seccionId={id} />
+      )}
 
       <div
         className="vista-seccion__pestanas"
