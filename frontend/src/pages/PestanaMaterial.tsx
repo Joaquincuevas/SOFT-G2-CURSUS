@@ -116,6 +116,8 @@ function FormularioMaterial({
   // Archivo que ya quedó subido y confirmado, pero cuyo registro falló: al
   // reintentar con el mismo archivo se registra ese, sin subirlo otra vez.
   const confirmado = useRef<{ archivo: File; id: string } | null>(null)
+  // Un segundo clic antes de que React deshabilite el botón no envía otra vez.
+  const enCurso = useRef(false)
 
   const ocupado = etapa !== null
 
@@ -211,6 +213,7 @@ function FormularioMaterial({
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (enCurso.current) return
     setAviso(null)
     const motivo = validar()
     if (motivo || !archivo || !campos.categoria) {
@@ -218,6 +221,7 @@ function FormularioMaterial({
       return
     }
     setError(null)
+    enCurso.current = true
     try {
       const previo = confirmado.current
       const archivoId =
@@ -238,6 +242,7 @@ function FormularioMaterial({
       )
     } finally {
       // Siempre se desbloquea, también si falló a mitad del flujo.
+      enCurso.current = false
       setEtapa(null)
     }
   }
