@@ -21,6 +21,7 @@ const RESUMEN: SeccionResumen = {
   rol: 'PROFESOR',
   horario: [],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [],
 }
 
@@ -614,6 +615,7 @@ describe('ASI-04: corrección de marcas', () => {
               motivo: '<script>alert(1)</script> Justificante revisado',
               fecha: '2026-09-14T13:00:00.000Z',
               profesor: { id: 'p1', nombre: 'Camila Rojas' },
+              profesores: ['Camila Rojas'],
             },
           ]
         },
