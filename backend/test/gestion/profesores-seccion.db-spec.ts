@@ -283,6 +283,50 @@ describe('migración y sincronización con seccion.profesor_id (GES-25)', () => 
     expect(await profesorIdDe(ids.s2)).toBe(profesor3)
   })
 
+  it('el código anterior que reemplaza al primero por un profesor ya asignado archiva solo al primero y conserva la asignación del otro', async () => {
+    // Asignados en este orden: PROFESOR, profesor2 y profesor3.
+    await dejarProfesores(ids.s2, [PROFESOR, profesor2, profesor3])
+    const asignacionDe = async (correo: string) =>
+      (
+        await bd.query<{ id: string; created_at: Date }[]>(
+          `SELECT id, created_at FROM seccion_profesor
+            WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL`,
+          [ids.s2, await idDe(correo)],
+        )
+      )[0]
+    const archivadasDe = () =>
+      bd.query<{ id: string; correo: string }[]>(
+        `SELECT sp.id, u.correo FROM seccion_profesor sp
+           JOIN usuario u ON u.id = sp.usuario_id
+          WHERE sp.seccion_id = $1 AND sp.archived_at IS NOT NULL`,
+        [ids.s2],
+      )
+    const antes = await asignacionDe(profesor3)
+    const filas = await filasDe(ids.s2)
+    const archivadasAntes = new Set((await archivadasDe()).map((a) => a.id))
+
+    // El PUT anterior: reemplaza al primero (PROFESOR) por profesor3.
+    await bd.query('UPDATE seccion SET profesor_id = $2 WHERE id = $1', [
+      ids.s2,
+      await idDe(profesor3),
+    ])
+
+    expect((await vigentes(ids.s2)).map((v) => v.correo)).toEqual([
+      profesor2,
+      profesor3,
+    ])
+    // Sin filas nuevas, la asignación de profesor3 intacta, y solo se
+    // archivó la del primero.
+    expect(await filasDe(ids.s2)).toBe(filas)
+    expect(await asignacionDe(profesor3)).toEqual(antes)
+    expect(
+      (await archivadasDe())
+        .filter((a) => !archivadasAntes.has(a.id))
+        .map((a) => a.correo),
+    ).toEqual([PROFESOR])
+    expect(await profesorIdDe(ids.s2)).toBe(profesor2)
+  })
+
   it('el código anterior sin co-profesores reemplaza al profesor y deja profesor_id en el nuevo', async () => {
     await dejarProfesores(ids.s2, [profesor2])
     const antes = await filasDe(ids.s2)
