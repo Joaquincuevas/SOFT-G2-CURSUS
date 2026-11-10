@@ -13,6 +13,7 @@ import { AppModule } from '../../src/app.module.js'
 import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
 import {
+  fijarUsuario,
   ROL_APP,
   type BaseDeDatos,
 } from '../../src/database/base-de-datos.service.js'
@@ -112,7 +113,7 @@ const seccionDe = async (codigo: string, numero: number) =>
 
 // Consulta con el rol de la API, en una transacción que se revierte.
 async function comoApp(
-  sesion: { universidadId: string; rol: Rol },
+  sesion: { universidadId: string; rol: Rol; usuarioId?: string },
   prueba: (q: QueryRunner) => Promise<void>,
 ) {
   const q = bd.createQueryRunner()
@@ -124,6 +125,7 @@ async function comoApp(
               set_config('app.rol', $2, true)`,
       [sesion.universidadId, sesion.rol],
     )
+    if (sesion.usuarioId) await fijarUsuario(q, sesion.usuarioId)
     await prueba(q)
   } finally {
     await q.rollbackTransaction()
@@ -438,6 +440,20 @@ describe('PUT de una evaluación (NOT-03)', () => {
       [id, await idDe(ALUMNO), await idDe(AYUDANTE)],
     )
   }
+  const sesionProfesor = async (correo = PROFESOR) => ({
+    universidadId: await universidadDe('norte.cursus.test'),
+    rol: 'PROFESOR' as const,
+    usuarioId: await idDe(correo),
+  })
+  const editarPorSql = (q: QueryRunner, id: string) =>
+    q.query<{ id: string }[]>(
+      `WITH editada AS (
+         UPDATE evaluacion SET nombre = $2, fecha = $3, ponderacion = $4
+          WHERE id = $1 RETURNING id
+       )
+       SELECT id FROM editada`,
+      [id, nuevos().nombre, nuevos().fecha, nuevos().ponderacion],
+    )
 
   it('actualiza los tres campos y la suma, y registra fecha, actor y valores reales una sola vez', async () => {
     const { id } = await preparar()
@@ -485,6 +501,11 @@ describe('PUT de una evaluación (NOT-03)', () => {
         `notas:${id}`,
       ])
       await ingresarNota(id, q)
+      await comoApp(await sesionProfesor(), async (appSql) => {
+        await expect(editarPorSql(appSql, id)).rejects.toMatchObject({
+          driverError: { code: '40001' },
+        })
+      })
       await tokenDe(PROFESOR)
       edicion = editar(id, 409).then((res) => {
         expect((res.body as { message: string }).message).toContain(
@@ -542,18 +563,108 @@ describe('PUT de una evaluación (NOT-03)', () => {
     await editar(id, 404)
   })
 
-  it('RLS rechaza registrar un responsable distinto al profesor de sesión', async () => {
+  it('RLS no permite que otro profesor de la universidad edite la evaluación con SQL', async () => {
     const { id } = await preparar()
-    const universidadId = await universidadDe('norte.cursus.test')
-    await comoApp({ universidadId, rol: 'PROFESOR' }, async (q) => {
-      await q.query("SELECT set_config('app.usuario_id', $1, true)", [
-        await idDe(PROFESOR),
+    await comoApp(await sesionProfesor(profesorOtraSeccion), async (q) => {
+      // Puede leerla por universidad, pero la política de UPDATE no alcanza la fila.
+      expect(
+        await q.query('SELECT id FROM evaluacion WHERE id=$1', [id]),
+      ).toEqual([{ id }])
+      expect(await editarPorSql(q, id)).toEqual([])
+    })
+    expect(await historial(id)).toEqual([])
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+  })
+
+  it.each([
+    ['nombre', () => nuevos().nombre, false],
+    ['fecha', () => nuevos().fecha, false],
+    ['ponderacion', () => nuevos().ponderacion, true],
+  ] as const)(
+    'el trigger impide cambiar %s por SQL si hay notas',
+    async (campo, valor, archivar) => {
+      const { id } = await preparar()
+      const q = bd.createQueryRunner()
+      try {
+        await ingresarNota(id, q)
+      } finally {
+        await q.release()
+      }
+      if (archivar) {
+        await bd.query(
+          'UPDATE nota SET archived_at=now() WHERE evaluacion_id=$1',
+          [id],
+        )
+      }
+      await comoApp(await sesionProfesor(), async (appSql) => {
+        await expect(
+          appSql.query(`UPDATE evaluacion SET ${campo} = $2 WHERE id=$1`, [
+            id,
+            valor(),
+          ]),
+        ).rejects.toMatchObject({
+          driverError: {
+            code: CHECK,
+            message: 'La evaluación ya tiene notas ingresadas',
+          },
+        })
+      })
+      expect(await historial(id)).toEqual([])
+      await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [
+        id,
       ])
+    },
+  )
+
+  it('audita la edición hecha por SQL y revierte el historial junto con la evaluación', async () => {
+    const { id } = await preparar()
+    const sesion = await sesionProfesor()
+    await comoApp(sesion, async (q) => {
+      expect(await editarPorSql(q, id)).toEqual([{ id }])
+      expect(await editarPorSql(q, id)).toEqual([{ id }]) // Mismos valores: sin otro evento.
+      await comoApp(
+        { universidadId: sesion.universidadId, rol: 'AYUDANTE' },
+        async (ayudante) => {
+          await expect(ingresarNota(id, ayudante)).rejects.toMatchObject({
+            driverError: { code: '40001' },
+          })
+        },
+      )
+      await q.query('RESET ROLE')
+      expect(
+        await q.query(
+          'SELECT responsable_id, fecha, anterior, nuevo FROM evaluacion_cambio WHERE evaluacion_id=$1',
+          [id],
+        ),
+      ).toEqual([
+        {
+          responsable_id: sesion.usuarioId,
+          fecha: expect.any(Date) as Date,
+          anterior: inicial(),
+          nuevo: nuevos(),
+        },
+      ])
+    })
+    expect(await historial(id)).toEqual([])
+    expect(
+      (await listar(PROFESOR, secciones.s1, 200)).evaluaciones,
+    ).toContainEqual({
+      id,
+      ...inicial(),
+      tieneNotas: false,
+    })
+    await bd.query('UPDATE evaluacion SET archived_at=now() WHERE id=$1', [id])
+  })
+
+  it('cursus_app no puede insertar manualmente en el historial ni con el actor correcto', async () => {
+    const { id } = await preparar()
+    const sesion = await sesionProfesor()
+    await comoApp(sesion, async (q) => {
       await expect(
         q.query(
           `INSERT INTO evaluacion_cambio (universidad_id,evaluacion_id,responsable_id,anterior,nuevo)
          VALUES ($1,$2,$3,'{"ponderacion":20}','{"ponderacion":30}')`,
-          [universidadId, id, await idDe(profesorOtraSeccion)],
+          [sesion.universidadId, id, sesion.usuarioId],
         ),
       ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
     })

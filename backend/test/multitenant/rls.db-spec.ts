@@ -389,7 +389,7 @@ describe('contrato del schema', () => {
         // API solo la lee.
         comandos:
           tabla.tabla === 'evaluacion_cambio'
-            ? ['INSERT']
+            ? []
             : tabla.tabla === 'superadmin_cambio'
               ? ['SELECT']
               : [
@@ -435,7 +435,7 @@ describe('contrato del schema', () => {
 
   // Estas políticas requieren que la API fije la identidad de sesión:
   // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
-  // archivos propios y NOT-03 para guardar el historial de edición.
+  // archivos propios y NOT-03 para editar evaluaciones.
   it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
@@ -458,9 +458,9 @@ describe('contrato del schema', () => {
         comando: 'UPDATE',
       },
       {
-        tabla: 'evaluacion_cambio',
-        politica: 'pol_evaluacion_cambio_insercion',
-        comando: 'INSERT',
+        tabla: 'evaluacion',
+        politica: 'pol_evaluacion_modificacion',
+        comando: 'UPDATE',
       },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
       {

@@ -174,7 +174,7 @@ export class EvaluacionesService {
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
             AND e.archived_at IS NULL AND s.archived_at IS NULL
             AND c.archived_at IS NULL
-          FOR UPDATE OF e FOR SHARE OF s, c, p`,
+          FOR SHARE OF s, c, p`,
         [contexto.universidadId, seccion.id, evaluacionId],
       )
       if (!actual) throw new NotFoundException('La evaluación no existe')
@@ -197,9 +197,16 @@ export class EvaluacionesService {
         return { id, nombre, fecha, ponderacion }
 
       await fijarUsuario(bd, usuarioId)
-      await bd.query(
-        `UPDATE evaluacion SET nombre = $3, fecha = $4::date, ponderacion = $5
-          WHERE universidad_id = $1 AND id = $2`,
+      // La RLS exige la identidad y el trigger comprueba notas y guarda el
+      // historial. El lock de notas mantiene estable la versión leída.
+      const [editada] = await bd.query<Evaluacion>(
+        `WITH editada AS (
+           UPDATE evaluacion SET nombre = $3, fecha = $4::date, ponderacion = $5
+            WHERE universidad_id = $1 AND id = $2 AND archived_at IS NULL
+            RETURNING id, nombre, fecha, ponderacion
+         )
+         SELECT id, nombre, to_char(fecha, 'YYYY-MM-DD') AS fecha, ponderacion
+           FROM editada`,
         [
           contexto.universidadId,
           id,
@@ -208,24 +215,8 @@ export class EvaluacionesService {
           datos.ponderacion,
         ],
       )
-      await bd.query(
-        `INSERT INTO evaluacion_cambio
-           (universidad_id, evaluacion_id, responsable_id, anterior, nuevo)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb)`,
-        [
-          contexto.universidadId,
-          id,
-          usuarioId,
-          { nombre, fecha, ponderacion },
-          datos,
-        ],
-      )
-      return {
-        id,
-        nombre: datos.nombre,
-        fecha: datos.fecha,
-        ponderacion: datos.ponderacion,
-      }
+      if (!editada) throw new NotFoundException('La evaluación no existe')
+      return editada
     })
   }
 }

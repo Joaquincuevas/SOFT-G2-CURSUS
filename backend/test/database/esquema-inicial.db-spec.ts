@@ -182,25 +182,43 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
-    // CrearArchivo (MAT-01) solo quita su tabla.
-    await bd.undoLastMigration()
-    const SIN_ARCHIVO = TABLAS.filter((tabla) => tabla !== 'archivo')
-    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
-
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
-    const SIN_EDICION_EVALUACION = SIN_ARCHIVO.filter(
+    const SIN_EDICION_EVALUACION = TABLAS.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    const [edicionRevertida] = await bd.query<
+      {
+        auditoria: string | null
+        bloqueo: string | null
+        updateTabla: boolean
+      }[]
+    >(`
+      SELECT to_regprocedure('public.validar_y_auditar_edicion_evaluacion()') AS auditoria,
+             to_regprocedure('public.bloquear_nueva_nota_para_edicion()') AS bloqueo,
+             has_table_privilege('cursus_app', 'evaluacion', 'UPDATE') AS "updateTabla"
+    `)
+    expect(edicionRevertida).toEqual({
+      auditoria: null,
+      bloqueo: null,
+      updateTabla: true,
+    })
+
+    // CrearArchivo (MAT-01) solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ARCHIVO = SIN_EDICION_EVALUACION.filter(
+      (tabla) => tabla !== 'archivo',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // UI-04: inicializa colores; al revertir conserva los datos elegidos.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
     // del comentario, su UPDATE y la columna.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosDevolucion }] = await bd.query<
       { restosDevolucion: string }[]
     >(
@@ -221,7 +239,7 @@ describe('migraciones', () => {
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosAprobacion }] = await bd.query<
       { restosAprobacion: string }[]
     >(
@@ -245,13 +263,13 @@ describe('migraciones', () => {
       `SELECT to_regprocedure('public.total_clases_asistencia(uuid)')::text AS funcion`,
     )
     expect(funcion).toBeNull()
-    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
     // revision_notas, y deja las políticas del ayudante en nota sin la
     // condición del estado.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosEnvio }] = await bd.query<{ restosEnvio: string }[]>(
       `SELECT (SELECT count(*) FROM pg_policies
                 WHERE policyname = 'pol_revision_notas_envio')
@@ -267,9 +285,7 @@ describe('migraciones', () => {
 
     // NOT-07: quita el estado de las notas con su trigger del superadmin.
     await bd.undoLastMigration()
-    const SIN_REVISION_NOTAS = SIN_EDICION_EVALUACION.filter(
-      (t) => t !== 'revision_notas',
-    )
+    const SIN_REVISION_NOTAS = SIN_ARCHIVO.filter((t) => t !== 'revision_notas')
     expect(await tablasExistentes()).toEqual(SIN_REVISION_NOTAS)
 
     await bd.undoLastMigration() // ASI-04: conserva las marcas corregidas.
