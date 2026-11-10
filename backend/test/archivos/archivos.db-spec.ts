@@ -500,6 +500,52 @@ describe('MAT-01: confirmar la subida', () => {
   })
 })
 
+// GES-25: con varios profesores, cualquiera de los vigentes sube archivos.
+describe('GES-25: un segundo profesor de la sección', () => {
+  it('pide y confirma la subida; quitado, recibe 403 en las dos', async () => {
+    const segundo = await demoDe('PROFESOR', 1)
+    const [{ id: asignacion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id)
+       SELECT universidad_id, $1, $2 FROM seccion WHERE id = $1
+       RETURNING id`,
+      [secciones.s1, await idDe(segundo)],
+    )
+    try {
+      const { archivo } = await pedirSubida(segundo, secciones.s1, BODY)
+      almacenamiento.objetos.set(await claveDe(archivo.id), {
+        tamano: 100,
+        tipo: 'application/pdf',
+      })
+      expect(
+        (await confirmar(segundo, secciones.s1, archivo.id)).subidoEn,
+      ).toEqual(expect.any(String))
+
+      // Una segunda subida pedida antes de quitarlo no se confirma después.
+      const { archivo: pendiente } = await pedirSubida(
+        segundo,
+        secciones.s1,
+        BODY,
+      )
+      almacenamiento.objetos.set(await claveDe(pendiente.id), {
+        tamano: 100,
+        tipo: 'application/pdf',
+      })
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at = now() WHERE id = $1',
+        [asignacion],
+      )
+      await pedirSubida(segundo, secciones.s1, BODY, 403)
+      await confirmar(segundo, secciones.s1, pendiente.id, 403)
+    } finally {
+      await bd.query(
+        `UPDATE seccion_profesor SET archived_at = now()
+          WHERE id = $1 AND archived_at IS NULL`,
+        [asignacion],
+      )
+    }
+  })
+})
+
 describe('MAT-01: descargar un archivo', () => {
   let delProfesor: ArchivoResumen
   let delAlumno: ArchivoResumen
