@@ -4,6 +4,7 @@ import {
   type ErrorNotasInvalidas,
   type EvaluacionesSeccion,
   type EstadoEnvioNotas,
+  type HistorialNota,
   MAX_NOTAS_GUARDADO,
   MENSAJES_NOTA_INVALIDA,
   type NotasEvaluacion,
@@ -2834,6 +2835,183 @@ describe('RLS de la devolución (NOT-12)', () => {
     expect((await devolucionDe(evaluacion))[0].comentario_devolucion).toBe(
       COMENTARIO,
     )
+  })
+})
+
+describe('historial de una nota (NOT-16)', () => {
+  const destino = (evaluacion: string, alumno: string) =>
+    `${ruta(secciones.s1, evaluacion)}/${alumno}/historial`
+
+  async function leerHistorial(
+    correo: string,
+    evaluacion: string,
+    alumno: string,
+    status: number,
+  ) {
+    const token = await tokenDe(correo)
+    const peticion = request(app.getHttpServer())
+      .get(destino(evaluacion, alumno))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(status)
+    return status === 200
+      ? peticion.expect('Cache-Control', 'no-store')
+      : peticion
+  }
+
+  it('devuelve valores, responsables, fechas y motivos en orden, sin eventos de otros alumnos', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver(PROFESOR, evaluacion, 200)
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.base, 5.5]]), 200)
+    await enviar(AYUDANTE, evaluacion, 200)
+    await aprobar(PROFESOR, evaluacion, 200)
+    const profesorId = await idDe(PROFESOR)
+    const ayudanteId = await idDe(AYUDANTE)
+    const primero = '00000000-0000-4000-8000-000000000001'
+    const segundo = '00000000-0000-4000-8000-000000000002'
+    // NOT-15 escribe estos eventos. Se insertan como fixture para probar la
+    // lectura sobre develop. Las dos recorrecciones comparten fecha y se
+    // insertan en orden inverso para probar el desempate por id.
+    await bd.query(
+      `INSERT INTO nota_cambio (id, universidad_id, evaluacion_id, alumno_id, tipo,
+                                nota_anterior, nota_nueva, motivo, responsable_id, fecha)
+       VALUES ($1, $3, $4, $5, 'RECORRECCION', 6.2, 6.5, 'Segundo ajuste', $6, statement_timestamp()),
+              ($2, $3, $4, $5, 'RECORRECCION', 5.5, 6.2, 'Revisión de la rúbrica', $6, statement_timestamp()),
+              (gen_random_uuid(), $3, $4, $7, 'RECORRECCION', 5.0, 6.8, 'Motivo de otro alumno', $6, statement_timestamp())`,
+      [
+        segundo,
+        primero,
+        ids.norte,
+        evaluacion,
+        alumnos.base,
+        profesorId,
+        alumnos.ana,
+      ],
+    )
+    const actores = await bd.query<{ id: string; nombre: string }[]>(
+      'SELECT id, nombre FROM usuario WHERE id IN ($1, $2)',
+      [profesorId, ayudanteId],
+    )
+    const antes = await eventosDe(evaluacion)
+    const res = await leerHistorial(PROFESOR, evaluacion, alumnos.base, 200)
+    const { eventos } = res.body as HistorialNota
+    expect(
+      eventos.map(({ tipo, notaAnterior, notaNueva, motivo, responsable }) => [
+        tipo,
+        notaAnterior,
+        notaNueva,
+        motivo,
+        responsable,
+      ]),
+    ).toEqual([
+      ['PROPUESTA', null, 5, null, actores.find((u) => u.id === ayudanteId)],
+      ['ENVIO', null, null, null, actores.find((u) => u.id === ayudanteId)],
+      [
+        'DEVOLUCION',
+        null,
+        null,
+        COMENTARIO,
+        actores.find((u) => u.id === profesorId),
+      ],
+      ['PROPUESTA', 5, 5.5, null, actores.find((u) => u.id === ayudanteId)],
+      ['ENVIO', null, null, null, actores.find((u) => u.id === ayudanteId)],
+      [
+        'PUBLICACION',
+        null,
+        5.5,
+        null,
+        actores.find((u) => u.id === profesorId),
+      ],
+      [
+        'APROBACION',
+        null,
+        null,
+        null,
+        actores.find((u) => u.id === profesorId),
+      ],
+      [
+        'RECORRECCION',
+        5.5,
+        6.2,
+        'Revisión de la rúbrica',
+        actores.find((u) => u.id === profesorId),
+      ],
+      [
+        'RECORRECCION',
+        6.2,
+        6.5,
+        'Segundo ajuste',
+        actores.find((u) => u.id === profesorId),
+      ],
+    ])
+    const fechas = eventos.map((evento) => Date.parse(evento.fecha))
+    expect(fechas.every(Number.isFinite)).toBe(true)
+    expect(fechas).toEqual(fechas.toSorted((a, b) => a - b))
+    expect(eventos.slice(-2).map(({ id }) => id)).toEqual([primero, segundo])
+    expect(await eventosDe(evaluacion)).toEqual(antes)
+  })
+
+  it('permite a otro profesor vigente y rechaza alumnos fuera de la sección y roles ajenos', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const [{ id, correo }] = await bd.query<{ id: string; correo: string }[]>(
+      `SELECT id, correo FROM usuario
+        WHERE universidad_id = $1 AND rol = 'PROFESOR' AND correo <> $2
+          AND archived_at IS NULL
+        ORDER BY id LIMIT 1`,
+      [ids.norte, PROFESOR],
+    )
+    await request(app.getHttpServer())
+      .get(destino(evaluacion, alumnos.base))
+      .expect(401)
+    await leerHistorial(correo, evaluacion, alumnos.base, 403)
+    const [{ id: asignacion }] = await bd.query<{ id: string }[]>(
+      'INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id) VALUES ($1, $2, $3) RETURNING id',
+      [ids.norte, secciones.s1, id],
+    )
+    try {
+      const respuesta = await leerHistorial(
+        correo,
+        evaluacion,
+        alumnos.base,
+        200,
+      )
+      expect(
+        (respuesta.body as HistorialNota).eventos.map(({ tipo }) => tipo),
+      ).toEqual(['PROPUESTA', 'ENVIO'])
+    } finally {
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [asignacion],
+      )
+    }
+    await leerHistorial(correo, evaluacion, alumnos.base, 403)
+    for (const rol of [AYUDANTE, ALUMNO, ADMIN_INGENIERIA, DIRECTOR]) {
+      await leerHistorial(rol, evaluacion, alumnos.base, 403)
+    }
+    await leerHistorial(PROFESOR_SUR, evaluacion, alumnos.base, 404)
+    await leerHistorial(PROFESOR, evaluacion, alumnos.noInscrito, 404)
+    await leerHistorial(PROFESOR, evaluacion, alumnos.retirado, 404)
+    await leerHistorial(
+      PROFESOR,
+      await crearEvaluacion(secciones.s2),
+      alumnos.base,
+      404,
+    )
+    await leerHistorial(PROFESOR, evaluacion, 'no-es-uuid', 400)
+  })
+
+  it('muestra historial vacío cuando el alumno no tiene eventos propios', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const nuevo = await crearAlumno(secciones.s1, 'Alumno Tardío Historial')
+    await inscribir(secciones.s1, nuevo)
+    try {
+      const respuesta = await leerHistorial(PROFESOR, evaluacion, nuevo, 200)
+      expect(respuesta.body).toEqual({ eventos: [] })
+    } finally {
+      await bd.query(
+        'UPDATE inscripcion SET archived_at=now(), archivada_por=$2 WHERE seccion_id=$3 AND usuario_id=$1',
+        [nuevo, await idDe(ADMIN_INGENIERIA), secciones.s1],
+      )
+    }
   })
 })
 

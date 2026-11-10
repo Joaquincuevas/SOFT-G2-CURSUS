@@ -70,6 +70,21 @@ export const TIPOS_EVENTO_NOTA = [
 
 export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
 
+// NOT-16: eventos de un alumno y de su evaluación, ordenados por fecha e id.
+export interface EventoHistorialNota {
+  id: string
+  tipo: TipoEventoNota
+  fecha: string
+  responsable: { id: string; nombre: string }
+  notaAnterior: number | null
+  notaNueva: number | null
+  motivo: string | null
+}
+
+export interface HistorialNota {
+  eventos: EventoHistorialNota[]
+}
+
 // Motivo de una devolución o una recorrección (NOT-12 y NOT-15).
 export const LARGO_MOTIVO_NOTA = 500
 

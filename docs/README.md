@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [NOT-16 · Historial de cambios de una nota y guía de revisión](not-16-historial-nota.md)
 - [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
 - [UI-04: tema institucional, contraste y guía de revisión](ui-04-tema-universidad.md)

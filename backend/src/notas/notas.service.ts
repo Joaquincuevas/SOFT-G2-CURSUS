@@ -6,6 +6,7 @@ import {
   type ErrorNotasFaltantes,
   type EstadoRevisionNotas,
   type GuardarNotas,
+  type HistorialNota,
   type EstadoNota,
   type NotasEvaluacion,
   type SeccionEspacio,
@@ -238,6 +239,69 @@ export class NotasService {
       throw new NotFoundException('La evaluación no existe')
     }
     return fila
+  }
+
+  async historial(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+    alumnoId: string,
+  ): Promise<HistorialNota> {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo un profesor vigente de la sección puede ver el historial',
+      )
+    }
+
+    // La autorización y los eventos se leen en la misma instantánea.
+    // Una nota aún sin eventos tiene historial vacío, aunque la evaluación
+    // ya haya tenido envíos o devoluciones de otros alumnos.
+    const [fila] = await this.bd.consultarEnUniversidad<
+      HistorialNota & { autorizado: boolean; inscrito: boolean }
+    >(
+      contexto,
+      `WITH alcance AS (
+        SELECT e.id, e.universidad_id,
+               es_profesor_de_seccion(s.id, $4) AS autorizado,
+               EXISTS (
+                 SELECT 1 FROM inscripcion i
+                  WHERE i.universidad_id = e.universidad_id AND i.seccion_id = s.id
+                    AND i.usuario_id = $5 AND i.archived_at IS NULL
+               ) AS inscrito
+          FROM evaluacion e
+          JOIN seccion s ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
+          JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
+         WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+           AND e.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+      )
+      SELECT a.autorizado, a.inscrito,
+             COALESCE((
+               SELECT json_agg(json_build_object(
+                 'id', c.id, 'tipo', c.tipo, 'fecha', c.fecha,
+                 'responsable', json_build_object('id', u.id, 'nombre', u.nombre),
+                 'notaAnterior', c.nota_anterior, 'notaNueva', c.nota_nueva,
+                 'motivo', c.motivo
+               ) ORDER BY c.fecha, c.id)
+                 FROM nota_cambio c
+                 JOIN usuario u ON u.id = c.responsable_id AND u.universidad_id = c.universidad_id
+                WHERE a.autorizado AND a.inscrito AND c.universidad_id = a.universidad_id
+                  AND c.evaluacion_id = a.id
+                  AND (c.alumno_id = $5 OR (c.alumno_id IS NULL AND EXISTS (
+                    SELECT 1 FROM nota_cambio propia
+                     WHERE propia.universidad_id = a.universidad_id
+                       AND propia.evaluacion_id = a.id AND propia.alumno_id = $5
+                  )))
+             ), '[]') AS eventos
+        FROM alcance a`,
+      [seccion.id, evaluacionId, usuarioId, alumnoId],
+    )
+    if (!fila) throw new NotFoundException('La evaluación no existe')
+    if (!fila.autorizado) throw new ForbiddenException()
+    if (!fila.inscrito) {
+      throw new NotFoundException('El alumno no está inscrito en esta sección')
+    }
+    return { eventos: fila.eventos }
   }
 
   // Guarda como propuesta las notas recibidas, de cualquier subconjunto de
