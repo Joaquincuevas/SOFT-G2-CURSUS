@@ -514,6 +514,12 @@ describe('PUT de una evaluación (NOT-03)', () => {
       ...inicial(),
       tieneNotas: true,
     })
+    const listaAyudante = await listar(AYUDANTE, secciones.s1, 200)
+    expect(listaAyudante.evaluaciones.find((e) => e.id === id)).toEqual({
+      id,
+      ...inicial(),
+      envio: { estado: 'BORRADOR', comentarioDevolucion: null },
+    })
     await bd.query('UPDATE nota SET archived_at=now() WHERE evaluacion_id=$1', [
       id,
     ])

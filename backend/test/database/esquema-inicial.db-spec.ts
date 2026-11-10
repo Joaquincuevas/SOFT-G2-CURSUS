@@ -187,6 +187,10 @@ describe('migraciones', () => {
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
 
+    // UI-04: inicializa colores; al revertir conserva los datos elegidos.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+
     // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
     // del comentario, su UPDATE y la columna.
     await bd.undoLastMigration()

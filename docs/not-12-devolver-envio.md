@@ -32,7 +32,7 @@ Al confirmar:
 - **con un error** (500, sin conexión o un 400 de validación) aparece el mensaje con `role="alert"`. El panel sigue abierto con el comentario escrito, para reintentar;
 - **con un 409 de estado** (por ejemplo, otra pestaña ya la aprobó) pasa lo mismo que en NOT-11: se muestra el mensaje del servidor como aviso, la tabla se cierra y la lista se recarga. Un 409 sin `estado` deja el panel abierto con el mensaje.
 
-El ayudante ve la evaluación como "Estado: Devuelta", con los campos editables, **Guardar borrador** y **Enviar a revisión**. Mostrarle el comentario es NOT-09; el comentario ya está guardado en `revision_notas.comentario_devolucion`.
+El ayudante ve la evaluación como "Estado: Devuelta", con los campos editables, **Guardar borrador** y **Enviar a revisión**. [NOT-09](not-09-estado-envios.md) muestra el comentario de `revision_notas.comentario_devolucion` en el listado y el detalle; al reenviar, el comentario actual desaparece.
 
 ## API
 

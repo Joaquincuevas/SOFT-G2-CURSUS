@@ -2,6 +2,8 @@ import {
   type ErrorListaNotas,
   type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
+  type EvaluacionesSeccion,
+  type EstadoEnvioNotas,
   MAX_NOTAS_GUARDADO,
   MENSAJES_NOTA_INVALIDA,
   type NotasEvaluacion,
@@ -2832,4 +2834,126 @@ describe('RLS de la devolución (NOT-12)', () => {
       COMENTARIO,
     )
   })
+})
+
+describe('estado de los envíos del ayudante (NOT-09)', () => {
+  async function listarEnvios(
+    correo: string,
+    estado = 200,
+    seccionId = secciones.s1,
+  ) {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${seccionId}/evaluaciones`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return respuesta.body as EvaluacionesSeccion
+  }
+
+  async function comprobar(evaluacion: string, envio: EstadoEnvioNotas) {
+    // Cualquier ayudante activo ve el estado de la evaluación, aunque el
+    // último envío lo haya hecho otro ayudante de la misma sección.
+    for (const correo of [AYUDANTE, otroAyudante]) {
+      const lista = await listarEnvios(correo)
+      expect(
+        lista.evaluaciones.find((e) => e.id === evaluacion)?.envio,
+      ).toEqual(envio)
+      const detalle = await leer(correo, evaluacion, 200)
+      expect(detalle.estado).toBe(envio.estado)
+      expect(detalle.comentarioDevolucion).toBe(envio.comentarioDevolucion)
+    }
+  }
+
+  it('lista y detalle recorren borrador, revisión, devolución editable, reenvío y aprobación', async () => {
+    const evaluacion = await crearEvaluacion()
+    const borrador: EstadoEnvioNotas = {
+      estado: 'BORRADOR',
+      comentarioDevolucion: null,
+    }
+    await comprobar(evaluacion, borrador)
+    // Leer un borrador no crea una revisión ni eventos de escritura.
+    expect(await devolucionDe(evaluacion)).toEqual([])
+    expect(await eventosDe(evaluacion)).toEqual([])
+    const inscritos = await bd.query<{ id: string }[]>(
+      'SELECT usuario_id AS id FROM inscripcion WHERE seccion_id = $1 AND archived_at IS NULL',
+      [secciones.s1],
+    )
+    await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe(inscritos.map((a) => [a.id, 5])),
+      200,
+    )
+    await comprobar(evaluacion, borrador)
+    await enviar(AYUDANTE, evaluacion, 200)
+    const enRevision: EstadoEnvioNotas = {
+      estado: 'EN_REVISION',
+      comentarioDevolucion: null,
+    }
+    await comprobar(evaluacion, enRevision)
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 6]]), 409)
+
+    const comentario = 'Revisa la pregunta 3.\nJustifica el resultado de Ana.'
+    const devuelta = await devolver(PROFESOR, evaluacion, 200, { comentario })
+    expect(devuelta.comentarioDevolucion).toBe(comentario)
+    const envioDevuelto: EstadoEnvioNotas = {
+      estado: 'DEVUELTA',
+      comentarioDevolucion: comentario,
+    }
+    await comprobar(evaluacion, envioDevuelto)
+    const corregida = await guardar(
+      otroAyudante,
+      evaluacion,
+      notasDe([[alumnos.ana, 6.5]]),
+      200,
+    )
+    expect(corregida.comentarioDevolucion).toBe(comentario)
+    await comprobar(evaluacion, envioDevuelto)
+    expect(
+      (await filasDe(evaluacion)).find((n) => n.alumno_id === alumnos.ana)
+        ?.valor,
+    ).toBe('6.5')
+
+    const reenviada = await enviar(otroAyudante, evaluacion, 200)
+    expect(reenviada.comentarioDevolucion).toBeNull()
+    await comprobar(evaluacion, enRevision)
+    const aprobada = await aprobar(PROFESOR, evaluacion, 200)
+    expect(aprobada.comentarioDevolucion).toBeNull()
+    await comprobar(evaluacion, {
+      estado: 'APROBADA',
+      comentarioDevolucion: null,
+    })
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 6.7]]), 409)
+  })
+
+  it.each([ALUMNO, PROFESOR, DIRECTOR, DIRECTOR_SUR])(
+    '%s no recibe estados ni comentarios por el listado de evaluaciones',
+    async (correo) => {
+      const evaluacion = await evaluacionEnRevision()
+      await devolver(PROFESOR, evaluacion, 200)
+      const lista = await listarEnvios(correo)
+      const fila = lista.evaluaciones.find((e) => e.id === evaluacion)
+      expect(fila).toBeDefined()
+      expect(fila).not.toHaveProperty('envio')
+      expect(fila).not.toHaveProperty('comentarioDevolucion')
+    },
+  )
+
+  it('excluye evaluaciones archivadas y no trae envíos de otra sección', async () => {
+    const archivada = await crearEvaluacion(secciones.s1, { archivada: true })
+    const otraSeccion = await crearEvaluacion(secciones.s2)
+    const lista = await listarEnvios(AYUDANTE)
+    expect(lista.evaluaciones.map((e) => e.id)).not.toContain(archivada)
+    expect(lista.evaluaciones.map((e) => e.id)).not.toContain(otraSeccion)
+  })
+
+  it.each<[string, () => string, number]>([
+    ['otra sección', () => ayudanteOtraSeccion, 403],
+    ['otra universidad', () => AYUDANTE_SUR, 404],
+  ])(
+    'un ayudante de %s no lee los comentarios',
+    async (_caso, correo, estado) => {
+      await listarEnvios(correo(), estado)
+    },
+  )
 })

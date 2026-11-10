@@ -26,6 +26,10 @@ import {
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
 import { bloquearNotasDe } from './bloqueo-notas.js'
+import {
+  COMENTARIO_DEVOLUCION_NOTAS,
+  ESTADO_REVISION_NOTAS,
+} from './revision-notas.sql.js'
 
 // La evaluación se llama e en la consulta.
 const COLUMNAS_EVALUACION = `json_build_object(
@@ -53,9 +57,14 @@ const DESDE_EVALUACION = `
 
 // NOT-07: estado de las notas frente al profesor. Una evaluación sin fila en
 // revision_notas es un borrador.
-const ESTADO_REVISION = `COALESCE(r.estado, 'BORRADOR') AS estado`
+const ESTADO_REVISION = `${ESTADO_REVISION_NOTAS} AS estado`
 const CON_REVISION = `
   LEFT JOIN revision_notas r ON r.evaluacion_id = e.id`
+
+// NOT-09: el comentario acompaña a todas las respuestas del detalle,
+// también al guardar y reenviar, para no conservar una devolución anterior.
+const COLUMNAS_NOTAS = `${COLUMNAS_EVALUACION}, ${ESTADO_REVISION},
+  ${COMENTARIO_DEVOLUCION_NOTAS} AS "comentarioDevolucion", ${ALUMNOS_CON_NOTA}`
 
 // NOT-08: el ayudante escribe notas y envía solo en BORRADOR o DEVUELTA.
 const NO_EDITABLE: Partial<Record<EstadoRevisionNotas, string>> = {
@@ -210,18 +219,17 @@ export class NotasService {
     seccion: SeccionEspacio,
     evaluacionId: string,
   ): Promise<NotasEvaluacion> {
-    const columnas = `${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}`
     const [fila] =
       contexto.rol === 'DIRECTOR'
         ? await this.bd.consultarEnTodasLasUniversidades<NotasEvaluacion>(
             contexto,
-            `SELECT ${columnas} ${DESDE_EVALUACION} ${CON_REVISION}
+            `SELECT ${COLUMNAS_NOTAS} ${DESDE_EVALUACION} ${CON_REVISION}
               WHERE s.id = $1 AND e.id = $2 AND e.archived_at IS NULL`,
             [seccion.id, evaluacionId],
           )
         : await this.bd.consultarEnUniversidad<NotasEvaluacion>(
             contexto,
-            `SELECT ${columnas} ${DESDE_EVALUACION} ${CON_REVISION}
+            `SELECT ${COLUMNAS_NOTAS} ${DESDE_EVALUACION} ${CON_REVISION}
               WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
                 AND e.archived_at IS NULL`,
             [seccion.id, evaluacionId],
@@ -367,7 +375,7 @@ export class NotasService {
       )
 
       const [guardada] = await bd.query<NotasEvaluacion>(
-        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+        `SELECT ${COLUMNAS_NOTAS}
            ${DESDE_EVALUACION} ${CON_REVISION}
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
         [contexto.universidadId, seccion.id, evaluacionId],
@@ -464,7 +472,7 @@ export class NotasService {
       })
 
       const [enviada] = await bd.query<NotasEvaluacion>(
-        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+        `SELECT ${COLUMNAS_NOTAS}
            ${DESDE_EVALUACION} ${CON_REVISION}
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
         [contexto.universidadId, seccion.id, evaluacionId],
@@ -561,7 +569,7 @@ export class NotasService {
       })
 
       const [aprobada] = await bd.query<NotasEvaluacion>(
-        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+        `SELECT ${COLUMNAS_NOTAS}
            ${DESDE_EVALUACION} ${CON_REVISION}
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
         [contexto.universidadId, seccion.id, evaluacionId],
@@ -625,7 +633,7 @@ export class NotasService {
       })
 
       const [devuelta] = await bd.query<NotasEvaluacion>(
-        `SELECT ${COLUMNAS_EVALUACION}, ${ESTADO_REVISION}, ${ALUMNOS_CON_NOTA}
+        `SELECT ${COLUMNAS_NOTAS}
            ${DESDE_EVALUACION} ${CON_REVISION}
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
         [contexto.universidadId, seccion.id, evaluacionId],

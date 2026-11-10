@@ -1,8 +1,10 @@
 import {
   COLOR_CURSUS,
+  colorConContraste,
   type CrearUniversidad,
   LARGO_DOMINIO_CORREO,
   LARGO_NOMBRE_UNIVERSIDAD,
+  MENSAJE_COLOR_CONTRASTE,
 } from '@cursus/shared'
 import { type FormEvent, useId, useState } from 'react'
 
@@ -34,6 +36,10 @@ export function FormularioUniversidad({
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!colorConContraste(color)) {
+      setError(MENSAJE_COLOR_CONTRASTE)
+      return
+    }
     setGuardando(true)
     setError(null)
     const resultado = await onGuardar({
@@ -85,10 +91,15 @@ export function FormularioUniversidad({
       <input
         id={`${id}-color`}
         type="color"
+        aria-describedby={`${id}-color-ayuda`}
         value={color}
         onChange={(event) => setColor(event.target.value)}
         disabled={guardando}
       />
+      <p id={`${id}-color-ayuda`}>
+        Se usa en botones, menú y encabezado. Elige un tono oscuro para mantener
+        el texto legible; el contraste mínimo es 4,5:1 (WCAG AA).
+      </p>
       <div className="carreras__acciones">
         <button
           className="carreras__primario"

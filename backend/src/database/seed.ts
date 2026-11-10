@@ -38,6 +38,7 @@ export interface UsuarioSeed {
 interface UniversidadSeed {
   nombre: string
   dominio: string
+  color: string
   facultades: FacultadSeed[]
   usuarios: UsuarioSeed[]
 }
@@ -50,6 +51,7 @@ export const UNIVERSIDADES: UniversidadSeed[] = [
   {
     nombre: 'Universidad Demo Norte',
     dominio: 'norte.cursus.test',
+    color: '#1b4f72',
     facultades: [
       {
         nombre: INGENIERIA,
@@ -106,6 +108,7 @@ export const UNIVERSIDADES: UniversidadSeed[] = [
   {
     nombre: 'Universidad Demo Sur',
     dominio: 'sur.cursus.test',
+    color: '#0a5c36',
     facultades: [
       {
         nombre: SALUD,
@@ -296,9 +299,9 @@ async function sembrarUniversidad(
 ) {
   const universidadId = await upsert(
     m,
-    `INSERT INTO universidad (nombre, dominio_correo) VALUES ($1, $2)
+    `INSERT INTO universidad (nombre, dominio_correo, color) VALUES ($1, $2, $3)
      ON CONFLICT (dominio_correo) DO UPDATE SET nombre = EXCLUDED.nombre`,
-    [u.nombre, u.dominio],
+    [u.nombre, u.dominio, u.color],
   )
 
   const facultadIds = new Map<string, string>()

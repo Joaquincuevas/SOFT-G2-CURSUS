@@ -123,6 +123,7 @@ describe('superadmin creado con el comando', () => {
       rol: 'SUPERADMIN',
       universidadId: null,
       universidadNombre: 'CURSUS',
+      universidadColor: null,
       facultadNombre: null,
       debeCambiarPassword: true,
       periodoActivo: null,
@@ -184,6 +185,7 @@ describe('elegir universidad y facultad', () => {
       rol: 'SUPERADMIN',
       universidadId: ingenieriaNorte.universidadId,
       universidadNombre: UNIVERSIDADES[0].nombre,
+      universidadColor: UNIVERSIDADES[0].color,
       facultadNombre: 'Facultad de Ingeniería',
     })
     // El período activo es el de la universidad elegida.
@@ -195,6 +197,31 @@ describe('elegir universidad y facultad', () => {
   it('cada sesión tiene su propia elección', async () => {
     const otra = await loginSuperadmin()
     await pedir('get', '/api/cursos', otra).expect(403)
+  })
+
+  it('al cambiar de universidad devuelve su color, también al restaurar la sesión', async () => {
+    const otra = await loginSuperadmin()
+    expect(
+      ((await elegir(otra, ingenieriaNorte).expect(200)).body as UsuarioSesion)
+        .universidadColor,
+    ).toBe(UNIVERSIDADES[0].color)
+    expect(
+      ((await elegir(otra, saludSur).expect(200)).body as UsuarioSesion)
+        .universidadColor,
+    ).toBe(UNIVERSIDADES[1].color)
+    expect(
+      (
+        (await pedir('get', '/api/auth/yo', otra).expect(200))
+          .body as UsuarioSesion
+      ).universidadColor,
+    ).toBe(UNIVERSIDADES[1].color)
+    // No modifica la elección ni el tema de otra sesión.
+    expect(
+      (
+        (await pedir('get', '/api/auth/yo', token).expect(200))
+          .body as UsuarioSesion
+      ).universidadColor,
+    ).toBe(UNIVERSIDADES[0].color)
   })
 
   it('al salir de la universidad vuelve a la vista global, sin borrar datos', async () => {
@@ -210,6 +237,7 @@ describe('elegir universidad y facultad', () => {
     expect(respuesta.body).toMatchObject({
       rol: 'SUPERADMIN',
       universidadId: null,
+      universidadColor: null,
       facultadNombre: null,
       periodoActivo: null,
     })
