@@ -36,6 +36,12 @@ export class CrearSilabo1792760000000 implements MigrationInterface {
         FOR INSERT TO ${ROL_APP}
         WITH CHECK (universidad_id = universidad_actual() AND rol_actual() = 'PROFESOR')
     `)
+    await queryRunner.query(`
+      CREATE TRIGGER tg_silabo_auditar_superadmin
+        AFTER INSERT OR UPDATE ON silabo
+        FOR EACH ROW WHEN (superadmin_actual() IS NOT NULL)
+        EXECUTE FUNCTION auditar_superadmin()
+    `)
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

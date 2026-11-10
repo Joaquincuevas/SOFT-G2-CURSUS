@@ -26,6 +26,7 @@ const TABLAS = [
   ['inscripcion', 'universidad_id'],
   ['ayudante_seccion', 'universidad_id'],
   ['horario_seccion', 'universidad_id'],
+  ['silabo', 'universidad_id'],
 ] as const
 
 let admin: DataSource
@@ -87,6 +88,12 @@ beforeAll(async () => {
          FROM carrera c, periodo p
         WHERE c.universidad_id = $1 AND p.universidad_id = $1
         LIMIT 1`,
+      [id],
+    )
+    await bd.query(
+      `INSERT INTO silabo (universidad_id, curso_id, version, contenido)
+       SELECT universidad_id, id, 1, decode('255044462d', 'hex')
+         FROM curso WHERE universidad_id = $1 AND codigo = 'RLS101'`,
       [id],
     )
     // Una sección del curso anterior, para los tests genéricos de seccion.
@@ -297,6 +304,12 @@ describe('Director (ADR 0001)', () => {
     async (tabla) => {
       const universidadId = universidades[NORTE]
       await comoApp({ universidadId, rol: 'DIRECTOR' }, async (q) => {
+        if (tabla === 'silabo') {
+          await expect(
+            q.query('UPDATE silabo SET contenido = contenido'),
+          ).rejects.toMatchObject({ code: SIN_PERMISO })
+          return
+        }
         const [, afectadas] = await q.query<[unknown[], number]>(
           `UPDATE ${tabla} SET updated_at = now()`,
         )
@@ -393,6 +406,7 @@ describe('contrato del schema', () => {
                   'anuncio_cambio',
                   'asistencia_cambio',
                   'lectura_anuncio',
+                  'silabo',
                 ].includes(tabla.tabla)
               ? ['INSERT', 'SELECT']
               : ['INSERT', 'SELECT', 'UPDATE'],
