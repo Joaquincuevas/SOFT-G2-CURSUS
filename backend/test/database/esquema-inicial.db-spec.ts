@@ -38,6 +38,7 @@ const TABLAS = [
   'revision_notas',
   'seccion',
   'sesion_auth',
+  'silabo',
   'superadmin_cambio',
   'universidad',
   'usuario',
@@ -180,14 +181,19 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // MAT-02: el sílabo se revierte sin afectar los cursos.
+    await bd.undoLastMigration()
+    const SIN_SILABO = TABLAS.filter((tabla) => tabla !== 'silabo')
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+
     // UI-04: inicializa colores; al revertir conserva los datos elegidos.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
 
     // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
     // del comentario, su UPDATE y la columna.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
     const [{ restosDevolucion }] = await bd.query<
       { restosDevolucion: string }[]
     >(
@@ -208,7 +214,7 @@ describe('migraciones', () => {
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
     const [{ restosAprobacion }] = await bd.query<
       { restosAprobacion: string }[]
     >(
@@ -232,13 +238,13 @@ describe('migraciones', () => {
       `SELECT to_regprocedure('public.total_clases_asistencia(uuid)')::text AS funcion`,
     )
     expect(funcion).toBeNull()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
 
     // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
     // revision_notas, y deja las políticas del ayudante en nota sin la
     // condición del estado.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
     const [{ restosEnvio }] = await bd.query<{ restosEnvio: string }[]>(
       `SELECT (SELECT count(*) FROM pg_policies
                 WHERE policyname = 'pol_revision_notas_envio')
@@ -254,7 +260,7 @@ describe('migraciones', () => {
 
     // NOT-07: quita el estado de las notas con su trigger del superadmin.
     await bd.undoLastMigration()
-    const SIN_REVISION_NOTAS = TABLAS.filter((t) => t !== 'revision_notas')
+    const SIN_REVISION_NOTAS = SIN_SILABO.filter((t) => t !== 'revision_notas')
     expect(await tablasExistentes()).toEqual(SIN_REVISION_NOTAS)
 
     await bd.undoLastMigration() // ASI-04: conserva las marcas corregidas.
@@ -539,6 +545,7 @@ describe('migraciones', () => {
         t !== 'anuncio_cambio' &&
         t !== 'asistencia_cambio' &&
         t !== 'lectura_anuncio' &&
+        t !== 'silabo' &&
         t !== 'superadmin_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
