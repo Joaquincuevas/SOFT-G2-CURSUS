@@ -234,6 +234,8 @@ export class VariosProfesoresSeccion1792790000000 implements MigrationInterface 
     await q.query(`
       CREATE FUNCTION public.sincronizar_seccion_profesor() RETURNS trigger
       LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+      DECLARE
+        primero uuid;
       BEGIN
         -- Como SECURITY DEFINER escribe seccion_profesor sin su RLS: solo el
         -- Administrativo (o el dueño, sin rol: migraciones y seed) cambia
@@ -245,6 +247,18 @@ export class VariosProfesoresSeccion1792790000000 implements MigrationInterface 
            AND public.rol_actual() <> 'ADMINISTRATIVO' THEN
           RAISE EXCEPTION 'Solo el Administrativo asigna profesores'
             USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        -- Si profesor_id ya es el primer profesor vigente, el cambio vino de
+        -- tg_seccion_profesor_sincronizar (o ya estaba al día): no hay nada
+        -- que reflejar. Sin esto, al reemplazar con el código anterior a A
+        -- por C (ya asignado junto a B), la otra sincronización deja B y esta
+        -- archivaría a C para volver a crearlo con otro id y otra antigüedad.
+        SELECT sp.usuario_id INTO primero FROM public.seccion_profesor sp
+         WHERE sp.seccion_id = NEW.id AND sp.archived_at IS NULL
+         ORDER BY sp.created_at, sp.id
+         LIMIT 1;
+        IF NEW.profesor_id IS NOT DISTINCT FROM primero THEN
+          RETURN NULL;
         END IF;
         IF TG_OP = 'UPDATE' AND OLD.profesor_id IS NOT NULL
            AND OLD.profesor_id IS DISTINCT FROM NEW.profesor_id THEN
