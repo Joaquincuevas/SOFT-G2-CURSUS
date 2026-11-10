@@ -59,6 +59,11 @@
   color: var(--color-success);
 }
 
+.notas__listado {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 .notas__tabla {
   width: 100%;
   border-collapse: collapse;
@@ -179,4 +184,46 @@
   margin: 0;
   color: var(--color-text-secondary);
   font: var(--font-caption);
+}
+
+/* NOT-09: el texto identifica el estado sin depender solamente del color. */
+.notas__estado-envio {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-caption);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.notas__estado-envio[data-estado='EN_REVISION'] {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.notas__estado-envio[data-estado='APROBADA'] {
+  color: var(--color-success);
+  background: var(--color-background);
+}
+
+.notas__devolucion {
+  max-width: 32rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.notas__devolucion-titulo {
+  margin-bottom: var(--space-1);
+  font: var(--font-button);
+}
+
+.notas__devolucion-texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--font-body);
 }
