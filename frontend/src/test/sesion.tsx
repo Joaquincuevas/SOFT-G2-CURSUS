@@ -103,6 +103,10 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
 // la simule.
 const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
   [
+    /^\/api\/espacio\/secciones\/[^/]+\/silabo-vigente$/,
+    () => ({ silabo: null }),
+  ],
+  [
     /^\/api\/espacio\/secciones\/[^/]+\/asistencia\/resumen$/,
     () => ({ clasesRegistradas: 0, alumnos: [] }),
   ],

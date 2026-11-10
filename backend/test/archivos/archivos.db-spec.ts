@@ -1,6 +1,7 @@
 import type {
   ArchivoResumen,
   DescargaArchivo,
+  SilaboVigente,
   SubidaArchivo,
 } from '@cursus/shared'
 import {
@@ -33,6 +34,8 @@ const AYUDANTE = 'ayudante@norte.cursus.test'
 const ALUMNO = 'alumno@norte.cursus.test'
 const ADMIN_INGENIERIA = 'administrativo.ingenieria@norte.cursus.test'
 const DIRECTOR = 'director@norte.cursus.test'
+
+const PROFESOR_SUR = 'profesor@sur.cursus.test'
 
 // S3 en memoria: firma sin red y guarda lo que "subió" el navegador. El
 // formato real de las firmas lo prueba almacenamiento.service.spec.ts.
@@ -408,6 +411,121 @@ describe('MAT-01: pedir la subida de un archivo', () => {
 })
 
 const BODY = { nombre: 'guia.pdf', tamano: 100 }
+
+describe('MAT-03: sílabo vigente del curso', () => {
+  const ruta = (seccionId: string) =>
+    `/api/espacio/secciones/${seccionId}/silabo-vigente`
+
+  async function consultar(correo: string, camino: string, status: number) {
+    const token = await tokenDe(correo)
+    const peticion = request(app.getHttpServer())
+      .get(camino)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(status)
+    return status === 200
+      ? peticion.expect('Cache-Control', 'no-store')
+      : peticion
+  }
+
+  it('muestra el vacío mientras MAT-02 no haya publicado una versión', async () => {
+    const respuesta = await consultar(ALUMNO, ruta(secciones.s1), 200)
+    expect(respuesta.body).toEqual({ silabo: null })
+    await consultar(ALUMNO, `${ruta(secciones.s1)}/descarga`, 404)
+  })
+
+  describe('con versiones vinculadas a archivos de MAT-01', () => {
+    let vigente: ArchivoResumen
+
+    beforeAll(async () => {
+      // Contrato de prueba de MAT-02 mientras su migración aún no está en
+      // develop. La subida y confirmación del archivo pasan por MAT-01 real.
+      const [{ existe }] = await bd.query<{ existe: boolean }[]>(
+        "SELECT to_regclass('public.silabo') IS NOT NULL AS existe",
+      )
+      if (!existe) {
+        await bd.query(`
+          CREATE TABLE silabo (
+            universidad_id uuid NOT NULL, curso_id uuid NOT NULL,
+            version integer NOT NULL, archivo_id uuid NOT NULL,
+            subido_por uuid NOT NULL, PRIMARY KEY (curso_id, version)
+          )
+        `)
+        await bd.query('GRANT SELECT ON silabo TO cursus_app')
+        await bd.query('ALTER TABLE silabo ENABLE ROW LEVEL SECURITY')
+        await bd.query(`
+          CREATE POLICY pol_silabo_lectura ON silabo FOR SELECT TO cursus_app
+            USING (universidad_id = universidad_actual())
+        `)
+      }
+      const anterior = await subir(PROFESOR, secciones.s1, 'Sílabo v1.pdf')
+      vigente = await subir(demo.profesor2, secciones.s2, 'Sílabo v2.pdf')
+      const { archivo: pendiente } = await pedirSubida(
+        PROFESOR,
+        secciones.s1,
+        BODY,
+      )
+      for (const [version, archivo] of [
+        [1, anterior],
+        [2, vigente],
+        [3, pendiente],
+      ] as const) {
+        await bd.query(
+          `INSERT INTO silabo (universidad_id, curso_id, version, archivo_id, subido_por)
+           SELECT a.universidad_id, s.curso_id, $2, a.id, a.subido_por
+             FROM archivo a JOIN seccion s ON s.id = a.seccion_id
+            WHERE a.id = $1`,
+          [archivo.id, version],
+        )
+      }
+    })
+
+    it('elige el último PDF confirmado del curso y lo firma desde la sección del alumno', async () => {
+      const respuesta = await consultar(ALUMNO, ruta(secciones.s1), 200)
+      expect(respuesta.body as SilaboVigente).toEqual({
+        silabo: { version: 2, subidoEn: vigente.subidoEn },
+      })
+      const pdf = await consultar(ALUMNO, `${ruta(secciones.s1)}/descarga`, 200)
+      expect((pdf.body as DescargaArchivo).url).toBe(
+        `https://s3.test/${await claveDe(vigente.id)}?nombre=${encodeURIComponent(vigente.nombre)}`,
+      )
+      await consultar(AYUDANTE, `${ruta(secciones.s1)}/descarga`, 200)
+      await consultar(demo.profesor2, `${ruta(secciones.s2)}/descarga`, 200)
+    })
+
+    it('rechaza la descarga a quien no pertenece a la sección y a quien pierde su inscripción', async () => {
+      const descarga = `${ruta(secciones.s1)}/descarga`
+      await request(app.getHttpServer()).get(descarga).expect(401)
+      for (const correo of [
+        demo.alumnoFuera,
+        demo.profesor2,
+        ADMIN_INGENIERIA,
+        DIRECTOR,
+      ]) {
+        await consultar(correo, descarga, 403)
+      }
+      await consultar(PROFESOR_SUR, descarga, 404)
+      await consultar(ALUMNO, `${ruta(secciones.s2)}/descarga`, 403)
+
+      await consultar(demo.alumno2, ruta(secciones.s1), 200)
+      const [{ id }] = await bd.query<{ id: string }[]>(
+        `WITH retiro AS (
+           UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+            WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL
+            RETURNING id
+         ) SELECT id FROM retiro`,
+        [secciones.s1, await idDe(demo.alumno2), await idDe(ADMIN_INGENIERIA)],
+      )
+      try {
+        await consultar(demo.alumno2, descarga, 403)
+      } finally {
+        await bd.query(
+          'UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL WHERE id = $1',
+          [id],
+        )
+      }
+    })
+  })
+})
 
 describe('MAT-01: confirmar la subida', () => {
   it('responde 409 si el archivo todavía no llega a S3', async () => {
