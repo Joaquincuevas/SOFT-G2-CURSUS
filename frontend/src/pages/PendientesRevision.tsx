@@ -10,8 +10,8 @@ import { useDatos } from './useDatos'
 
 // NOT-10: evaluaciones enviadas a revisión en las secciones del profesor, de
 // la más antigua a la más nueva. Al abrir una se ven todas las notas
-// propuestas en solo lectura y, NOT-11, aprobarlas y publicarlas (NOT-12
-// agregará devolverlas).
+// propuestas en solo lectura y aprobarlas y publicarlas (NOT-11) o
+// devolverlas al ayudante con un comentario (NOT-12).
 export function PendientesRevision() {
   const [pendientes, recargar, status] = useDatos<PendienteRevision[]>(
     RUTA_PENDIENTES_REVISION,
@@ -105,9 +105,9 @@ export function PendientesRevision() {
                         <NotasDeEvaluacion
                           seccionId={p.seccion.id}
                           evaluacionId={p.evaluacion.id}
-                          // Aprobada (o ya no pendiente): se cierra y la
-                          // recarga la saca de la lista.
-                          alAprobar={(texto) => {
+                          // Aprobada o devuelta (o ya no pendiente): se
+                          // cierra y la recarga la saca de la lista.
+                          alRevisar={(texto) => {
                             setAviso(`${p.evaluacion.nombre}: ${texto}`)
                             setAbierta(null)
                             recargar()

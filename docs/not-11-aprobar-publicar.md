@@ -26,7 +26,7 @@ En **Evaluaciones pendientes de revisión** (NOT-10), al abrir una con **Ver not
 
 El botón solo aparece en la vista de pendientes y con la evaluación en revisión. En la pestaña Notas de la sección no cambia nada.
 
-**Alumnos sin nota:** si alguien se inscribió después del envío (NOT-08), la fila de pendientes ya lo advierte ("1 alumno sin nota"). Aprobar publica las notas que existen; ese alumno queda sin nota. Para agregarla, el profesor deberá devolver la evaluación (NOT-12) en vez de aprobarla.
+**Alumnos sin nota:** si alguien se inscribió después del envío (NOT-08), la fila de pendientes lo advierte ("1 alumno sin nota"). Aprobar publica las notas que existen y ese alumno queda sin nota. Para agregarla, el profesor [devuelve la evaluación](not-12-devolver-envio.md) (NOT-12) en vez de aprobarla.
 
 ## API
 
@@ -60,7 +60,7 @@ La aprobación, en una transacción:
 
 Con dos aprobaciones a la vez, una responde 200 y la otra 409, y la auditoría queda una sola vez.
 
-**Los 409 de estado** (`BORRADOR`, `DEVUELTA` y `APROBADA`) traen además `estado` en el cuerpo (`ErrorEstadoAprobacion` en `@cursus/shared`). Así el cliente distingue una evaluación que ya no está pendiente de los otros 409, que no traen `estado` porque la evaluación sigue en revisión.
+**Los 409 de estado** (`BORRADOR`, `DEVUELTA` y `APROBADA`) traen además `estado` en el cuerpo (`ErrorEstadoRevision` en `@cursus/shared`). Así el cliente distingue una evaluación que ya no está pendiente de los otros 409, que no traen `estado` porque la evaluación sigue en revisión.
 
 ## Datos
 
@@ -116,7 +116,7 @@ npm run test:db --workspace=backend
 - `backend/test/notas/auditoria-notas.db-spec.ts`: `PUBLICACION` se registra con alumno y nota, y se rechaza sin alumno, sin nota o con nota anterior.
 - `backend/test/database/esquema-inicial.db-spec.ts`: la migración se revierte primero y no deja políticas, trigger, funciones ni el tipo nuevo.
 - `backend/test/multitenant/rls.db-spec.ts`: el contrato del schema cuenta los comandos sin repetir (ahora hay dos UPDATE en `nota` y `revision_notas`), y las políticas con `usuario_actual()` son solo las dos de la aprobación.
-- `backend/test/notas/aprobacion.e2e-spec.ts`, con el acceso a la sección y el servicio reemplazados:
+- `backend/test/notas/revision.e2e-spec.ts`, con el acceso a la sección y el servicio reemplazados:
   - 401 sin sesión, 200 con las notas aprobadas y el 409 con su mensaje;
   - 403 por CASL para el ayudante, el alumno, el Administrativo y el Director;
   - 403 para un profesor que entra a la sección con otro rol;

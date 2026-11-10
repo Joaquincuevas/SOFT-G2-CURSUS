@@ -186,6 +186,30 @@ describe('migraciones', () => {
     const SIN_ARCHIVO = TABLAS.filter((tabla) => tabla !== 'archivo')
     expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
+    // UI-04: inicializa colores; al revertir conserva los datos elegidos.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
+
+    // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
+    // del comentario, su UPDATE y la columna.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
+    const [{ restosDevolucion }] = await bd.query<
+      { restosDevolucion: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM pg_policies
+                WHERE policyname = 'pol_revision_notas_devolucion')
+            + (SELECT count(*) FROM pg_trigger
+                WHERE tgname = 'tg_revision_notas_comentario_al_devolver')
+            + (SELECT count(*) FROM pg_proc
+                WHERE proname = 'revision_notas_comentario_al_devolver')
+            + (SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'revision_notas'
+                  AND column_name = 'comentario_devolucion')
+              AS "restosDevolucion"`,
+    )
+    expect(Number(restosDevolucion)).toBe(0)
+
     // NOT-11: no crea tablas. Quita las políticas de la aprobación, el
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.

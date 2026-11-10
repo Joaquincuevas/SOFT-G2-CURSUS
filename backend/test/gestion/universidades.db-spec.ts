@@ -1,4 +1,8 @@
-import type { FacultadElegible, UniversidadElegible } from '@cursus/shared'
+import {
+  MENSAJE_COLOR_CONTRASTE,
+  type FacultadElegible,
+  type UniversidadElegible,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -187,10 +191,45 @@ describe('universidades', () => {
     ])
   })
 
-  it('las universidades existentes tienen el color de CURSUS', async () => {
-    const norte = (await listar()).find((u) => u.dominioCorreo === NORTE)
-    expect(norte?.color).toBe('#1b4f72')
+  it('las universidades del seed tienen colores iniciales distintos', async () => {
+    const universidades = await listar()
+    for (const u of UNIVERSIDADES)
+      expect(
+        universidades.find((fila) => fila.dominioCorreo === u.dominio)?.color,
+      ).toBe(u.color)
+    expect(new Set(UNIVERSIDADES.map((u) => u.color)).size).toBe(
+      UNIVERSIDADES.length,
+    )
   })
+
+  it.each(['#ffffff', '#ffff00', '#00ff00', '#ff0000', '#777777'])(
+    'rechaza %s por contraste al crear y editar, sin guardar cambios',
+    async (color) => {
+      const datos = nueva()
+      const creacion = await crear({ ...datos, color }).expect(400)
+      expect((creacion.body as { message: string[] }).message).toContain(
+        MENSAJE_COLOR_CONTRASTE,
+      )
+      expect(
+        (await listar()).some((u) => u.dominioCorreo === datos.dominioCorreo),
+      ).toBe(false)
+      const universidad = await crearUniversidad()
+      const antes = await auditoria(universidad.id)
+      const edicion = await pedir(
+        'patch',
+        `/api/superadmin/universidades/${universidad.id}`,
+      )
+        .send({ color })
+        .expect(400)
+      expect((edicion.body as { message: string[] }).message).toContain(
+        MENSAJE_COLOR_CONTRASTE,
+      )
+      expect((await listar()).find((u) => u.id === universidad.id)?.color).toBe(
+        universidad.color,
+      )
+      expect(await auditoria(universidad.id)).toEqual(antes)
+    },
+  )
 
   it.each([
     ['sin nombre', { nombre: '  ' }],

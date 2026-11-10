@@ -1,4 +1,5 @@
 import {
+  colorConContraste,
   type CrearUniversidad,
   type FacultadElegible,
   LARGO_MOTIVO_ARCHIVAR,
@@ -38,6 +39,7 @@ import { useDatos } from './useDatos'
 export function AdministrarUniversidad() {
   const { id } = useParams()
   const { fetchConSesion } = useAuth()
+  const { user, reemplazarUsuario } = useSession()
   const [universidades, recargar] =
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -74,6 +76,15 @@ export function AdministrarUniversidad() {
       datos,
     )
     if (!resultado.ok) return resultado.error
+    // UI-04: si está trabajando en esta universidad, el cambio de color se
+    // ve de inmediato. Las sesiones de otros usuarios lo leen al recargar.
+    if (user.universidadId === resultado.datos.id) {
+      reemplazarUsuario({
+        ...user,
+        universidadNombre: resultado.datos.nombre,
+        universidadColor: resultado.datos.color,
+      })
+    }
     setAviso('Datos de la universidad guardados')
     recargar()
     return null
@@ -103,6 +114,17 @@ export function AdministrarUniversidad() {
       {aviso && (
         <p className="carreras__aviso" role="status">
           {aviso}
+        </p>
+      )}
+      {!colorConContraste(universidad.color) && (
+        <p
+          className="carreras__aviso"
+          role="status"
+          aria-label="Color institucional"
+        >
+          El color guardado no tiene contraste suficiente. Las sesiones de esta
+          universidad usan el tema de CURSUS como respaldo. Elige un color más
+          oscuro en Datos de la universidad.
         </p>
       )}
       <div className="carreras__columnas">

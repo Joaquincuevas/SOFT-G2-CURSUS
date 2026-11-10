@@ -124,6 +124,29 @@ describe('seed de datos simulados', () => {
     expect(UNIVERSIDADES[0].facultades.length).toBeGreaterThanOrEqual(2)
   })
 
+  it('crea colores distintos y al repetir no pisa el color personalizado', async () => {
+    const colores = () =>
+      bd.query<{ dominio: string; color: string }[]>(
+        'SELECT dominio_correo AS dominio, color FROM universidad ORDER BY dominio_correo',
+      )
+    expect(await colores()).toEqual(
+      UNIVERSIDADES.map((u) => ({ dominio: u.dominio, color: u.color })),
+    )
+    await bd.query(
+      `UPDATE universidad SET color = '#6b2d84' WHERE dominio_correo = 'sur.cursus.test'`,
+    )
+    try {
+      await ejecutarSeed(bd, PASSWORD)
+      expect(
+        (await colores()).find((u) => u.dominio === 'sur.cursus.test')?.color,
+      ).toBe('#6b2d84')
+    } finally {
+      await bd.query(
+        `UPDATE universidad SET color = '#0a5c36' WHERE dominio_correo = 'sur.cursus.test'`,
+      )
+    }
+  })
+
   it('crea los cursos de cada carrera en el período activo', async () => {
     for (const u of UNIVERSIDADES) {
       const cursos = await bd.query<{ codigo: string; carrera: string }[]>(

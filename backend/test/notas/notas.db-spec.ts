@@ -2,6 +2,8 @@ import {
   type ErrorListaNotas,
   type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
+  type EvaluacionesSeccion,
+  type EstadoEnvioNotas,
   MAX_NOTAS_GUARDADO,
   MENSAJES_NOTA_INVALIDA,
   type NotasEvaluacion,
@@ -2388,4 +2390,570 @@ describe('RLS de la aprobación (NOT-11)', () => {
       expect(Number(filas)).toBe(0)
     })
   })
+})
+
+const COMENTARIO = 'Revisa la pregunta 3 de Ana'
+
+async function devolver(
+  correo: string,
+  evaluacionId: string,
+  estado: number,
+  cuerpo: unknown = { comentario: COMENTARIO },
+  seccionId = secciones.s1,
+) {
+  const token = await tokenDe(correo)
+  const respuesta = await request(app.getHttpServer())
+    .post(`${ruta(seccionId, evaluacionId)}/devolucion`)
+    .set('Authorization', `Bearer ${token}`)
+    .send(cuerpo as object)
+    .expect(estado)
+  return respuesta.body as NotasEvaluacion & {
+    message: string | string[]
+    estado?: string
+  }
+}
+
+const devolucionDe = (evaluacionId: string) =>
+  bd.query<
+    {
+      estado: string
+      actualizado_por: string
+      comentario_devolucion: string | null
+    }[]
+  >(
+    `SELECT estado, actualizado_por, comentario_devolucion FROM revision_notas
+      WHERE evaluacion_id = $1`,
+    [evaluacionId],
+  )
+
+// Eventos de toda la evaluación (sin PROPUESTA), en orden.
+const vueltasDe = (evaluacionId: string) =>
+  bd.query<
+    {
+      tipo: string
+      responsable_id: string
+      motivo: string | null
+      fecha: Date
+    }[]
+  >(
+    `SELECT tipo, responsable_id, motivo, fecha FROM nota_cambio
+      WHERE evaluacion_id = $1 AND tipo <> 'PROPUESTA'
+      ORDER BY fecha, id`,
+    [evaluacionId],
+  )
+
+describe('POST .../notas/devolucion (NOT-12)', () => {
+  it('pasa a DEVUELTA con el comentario, deja las notas en PROPUESTA y registra DEVOLUCION con fecha, profesor y comentario', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const profesor = await idDe(PROFESOR)
+    const antes = new Date()
+
+    const devuelta = await devolver(PROFESOR, evaluacion, 200, {
+      comentario: `  ${COMENTARIO}\n  `,
+    })
+
+    expect(devuelta.estado).toBe('DEVUELTA')
+    expect(devuelta.alumnos.every((a) => a.estado === 'PROPUESTA')).toBe(true)
+    expect(
+      (await filasDe(evaluacion)).every((f) => f.estado === 'PROPUESTA'),
+    ).toBe(true)
+    // Sin los espacios de los extremos.
+    expect(await devolucionDe(evaluacion)).toEqual([
+      {
+        estado: 'DEVUELTA',
+        actualizado_por: profesor,
+        comentario_devolucion: COMENTARIO,
+      },
+    ])
+    const vueltas = await vueltasDe(evaluacion)
+    expect(vueltas.map((v) => [v.tipo, v.motivo])).toEqual([
+      ['ENVIO', null],
+      ['DEVOLUCION', COMENTARIO],
+    ])
+    expect(vueltas[1].responsable_id).toBe(profesor)
+    expect(vueltas[1].fecha.getTime()).toBeGreaterThanOrEqual(
+      antes.getTime() - 1000,
+    )
+  })
+
+  it.each([
+    [null, 'Las notas aún no se envían a revisión'],
+    ['BORRADOR', 'Las notas aún no se envían a revisión'],
+    ['DEVUELTA', 'Las notas fueron devueltas al ayudante'],
+    ['APROBADA', 'Las notas ya fueron aprobadas'],
+  ])(
+    'en %s responde 409 con el estado y no cambia nada',
+    async (estado, mensaje) => {
+      const evaluacion = await evaluacionCompleta()
+      if (estado) await fijarEstado(evaluacion, estado)
+
+      const respuesta = await devolver(PROFESOR, evaluacion, 409)
+
+      expect(respuesta).toMatchObject({
+        message: mensaje,
+        estado: estado ?? 'BORRADOR',
+      })
+      expect(
+        (await vueltasDe(evaluacion)).filter((v) => v.tipo === 'DEVOLUCION'),
+      ).toEqual([])
+    },
+  )
+
+  it.each([
+    ['sin comentario', {}],
+    ['vacío', { comentario: '' }],
+    ['de solo espacios', { comentario: '   \n ' }],
+    ['que no es texto', { comentario: 5 }],
+    ['de más de 500 caracteres', { comentario: 'a'.repeat(501) }],
+    // Cada "❤️" son dos caracteres para PostgreSQL (con el selector de
+    // variante): 1000, aunque @MaxLength contaría 500.
+    [
+      'de 500 emojis con selector de variante',
+      { comentario: '❤️'.repeat(500) },
+    ],
+    ['con un carácter de control', { comentario: 'Revisa\u0007' }],
+    ['con campos de más', { comentario: COMENTARIO, estado: 'BORRADOR' }],
+  ])(
+    'un comentario %s responde 400 y no cambia nada',
+    async (_caso, cuerpo) => {
+      const evaluacion = await evaluacionEnRevision()
+
+      await devolver(PROFESOR, evaluacion, 400, cuerpo)
+
+      expect(await devolucionDe(evaluacion)).toEqual([
+        expect.objectContaining({
+          estado: 'EN_REVISION',
+          comentario_devolucion: null,
+        }),
+      ])
+    },
+  )
+
+  it('acepta 500 caracteres contados como PostgreSQL, con emojis', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const comentario = '❤'.repeat(250) + '😀'.repeat(250)
+    await devolver(PROFESOR, evaluacion, 200, { comentario })
+    expect((await devolucionDe(evaluacion))[0].comentario_devolucion).toBe(
+      comentario,
+    )
+  })
+
+  it('acepta 500 caracteres y saltos de línea', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const comentario = `Primera línea\n${'a'.repeat(486)}`
+    expect(comentario).toHaveLength(500)
+    await devolver(PROFESOR, evaluacion, 200, { comentario })
+    expect((await devolucionDe(evaluacion))[0].comentario_devolucion).toBe(
+      comentario,
+    )
+  })
+
+  it.each([AYUDANTE, ALUMNO, ADMIN_INGENIERIA, DIRECTOR])(
+    '%s recibe 403 y no cambia nada',
+    async (correo) => {
+      const evaluacion = await evaluacionEnRevision()
+      await devolver(correo, evaluacion, 403)
+      expect((await devolucionDe(evaluacion))[0].estado).toBe('EN_REVISION')
+    },
+  )
+
+  it('un profesor que no es de la sección recibe 403', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver((await otroProfesorDeNorte()).correo, evaluacion, 403)
+    expect((await devolucionDe(evaluacion))[0].estado).toBe('EN_REVISION')
+  })
+
+  it('un profesor de otra universidad recibe 404', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver(PROFESOR_SUR, evaluacion, 404)
+    expect((await devolucionDe(evaluacion))[0].estado).toBe('EN_REVISION')
+  })
+
+  it('aprobar y devolver a la vez: una responde 200, la otra 409, y queda un solo evento', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const token = await tokenDe(PROFESOR)
+
+    // Ambas esperan el lock de la evaluación, que tiene este test.
+    const bloqueo = bd.createQueryRunner()
+    await bloqueo.startTransaction()
+    let respuestas: Promise<number>[]
+    try {
+      await bloqueo.query(
+        `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+        [`notas:${evaluacion}`],
+      )
+      const base = `${ruta(secciones.s1, evaluacion)}`
+      respuestas = [
+        request(app.getHttpServer())
+          .post(`${base}/aprobacion`)
+          .set('Authorization', `Bearer ${token}`),
+        request(app.getHttpServer())
+          .post(`${base}/devolucion`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ comentario: COMENTARIO }),
+      ].map((peticion) => peticion.then((r) => r.status))
+      await esperarBloqueados(2)
+    } finally {
+      await bloqueo.commitTransaction()
+      await bloqueo.release()
+    }
+    expect((await Promise.all(respuestas)).sort()).toEqual([200, 409])
+    const tipos = (await vueltasDe(evaluacion)).map((v) => v.tipo)
+    // ENVIO y la acción que ganó: aprobada (con sus PUBLICACION) o devuelta.
+    const [{ estado }] = await devolucionDe(evaluacion)
+    expect(
+      estado === 'APROBADA' ? tipos.filter((t) => t !== 'PUBLICACION') : tipos,
+    ).toEqual(['ENVIO', estado === 'APROBADA' ? 'APROBACION' : 'DEVOLUCION'])
+    expect(
+      (await filasDe(evaluacion)).every(
+        (f) => f.estado === (estado === 'APROBADA' ? 'PUBLICADA' : 'PROPUESTA'),
+      ),
+    ).toBe(true)
+  })
+
+  it('tras devolver, el ayudante edita, reenvía y el profesor aprueba; el historial conserva ambas vueltas', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver(PROFESOR, evaluacion, 200)
+
+    // NOT-05 y NOT-07: vuelve a ser editable.
+    const guardada = await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe([[alumnos.ana, 6.5]]),
+      200,
+    )
+    expect(guardada.estado).toBe('DEVUELTA')
+    // NOT-08: el reenvío la deja otra vez en revisión, sin el comentario.
+    expect((await enviar(otroAyudante, evaluacion, 200)).estado).toBe(
+      'EN_REVISION',
+    )
+    expect((await devolucionDe(evaluacion))[0].comentario_devolucion).toBeNull()
+    await aprobar(PROFESOR, evaluacion, 200)
+
+    expect(
+      (await vueltasDe(evaluacion))
+        .map((v) => v.tipo)
+        .filter((t) => t !== 'PUBLICACION'),
+    ).toEqual(['ENVIO', 'DEVOLUCION', 'ENVIO', 'APROBACION'])
+    const [{ motivo }] = (await vueltasDe(evaluacion)).filter(
+      (v) => v.tipo === 'DEVOLUCION',
+    )
+    expect(motivo).toBe(COMENTARIO)
+    expect(
+      (await filasDe(evaluacion)).find((f) => f.alumno_id === alumnos.ana),
+    ).toMatchObject({ valor: '6.5', estado: 'PUBLICADA' })
+  })
+
+  // Pendiente de NOT-11: un alumno inscrito después del envío.
+  it('tras devolver, el ayudante le pone nota a un alumno inscrito después del envío', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const nuevo = await crearAlumno(secciones.s1, 'Tomás Tardío')
+    await inscribir(secciones.s1, nuevo)
+    try {
+      // En revisión no se puede.
+      await guardar(AYUDANTE, evaluacion, notasDe([[nuevo, 4]]), 409)
+
+      await devolver(PROFESOR, evaluacion, 200)
+      await guardar(AYUDANTE, evaluacion, notasDe([[nuevo, 4]]), 200)
+      await enviar(AYUDANTE, evaluacion, 200)
+      await aprobar(PROFESOR, evaluacion, 200)
+
+      expect(
+        (await filasDe(evaluacion)).find((f) => f.alumno_id === nuevo),
+      ).toMatchObject({ valor: '4.0', estado: 'PUBLICADA' })
+    } finally {
+      await bd.query(
+        `UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+          WHERE seccion_id = $1 AND usuario_id = $2`,
+        [secciones.s1, nuevo, await idDe(ADMIN_INGENIERIA)],
+      )
+    }
+  })
+})
+
+describe('RLS de la devolución (NOT-12)', () => {
+  // Filas modificadas: la RLS omite sin error las que no alcanza.
+  const devolverRevision = async (
+    q: QueryRunner,
+    evaluacion: string,
+    {
+      comentario = COMENTARIO,
+      actualizadoPor = 'usuario_actual()',
+    }: { comentario?: string | null; actualizadoPor?: string } = {},
+  ): Promise<number> => {
+    const [, filas] = await q.query<[unknown[], number]>(
+      `UPDATE revision_notas
+          SET estado = 'DEVUELTA', comentario_devolucion = $2,
+              actualizado_por = ${actualizadoPor}
+        WHERE evaluacion_id = $1 RETURNING id`,
+      [evaluacion, comentario],
+    )
+    return Number(filas)
+  }
+  const comoProfesor = async (
+    prueba: (q: QueryRunner) => Promise<void>,
+    usuarioId?: string,
+  ) =>
+    comoApp(
+      {
+        universidadId: ids.norte,
+        rol: 'PROFESOR',
+        usuarioId: usuarioId ?? (await idDe(PROFESOR)),
+      },
+      prueba,
+    )
+
+  it('el profesor de la sección devuelve (control positivo)', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoProfesor(async (q) => {
+      expect(await devolverRevision(q, evaluacion)).toBe(1)
+    })
+  })
+
+  it('sin comentario: 42501', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoProfesor(async (q) => {
+      await expect(
+        devolverRevision(q, evaluacion, { comentario: null }),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
+  it('un comentario de solo espacios: CHECK', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoProfesor(async (q) => {
+      await expect(
+        devolverRevision(q, evaluacion, { comentario: '   ' }),
+      ).rejects.toMatchObject({ driverError: { code: CHECK } })
+    })
+  })
+
+  it('tras reenviar, una nueva devolución exige un comentario nuevo: 42501', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver(PROFESOR, evaluacion, 200)
+    await enviar(AYUDANTE, evaluacion, 200)
+    await comoProfesor(async (q) => {
+      // Sin tocar el comentario: el anterior se borró al reenviar.
+      await expect(
+        q.query(
+          `UPDATE revision_notas
+              SET estado = 'DEVUELTA', actualizado_por = usuario_actual()
+            WHERE evaluacion_id = $1`,
+          [evaluacion],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
+  it('a nombre de otro usuario: 42501', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const ayudante = await idDe(AYUDANTE)
+    await comoProfesor(async (q) => {
+      await expect(
+        devolverRevision(q, evaluacion, { actualizadoPor: `'${ayudante}'` }),
+      ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+    })
+  })
+
+  it('el AYUDANTE no devuelve: su UPDATE no alcanza la evaluación en revisión', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoApp(
+      {
+        universidadId: ids.norte,
+        rol: 'AYUDANTE',
+        usuarioId: await idDe(AYUDANTE),
+      },
+      async (q) => {
+        expect(await devolverRevision(q, evaluacion)).toBe(0)
+      },
+    )
+  })
+
+  it('otro profesor de la universidad no alcanza filas', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    const otro = (await otroProfesorDeNorte()).id
+    await comoProfesor(async (q) => {
+      expect(await devolverRevision(q, evaluacion)).toBe(0)
+    }, otro)
+  })
+
+  it('sin usuario en la sesión no alcanza filas', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoApp({ universidadId: ids.norte, rol: 'PROFESOR' }, async (q) => {
+      expect(
+        await devolverRevision(q, evaluacion, {
+          actualizadoPor: 'actualizado_por',
+        }),
+      ).toBe(0)
+    })
+  })
+
+  it('desde otra universidad no alcanza filas de Norte', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoApp(
+      {
+        universidadId: ids.sur,
+        rol: 'PROFESOR',
+        usuarioId: await idDe(PROFESOR_SUR),
+      },
+      async (q) => {
+        expect(await devolverRevision(q, evaluacion)).toBe(0)
+      },
+    )
+  })
+
+  it('el comentario no se escribe al aprobar (trigger)', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await comoProfesor(async (q) => {
+      await expect(
+        q.query(
+          `UPDATE revision_notas
+              SET estado = 'APROBADA', actualizado_por = usuario_actual(),
+                  comentario_devolucion = 'Aprobada con otro comentario'
+            WHERE evaluacion_id = $1`,
+          [evaluacion],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: CHECK } })
+    })
+  })
+
+  it('el ayudante no cambia el comentario al reenviar (trigger)', async () => {
+    const evaluacion = await evaluacionEnRevision()
+    await devolver(PROFESOR, evaluacion, 200)
+    await comoApp({ universidadId: ids.norte, rol: 'AYUDANTE' }, async (q) => {
+      await expect(
+        q.query(
+          `UPDATE revision_notas
+                SET estado = 'EN_REVISION', comentario_devolucion = 'Listo'
+              WHERE evaluacion_id = $1`,
+          [evaluacion],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: CHECK } })
+    })
+    expect((await devolucionDe(evaluacion))[0].comentario_devolucion).toBe(
+      COMENTARIO,
+    )
+  })
+})
+
+describe('estado de los envíos del ayudante (NOT-09)', () => {
+  async function listarEnvios(
+    correo: string,
+    estado = 200,
+    seccionId = secciones.s1,
+  ) {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .get(`/api/espacio/secciones/${seccionId}/evaluaciones`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return respuesta.body as EvaluacionesSeccion
+  }
+
+  async function comprobar(evaluacion: string, envio: EstadoEnvioNotas) {
+    // Cualquier ayudante activo ve el estado de la evaluación, aunque el
+    // último envío lo haya hecho otro ayudante de la misma sección.
+    for (const correo of [AYUDANTE, otroAyudante]) {
+      const lista = await listarEnvios(correo)
+      expect(
+        lista.evaluaciones.find((e) => e.id === evaluacion)?.envio,
+      ).toEqual(envio)
+      const detalle = await leer(correo, evaluacion, 200)
+      expect(detalle.estado).toBe(envio.estado)
+      expect(detalle.comentarioDevolucion).toBe(envio.comentarioDevolucion)
+    }
+  }
+
+  it('lista y detalle recorren borrador, revisión, devolución editable, reenvío y aprobación', async () => {
+    const evaluacion = await crearEvaluacion()
+    const borrador: EstadoEnvioNotas = {
+      estado: 'BORRADOR',
+      comentarioDevolucion: null,
+    }
+    await comprobar(evaluacion, borrador)
+    // Leer un borrador no crea una revisión ni eventos de escritura.
+    expect(await devolucionDe(evaluacion)).toEqual([])
+    expect(await eventosDe(evaluacion)).toEqual([])
+    const inscritos = await bd.query<{ id: string }[]>(
+      'SELECT usuario_id AS id FROM inscripcion WHERE seccion_id = $1 AND archived_at IS NULL',
+      [secciones.s1],
+    )
+    await guardar(
+      AYUDANTE,
+      evaluacion,
+      notasDe(inscritos.map((a) => [a.id, 5])),
+      200,
+    )
+    await comprobar(evaluacion, borrador)
+    await enviar(AYUDANTE, evaluacion, 200)
+    const enRevision: EstadoEnvioNotas = {
+      estado: 'EN_REVISION',
+      comentarioDevolucion: null,
+    }
+    await comprobar(evaluacion, enRevision)
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 6]]), 409)
+
+    const comentario = 'Revisa la pregunta 3.\nJustifica el resultado de Ana.'
+    const devuelta = await devolver(PROFESOR, evaluacion, 200, { comentario })
+    expect(devuelta.comentarioDevolucion).toBe(comentario)
+    const envioDevuelto: EstadoEnvioNotas = {
+      estado: 'DEVUELTA',
+      comentarioDevolucion: comentario,
+    }
+    await comprobar(evaluacion, envioDevuelto)
+    const corregida = await guardar(
+      otroAyudante,
+      evaluacion,
+      notasDe([[alumnos.ana, 6.5]]),
+      200,
+    )
+    expect(corregida.comentarioDevolucion).toBe(comentario)
+    await comprobar(evaluacion, envioDevuelto)
+    expect(
+      (await filasDe(evaluacion)).find((n) => n.alumno_id === alumnos.ana)
+        ?.valor,
+    ).toBe('6.5')
+
+    const reenviada = await enviar(otroAyudante, evaluacion, 200)
+    expect(reenviada.comentarioDevolucion).toBeNull()
+    await comprobar(evaluacion, enRevision)
+    const aprobada = await aprobar(PROFESOR, evaluacion, 200)
+    expect(aprobada.comentarioDevolucion).toBeNull()
+    await comprobar(evaluacion, {
+      estado: 'APROBADA',
+      comentarioDevolucion: null,
+    })
+    await guardar(AYUDANTE, evaluacion, notasDe([[alumnos.ana, 6.7]]), 409)
+  })
+
+  it.each([ALUMNO, PROFESOR, DIRECTOR, DIRECTOR_SUR])(
+    '%s no recibe estados ni comentarios por el listado de evaluaciones',
+    async (correo) => {
+      const evaluacion = await evaluacionEnRevision()
+      await devolver(PROFESOR, evaluacion, 200)
+      const lista = await listarEnvios(correo)
+      const fila = lista.evaluaciones.find((e) => e.id === evaluacion)
+      expect(fila).toBeDefined()
+      expect(fila).not.toHaveProperty('envio')
+      expect(fila).not.toHaveProperty('comentarioDevolucion')
+    },
+  )
+
+  it('excluye evaluaciones archivadas y no trae envíos de otra sección', async () => {
+    const archivada = await crearEvaluacion(secciones.s1, { archivada: true })
+    const otraSeccion = await crearEvaluacion(secciones.s2)
+    const lista = await listarEnvios(AYUDANTE)
+    expect(lista.evaluaciones.map((e) => e.id)).not.toContain(archivada)
+    expect(lista.evaluaciones.map((e) => e.id)).not.toContain(otraSeccion)
+  })
+
+  it.each<[string, () => string, number]>([
+    ['otra sección', () => ayudanteOtraSeccion, 403],
+    ['otra universidad', () => AYUDANTE_SUR, 404],
+  ])(
+    'un ayudante de %s no lee los comentarios',
+    async (_caso, correo, estado) => {
+      await listarEnvios(correo(), estado)
+    },
+  )
 })

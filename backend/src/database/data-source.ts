@@ -43,7 +43,9 @@ import { CrearRevisionNotas1792700000000 } from './migrations/1792700000000-Crea
 import { EnviarNotasRevision1792710000000 } from './migrations/1792710000000-EnviarNotasRevision.js'
 import { ContarClasesAsistencia1792720000000 } from './migrations/1792720000000-ContarClasesAsistencia.js'
 import { AprobarNotas1792730000000 } from './migrations/1792730000000-AprobarNotas.js'
-import { CrearArchivo1792740000000 } from './migrations/1792740000000-CrearArchivo.js'
+import { DevolverNotas1792740000000 } from './migrations/1792740000000-DevolverNotas.js'
+import { InicializarColoresUniversidad1792750000000 } from './migrations/1792750000000-InicializarColoresUniversidad.js'
+import { CrearArchivo1792770000000 } from './migrations/1792770000000-CrearArchivo.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -108,7 +110,9 @@ export function opcionesDataSource(
       EnviarNotasRevision1792710000000,
       ContarClasesAsistencia1792720000000,
       AprobarNotas1792730000000,
-      CrearArchivo1792740000000,
+      DevolverNotas1792740000000,
+      InicializarColoresUniversidad1792750000000,
+      CrearArchivo1792770000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

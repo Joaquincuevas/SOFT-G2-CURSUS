@@ -14,8 +14,8 @@ const TAMANO_MAXIMO = 20 * 1024 * 1024
 // usar texto del usuario en la llave. subido_como es el rol con el que se
 // subió, para que un alumno descargue lo del equipo docente pero no las
 // entregas de otros alumnos.
-export class CrearArchivo1792740000000 implements MigrationInterface {
-  name = 'CrearArchivo1792740000000'
+export class CrearArchivo1792770000000 implements MigrationInterface {
+  name = 'CrearArchivo1792770000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Las FKs compuestas aseguran que la sección y quien sube sean de la

@@ -117,6 +117,7 @@ npm run seed --workspace=backend
 - La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
 - Los dominios usan `.test`, un TLD reservado, así que ningún correo es real.
 - El período 2026-2 queda activo solo si la universidad no tiene ya otro período activo.
+- Norte usa azul y Sur verde como colores iniciales. El superadmin puede cambiarlos con contraste suficiente; repetir el seed conserva las personalizaciones. Ver [UI-04](docs/ui-04-tema-universidad.md).
 
 | Universidad            | Facultades y carreras                                                                                                                                                      | Período |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |

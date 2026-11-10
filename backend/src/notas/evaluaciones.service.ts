@@ -15,6 +15,10 @@ import {
 } from '../database/base-de-datos.service.js'
 import type { CrearEvaluacionDto } from './crear-evaluacion.dto.js'
 import { bloquearPonderaciones } from './ponderaciones.service.js'
+import {
+  COMENTARIO_DEVOLUCION_NOTAS,
+  ESTADO_REVISION_NOTAS,
+} from './revision-notas.sql.js'
 
 // La base devuelve las fechas como YYYY-MM-DD, sin conversión de zona horaria.
 const COLUMNAS = `e.id, e.nombre, to_char(e.fecha, 'YYYY-MM-DD') AS fecha,
@@ -33,6 +37,18 @@ export class EvaluacionesService {
     seccion: SeccionEspacio,
   ): Promise<EvaluacionesSeccion> {
     const orden = 'ORDER BY e.fecha, e.nombre, e.id'
+    // NOT-09: solo el ayudante recibe este resumen. No se consulta cada
+    // evaluación por separado ni se exponen comentarios al alumno.
+    const columnas =
+      seccion.rol === 'AYUDANTE'
+        ? `${COLUMNAS}, json_build_object(
+          'estado', ${ESTADO_REVISION_NOTAS},
+          'comentarioDevolucion', ${COMENTARIO_DEVOLUCION_NOTAS}) AS envio`
+        : COLUMNAS
+    const revision =
+      seccion.rol === 'AYUDANTE'
+        ? 'LEFT JOIN revision_notas r ON r.evaluacion_id = e.id AND r.universidad_id = e.universidad_id'
+        : ''
     const evaluaciones =
       contexto.rol === 'DIRECTOR'
         ? await this.bd.consultarEnTodasLasUniversidades<Evaluacion>(
@@ -43,7 +59,7 @@ export class EvaluacionesService {
           )
         : await this.bd.consultarEnUniversidad<Evaluacion>(
             contexto,
-            `SELECT ${COLUMNAS} FROM evaluacion e
+            `SELECT ${columnas} FROM evaluacion e ${revision}
               WHERE e.universidad_id = $1 AND e.seccion_id = $2
                 AND e.archived_at IS NULL ${orden}`,
             [seccion.id],
