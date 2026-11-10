@@ -23,6 +23,7 @@ Documentación del proyecto:
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))
 - [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
+- [MAT-04: el profesor sube un material con su categoría y guía de revisión](mat-04-subir-material.md)
 - [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
