@@ -5,13 +5,18 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 import { BLOQUES_HORARIO } from '../gestion/horarios.sql.js'
+import { NOMBRES_PROFESORES } from './profesores.sql.js'
 
-type FilaResumen = Pick<SeccionResumen, 'horario' | 'profesor' | 'ayudantes'>
+type FilaResumen = Pick<
+  SeccionResumen,
+  'horario' | 'profesor' | 'profesores' | 'ayudantes'
+>
 
 const COLUMNAS = `
   ${BLOQUES_HORARIO} AS horario,
   CASE WHEN pr.id IS NULL THEN NULL
        ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor,
+  ${NOMBRES_PROFESORES()} AS profesores,
   (SELECT COALESCE(json_agg(json_build_object('id', u.id, 'nombre', u.nombre)
                             ORDER BY u.nombre, u.id), '[]')
      FROM ayudante_seccion a JOIN usuario u ON u.id = a.usuario_id
