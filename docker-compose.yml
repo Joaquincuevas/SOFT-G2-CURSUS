@@ -32,8 +32,17 @@ services:
       S3_BUCKET: ${S3_BUCKET:-cursus-archivos}
     ports:
       - '127.0.0.1:${S3_PORT:-4566}:4566'
+    # Sintaxis larga con create_host_path: false. Si el script no existe (por
+    # ejemplo, en una rama anterior a MAT-01 y el contenedor se reinicia solo),
+    # Docker no crea en su lugar una carpeta de root que después impide
+    # cambiar de rama: LocalStack simplemente no arranca.
     volumes:
-      - ./infra/localstack/crear-bucket.sh:/etc/localstack/init/ready.d/crear-bucket.sh:ro
+      - type: bind
+        source: ./infra/localstack/crear-bucket.sh
+        target: /etc/localstack/init/ready.d/crear-bucket.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ['CMD-SHELL', 'awslocal s3api head-bucket --bucket $${S3_BUCKET}']
       interval: 5s
