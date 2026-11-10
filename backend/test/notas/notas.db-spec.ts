@@ -361,11 +361,41 @@ describe('GET .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
 
     expect(notas.evaluacion).toMatchObject({ id: evaluacion, ponderacion: 20 })
     expect(notas.alumnos).toEqual([
-      { id: alumnos.base, nombre: 'Alumno Norte', nota: null, estado: null },
-      { id: alumnos.ana, nombre: 'Ana Ávila', nota: null, estado: null },
-      { id: alumnos.bruno, nombre: 'Bruno Díaz', nota: null, estado: null },
-      { id: alumnos.carla, nombre: 'Carla Soto', nota: null, estado: null },
-      { id: alumnos.zoe, nombre: 'Zoe Ruiz', nota: null, estado: null },
+      {
+        id: alumnos.base,
+        nombre: 'Alumno Norte',
+        nota: null,
+        estado: null,
+        recorregida: false,
+      },
+      {
+        id: alumnos.ana,
+        nombre: 'Ana Ávila',
+        nota: null,
+        estado: null,
+        recorregida: false,
+      },
+      {
+        id: alumnos.bruno,
+        nombre: 'Bruno Díaz',
+        nota: null,
+        estado: null,
+        recorregida: false,
+      },
+      {
+        id: alumnos.carla,
+        nombre: 'Carla Soto',
+        nota: null,
+        estado: null,
+        recorregida: false,
+      },
+      {
+        id: alumnos.zoe,
+        nombre: 'Zoe Ruiz',
+        nota: null,
+        estado: null,
+        recorregida: false,
+      },
     ])
   })
 
@@ -383,6 +413,7 @@ describe('GET .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
       nombre: 'Ana Ávila',
       nota: 6.2,
       estado: 'PROPUESTA',
+      recorregida: false,
     })
   })
 
@@ -926,9 +957,9 @@ describe('PUT .../evaluaciones/:evaluacionId/notas (NOT-05)', () => {
     ['el Administrativo de la facultad', ADMIN_INGENIERIA, 403],
     ['el Director (solo lectura)', DIRECTOR, 403],
     ['un ayudante de otra sección', () => ayudanteOtraSeccion, 403],
-    // CASL responde antes que el guard de la sección: un profesor no tiene
-    // update sobre Nota en ninguna universidad.
-    ['un profesor de otra universidad', PROFESOR_SUR, 403],
+    // NOT-15 habilita update Nota al profesor. El guard oculta la sección
+    // de otra universidad antes de llegar a la validación del PUT.
+    ['un profesor de otra universidad', PROFESOR_SUR, 404],
     ['un ayudante de otra universidad', AYUDANTE_SUR, 404],
   ])('%s no guarda notas (%#)', async (_caso, correo, estado) => {
     const evaluacion = await crearEvaluacion()
@@ -2383,11 +2414,12 @@ describe('RLS de la aprobación (NOT-11)', () => {
     const evaluacion = await evaluacionEnRevision()
     await aprobar(PROFESOR, evaluacion, 200)
     await comoProfesor(async (q) => {
-      const [, filas] = await q.query<[unknown[], number]>(
-        `UPDATE nota SET estado = 'PROPUESTA' WHERE evaluacion_id = $1 RETURNING id`,
-        [evaluacion],
-      )
-      expect(Number(filas)).toBe(0)
+      await expect(
+        q.query(
+          `UPDATE nota SET estado = 'PROPUESTA' WHERE evaluacion_id = $1 RETURNING id`,
+          [evaluacion],
+        ),
+      ).rejects.toMatchObject({ driverError: { code: CHECK } })
     })
   })
 })

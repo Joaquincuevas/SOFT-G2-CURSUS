@@ -27,6 +27,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
   const ingresaNotas = rol === 'AYUDANTE'
+  const consultaNotas = ingresaNotas || rol === 'PROFESOR'
   const aviso =
     rol === 'PROFESOR' && datos
       ? avisoPonderaciones(datos.sumaPonderaciones)
@@ -65,7 +66,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                 <th scope="col">Fecha</th>
                 <th scope="col">Ponderación</th>
                 {ingresaNotas && <th scope="col">Estado del envío</th>}
-                {ingresaNotas && <th scope="col">Notas</th>}
+                {consultaNotas && <th scope="col">Notas</th>}
               </tr>
             </thead>
             <tbody>
@@ -91,7 +92,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                       )}
                     </td>
                   )}
-                  {ingresaNotas && (
+                  {consultaNotas && (
                     <td>
                       <button
                         type="button"
@@ -106,12 +107,14 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                       >
                         {elegida === evaluacion.id
                           ? 'Ocultar'
-                          : evaluacion.envio?.estado === 'EN_REVISION' ||
-                              evaluacion.envio?.estado === 'APROBADA'
+                          : rol === 'PROFESOR'
                             ? 'Ver notas'
-                            : evaluacion.envio?.estado === 'DEVUELTA'
-                              ? 'Corregir notas'
-                              : 'Ingresar notas'}
+                            : evaluacion.envio?.estado === 'EN_REVISION' ||
+                                evaluacion.envio?.estado === 'APROBADA'
+                              ? 'Ver notas'
+                              : evaluacion.envio?.estado === 'DEVUELTA'
+                                ? 'Corregir notas'
+                                : 'Ingresar notas'}
                       </button>
                     </td>
                   )}
@@ -130,13 +133,15 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                     <td />
                   </>
                 )}
+                {rol === 'PROFESOR' && <td />}
               </tr>
             </tfoot>
           </table>
         </div>
       )}
-      {ingresaNotas && elegida && (
+      {consultaNotas && elegida && (
         <NotasDeEvaluacion
+          rol={rol}
           key={elegida}
           seccionId={seccionId}
           evaluacionId={elegida}

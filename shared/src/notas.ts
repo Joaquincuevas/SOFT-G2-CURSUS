@@ -147,6 +147,22 @@ export interface NotaAlumno {
   nombre: string
   nota: number | null
   estado: EstadoNota | null
+  // NOT-15: la nota publicada tiene una recorrección en la auditoría.
+  recorregida?: boolean
+}
+
+// La nota que vio el profesor evita sobrescribir otra recorrección realizada
+// desde una segunda pestaña. El servidor conserva la anterior real.
+export interface RecorregirNota {
+  notaAnterior: number
+  notaNueva: number
+  motivo: string
+}
+
+export interface ErrorNotaRecorregida {
+  statusCode: 409
+  message: string
+  notaActual: number
 }
 
 // GET y respuesta del PUT: los alumnos activos de la sección por nombre.

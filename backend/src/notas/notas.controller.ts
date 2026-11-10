@@ -27,6 +27,7 @@ import {
 import { DevolverNotasDto } from './devolver-notas.dto.js'
 import { validarGuardarNotas } from './guardar-notas.dto.js'
 import { NotasService } from './notas.service.js'
+import { RecorregirNotaDto } from './recorregir-nota.dto.js'
 
 // Roles en la sección que leen las notas propuestas. El alumno ve las suyas,
 // publicadas, en NOT-13.
@@ -38,6 +39,28 @@ const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 @Controller('espacio/secciones/:id/evaluaciones/:evaluacionId/notas')
 export class NotasController {
   constructor(private readonly notas: NotasService) {}
+
+  @Puede('update', 'Nota')
+  @IntegranteDeSeccion()
+  @Post(':alumnoId/recorreccion')
+  @HttpCode(200)
+  recorregir(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+    @Param('alumnoId', ParseUUIDPipe) alumnoId: string,
+    @Body() datos: RecorregirNotaDto,
+  ): Promise<NotasEvaluacion> {
+    return this.notas.recorregir(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+      alumnoId,
+      datos,
+    )
+  }
 
   @Puede('read', 'Nota')
   @IntegranteDeSeccion()

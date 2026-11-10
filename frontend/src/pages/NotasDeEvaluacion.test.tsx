@@ -486,7 +486,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
     ).toBeInTheDocument()
   })
 
-  test.each<Rol>(['PROFESOR', 'ALUMNO'])(
+  test.each<Rol>(['ALUMNO'])(
     '%s no ve el botón ni campos de nota',
     async (rol) => {
       const panel = await abrirNotas(rol)

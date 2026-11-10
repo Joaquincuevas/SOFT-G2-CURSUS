@@ -64,6 +64,34 @@
   overflow-x: auto;
 }
 
+.notas__recorregida {
+  display: inline-block;
+  margin-inline-start: 0.5rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 0.3rem;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+}
+
+.notas__recorreccion {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+}
+
+.notas__recorreccion textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 38rem;
+  font: inherit;
+  resize: vertical;
+}
+
 .notas__tabla {
   width: 100%;
   border-collapse: collapse;

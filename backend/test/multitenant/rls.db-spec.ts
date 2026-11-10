@@ -427,10 +427,10 @@ describe('contrato del schema', () => {
     expect(sinTrigger).toEqual([])
   })
 
-  // NOT-11 y NOT-12: las políticas que exigen usuario_actual() son solo las
-  // de la aprobación y la devolución del profesor. Si otra migración empieza a usarlo, este test
+  // NOT-11, NOT-12 y NOT-15: aprobación, devolución y recorrección del
+  // profesor. Si otra migración empieza a usar usuario_actual(), este test
   // obliga a revisar que la API lo fije (fijarUsuario).
-  it('las políticas con usuario_actual() son solo las de la aprobación y la devolución (NOT-11 y NOT-12)', async () => {
+  it('las políticas con usuario_actual() son las de aprobación, devolución y recorrección', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
     >(
@@ -442,6 +442,7 @@ describe('contrato del schema', () => {
     )
     expect(politicas).toEqual([
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
+      { tabla: 'nota', politica: 'pol_nota_recorreccion', comando: 'UPDATE' },
       {
         tabla: 'revision_notas',
         politica: 'pol_revision_notas_aprobacion',

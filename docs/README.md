@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [NOT-15: recorrección de notas publicadas y auditoría](not-15-recorreccion-notas.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
 - [UI-04: tema institucional, contraste y guía de revisión](ui-04-tema-universidad.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
