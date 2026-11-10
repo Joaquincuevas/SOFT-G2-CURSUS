@@ -16,6 +16,7 @@ import {
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import { AlmacenamientoService } from './almacenamiento.service.js'
 import type { PedirSubidaDto } from './pedir-subida.dto.js'
@@ -94,23 +95,31 @@ export class ArchivosService {
       tipo,
       datos.tamano,
     )
-    const [fila] = await this.bd.consultarEnUniversidad<FilaArchivo>(
+    // La RLS exige que subido_por sea el usuario fijado (usuario_actual()).
+    const fila = await this.bd.enTransaccionEnUniversidad(
       contexto,
-      `INSERT INTO archivo
-         (id, universidad_id, seccion_id, subido_por, subido_como, nombre, tipo, tamano, clave)
-       SELECT $5, $1, $2, $3, $4, $6, $7, $8, $9
-        WHERE ${SIGUE_INTEGRANTE}
-       RETURNING ${COLUMNAS}`,
-      [
-        seccion.id,
-        usuarioId,
-        seccion.rol,
-        id,
-        datos.nombre,
-        tipo,
-        datos.tamano,
-        clave,
-      ],
+      async (bd) => {
+        await fijarUsuario(bd, usuarioId)
+        const [insertada] = await bd.query<FilaArchivo>(
+          `INSERT INTO archivo
+             (id, universidad_id, seccion_id, subido_por, subido_como, nombre, tipo, tamano, clave)
+           SELECT $5, $1, $2, $3, $4, $6, $7, $8, $9
+            WHERE ${SIGUE_INTEGRANTE}
+           RETURNING ${COLUMNAS}`,
+          [
+            contexto.universidadId,
+            seccion.id,
+            usuarioId,
+            seccion.rol,
+            id,
+            datos.nombre,
+            tipo,
+            datos.tamano,
+            clave,
+          ],
+        )
+        return insertada
+      },
     )
     if (!fila) {
       throw new ForbiddenException('Ya no perteneces a esta sección')
@@ -126,7 +135,8 @@ export class ArchivosService {
   }
 
   // Confirma la subida cuando el objeto ya está en S3 con el tamaño y el tipo
-  // registrados. Solo quien lo subió. Confirmar de nuevo no cambia nada.
+  // registrados. Solo quien lo subió y mientras siga en la sección. Confirmar
+  // de nuevo no cambia nada.
   async confirmar(
     contexto: ContextoUniversidad,
     usuarioId: string,
@@ -134,6 +144,8 @@ export class ArchivosService {
     archivoId: string,
   ): Promise<ArchivoResumen> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Antes del FOR UPDATE, que también pasa por la política de UPDATE.
+      await fijarUsuario(bd, usuarioId)
       const [archivo] = await bd.query<FilaArchivo>(
         `SELECT ${COLUMNAS} FROM archivo
           WHERE universidad_id = $1 AND seccion_id = $2 AND id = $3
@@ -143,6 +155,14 @@ export class ArchivosService {
       )
       if (!archivo) {
         throw new NotFoundException('El archivo no existe')
+      }
+      // Como al pedir la subida: pudo dejar la sección después del guard.
+      const [{ sigue }] = await bd.query<{ sigue: boolean }>(
+        `SELECT ${SIGUE_INTEGRANTE} AS sigue`,
+        [contexto.universidadId, seccion.id, usuarioId, seccion.rol],
+      )
+      if (!sigue) {
+        throw new ForbiddenException('Ya no perteneces a esta sección')
       }
       if (archivo.subido_at) {
         return resumenDe(archivo)
@@ -175,7 +195,8 @@ export class ArchivosService {
   // URL firmada de descarga de un archivo confirmado de la sección. El
   // profesor, el ayudante y el Director descargan cualquiera; el alumno, solo
   // los que subió él y los del equipo docente (no las entregas de otros
-  // alumnos). Para el resto responde 404, sin revelar que existe.
+  // alumnos). La regla del alumno va en la consulta: si no calza, no hay fila
+  // y responde 404, sin revelar que existe.
   async descarga(
     contexto: ContextoUniversidad,
     usuarioId: string,
@@ -196,15 +217,12 @@ export class ArchivosService {
             contexto,
             `SELECT ${COLUMNAS} FROM archivo
               WHERE universidad_id = $1 AND seccion_id = $2 AND id = $3
-                AND ${vigente}`,
-            [seccion.id, archivoId],
+                AND ${vigente}
+                AND ($4::text <> 'ALUMNO' OR subido_por = $5
+                     OR subido_como <> 'ALUMNO')`,
+            [seccion.id, archivoId, seccion.rol, usuarioId],
           )
-    const puede =
-      archivo &&
-      (seccion.rol !== 'ALUMNO' ||
-        archivo.subido_por === usuarioId ||
-        archivo.subido_como !== 'ALUMNO')
-    if (!puede) {
+    if (!archivo) {
       throw new NotFoundException('El archivo no existe')
     }
     const { url, expiraEn } = await this.almacenamiento.firmarDescarga(

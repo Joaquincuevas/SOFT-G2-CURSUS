@@ -74,11 +74,15 @@ export class CrearArchivo1792770000000 implements MigrationInterface {
     `)
 
     // RLS con el patrón de CrearAnuncio: cada universidad lee sus archivos y
-    // el Director los de todas (ADR 0001); solo el profesor, el ayudante y el
-    // alumno suben o confirman, en su universidad. Que sea integrante de la
-    // sección lo verifica ArchivosService. Sin DELETE: nada se elimina.
+    // el Director los de todas (ADR 0001). Solo el profesor, el ayudante y el
+    // alumno suben o confirman, en su universidad, y solo archivos propios:
+    // subido_por debe ser el usuario que fijó la API (usuario_actual(), ver
+    // fijarUsuario), así nadie registra ni modifica un archivo ajeno, ni con
+    // SQL directo. Que sea integrante de la sección lo verifica
+    // ArchivosService. Sin DELETE: nada se elimina.
     const puedeEscribir = `universidad_id = universidad_actual()
-      AND rol_actual() IN ('PROFESOR', 'AYUDANTE', 'ALUMNO')`
+      AND rol_actual() IN ('PROFESOR', 'AYUDANTE', 'ALUMNO')
+      AND subido_por = usuario_actual()`
     await queryRunner.query(
       `GRANT SELECT, INSERT, UPDATE ON archivo TO ${ROL_APP}`,
     )
