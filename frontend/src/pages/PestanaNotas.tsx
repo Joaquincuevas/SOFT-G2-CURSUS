@@ -12,6 +12,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
+import { HistorialDeNota } from './HistorialDeNota'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
@@ -29,6 +30,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<Evaluacion | null>(null)
+  const [historial, setHistorial] = useState<string | null>(null)
   const [avisoEdicion, setAvisoEdicion] = useState(false)
   const ingresaNotas = rol === 'AYUDANTE'
   const editaEvaluaciones = rol === 'PROFESOR'
@@ -71,7 +73,7 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                 <th scope="col">Ponderación</th>
                 {ingresaNotas && <th scope="col">Estado del envío</th>}
                 {ingresaNotas && <th scope="col">Notas</th>}
-                {editaEvaluaciones && <th scope="col">Edición</th>}
+                {editaEvaluaciones && <th scope="col">Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -98,6 +100,25 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
                           Editar
                         </button>
                       )}
+                      <div>
+                        <button
+                          className="notas__enlace"
+                          type="button"
+                          aria-label={`Historial de notas de ${evaluacion.nombre}`}
+                          aria-expanded={historial === evaluacion.id}
+                          onClick={() =>
+                            setHistorial(
+                              historial === evaluacion.id
+                                ? null
+                                : evaluacion.id,
+                            )
+                          }
+                        >
+                          {historial === evaluacion.id
+                            ? 'Ocultar historial'
+                            : 'Ver historial'}
+                        </button>
+                      </div>
                     </td>
                   )}
                   {ingresaNotas && (
@@ -175,6 +196,9 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
             recargar()
           }}
         />
+      )}
+      {editaEvaluaciones && historial && (
+        <HistorialDeNota key={historial} ruta={`${ruta}/${historial}/notas`} />
       )}
       {avisoEdicion && (
         <p className="notas__aviso" role="status">

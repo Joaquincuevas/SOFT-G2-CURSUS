@@ -1,5 +1,6 @@
 import type {
   GuardarNotas,
+  HistorialNota,
   NotasEvaluacion,
   Rol,
   SeccionEspacio,
@@ -9,6 +10,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -51,6 +53,26 @@ export class NotasController {
       throw new ForbiddenException()
     }
     return this.notas.obtener(contexto, seccion, evaluacionId)
+  }
+
+  @Puede('read', 'Nota')
+  @IntegranteDeSeccion()
+  @Get(':alumnoId/historial')
+  @Header('Cache-Control', 'no-store')
+  historial(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+    @Param('alumnoId', ParseUUIDPipe) alumnoId: string,
+  ): Promise<HistorialNota> {
+    return this.notas.historial(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+      alumnoId,
+    )
   }
 
   // PUT: guardar las mismas notas otra vez no cambia nada ni deja eventos.
