@@ -30,7 +30,7 @@ La vista de la sección (ESP-04) suma la pestaña **Entregas** (`PestanaEntregas
 
 El profesor de la sección ve además el formulario **Nueva actividad**: Título, Instrucciones, Fecha límite y Hora límite, todos obligatorios, con el aviso de que la hora es de Chile continental. Al crear una actividad, el formulario se limpia, aparece "Actividad creada" y la lista se actualiza. Un 400 muestra el mensaje de la API (por ejemplo, que el plazo ya pasó) y conserva lo escrito.
 
-La pestaña usa el mismo mecanismo que las otras (`CONTENIDO` en `VistaSeccion.tsx`, con `PropsPestana`). Va aparte de **Material**, como en el Figma: Material es para los archivos del curso (sílabo y materiales, MAT-02 y MAT-04) y sigue deshabilitada. El Figma llama a esta pestaña "Entregar Trabajo" en la vista del alumno; aquí se usa "Entregas" para todos los roles. MAT-09 y MAT-10 agregarán aquí las entregas y su descarga.
+La pestaña usa el mismo mecanismo que las otras (`CONTENIDO` en `VistaSeccion.tsx`, con `PropsPestana`). Va aparte de **Material**, como en el Figma: Material contiene los archivos del curso, incluido el sílabo de MAT-02. El Figma llama a esta pestaña "Entregar Trabajo" en la vista del alumno; aquí se usa "Entregas" para todos los roles. MAT-09 y MAT-10 agregarán aquí las entregas y su descarga.
 
 ## API
 
@@ -97,5 +97,5 @@ npm run build
   - la lista por plazo, con `cerrada: true` para una actividad vencida, sin las archivadas, y que la lean el ayudante, el alumno y el Director;
   - en la base: RLS aísla las actividades por universidad y solo deja insertar al profesor (con control positivo), los CHECK rechazan título o instrucciones vacíos, y no hay `DELETE` ni ruta para borrar.
 - `backend/test/materiales/actividades.e2e-spec.ts`: 403 al crear por rol, 403 al leer para el Administrativo, 401 sin sesión, 400 con un id inválido y sin ruta `DELETE`.
-- `frontend/src/pages/PestanaEntregas.test.tsx`: la lista con el plazo en hora de Chile, la etiqueta Abierta o Cerrada y los saltos de línea; crear, el aviso y la recarga; el mensaje del 400; la lista sin formulario para el ayudante y el alumno; el estado vacío y el error de carga. `VistaSeccion.test.tsx` comprueba que la pestaña Entregas aparece al final y queda habilitada, y que Material sigue deshabilitada.
+- `frontend/src/pages/PestanaEntregas.test.tsx`: la lista con el plazo en hora de Chile, la etiqueta Abierta o Cerrada y los saltos de línea; crear, el aviso y la recarga; el mensaje del 400; la lista sin formulario para el ayudante y el alumno; el estado vacío y el error de carga. `VistaSeccion.test.tsx` comprueba que Entregas aparece al final y queda habilitada.
 - `src/auth/permisos.spec.ts` incluye `Actividad` en la matriz; `esquema-inicial.db-spec.ts` revierte la migración nueva, y `rls.db-spec.ts` agrega la tabla al contrato del schema.

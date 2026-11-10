@@ -11,6 +11,7 @@ import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
+import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
@@ -31,6 +32,7 @@ export interface PropsPestana {
 
 // Contenido de cada pestaña ya implementada; las demás siguen deshabilitadas.
 const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
+  Material: PestanaMaterial,
   Asistencia: PestanaAsistencia,
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,

@@ -1,0 +1,99 @@
+.silabo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.silabo__formulario {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.silabo__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.silabo__archivo {
+  max-width: 100%;
+  font: var(--font-body);
+  color: var(--color-text-primary);
+}
+
+.silabo__boton {
+  min-height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  font: var(--font-button);
+  color: var(--color-background);
+  cursor: pointer;
+}
+
+.silabo__boton--secundario {
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+.silabo__boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.silabo__ayuda,
+.silabo__error,
+.silabo__aviso {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.silabo__ayuda,
+.silabo__version time {
+  font: var(--font-caption);
+  color: var(--color-text-secondary);
+}
+
+.silabo__error,
+.silabo__aviso {
+  font: var(--font-body);
+}
+
+.silabo__error {
+  color: var(--color-error);
+}
+
+.silabo__aviso {
+  color: var(--color-success);
+}
+
+.silabo__historial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.silabo__version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.silabo__titulo {
+  margin: 0 0 var(--space-1);
+  font: var(--font-button);
+  color: var(--color-text-primary);
+}

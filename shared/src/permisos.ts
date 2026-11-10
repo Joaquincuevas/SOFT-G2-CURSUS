@@ -31,6 +31,7 @@ export type SujetoTabla =
   | 'Anuncio'
   | 'Evaluacion'
   | 'Actividad'
+  | 'Silabo'
   | 'Nota'
   | 'RevisionNotas'
 
@@ -63,6 +64,12 @@ const LEEN_EVALUACIONES: readonly Rol[] = [
 // NOT-05: el alumno ve sus notas publicadas en NOT-13.
 const LEEN_NOTAS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 const LEEN_ACTIVIDADES: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
+const LEEN_SILABO: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
   'ALUMNO',
@@ -157,6 +164,12 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // El Administrativo no recibe nada. Nadie las borra.
   if (usuario.rol === 'PROFESOR') can('create', 'Actividad')
   if (LEEN_ACTIVIDADES.includes(usuario.rol)) can('read', 'Actividad')
+
+  // MAT-02: el sílabo pertenece al curso y su período, no al profesor que lo
+  // cargó. Cualquier profesor del curso puede agregar una versión; sus
+  // integrantes y el Director pueden consultar el historial.
+  if (usuario.rol === 'PROFESOR') can('create', 'Silabo')
+  if (LEEN_SILABO.includes(usuario.rol)) can('read', 'Silabo')
 
   // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante como
   // propuesta (el controlador exige además que sea ayudante de esa sección) y

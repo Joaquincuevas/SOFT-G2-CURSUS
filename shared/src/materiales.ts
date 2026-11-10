@@ -27,3 +27,10 @@ export interface CrearActividad {
   // HH:mm.
   hora: string
 }
+
+export const MAX_TAMANO_SILABO_BYTES = 10 * 1024 * 1024
+
+export interface VersionSilabo {
+  version: number
+  subidoEn: string
+}

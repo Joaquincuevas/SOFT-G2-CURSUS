@@ -24,6 +24,7 @@ const SUJETOS: SujetoTabla[] = [
   'Evaluacion',
   'Anuncio',
   'Actividad',
+  'Silabo',
   'Nota',
   'RevisionNotas',
 ]
@@ -147,6 +148,17 @@ const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
   ALUMNO: LECTURA,
 }
 for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
+
+// MAT-02: carga el profesor del curso; leen sus integrantes y el Director.
+const SILABO: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: LECTURA,
+  ALUMNO: LECTURA,
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Silabo = SILABO[rol]
 
 // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante; leen el
 // profesor y el Director. El alumno (NOT-13) y el Administrativo no reciben

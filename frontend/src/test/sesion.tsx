@@ -159,6 +159,8 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
   ],
   // Actividades de entrega de la sección (MAT-08).
   [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
+  // Historial del sílabo de la sección (MAT-02).
+  [/^\/api\/espacio\/secciones\/[^/]+\/silabo$/, () => []],
 ]
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh
