@@ -2,6 +2,7 @@ import type {
   AyudanteQuitado,
   CursoDetalle as DatosCurso,
   HorarioSeccion,
+  ProfesorResumen,
   SeccionDetalle,
 } from '@cursus/shared'
 import { useState } from 'react'
@@ -199,8 +200,10 @@ function Detalle({ id }: { id: string }) {
   // cambiados aquí (id de sección → nombres), que reemplazan a los de la
   // tabla sin volver a pedir el curso.
   const [profesoresEn, setProfesoresEn] = useState<SeccionDetalle | null>(null)
+  // Con un backend anterior, el primero es también la asignación que usa el
+  // diálogo al reabrirlo.
   const [profesoresCambiados, setProfesoresCambiados] = useState<
-    Record<string, string[]>
+    Record<string, ProfesorResumen[]>
   >({})
   // GES-14: sección de la que se está quitando un ayudante. Se toma de la
   // tabla en cada render.
@@ -269,7 +272,9 @@ function Detalle({ id }: { id: string }) {
     (!curso.universidadId || curso.universidadId === user.universidadId)
   const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
     ...seccion,
-    profesores: profesoresCambiados[seccion.id] ?? nombresProfesores(seccion),
+    profesores:
+      profesoresCambiados[seccion.id]?.map((p) => p.nombre) ??
+      nombresProfesores(seccion),
     alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
     ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
     horario: horariosGuardados[seccion.id]
@@ -429,9 +434,14 @@ function Detalle({ id }: { id: string }) {
             [...curso.secciones, ...nuevas].find(
               (s) => s.id === profesoresEn.id,
             )?.profesores === undefined
-              ? profesoresEn.profesorId && profesoresEn.profesor
-                ? { id: profesoresEn.profesorId, nombre: profesoresEn.profesor }
-                : null
+              ? profesoresEn.id in profesoresCambiados
+                ? (profesoresCambiados[profesoresEn.id][0] ?? null)
+                : profesoresEn.profesorId && profesoresEn.profesor
+                  ? {
+                      id: profesoresEn.profesorId,
+                      nombre: profesoresEn.profesor,
+                    }
+                  : null
               : undefined
           }
           onCambio={(profesores) =>
