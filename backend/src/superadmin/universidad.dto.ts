@@ -1,6 +1,7 @@
 import {
   type ArchivarUniversidad,
   type CrearUniversidad,
+  colorConContraste,
   type EditarUniversidad,
   FORMATO_COLOR,
   FORMATO_DOMINIO_CORREO,
@@ -9,6 +10,7 @@ import {
   LARGO_MOTIVO_ARCHIVAR,
   LARGO_NOMBRE_FACULTAD,
   LARGO_NOMBRE_UNIVERSIDAD,
+  MENSAJE_COLOR_CONTRASTE,
 } from '@cursus/shared'
 import { Transform } from 'class-transformer'
 import {
@@ -17,6 +19,7 @@ import {
   IsString,
   Matches,
   MaxLength,
+  ValidateBy,
 } from 'class-validator'
 
 // GES-23: bodies de la gestión de universidades y facultades del superadmin.
@@ -28,6 +31,19 @@ const nombre = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().replace(/\s+/gu, ' ') : value
 const minusculas = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value
+
+const ConContraste = () =>
+  ValidateBy({
+    name: 'colorConContraste',
+    validator: {
+      // El formato se informa con @Matches; este error explica el contraste.
+      validate: (valor: unknown) =>
+        typeof valor !== 'string' ||
+        !FORMATO_COLOR.test(valor) ||
+        colorConContraste(valor),
+      defaultMessage: () => MENSAJE_COLOR_CONTRASTE,
+    },
+  })
 
 export class CrearUniversidadDto implements CrearUniversidad {
   @Transform(nombre)
@@ -49,6 +65,7 @@ export class CrearUniversidadDto implements CrearUniversidad {
   @Matches(FORMATO_COLOR, {
     message: 'El color debe tener el formato #rrggbb',
   })
+  @ConContraste()
   color!: string
 }
 
@@ -76,6 +93,7 @@ export class EditarUniversidadDto implements EditarUniversidad {
   @Matches(FORMATO_COLOR, {
     message: 'El color debe tener el formato #rrggbb',
   })
+  @ConContraste()
   color?: string
 }
 

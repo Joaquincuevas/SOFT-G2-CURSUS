@@ -175,6 +175,7 @@ describe('GET /api/auth/yo', () => {
       nombre: 'Director Norte',
       rol: 'DIRECTOR',
       universidadNombre: 'Directorio',
+      universidadColor: null,
       facultadNombre: null,
     },
     {
@@ -182,6 +183,7 @@ describe('GET /api/auth/yo', () => {
       nombre: 'Administrativo Ingeniería Norte',
       rol: 'ADMINISTRATIVO',
       universidadNombre: 'Universidad Demo Norte',
+      universidadColor: '#1b4f72',
       facultadNombre: 'Facultad de Ingeniería',
     },
     {
@@ -189,6 +191,7 @@ describe('GET /api/auth/yo', () => {
       nombre: 'Profesor Norte',
       rol: 'PROFESOR',
       universidadNombre: 'Universidad Demo Norte',
+      universidadColor: '#1b4f72',
       facultadNombre: 'Facultad de Ingeniería',
     },
     {
@@ -196,6 +199,7 @@ describe('GET /api/auth/yo', () => {
       nombre: 'Ayudante Norte',
       rol: 'AYUDANTE',
       universidadNombre: 'Universidad Demo Norte',
+      universidadColor: '#1b4f72',
       facultadNombre: 'Facultad de Ingeniería',
     },
     {
@@ -203,6 +207,7 @@ describe('GET /api/auth/yo', () => {
       nombre: 'Alumno Sur',
       rol: 'ALUMNO',
       universidadNombre: 'Universidad Demo Sur',
+      universidadColor: '#0a5c36',
       facultadNombre: 'Facultad de Ciencias de la Salud',
     },
   ]
@@ -250,6 +255,33 @@ describe('GET /api/auth/yo', () => {
       expect((respuesta.body as UsuarioSesion).periodoActivo).toBeNull()
     } finally {
       await marcarActivo(true)
+    }
+  })
+
+  it('lee el color vigente de la universidad sin cambiar el token', async () => {
+    const token = await tokenDe('alumno@sur.cursus.test')
+    await bd.query(
+      `UPDATE universidad SET color = '#6b2d84' WHERE dominio_correo = 'sur.cursus.test'`,
+    )
+    try {
+      const respuesta = await yo(token).expect(200)
+      expect((respuesta.body as UsuarioSesion).universidadColor).toBe('#6b2d84')
+      expect(
+        (
+          (await yo(await tokenDe('profesor@norte.cursus.test')).expect(200))
+            .body as UsuarioSesion
+        ).universidadColor,
+      ).toBe('#1b4f72')
+      expect(
+        (
+          (await yo(await tokenDe('director@sur.cursus.test')).expect(200))
+            .body as UsuarioSesion
+        ).universidadColor,
+      ).toBeNull()
+    } finally {
+      await bd.query(
+        `UPDATE universidad SET color = '#0a5c36' WHERE dominio_correo = 'sur.cursus.test'`,
+      )
     }
   })
 

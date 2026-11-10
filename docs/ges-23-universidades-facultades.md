@@ -10,7 +10,7 @@ El superadmin crea, edita y archiva universidades y facultades desde su **vista 
 - **Dominio:**
   - Solo se cambia mientras la universidad no tiene usuarios. El login identifica la universidad por el dominio del correo, así que cambiarlo dejaría sin acceso a todos sus usuarios.
   - Tampoco puede ser el dominio del correo de un superadmin.
-- **Color:** las universidades existentes quedan con el color de CURSUS (`#1b4f72`). Asignarles colores distintos, usar el color como tema y revisar su contraste es UI-04.
+- **Color:** [UI-04](ui-04-tema-universidad.md) inicializa colores distintos en las universidades existentes que conservaban el azul por defecto, aplica el tema por sesión y rechaza colores sin contraste suficiente al crear o editar. Conserva las personalizaciones del superadmin.
 - **Archivar una universidad:**
   - Sus usuarios ya no pueden iniciar sesión, y las sesiones abiertas se cortan en la siguiente petición, como las de un usuario archivado.
   - Si un superadmin trabajaba en ella, vuelve a la vista global.
