@@ -33,6 +33,7 @@ const TABLAS = [
   'inscripcion',
   'lectura_anuncio',
   'limite_login',
+  'material',
   'nota',
   'nota_cambio',
   'periodo',
@@ -183,8 +184,26 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // MAT-04: quita material, su trigger y la restricción que agregó a
+    // archivo. Revertir, aplicar y revertir de nuevo deja lo mismo. Desde
+    // aquí, SIN_MATERIAL es lo que siguen esperando las migraciones
+    // anteriores.
+    await bd.undoLastMigration()
+    const SIN_MATERIAL = TABLAS.filter((tabla) => tabla !== 'material')
+    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
+    const [restosMaterial] = await bd.query<{ restos: string }[]>(
+      `SELECT (SELECT count(*) FROM pg_proc WHERE proname = 'validar_material')
+            + (SELECT count(*) FROM pg_constraint
+                WHERE conname = 'uq_archivo_id_universidad') AS restos`,
+    )
+    expect(Number(restosMaterial.restos)).toBe(0)
+    await bd.runMigrations()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
+
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
-    const SIN_EDICION_EVALUACION = TABLAS.filter(
+    const SIN_EDICION_EVALUACION = SIN_MATERIAL.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
@@ -248,6 +267,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // MAT-04 sale antes que NOT-03.
+    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
     await bd.undoLastMigration()
@@ -656,6 +677,7 @@ describe('migraciones', () => {
         'facultad',
         'horario_seccion',
         'inscripcion',
+        'material',
         'nota',
         'seccion',
         'seccion_profesor',
