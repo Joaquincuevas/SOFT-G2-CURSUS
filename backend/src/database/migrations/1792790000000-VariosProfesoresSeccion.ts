@@ -105,8 +105,8 @@ const correccionAsistencia = (condicion: string) => `
       $$
     `
 
-export class VariosProfesoresSeccion1792780000000 implements MigrationInterface {
-  name = 'VariosProfesoresSeccion1792780000000'
+export class VariosProfesoresSeccion1792790000000 implements MigrationInterface {
+  name = 'VariosProfesoresSeccion1792790000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Igual que ayudante_seccion (GES-12): FKs compuestas por universidad,

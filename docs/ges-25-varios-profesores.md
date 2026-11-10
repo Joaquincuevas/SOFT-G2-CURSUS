@@ -50,7 +50,7 @@ Las tres exigen `@Puede('update', 'Seccion')` (el Administrativo de la facultad)
 
 ## Datos
 
-Migración `1792780000000-VariosProfesoresSeccion`:
+Migración `1792790000000-VariosProfesoresSeccion`:
 
 - **`seccion_profesor`**, igual que `ayudante_seccion`:
   - FKs compuestas `(seccion_id, universidad_id)` y `(usuario_id, universidad_id)`;
