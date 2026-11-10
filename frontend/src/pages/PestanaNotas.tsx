@@ -11,6 +11,8 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
+import { ComentarioDevolucion } from './ComentarioDevolucion'
+import { ESTADO_REVISION } from './estados-notas'
 import './PestanaNotas.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -22,7 +24,7 @@ import type { PropsPestana } from './VistaSeccion'
 // profesor las revisa en NOT-10.
 export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
-  const [datos, recargar] = useDatos<EvaluacionesSeccion>(ruta)
+  const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
   const ingresaNotas = rol === 'AYUDANTE'
   const aviso =
@@ -55,57 +57,109 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
       ) : datos.evaluaciones.length === 0 ? (
         <p className="dashboard__texto">Aún no hay evaluaciones</p>
       ) : (
-        <table className="notas__tabla">
-          <thead>
-            <tr>
-              <th scope="col">Evaluación</th>
-              <th scope="col">Fecha</th>
-              <th scope="col">Ponderación</th>
-              {ingresaNotas && <th scope="col">Notas</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {datos.evaluaciones.map((evaluacion) => (
-              <tr key={evaluacion.id}>
-                <td>{evaluacion.nombre}</td>
-                <td>{evaluacion.fecha}</td>
-                <td>{evaluacion.ponderacion} %</td>
+        <div className="notas__listado">
+          <table className="notas__tabla">
+            <thead>
+              <tr>
+                <th scope="col">Evaluación</th>
+                <th scope="col">Fecha</th>
+                <th scope="col">Ponderación</th>
+                {ingresaNotas && <th scope="col">Estado del envío</th>}
+                {ingresaNotas && <th scope="col">Notas</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {datos.evaluaciones.map((evaluacion) => (
+                <tr key={evaluacion.id}>
+                  <td>{evaluacion.nombre}</td>
+                  <td>{evaluacion.fecha}</td>
+                  <td>{evaluacion.ponderacion} %</td>
+                  {ingresaNotas && (
+                    <td>
+                      <span
+                        className="notas__estado-envio"
+                        data-estado={evaluacion.envio?.estado}
+                      >
+                        {evaluacion.envio
+                          ? ESTADO_REVISION[evaluacion.envio.estado]
+                          : 'Estado no disponible'}
+                      </span>
+                      {evaluacion.envio?.estado === 'DEVUELTA' && (
+                        <ComentarioDevolucion
+                          comentario={evaluacion.envio.comentarioDevolucion}
+                        />
+                      )}
+                    </td>
+                  )}
+                  {ingresaNotas && (
+                    <td>
+                      <button
+                        type="button"
+                        className="notas__enlace"
+                        aria-pressed={elegida === evaluacion.id}
+                        aria-label={`Notas de ${evaluacion.nombre}`}
+                        onClick={() =>
+                          setElegida(
+                            elegida === evaluacion.id ? null : evaluacion.id,
+                          )
+                        }
+                      >
+                        {elegida === evaluacion.id
+                          ? 'Ocultar'
+                          : evaluacion.envio?.estado === 'EN_REVISION' ||
+                              evaluacion.envio?.estado === 'APROBADA'
+                            ? 'Ver notas'
+                            : evaluacion.envio?.estado === 'DEVUELTA'
+                              ? 'Corregir notas'
+                              : 'Ingresar notas'}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row" colSpan={2}>
+                  Suma de ponderaciones
+                </th>
+                <td>{datos.sumaPonderaciones} %</td>
                 {ingresaNotas && (
-                  <td>
-                    <button
-                      type="button"
-                      className="notas__enlace"
-                      aria-pressed={elegida === evaluacion.id}
-                      aria-label={`Notas de ${evaluacion.nombre}`}
-                      onClick={() =>
-                        setElegida(
-                          elegida === evaluacion.id ? null : evaluacion.id,
-                        )
-                      }
-                    >
-                      {elegida === evaluacion.id ? 'Ocultar' : 'Ingresar notas'}
-                    </button>
-                  </td>
+                  <>
+                    <td />
+                    <td />
+                  </>
                 )}
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <th scope="row" colSpan={2}>
-                Suma de ponderaciones
-              </th>
-              <td>{datos.sumaPonderaciones} %</td>
-              {ingresaNotas && <td />}
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       )}
       {ingresaNotas && elegida && (
         <NotasDeEvaluacion
           key={elegida}
           seccionId={seccionId}
           evaluacionId={elegida}
+          alActualizar={(notas) => {
+            if (!datos) return
+            fijar({
+              ...datos,
+              evaluaciones: datos.evaluaciones.map((evaluacion) =>
+                evaluacion.id === notas.evaluacion.id
+                  ? {
+                      ...evaluacion,
+                      envio: {
+                        estado: notas.estado,
+                        comentarioDevolucion:
+                          notas.estado === 'DEVUELTA'
+                            ? (notas.comentarioDevolucion ?? null)
+                            : null,
+                      },
+                    }
+                  : evaluacion,
+              ),
+            })
+          }}
         />
       )}
     </section>

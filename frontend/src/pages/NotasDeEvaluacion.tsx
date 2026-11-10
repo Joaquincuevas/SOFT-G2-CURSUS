@@ -11,15 +11,26 @@ import {
   type NotaAlumno,
   type NotasEvaluacion,
 } from '@cursus/shared'
-import { useId, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useState,
+  type FormEvent,
+} from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
+import { ComentarioDevolucion } from './ComentarioDevolucion'
+import { ESTADO_REVISION } from './estados-notas'
 
 interface Props {
   seccionId: string
   evaluacionId: string
+  // NOT-09: actualiza el resumen de la lista con lo que acaba de responder
+  // el servidor, sin recargar ni desmontar el formulario y perder su edición.
+  alActualizar?: (notas: NotasEvaluacion) => void
   // NOT-11 y NOT-12: en la vista de pendientes del profesor, muestra
   // "Aprobar y publicar" y "Devolver" mientras la evaluación está en
   // revisión. Recibe el aviso para quien la abrió (éxito o el 409 de estado),
@@ -38,11 +49,18 @@ interface Props {
 export function NotasDeEvaluacion({
   seccionId,
   evaluacionId,
+  alActualizar,
   alRevisar,
 }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
   const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
   const [aviso, setAviso] = useState<string | null>(null)
+  const notificarLectura = useEffectEvent((notas: NotasEvaluacion) =>
+    alActualizar?.(notas),
+  )
+  useEffect(() => {
+    if (datos) notificarLectura(datos)
+  }, [datos])
 
   if (datos === undefined) {
     return <Cargando texto="Cargando notas…" />
@@ -66,6 +84,9 @@ export function NotasDeEvaluacion({
       <p className="dashboard__texto">
         Estado: {ESTADO_REVISION[datos.estado]}
       </p>
+      {datos.estado === 'DEVUELTA' && (
+        <ComentarioDevolucion comentario={datos.comentarioDevolucion} />
+      )}
       {datos.alumnos.length === 0 ? (
         <p className="dashboard__texto">
           La sección no tiene alumnos inscritos
@@ -320,13 +341,6 @@ function motivoDe(texto: string): string | null {
     ? motivoNotaInvalida(leerNota(limpio))
     : 'formato'
   return motivo && MENSAJES_NOTA_INVALIDA[motivo]
-}
-
-const ESTADO_REVISION: Record<EstadoRevisionNotas, string> = {
-  BORRADOR: 'Borrador',
-  EN_REVISION: 'En revisión',
-  APROBADA: 'Aprobada',
-  DEVUELTA: 'Devuelta',
 }
 
 // NOT-08: el ayudante escribe y envía solo en borrador o devuelta.

@@ -32,6 +32,9 @@ export interface Evaluacion {
   // YYYY-MM-DD, dentro del período del curso.
   fecha: string
   ponderacion: number
+  // NOT-09: solo en el listado del ayudante de la sección. Los demás roles
+  // no reciben el estado ni el comentario por el listado de evaluaciones.
+  envio?: EstadoEnvioNotas
 }
 
 // GET: evaluaciones activas por fecha, con la suma de sus ponderaciones (el
@@ -119,7 +122,7 @@ export function esNotaValida(valor: unknown): valor is number {
 
 // NOT-07: estado de las notas de una evaluación frente al profesor. El
 // ayudante guarda un BORRADOR, que el profesor no ve como pendiente; enviar a
-// revisión (NOT-08), aprobar (NOT-09) y devolver (NOT-12) son otras tarjetas.
+// revisión (NOT-08), aprobar (NOT-11) y devolver (NOT-12) son otras tarjetas.
 export const ESTADOS_REVISION_NOTAS = [
   'BORRADOR',
   'EN_REVISION',
@@ -128,6 +131,14 @@ export const ESTADOS_REVISION_NOTAS = [
 ] as const
 
 export type EstadoRevisionNotas = (typeof ESTADOS_REVISION_NOTAS)[number]
+
+// Estado compartido por los ayudantes activos de la sección, sin notas ni
+// identidades de los alumnos. Sin un envío previo, el estado es BORRADOR.
+export interface EstadoEnvioNotas {
+  estado: EstadoRevisionNotas
+  // Solo mientras está DEVUELTA; al reenviar, el comentario actual se limpia.
+  comentarioDevolucion: string | null
+}
 
 // Un alumno activo de la sección con su nota en la evaluación, o null si aún
 // no tiene.
@@ -143,6 +154,9 @@ export interface NotasEvaluacion {
   evaluacion: Evaluacion
   // BORRADOR también si el ayudante aún no guarda nada.
   estado: EstadoRevisionNotas
+  // NOT-09: opcional para compatibilidad con respuestas anteriores. La API
+  // actual siempre lo devuelve, a null salvo que el estado sea DEVUELTA.
+  comentarioDevolucion?: string | null
   alumnos: NotaAlumno[]
 }
 
