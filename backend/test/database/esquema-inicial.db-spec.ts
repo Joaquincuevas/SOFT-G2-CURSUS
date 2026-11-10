@@ -17,6 +17,7 @@ const TABLAS = [
   'actividad',
   'anuncio',
   'anuncio_cambio',
+  'archivo',
   'asignacion_cambio',
   'asistencia',
   'asistencia_cambio',
@@ -181,8 +182,13 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // CrearArchivo (MAT-01) solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ARCHIVO = TABLAS.filter((tabla) => tabla !== 'archivo')
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
+
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
-    const SIN_EDICION_EVALUACION = TABLAS.filter(
+    const SIN_EDICION_EVALUACION = SIN_ARCHIVO.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
@@ -574,6 +580,7 @@ describe('migraciones', () => {
       [
         'actividad',
         'anuncio',
+        'archivo',
         'asistencia',
         'ayudante_seccion',
         'carrera',
