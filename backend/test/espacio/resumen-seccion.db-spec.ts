@@ -205,6 +205,7 @@ describe('GET /api/espacio/secciones/:id/resumen (ESP-04)', () => {
         { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
       ],
       profesor: await usuarioDe(PROFESOR),
+      profesores: [(await usuarioDe(PROFESOR)).nombre],
       ayudantes,
     } satisfies SeccionResumen)
   })
