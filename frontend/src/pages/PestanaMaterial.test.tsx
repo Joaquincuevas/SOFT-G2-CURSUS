@@ -111,6 +111,8 @@ interface Escenario {
   pedir?: () => unknown
   confirmar?: () => unknown
   registrar?: (init?: RequestInit) => unknown
+  // GET del listado; por defecto, materiales.
+  listar?: () => unknown
 }
 
 // Abre la pestaña Material de la sección. `llamadas` anota cada petición a la
@@ -121,6 +123,7 @@ async function abrirMaterial({
   pedir = () => json(SUBIDA, 201),
   confirmar = () => SUBIDA.archivo,
   registrar = () => json({ ...EXISTENTE, id: 'material-1' }, 201),
+  listar = () => materiales,
 }: Escenario = {}) {
   const llamadas: string[] = []
   const bodies: Record<string, unknown> = {}
@@ -138,7 +141,7 @@ async function abrirMaterial({
     [ARCHIVOS]: anotar(ARCHIVOS, pedir),
     [CONFIRMAR]: anotar(CONFIRMAR, confirmar),
     [MATERIALES]: anotar(MATERIALES, (init) =>
-      init?.method === 'POST' ? registrar(init) : materiales,
+      init?.method === 'POST' ? registrar(init) : listar(),
     ),
   })
   const pestana = await screen.findByRole('tab', { name: 'Material' })
@@ -529,6 +532,66 @@ describe('pestaña Material (MAT-04)', () => {
       // Una sola subida a S3, un solo archivo pedido y un solo material.
       expect(XhrFalso.enviadas).toHaveLength(1)
       expect(llamadas.filter((l) => l === `POST ${ARCHIVOS}`)).toHaveLength(1)
+      expect(guardados).toHaveLength(1)
+    })
+
+    test('si el listado no responde al verificar el 409, conserva el archivo y el siguiente intento verifica sin subir de nuevo', async () => {
+      const guardados: Material[] = []
+      let intento = 0
+      let listadoCaido = false
+      const { llamadas } = await abrirMaterial({
+        listar: () => {
+          if (!listadoCaido) return guardados
+          listadoCaido = false
+          return json({}, 503)
+        },
+        registrar: () => {
+          if (++intento === 1) {
+            guardados.push({
+              ...EXISTENTE,
+              id: 'material-1',
+              titulo: 'Guía 1',
+              archivo: {
+                ...SUBIDA.archivo,
+                subidoEn: '2026-11-10T12:00:00.000Z',
+              },
+            })
+            return Promise.reject(new TypeError('Failed to fetch'))
+          }
+          // El segundo intento verifica con el listado caído.
+          if (intento === 2) listadoCaido = true
+          return json(
+            {
+              statusCode: 409,
+              message: 'Ese archivo ya está registrado como material',
+            },
+            409,
+          )
+        },
+      })
+      completar()
+      enviar()
+      ;(await subidaEnCurso()).terminar(204)
+      expect(await panel().findByRole('alert')).toBeInTheDocument()
+      desbloqueado()
+
+      enviar()
+      await waitFor(() =>
+        expect(panel().getByRole('alert')).toHaveTextContent(
+          'No pudimos comprobar si el material quedó registrado. Inténtalo nuevamente.',
+        ),
+      )
+      desbloqueado()
+
+      enviar()
+      await waitFor(() =>
+        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+      )
+      expect(await panel().findByText('Guía 1')).toBeInTheDocument()
+      // Una sola subida a S3 y un solo archivo pedido en los tres intentos.
+      expect(XhrFalso.enviadas).toHaveLength(1)
+      expect(llamadas.filter((l) => l === `POST ${ARCHIVOS}`)).toHaveLength(1)
+      expect(llamadas.filter((l) => l === `POST ${MATERIALES}`)).toHaveLength(3)
       expect(guardados).toHaveLength(1)
     })
 
