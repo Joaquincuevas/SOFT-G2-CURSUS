@@ -22,7 +22,15 @@ Como alumno, en **Mis cursos** → un curso → pestaña **Notas**:
 - sin evaluaciones, "Aún no hay evaluaciones";
 - si falla la carga, "No pudimos cargar tus notas." con **Reintentar**.
 
-El profesor y el ayudante siguen viendo la lista de evaluaciones de antes en esa pestaña. "Del período" lo dan los cursos: el alumno entra solo a las secciones del período activo desde su dashboard.
+El profesor y el ayudante siguen viendo la lista de evaluaciones de antes en esa pestaña, con los estados y comentarios de NOT-09 y el historial de NOT-16.
+
+## Decisiones
+
+- **La vista es por sección.** Las notas se ven dentro de cada curso, en su pestaña **Notas**, no en una página que junte todos los cursos. "Del período" lo dan los cursos: el alumno entra solo a las secciones del período activo desde su dashboard.
+- **Un alumno con la inscripción archivada no ve sus notas** (403, como en `mi-asistencia`). `IntegranteSeccionGuard` exige una inscripción activa. Era un pendiente de NOT-11: si hace falta que un alumno retirado consulte sus notas, se resuelve en una tarjeta aparte.
+- **Para las próximas tarjetas:**
+  - NOT-14 (nota final) debe reutilizar esta consulta (`MisNotasService`) en vez de leer las notas por otro camino.
+  - NOT-15 (recorrección) agregará a `NotaPropia` la marca de nota recorregida.
 
 ## API
 
@@ -94,7 +102,7 @@ npm run test:db --workspace=backend
 - `backend/test/notas/notas.db-spec.ts`:
   - `GET .../mis-notas`: cada evaluación activa con nombre, fecha y ponderación; la nota solo si está publicada, `null` si está propuesta en revisión, devuelta o sin nota; sin evaluaciones archivadas ni de otra sección; en el orden de la lista; sin datos de otros alumnos;
   - una sección sin evaluaciones responde `{ evaluaciones: [] }`;
-  - el profesor, el ayudante, el Administrativo y un alumno no inscrito reciben 403; un alumno de otra universidad, 404; sin sesión, 401;
+  - el profesor, el ayudante, el Administrativo, un alumno no inscrito y un alumno con la inscripción archivada reciben 403; un alumno de otra universidad, 404; sin sesión, 401;
   - RLS como `cursus_app`: el alumno ve solo su nota publicada; no ve su propuesta ni su nota archivada; sin usuario en la sesión, desde otra universidad o con otro rol no ve ninguna fila.
 - `backend/test/multitenant/rls.db-spec.ts`: las políticas con `usuario_actual()` incluyen `pol_nota_lectura_alumno`.
 - `backend/test/database/esquema-inicial.db-spec.ts`: la migración se revierte primero y no deja la política.
