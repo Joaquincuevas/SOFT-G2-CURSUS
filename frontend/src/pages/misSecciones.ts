@@ -20,3 +20,25 @@ export const textoBloque = (b: BloqueHorario) =>
 
 export const textoAlumnos = (n: number) =>
   `${n} ${n === 1 ? 'alumno' : 'alumnos'}`
+
+// GES-25: nombres de los profesores. Si la respuesta no trae profesores (un
+// backend anterior durante un deploy desfasado), usa el campo deprecado.
+export function nombresProfesores(seccion: {
+  profesores?: string[]
+  profesor?: { nombre: string } | string | null
+}): string[] {
+  if (seccion.profesores) return seccion.profesores
+  if (!seccion.profesor) return []
+  return [
+    typeof seccion.profesor === 'string'
+      ? seccion.profesor
+      : seccion.profesor.nombre,
+  ]
+}
+
+// GES-25: los profesores de una sección, separados por coma. Una tarjeta con
+// un solo profesor se lee como antes.
+export function textoProfesores(profesores: string[]): string {
+  if (profesores.length === 0) return 'Sin profesor asignado'
+  return `${profesores.length === 1 ? 'Profesor' : 'Profesores'} a cargo: ${profesores.join(', ')}`
+}

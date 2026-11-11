@@ -33,6 +33,7 @@ export type SujetoTabla =
   | 'Actividad'
   | 'Nota'
   | 'RevisionNotas'
+  | 'Archivo'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -54,6 +55,7 @@ const LEEN_ANUNCIOS: readonly Rol[] = [
   'ALUMNO',
   'DIRECTOR',
 ]
+const SUBEN_ARCHIVOS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO']
 const LEEN_EVALUACIONES: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
@@ -148,7 +150,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // controlador exige además que sea el profesor de esa sección) y las leen
   // el ayudante, el alumno y el Director, este en solo lectura. Editar es
   // NOT-03; nadie las borra.
-  if (usuario.rol === 'PROFESOR') can('create', 'Evaluacion')
+  if (usuario.rol === 'PROFESOR') can(['create', 'update'], 'Evaluacion')
   if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
 
   // MAT-08 (RN-08): actividades de entrega de una sección. Las crea el
@@ -165,12 +167,20 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   if (usuario.rol === 'AYUDANTE') can('update', 'Nota')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
 
-  // NOT-11: revisión de las notas de una evaluación (revision_notas). La
-  // aprueba el profesor (el controlador exige además que sea el de esa
-  // sección); la leen los mismos que las notas. El envío del ayudante
-  // (NOT-08) va con update de Nota, porque es parte de ingresarlas.
+  // NOT-11 y NOT-12: revisión de las notas de una evaluación
+  // (revision_notas). La aprueba o la devuelve el profesor (el controlador
+  // exige además que sea el de esa sección); la leen los mismos que las
+  // notas. El envío del ayudante (NOT-08) va con update de Nota, porque es
+  // parte de ingresarlas.
   if (usuario.rol === 'PROFESOR') can('update', 'RevisionNotas')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'RevisionNotas')
+  // MAT-01: archivos de una sección (sílabo, materiales y entregas). Los
+  // suben el profesor, el ayudante y el alumno de la sección, y los descargan
+  // ellos y el Director, este en solo lectura. El controlador exige además
+  // ser integrante (ESP-06) y que el alumno solo descargue lo suyo o lo del
+  // equipo docente. El Administrativo no recibe nada. Nadie los borra.
+  if (SUBEN_ARCHIVOS.includes(usuario.rol)) can(['create', 'read'], 'Archivo')
+  if (usuario.rol === 'DIRECTOR') can('read', 'Archivo')
 
   return build()
 }

@@ -7,8 +7,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // fija, el alumno sigue sin ver nada. Las propuestas (borrador, en revisión
 // o devueltas), las archivadas y las de otros alumnos nunca son visibles.
 // Es permisiva: se suma con OR a pol_nota_lectura, que no cambia.
-export class LeerNotasAlumno1792750000000 implements MigrationInterface {
-  name = 'LeerNotasAlumno1792750000000'
+export class LeerNotasAlumno1792810000000 implements MigrationInterface {
+  name = 'LeerNotasAlumno1792810000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`

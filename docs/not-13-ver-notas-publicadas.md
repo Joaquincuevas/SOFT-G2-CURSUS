@@ -66,7 +66,7 @@ El código está en `backend/src/notas/mis-notas.controller.ts` y `mis-notas.ser
 
 ## Datos
 
-La migración `1792750000000-LeerNotasAlumno` no crea tablas. Agrega **`pol_nota_lectura_alumno`** (SELECT de `nota`), solo para el rol `ALUMNO`:
+La migración `1792810000000-LeerNotasAlumno` no crea tablas. Agrega **`pol_nota_lectura_alumno`** (SELECT de `nota`), solo para el rol `ALUMNO`:
 
 ```sql
 universidad_id = universidad_actual() AND rol_actual() = 'ALUMNO'

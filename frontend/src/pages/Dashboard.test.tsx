@@ -52,6 +52,7 @@ const resumen = (
     rol: 'PROFESOR',
     horario: seccion.horario,
     profesor: { id: 'profesor-1', nombre: 'Profesor Norte' },
+    profesores: ['Profesor Norte'],
     ayudantes: [],
   }),
 })
@@ -206,6 +207,7 @@ const SECCIONES_AYUDANTE: SeccionAyudante[] = [
       nombre: 'Introducción a la Programación',
     },
     profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+    profesores: ['Camila Rojas'],
   },
   {
     id: 'seccion-icc201-2',
@@ -216,6 +218,7 @@ const SECCIONES_AYUDANTE: SeccionAyudante[] = [
       nombre: 'Estructuras de Datos',
     },
     profesor: null,
+    profesores: [],
   },
 ]
 

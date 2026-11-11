@@ -32,7 +32,15 @@ export interface Evaluacion {
   // YYYY-MM-DD, dentro del período del curso.
   fecha: string
   ponderacion: number
+  // Solo en el listado del profesor. La escritura vuelve a verificarlo.
+  tieneNotas?: boolean
+  // NOT-09: solo en el listado del ayudante de la sección. Los demás roles
+  // no reciben el estado ni el comentario por el listado de evaluaciones.
+  envio?: EstadoEnvioNotas
 }
+
+export const EVALUACION_CON_NOTAS =
+  'Esta evaluación ya tiene notas ingresadas y no se puede editar.'
 
 // GET: evaluaciones activas por fecha, con la suma de sus ponderaciones (el
 // aviso de que no suman 100 % es NOT-02).
@@ -62,8 +70,31 @@ export const TIPOS_EVENTO_NOTA = [
 
 export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
 
+// NOT-16: eventos de un alumno y de su evaluación, ordenados por fecha e id.
+export interface EventoHistorialNota {
+  id: string
+  tipo: TipoEventoNota
+  fecha: string
+  responsable: { id: string; nombre: string }
+  notaAnterior: number | null
+  notaNueva: number | null
+  motivo: string | null
+}
+
+export interface HistorialNota {
+  eventos: EventoHistorialNota[]
+}
+
 // Motivo de una devolución o una recorrección (NOT-12 y NOT-15).
 export const LARGO_MOTIVO_NOTA = 500
+
+// NOT-12: cuerpo de POST .../notas/devolucion. El comentario para el ayudante
+// es obligatorio; queda en revision_notas y como motivo del evento
+// DEVOLUCION, con el mismo largo.
+export interface DevolverNotas {
+  comentario: string
+}
+export const LARGO_COMENTARIO_DEVOLUCION = LARGO_MOTIVO_NOTA
 
 // Notas de 1,0 a 7,0 con un decimal (NOT-06).
 export const NOTA_MINIMA = 1
@@ -111,7 +142,7 @@ export function esNotaValida(valor: unknown): valor is number {
 
 // NOT-07: estado de las notas de una evaluación frente al profesor. El
 // ayudante guarda un BORRADOR, que el profesor no ve como pendiente; enviar a
-// revisión (NOT-08), aprobar (NOT-09) y devolver (NOT-12) son otras tarjetas.
+// revisión (NOT-08), aprobar (NOT-11) y devolver (NOT-12) son otras tarjetas.
 export const ESTADOS_REVISION_NOTAS = [
   'BORRADOR',
   'EN_REVISION',
@@ -120,6 +151,14 @@ export const ESTADOS_REVISION_NOTAS = [
 ] as const
 
 export type EstadoRevisionNotas = (typeof ESTADOS_REVISION_NOTAS)[number]
+
+// Estado compartido por los ayudantes activos de la sección, sin notas ni
+// identidades de los alumnos. Sin un envío previo, el estado es BORRADOR.
+export interface EstadoEnvioNotas {
+  estado: EstadoRevisionNotas
+  // Solo mientras está DEVUELTA; al reenviar, el comentario actual se limpia.
+  comentarioDevolucion: string | null
+}
 
 // Un alumno activo de la sección con su nota en la evaluación, o null si aún
 // no tiene.
@@ -135,6 +174,9 @@ export interface NotasEvaluacion {
   evaluacion: Evaluacion
   // BORRADOR también si el ayudante aún no guarda nada.
   estado: EstadoRevisionNotas
+  // NOT-09: opcional para compatibilidad con respuestas anteriores. La API
+  // actual siempre lo devuelve, a null salvo que el estado sea DEVUELTA.
+  comentarioDevolucion?: string | null
   alumnos: NotaAlumno[]
 }
 
@@ -153,11 +195,11 @@ export interface ErrorNotasInvalidas {
   invalidas: { alumnoId: string; motivo: string }[]
 }
 
-// NOT-11: 409 de la aprobación cuando la evaluación ya no está en revisión,
-// con su estado actual: el cliente la saca de pendientes. Los otros 409 de la
-// aprobación (notas que no están propuestas, sin notas) no traen estado: la
-// evaluación sigue en revisión.
-export interface ErrorEstadoAprobacion {
+// NOT-11 y NOT-12: 409 de la aprobación o la devolución cuando la evaluación
+// ya no está en revisión, con su estado actual: el cliente la saca de
+// pendientes. Los otros 409 de la aprobación (notas que no están propuestas,
+// sin notas) no traen estado: la evaluación sigue en revisión.
+export interface ErrorEstadoRevision {
   statusCode: 409
   message: string
   estado: Exclude<EstadoRevisionNotas, 'EN_REVISION'>

@@ -204,6 +204,7 @@ describe('GET /api/dashboard/secciones-ayudante (ESP-02)', () => {
         nombre: 'Introducción a la Programación',
       },
       profesor: { id: await idDe(PROFESOR), nombre },
+      profesores: [nombre],
     } satisfies SeccionAyudante)
     // Sin profesor asignado.
     expect(icc201.profesor).toBeNull()

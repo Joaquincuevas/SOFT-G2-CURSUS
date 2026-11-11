@@ -34,6 +34,10 @@ export interface SeccionAlumno extends Omit<
   SeccionDashboard,
   'alumnos' | 'pendientesRevision'
 > {
+  // GES-25: el primer profesor vigente. Deprecado: usa profesores. Se
+  // retira con seccion.profesor_id (docs/ges-25-varios-profesores.md).
   profesor: { id: string; nombre: string } | null
+  // GES-25: todos los profesores vigentes, por nombre.
+  profesores: string[]
   anunciosNuevos: number
 }

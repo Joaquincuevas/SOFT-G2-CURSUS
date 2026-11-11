@@ -299,3 +299,20 @@
   font: var(--font-body);
   color: var(--color-text-primary);
 }
+
+/* GES-25: profesores asignados a una sección. */
+.cursos__lista-profesores {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cursos__lista-profesores li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}

@@ -16,6 +16,7 @@ const RESUMEN: SeccionResumen = {
   rol: 'ALUMNO',
   horario: [],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [],
 }
 
@@ -64,7 +65,7 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
     ])
   })
 
-  test('no ve el formulario ni los botones de ingreso de notas', async () => {
+  test('no ve el formulario, los estados del ayudante ni el historial', async () => {
     const { panel } = await abrirNotas('ALUMNO', { [MIS_NOTAS]: () => NOTAS })
 
     expect(await panel.findByText('Control 1')).toBeInTheDocument()
@@ -72,6 +73,15 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
       panel.queryByRole('form', { name: 'Nueva evaluación' }),
     ).not.toBeInTheDocument()
     expect(panel.queryAllByRole('button')).toHaveLength(0)
+    // Ni los estados y comentarios del ayudante (NOT-09) ni el historial de
+    // una nota (NOT-16).
+    expect(
+      panel.queryByRole('columnheader', { name: 'Estado del envío' }),
+    ).not.toBeInTheDocument()
+    expect(panel.queryByRole('note')).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Historial de notas de Control 1' }),
+    ).not.toBeInTheDocument()
   })
 
   test('sin evaluaciones muestra el estado vacío', async () => {

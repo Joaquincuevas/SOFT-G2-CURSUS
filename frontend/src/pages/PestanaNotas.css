@@ -20,7 +20,8 @@
   color: var(--color-text-secondary);
 }
 
-.notas__campo input {
+.notas__campo input,
+.notas__campo select {
   height: var(--control-size);
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
@@ -57,6 +58,11 @@
 
 .notas__aviso {
   color: var(--color-success);
+}
+
+.notas__listado {
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .notas__tabla {
@@ -163,4 +169,62 @@
   color: var(--color-text-primary);
   font: var(--font-body);
   font-weight: 600;
+}
+
+/* NOT-12: comentario de la devolución (el label es .notas__campo). */
+.notas__campo textarea {
+  min-height: 5rem;
+  max-width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-body);
+}
+
+.notas__contador {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--font-caption);
+}
+
+/* NOT-09: el texto identifica el estado sin depender solamente del color. */
+.notas__estado-envio {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-caption);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+}
+
+.notas__estado-envio[data-estado='EN_REVISION'] {
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.notas__estado-envio[data-estado='APROBADA'] {
+  color: var(--color-success);
+  background: var(--color-background);
+}
+
+.notas__devolucion {
+  max-width: 32rem;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.notas__devolucion-titulo {
+  margin-bottom: var(--space-1);
+  font: var(--font-button);
+}
+
+.notas__devolucion-texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: var(--font-body);
 }

@@ -24,6 +24,9 @@ export interface UsuarioSesion {
   universidadId: string | null
   // "Directorio" para el Director, que ve todas las universidades.
   universidadNombre: string
+  // UI-04: color institucional. null en las vistas globales del Director y
+  // del superadmin, que conservan el tema de CURSUS.
+  universidadColor: string | null
   facultadNombre: string | null
   // PER-03: true mientras tenga la contraseña provisoria; solo puede cambiarla.
   debeCambiarPassword: boolean
@@ -32,6 +35,7 @@ export interface UsuarioSesion {
 }
 
 export * from './permisos.js'
+export * from './archivos.js'
 export * from './cursos.js'
 export * from './periodos.js'
 export * from './perfil.js'
@@ -46,6 +50,7 @@ export * from './anuncios.js'
 export * from './notas.js'
 export * from './materiales.js'
 export * from './superadmin.js'
+export * from './colores.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

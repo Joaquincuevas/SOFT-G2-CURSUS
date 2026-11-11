@@ -1,12 +1,8 @@
 import {
   LARGO_MOTIVO_ASIGNACION,
-  type AsignacionQuitada,
   type AyudanteOpcion,
   type AyudanteQuitado,
-  type ProfesorCambiado,
-  type ProfesorOpcion,
   type QuitarAsignacion,
-  type QuitarProfesor,
   type SeccionDetalle,
 } from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
@@ -15,38 +11,29 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 
-export type TipoAsignacion = 'PROFESOR' | 'AYUDANTE'
-
 // Mensaje de un 400 o 404 de la API (el ValidationPipe manda una lista).
 function mensajeDe(cuerpo: { message?: unknown }): string | null {
   const [mensaje] = [cuerpo.message].flat()
   return typeof mensaje === 'string' ? mensaje : null
 }
 
-// Confirmación para quitar al profesor o a un ayudante de una sección (GES-14).
-// El motivo es obligatorio: queda en el historial de asignaciones. Para un
-// ayudante, se elige cuál quitar entre los asignados. Para el profesor, se
-// envía el que se está mostrando: si la sección cambió mientras tanto, la API
-// responde 409 con el actual, onProfesorCambiado actualiza la sección y el
-// diálogo pide confirmar de nuevo.
+// Confirmación para quitar a un ayudante de una sección (GES-14). El motivo
+// es obligatorio: queda en el historial de asignaciones. Se elige cuál quitar
+// entre los asignados. Los profesores se quitan en su propio diálogo
+// (ProfesoresSeccionDialogo, GES-25).
 export function QuitarAsignacionDialogo({
   seccion,
-  tipo,
   onQuitada,
-  onProfesorCambiado,
   onCerrar,
 }: {
   seccion: SeccionDetalle
-  tipo: TipoAsignacion
-  onQuitada: (resultado: AsignacionQuitada | AyudanteQuitado) => void
-  onProfesorCambiado: (profesor: ProfesorOpcion | null, mensaje: string) => void
+  onQuitada: (resultado: AyudanteQuitado) => void
   onCerrar: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const dialogo = useRef<HTMLDialogElement>(null)
-  const esAyudante = tipo === 'AYUDANTE'
   const [opciones, recargar] = useDatos<AyudanteOpcion[]>(
-    esAyudante ? `/api/secciones/${seccion.id}/ayudantes` : null,
+    `/api/secciones/${seccion.id}/ayudantes`,
   )
   // undefined mientras carga y null si falló, como useDatos.
   const asignados =
@@ -61,7 +48,7 @@ export function QuitarAsignacionDialogo({
   }, [])
 
   const elegido = asignados?.find((ayudante) => ayudante.id === ayudanteId)
-  const listo = !!motivo.trim() && (!esAyudante || !!elegido)
+  const listo = !!motivo.trim() && !!elegido
 
   async function quitar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -69,33 +56,19 @@ export function QuitarAsignacionDialogo({
     setQuitando(true)
     setError(null)
     try {
-      const [ruta, body]: [string, QuitarAsignacion | QuitarProfesor] =
-        esAyudante
-          ? [
-              `/api/secciones/${seccion.id}/ayudantes/${ayudanteId}/quitar`,
-              { motivo },
-            ]
-          : [
-              `/api/secciones/${seccion.id}/profesor/quitar`,
-              { motivo, profesorId: seccion.profesorId ?? '' },
-            ]
-      const respuesta = await fetchConSesion(ruta, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      const respuesta = await fetchConSesion(
+        `/api/secciones/${seccion.id}/ayudantes/${ayudanteId}/quitar`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ motivo } satisfies QuitarAsignacion),
+        },
+      )
       const cuerpo = (await respuesta.json().catch(() => ({}))) as {
         message?: unknown
       }
       if (respuesta.ok) {
-        onQuitada(cuerpo as AsignacionQuitada | AyudanteQuitado)
-        return
-      }
-      if (respuesta.status === 409 && !esAyudante && 'profesor' in cuerpo) {
-        const cambio = cuerpo as ProfesorCambiado
-        onProfesorCambiado(cambio.profesor, cambio.message)
-        setError(cambio.message)
-        setQuitando(false)
+        onQuitada(cuerpo as AyudanteQuitado)
         return
       }
       setError(
@@ -108,17 +81,10 @@ export function QuitarAsignacionDialogo({
     setQuitando(false)
   }
 
-  const titulo = `Quitar ${esAyudante ? 'ayudante' : 'profesor'} de la sección ${seccion.numero}`
+  const titulo = `Quitar ayudante de la sección ${seccion.numero}`
 
   let persona
-  if (!esAyudante) {
-    persona = (
-      <p id="quitar-asignacion-detalle" className="cursos__mensaje">
-        ¿Quitar a {seccion.profesor} como profesor a cargo de la sección{' '}
-        {seccion.numero}? La sección quedará sin profesor asignado.
-      </p>
-    )
-  } else if (asignados === undefined) {
+  if (asignados === undefined) {
     persona = <Cargando texto="Cargando ayudantes…" />
   } else if (asignados === null) {
     persona = (

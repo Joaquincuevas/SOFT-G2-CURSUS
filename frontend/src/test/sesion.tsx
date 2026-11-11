@@ -58,6 +58,7 @@ export function usuarioDePrueba(rol: Rol): UsuarioSesion {
           : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
+    universidadColor: rol === 'DIRECTOR' ? null : '#1b4f72',
     debeCambiarPassword: false,
     // PERIODO del seed: año 2026, semestre 2.
     periodoActivo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
@@ -70,6 +71,7 @@ export function superadminSinElegir(): UsuarioSesion {
   return {
     ...usuarioDePrueba('SUPERADMIN'),
     universidadId: null,
+    universidadColor: null,
     universidadNombre: 'CURSUS',
     facultadNombre: null,
     periodoActivo: null,

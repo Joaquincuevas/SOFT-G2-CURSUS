@@ -30,7 +30,7 @@ Tarjeta: [F4 · NOT-10](https://trello.com/c/i8ArJRxi). Depende de NOT-07 (`revi
 
 - **Ver notas** abre la tabla de la evaluación bajo su fila, con "Estado: En revisión" y todas las notas propuestas en solo lectura. Volver a pulsar la cierra.
 
-Aprobar y publicar es [NOT-11](not-11-aprobar-publicar.md); devolver queda para NOT-12.
+Aprobar y publicar es [NOT-11](not-11-aprobar-publicar.md), y devolver al ayudante, [NOT-12](not-12-devolver-envio.md).
 
 ## API
 
@@ -62,7 +62,7 @@ La lista no recibe ids, así que no tiene 404: las pendientes de otra universida
 Una evaluación con `revision_notas.estado = 'EN_REVISION'` que:
 
 - no está archivada;
-- es de una sección vigente a cargo del profesor (`seccion.profesor_id`);
+- es de una sección vigente a cargo del profesor (`es_profesor_de_seccion`: desde [GES-25](ges-25-varios-profesores.md), cualquiera de sus profesores vigentes);
 - es de un curso vigente del **período activo** de su universidad.
 
 No aparecen las evaluaciones en `BORRADOR` (con o sin fila), `DEVUELTA` ni `APROBADA`.
@@ -71,7 +71,7 @@ No aparecen las evaluaciones en `BORRADOR` (con o sin fila), `DEVUELTA` ni `APRO
 
 La lista y el contador usan los mismos fragmentos SQL de `backend/src/dashboard/pendientes.sql.ts`, así que no pueden diferir:
 
-- `SECCIONES_DEL_PROFESOR`: las secciones del profesor. Cuando GES-25 permita varios profesores por sección, es el único lugar que hay que cambiar.
+- `SECCIONES_DEL_PROFESOR`: las secciones del profesor. Era el único lugar que [GES-25](ges-25-varios-profesores.md) tenía que cambiar, y ahora usa `es_profesor_de_seccion`.
 - `EN_REVISION_DE_SECCION`: las evaluaciones en revisión de cada sección.
 
 ### Ayudante y fecha del envío
