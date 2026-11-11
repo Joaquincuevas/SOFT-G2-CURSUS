@@ -2,6 +2,8 @@
 
 Documentación del proyecto:
 
+- [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
+
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 
 - [MAT-09: entrega y reemplazo de informes con plazo](mat-09-entrega-informe.md)

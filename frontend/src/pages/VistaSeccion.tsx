@@ -39,10 +39,6 @@ const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
   Material: PestanaMaterial,
 }
 
-// Pestañas que por ahora solo abre el profesor. Material (MAT-04): el listado
-// y la descarga para el resto son de MAT-05 y MAT-06.
-const SOLO_PROFESOR: readonly Pestana[] = ['Material']
-
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,
 // ayudante y alumno. Hoy no hay acciones por rol: llegan en la Fase 4 con
 // las pestañas.
@@ -103,10 +99,7 @@ export function VistaSeccion() {
             role="tab"
             aria-selected={activa === pestana}
             className="vista-seccion__pestana"
-            disabled={
-              !CONTENIDO[pestana] ||
-              (SOLO_PROFESOR.includes(pestana) && rol !== 'PROFESOR')
-            }
+            disabled={!CONTENIDO[pestana]}
             onClick={() => setActiva(activa === pestana ? null : pestana)}
           >
             {pestana}
