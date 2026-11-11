@@ -16,6 +16,55 @@ const ARCHIVOS = `${BASE}/archivos`
 const CONFIRMAR = `${ARCHIVOS}/archivo-1/confirmar`
 const MATERIALES = `${BASE}/materiales`
 
+test('publica el PDF por MAT-01 y muestra el responsable en el historial del sílabo', async () => {
+  const publicar = vi.fn((init?: RequestInit) => {
+    expect(init?.body).toBe(JSON.stringify({ archivoId: SUBIDA.archivo.id }))
+    return json(
+      {
+        version: 1,
+        responsable: 'Camila Rojas',
+        subidoEn: '2026-11-10T12:00:00Z',
+      },
+      201,
+    )
+  })
+  await renderConSesion('PROFESOR', VISTA, {
+    [RESUMEN_RUTA]: () => RESUMEN,
+    [MATERIALES]: () => [],
+    [ARCHIVOS]: () => json(SUBIDA, 201),
+    [CONFIRMAR]: () => SUBIDA.archivo,
+    [`${BASE}/silabo`]: (init) =>
+      init?.method === 'POST'
+        ? publicar(init)
+        : publicar.mock.calls.length
+          ? [
+              {
+                version: 1,
+                responsable: 'Camila Rojas',
+                subidoEn: '2026-11-10T12:00:00Z',
+              },
+            ]
+          : [],
+  })
+  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  const panel = within(
+    await screen.findByRole('region', { name: 'Sílabo del curso' }),
+  )
+  const pdf = new File(['%PDF-'], 'programa.pdf', { type: 'application/pdf' })
+  fireEvent.change(panel.getByLabelText('Sílabo (PDF, hasta 10 MiB)'), {
+    target: { files: [pdf] },
+  })
+  fireEvent.click(panel.getByRole('button', { name: 'Publicar sílabo' }))
+  await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
+  expect(publicar).not.toHaveBeenCalled()
+  XhrFalso.enviadas[0].terminar(204)
+  expect(await panel.findByText('Sílabo publicado.')).toBeInTheDocument()
+  expect(
+    await panel.findByRole('list', { name: 'Historial del sílabo' }),
+  ).toHaveTextContent('Versión 1 · Camila Rojas')
+  expect(publicar).toHaveBeenCalledTimes(1)
+})
+
 const RESUMEN: SeccionResumen = {
   id: 'seccion-1',
   numero: 1,

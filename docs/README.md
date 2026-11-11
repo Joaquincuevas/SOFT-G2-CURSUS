@@ -32,6 +32,7 @@ Documentación del proyecto:
 - [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
 - [MAT-04: el profesor sube un material con su categoría y guía de revisión](mat-04-subir-material.md)
 - [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
+- [MAT-02: sílabo PDF del curso con historial de versiones](mat-02-silabo-curso.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
 - [ASI-02: marcar presente o ausente a cada alumno de una clase y guía de revisión](asi-02-marcar-asistencia.md)

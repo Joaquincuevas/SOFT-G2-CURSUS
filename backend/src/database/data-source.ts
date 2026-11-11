@@ -53,6 +53,7 @@ import { RecorregirNota1792820000000 } from './migrations/1792820000000-Recorreg
 import { CrearEntrega1792840000000 } from './migrations/1792840000000-CrearEntrega.js'
 import { MotivoRetiroAlumno1792850000000 } from './migrations/1792850000000-MotivoRetiroAlumno.js'
 import { CrearMaterial1792860000000 } from './migrations/1792860000000-CrearMaterial.js'
+import { CrearSilabo1792870000000 } from './migrations/1792870000000-CrearSilabo.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -127,6 +128,7 @@ export function opcionesDataSource(
       CrearEntrega1792840000000,
       MotivoRetiroAlumno1792850000000,
       CrearMaterial1792860000000,
+      CrearSilabo1792870000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',
