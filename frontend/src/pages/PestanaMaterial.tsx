@@ -9,6 +9,7 @@ import {
   type ArchivoResumen,
   type CategoriaMaterial,
   type CrearMaterial,
+  type DescargaArchivo,
   type Material,
   type SubidaArchivo,
 } from '@cursus/shared'
@@ -47,18 +48,53 @@ async function motivoDe(res: Response): Promise<string | null> {
   return Array.isArray(mensaje) ? mensaje.join('. ') : null
 }
 
-// MAT-04: materiales del curso de la sección. Solo el profesor sube
-// materiales; el listado y la descarga para el resto son de MAT-05 y MAT-06.
-// El material es del curso: aquí se ven también los que subió el profesor de
-// otra sección.
-export function PestanaMaterial({ seccionId }: PropsPestana) {
+// MAT-04 y MAT-06: materiales del curso de la sección. Solo el profesor sube
+// materiales; el profesor, el ayudante y el alumno los ven y los descargan. El
+// material es del curso: aquí se ven también los que subió el profesor de otra
+// sección.
+export function PestanaMaterial({ seccionId, rol }: PropsPestana) {
+  const { fetchConSesion } = useAuth()
   const ruta = `/api/espacio/secciones/${seccionId}`
   const [materiales, recargar] = useDatos<Material[]>(`${ruta}/materiales`)
+  const [descargando, setDescargando] = useState<string | null>(null)
+  const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
+
+  // MAT-06: la API revisa que sea integrante y firma una URL de S3 que vence a
+  // los 5 minutos. Se abre de inmediato y no se guarda: S3 entrega el archivo
+  // con su nombre original.
+  async function descargar(material: Material) {
+    setDescargando(material.id)
+    setErrorDescarga(null)
+    try {
+      const res = await fetchConSesion(
+        `${ruta}/materiales/${material.id}/descarga`,
+      )
+      if (!res.ok) throw new Error()
+      const { url } = (await res.json()) as DescargaArchivo
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.click()
+    } catch {
+      setErrorDescarga(
+        `No pudimos descargar «${material.titulo}». Inténtalo nuevamente.`,
+      )
+    } finally {
+      // Siempre se desbloquea, también si la descarga falló.
+      setDescargando(null)
+    }
+  }
 
   return (
     <section className="material" aria-label="Materiales del curso">
       <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
-      <FormularioMaterial ruta={ruta} alSubir={recargar} />
+      {rol === 'PROFESOR' && (
+        <FormularioMaterial ruta={ruta} alSubir={recargar} />
+      )}
+      {errorDescarga && (
+        <p className="material__error" role="alert">
+          {errorDescarga}
+        </p>
+      )}
       {materiales === undefined ? (
         <Cargando texto="Cargando materiales…" />
       ) : materiales === null ? (
@@ -84,10 +120,21 @@ export function PestanaMaterial({ seccionId }: PropsPestana) {
                     {material.descripcion}
                   </p>
                 )}
-                <p className="material__archivo">
-                  {material.archivo.nombre} ·{' '}
-                  {tamanoLegible(material.archivo.tamano)}
-                </p>
+                <div className="material__pie">
+                  <p className="material__archivo">
+                    {material.archivo.nombre} ·{' '}
+                    {tamanoLegible(material.archivo.tamano)}
+                  </p>
+                  <button
+                    type="button"
+                    className="material__descargar"
+                    aria-label={`Descargar ${material.titulo}`}
+                    disabled={descargando === material.id}
+                    onClick={() => void descargar(material)}
+                  >
+                    {descargando === material.id ? 'Descargando…' : 'Descargar'}
+                  </button>
+                </div>
               </article>
             </li>
           ))}
