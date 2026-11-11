@@ -150,14 +150,15 @@ const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
 }
 for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
 
-// MAT-04: materiales de un curso. Los sube el profesor y, hasta MAT-05, solo
-// él los lee. Nadie más recibe nada, tampoco el Director.
+// MAT-04 y MAT-06: materiales de un curso. Los sube el profesor; los leen y
+// descargan los integrantes de la sección y el Director. El Administrativo no
+// recibe nada.
 const MATERIAL: Record<Rol, AccionConcreta[]> = {
-  DIRECTOR: [],
+  DIRECTOR: ['read'],
   ADMINISTRATIVO: [],
   PROFESOR: ['create', 'read'],
-  AYUDANTE: [],
-  ALUMNO: [],
+  AYUDANTE: ['read'],
+  ALUMNO: ['read'],
   SUPERADMIN: [],
 }
 for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]

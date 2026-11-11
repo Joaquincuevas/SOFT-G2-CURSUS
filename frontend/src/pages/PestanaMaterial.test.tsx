@@ -212,14 +212,25 @@ describe('pestaña Material (MAT-04)', () => {
     expect(p.getByRole('button', { name: 'Subir material' })).toBeEnabled()
   })
 
+  // MAT-06: el ayudante y el alumno abren la pestaña para ver y descargar,
+  // sin subir. El Director y el Administrativo no llegan a esta vista (Mis
+  // Cursos es de profesores, ayudantes y alumnos).
   test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
-    '%s no ve el formulario: la pestaña está deshabilitada',
+    '%s ve los materiales, pero no el formulario',
     async (rol) => {
-      await abrirMaterial({ rol })
+      await abrirMaterial({ rol, materiales: [EXISTENTE] })
 
-      expect(screen.getByRole('tab', { name: 'Material' })).toBeDisabled()
-      expect(screen.queryByRole('form', { name: 'Subir material' })).toBeNull()
-      expect(screen.queryByLabelText('Archivo')).toBeNull()
+      expect(screen.getByRole('tab', { name: 'Material' })).toBeEnabled()
+      expect(
+        await panel().findByRole('article', { name: 'Solemne 2025' }),
+      ).toBeInTheDocument()
+      expect(panel().queryByLabelText('Archivo')).toBeNull()
+      expect(
+        panel().queryByRole('button', { name: 'Subir material' }),
+      ).toBeNull()
+      expect(
+        panel().getByRole('button', { name: 'Descargar Solemne 2025' }),
+      ).toBeEnabled()
     },
   )
 
@@ -252,6 +263,99 @@ describe('pestaña Material (MAT-04)', () => {
       await panel().findByText('No pudimos cargar los materiales.'),
     ).toBeInTheDocument()
     expect(panel().getByLabelText('Archivo')).toBeInTheDocument()
+  })
+
+  describe('descargar un material (MAT-06)', () => {
+    const DESCARGA = `${MATERIALES}/material-0/descarga`
+    const URL_FIRMADA = 'https://s3.test/u/s/archivo-0?firma=abc'
+    let abiertos: string[]
+    let espia: { mockRestore: () => void }
+
+    // jsdom no navega: se anota a dónde apuntaba cada enlace abierto.
+    beforeEach(() => {
+      abiertos = []
+      espia = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockImplementation(function (this: HTMLAnchorElement) {
+          abiertos.push(this.href)
+        })
+    })
+    afterEach(() => {
+      espia.mockRestore()
+    })
+
+    async function abrirConDescarga(rol: Rol, descarga: () => unknown) {
+      const pedidas: string[] = []
+      await renderConSesion(rol, VISTA, {
+        [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
+        [MATERIALES]: () => [EXISTENTE],
+        [DESCARGA]: (init) => {
+          pedidas.push(init?.method ?? 'GET')
+          return descarga()
+        },
+      })
+      fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+      const boton = await panel().findByRole('button', {
+        name: 'Descargar Solemne 2025',
+      })
+      return { boton, pedidas }
+    }
+
+    test.each<Rol>(['ALUMNO', 'PROFESOR'])(
+      '%s pide la URL firmada y la abre; el botón se bloquea mientras tanto',
+      async (rol) => {
+        let responder: (valor: unknown) => void = () => {}
+        const { boton, pedidas } = await abrirConDescarga(
+          rol,
+          () =>
+            new Promise((resolver) => {
+              responder = resolver
+            }),
+        )
+
+        fireEvent.click(boton)
+        await waitFor(() => expect(boton).toBeDisabled())
+        expect(boton).toHaveTextContent('Descargando…')
+        expect(abiertos).toEqual([])
+
+        responder({ url: URL_FIRMADA, expiraEn: '2026-11-11T12:05:00.000Z' })
+        await waitFor(() => expect(abiertos).toEqual([URL_FIRMADA]))
+        expect(pedidas).toEqual(['GET'])
+        expect(boton).toBeEnabled()
+        expect(boton).toHaveTextContent('Descargar')
+        expect(panel().queryByRole('alert')).toBeNull()
+      },
+    )
+
+    test.each([
+      ['sin acceso (403)', () => json({}, 403)],
+      ['el material ya no existe (404)', () => json({}, 404)],
+      ['sin almacenamiento (503)', () => json({}, 503)],
+    ])('si falla %s, avisa y desbloquea el botón', async (_caso, respuesta) => {
+      const { boton } = await abrirConDescarga('ALUMNO', respuesta)
+
+      fireEvent.click(boton)
+
+      expect(await panel().findByRole('alert')).toHaveTextContent(
+        'No pudimos descargar «Solemne 2025». Inténtalo nuevamente.',
+      )
+      expect(boton).toBeEnabled()
+      expect(abiertos).toEqual([])
+    })
+
+    test('el aviso desaparece al reintentar con éxito', async () => {
+      let intentos = 0
+      const { boton } = await abrirConDescarga('ALUMNO', () =>
+        ++intentos === 1 ? json({}, 500) : { url: URL_FIRMADA, expiraEn: '' },
+      )
+
+      fireEvent.click(boton)
+      expect(await panel().findByRole('alert')).toBeInTheDocument()
+      fireEvent.click(boton)
+
+      await waitFor(() => expect(abiertos).toEqual([URL_FIRMADA]))
+      expect(panel().queryByRole('alert')).toBeNull()
+    })
   })
 
   describe('el flujo: pedir subida → subir a S3 → confirmar → registrar', () => {
