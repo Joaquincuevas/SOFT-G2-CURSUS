@@ -22,6 +22,8 @@ export interface SubidaFirmada {
 export interface ObjetoSubido {
   tamano: number
   tipo: string | undefined
+  // MAT-09 fija esta versión para que otra subida no altere lo entregado.
+  version?: string
 }
 
 // Configuración del bucket desde el entorno. En AWS la define cursus.yml y las
@@ -133,7 +135,11 @@ export class AlmacenamientoService {
       const objeto = await cliente.send(
         new HeadObjectCommand({ Bucket: bucket, Key: clave }),
       )
-      return { tamano: objeto.ContentLength ?? 0, tipo: objeto.ContentType }
+      return {
+        tamano: objeto.ContentLength ?? 0,
+        tipo: objeto.ContentType,
+        ...(objeto.VersionId ? { version: objeto.VersionId } : {}),
+      }
     } catch (error) {
       if (error instanceof NotFound) return null
       throw error

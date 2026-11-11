@@ -26,6 +26,7 @@ const TABLAS = [
   'clase',
   'curso',
   'curso_cambio',
+  'entrega',
   'evaluacion',
   'evaluacion_cambio',
   'facultad',
@@ -182,10 +183,17 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // MAT-09 sale antes de NOT-15.
+    const SIN_ENTREGA = TABLAS.filter((tabla) => tabla !== 'entrega')
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ funcionEntrega }] = await bd.query<
+      { funcionEntrega: string | null }[]
+    >(`SELECT to_regprocedure('public.validar_entrega()') AS "funcionEntrega"`)
+    expect(funcionEntrega).toBeNull()
 
     // NOT-15: conserva notas y auditoría al retirar la marca y su política.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
     const [{ restosRecorreccion }] = await bd.query<
       { restosRecorreccion: string }[]
     >(
@@ -196,7 +204,7 @@ describe('migraciones', () => {
 
     // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
     const [{ lecturaAlumno }] = await bd.query<{ lecturaAlumno: string }[]>(
       `SELECT count(*) AS "lecturaAlumno" FROM pg_policies
         WHERE policyname = 'pol_nota_lectura_alumno'`,
@@ -204,7 +212,7 @@ describe('migraciones', () => {
     expect(Number(lecturaAlumno)).toBe(0)
 
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
-    const SIN_EDICION_EVALUACION = TABLAS.filter(
+    const SIN_EDICION_EVALUACION = SIN_ENTREGA.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
@@ -268,6 +276,7 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-09.
     await bd.undoLastMigration() // runMigrations también reaplicó NOT-15.
     await bd.undoLastMigration() // NOT-13 sale antes de NOT-03.
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
