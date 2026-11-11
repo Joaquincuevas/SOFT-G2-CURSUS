@@ -1105,6 +1105,27 @@ describe('GET .../mis-notas (NOT-13)', () => {
     await misNotas(ALUMNO, 403, secciones.s2)
   })
 
+  // Decisión de NOT-13: sin inscripción activa no ve sus notas, como en
+  // mi-asistencia (ASI-06).
+  it('un alumno con la inscripción archivada responde 403', async () => {
+    await bd.query(
+      `UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+        WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL`,
+      [secciones.s1, alumnos.base, await idDe(ADMIN_INGENIERIA)],
+    )
+    try {
+      await misNotas(ALUMNO, 403)
+    } finally {
+      await bd.query(
+        `UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL
+          WHERE id = (SELECT id FROM inscripcion
+                       WHERE seccion_id = $1 AND usuario_id = $2
+                       ORDER BY archived_at DESC NULLS LAST LIMIT 1)`,
+        [secciones.s1, alumnos.base],
+      )
+    }
+  })
+
   it('sin sesión responde 401', async () => {
     await request(app.getHttpServer())
       .get(rutaMisNotas(secciones.s1))
