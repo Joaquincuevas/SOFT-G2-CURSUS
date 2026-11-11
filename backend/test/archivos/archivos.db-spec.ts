@@ -2,6 +2,7 @@ import type {
   ArchivoResumen,
   DescargaArchivo,
   SubidaArchivo,
+  VersionSilabo,
 } from '@cursus/shared'
 import {
   type INestApplication,
@@ -59,10 +60,10 @@ class AlmacenamientoFalso {
     })
   }
 
-  firmarDescarga(clave: string, nombre: string) {
+  firmarDescarga(clave: string, nombre: string, version?: string) {
     this.conectado()
     return Promise.resolve({
-      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}`,
+      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}${version ? `&versionId=${version}` : ''}`,
       expiraEn: new Date(Date.now() + 300_000),
     })
   }
@@ -70,6 +71,10 @@ class AlmacenamientoFalso {
   objetoSubido(clave: string) {
     this.conectado()
     return Promise.resolve(this.objetos.get(clave) ?? null)
+  }
+
+  tieneCabeceraPdf(_clave: string, version: string) {
+    return Promise.resolve(version !== 'no-es-pdf')
   }
 }
 
@@ -800,5 +805,146 @@ describe('MAT-01: RLS y restricciones de archivo', () => {
     await expect(bd.query(INSERTAR, valores)).rejects.toMatchObject({
       code: '23514',
     })
+  })
+})
+
+describe('MAT-02: publicar versiones del sílabo', () => {
+  const ruta = (seccion: string) => `/api/espacio/secciones/${seccion}/silabo`
+  async function publicar(
+    correo: string,
+    seccion: string,
+    archivoId: string,
+    estado: number,
+  ) {
+    const token = await tokenDe(correo)
+    return request(app.getHttpServer())
+      .post(ruta(seccion))
+      .set('Authorization', `Bearer ${token}`)
+      .send({ archivoId })
+      .expect(estado)
+  }
+  async function preparar(correo: string, seccion: string, version: string) {
+    const { archivo } = await pedirSubida(correo, seccion, {
+      nombre: 'Programa.pdf',
+      tamano: 100,
+    })
+    almacenamiento.objetos.set(await claveDe(archivo.id), {
+      tamano: 100,
+      tipo: 'application/pdf',
+      version,
+    })
+    await confirmar(correo, seccion, archivo.id)
+    return archivo.id
+  }
+
+  it('publica desde dos secciones, conserva el responsable y fija la versión descargada', async () => {
+    const primero = await preparar(PROFESOR, secciones.s1, 's3-primero')
+    const segundo = await preparar(demo.profesor2, secciones.s2, 's3-segundo')
+    const inicial = await publicar(PROFESOR, secciones.s1, primero, 201)
+    expect((inicial.body as VersionSilabo).version).toBe(1)
+    const nueva = await publicar(demo.profesor2, secciones.s2, segundo, 201)
+    expect((nueva.body as VersionSilabo).version).toBe(2)
+    const reintento = await publicar(demo.profesor2, secciones.s2, segundo, 201)
+    expect(reintento.body).toEqual(nueva.body)
+
+    const token = await tokenDe(ALUMNO)
+    const listado = await request(app.getHttpServer())
+      .get(ruta(secciones.s1))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+    const actores = await bd.query<{ nombre: string }[]>(
+      'SELECT nombre FROM usuario WHERE correo=$1',
+      [demo.profesor2],
+    )
+    expect((listado.body as VersionSilabo[]).map((v) => v.version)).toEqual([
+      2, 1,
+    ])
+    expect((listado.body as VersionSilabo[])[0].responsable).toBe(
+      actores[0].nombre,
+    )
+    const clave = await claveDe(segundo)
+    almacenamiento.objetos.set(clave, {
+      tamano: 100,
+      tipo: 'application/pdf',
+      version: 'otra-version',
+    })
+    const pdf = await request(app.getHttpServer())
+      .get(`${ruta(secciones.s1)}/2`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect('Cache-Control', 'no-store')
+    expect((pdf.body as DescargaArchivo).url).toContain('versionId=s3-segundo')
+    const director = await tokenDe(DIRECTOR)
+    await request(app.getHttpServer())
+      .get(`${ruta(secciones.s2)}/2`)
+      .set('Authorization', `Bearer ${director}`)
+      .expect(403)
+    await descargar(DIRECTOR, secciones.s2, segundo, 404)
+  })
+
+  it('permite publicar al co-profesor y rechaza un archivo con MIME PDF y cabecera inválida', async () => {
+    const profesor = await idDe(demo.profesor2)
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id)
+       SELECT universidad_id, id, $2 FROM seccion WHERE id = $1 RETURNING id`,
+      [secciones.s1, profesor],
+    )
+    try {
+      const invalido = await preparar(demo.profesor2, secciones.s1, 'no-es-pdf')
+      await publicar(demo.profesor2, secciones.s1, invalido, 400)
+      const archivo = await preparar(
+        demo.profesor2,
+        secciones.s1,
+        'co-profesor',
+      )
+      await publicar(demo.profesor2, secciones.s1, archivo, 201)
+      await publicar(ALUMNO, secciones.s1, archivo, 403)
+    } finally {
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [id],
+      )
+    }
+  })
+
+  it('RLS impide registrar un PDF a nombre ajeno o de una sección sin asignación vigente', async () => {
+    const archivo = await preparar(PROFESOR, secciones.s1, 'rls')
+    const [{ universidad_id, curso_id }] = await bd.query<
+      { universidad_id: string; curso_id: string }[]
+    >('SELECT universidad_id, curso_id FROM seccion WHERE id=$1', [
+      secciones.s1,
+    ])
+    const profesor = await idDe(PROFESOR)
+    const ajeno = await idDe(demo.profesor2)
+    const [{ otroCurso }] = await bd.query<{ otroCurso: string }[]>(
+      'SELECT id AS "otroCurso" FROM curso WHERE universidad_id=$1 AND id<>$2 LIMIT 1',
+      [universidad_id, curso_id],
+    )
+    for (const caso of [
+      { actor: profesor, responsable: ajeno, curso: curso_id },
+      { actor: profesor, responsable: profesor, curso: otroCurso },
+      { actor: ajeno, responsable: ajeno, curso: curso_id },
+    ]) {
+      const q = bd.createQueryRunner()
+      await q.startTransaction()
+      try {
+        await q.query('SET LOCAL ROLE cursus_app')
+        await q.query(
+          `SELECT set_config('app.universidad_id', $1, true),
+          set_config('app.rol', 'PROFESOR', true), set_config('app.usuario_id', $2, true)`,
+          [universidad_id, caso.actor],
+        )
+        await expect(
+          q.query(
+            `INSERT INTO silabo (universidad_id, curso_id, archivo_id, version, version_objeto, subido_por)
+           VALUES ($1,$2,$3,99,'rls',$4)`,
+            [universidad_id, caso.curso, archivo, caso.responsable],
+          ),
+        ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+      } finally {
+        await q.rollbackTransaction()
+        await q.release()
+      }
+    }
   })
 })

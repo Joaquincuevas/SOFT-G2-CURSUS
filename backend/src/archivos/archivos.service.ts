@@ -204,7 +204,8 @@ export class ArchivosService {
     seccion: SeccionEspacio,
     archivoId: string,
   ): Promise<DescargaArchivo> {
-    const vigente = 'subido_at IS NOT NULL AND archived_at IS NULL'
+    const vigente =
+      'subido_at IS NOT NULL AND archived_at IS NULL AND NOT es_archivo_silabo(id)'
     // El Director lee en cualquier universidad, en una transacción READ ONLY.
     const [archivo] =
       contexto.rol === 'DIRECTOR'

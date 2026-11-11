@@ -385,6 +385,7 @@ describe('contrato del schema', () => {
         'archivo',
         // Sin filas en el seed: su RLS la prueba test/materiales (MAT-04).
         'material',
+        'silabo',
       ].sort(),
     )
     for (const tabla of tablas) {
@@ -406,6 +407,7 @@ describe('contrato del schema', () => {
                     'asistencia_cambio',
                     'lectura_anuncio',
                     'entrega',
+                    'silabo',
                   ].includes(tabla.tabla)
                 ? ['INSERT', 'SELECT']
                 : ['INSERT', 'SELECT', 'UPDATE'],
@@ -508,6 +510,8 @@ describe('contrato del schema', () => {
         politica: 'pol_revision_notas_devolucion',
         comando: 'UPDATE',
       },
+      { tabla: 'silabo', politica: 'pol_silabo_insercion', comando: 'INSERT' },
+      { tabla: 'silabo', politica: 'pol_silabo_lectura', comando: 'SELECT' },
     ])
   })
 

@@ -18,6 +18,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import './PestanaMaterial.css'
+import { AdministrarSilabo } from './AdministrarSilabo'
 import { subirAS3, tamanoLegible } from './subirArchivo'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
@@ -86,6 +87,7 @@ export function PestanaMaterial({ seccionId, rol }: PropsPestana) {
 
   return (
     <section className="material" aria-label="Materiales del curso">
+      <AdministrarSilabo ruta={ruta} />
       <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
       {rol === 'PROFESOR' && (
         <FormularioMaterial ruta={ruta} alSubir={recargar} />
