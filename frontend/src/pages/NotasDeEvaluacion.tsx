@@ -10,6 +10,7 @@ import {
   motivoNotaInvalida,
   type NotaAlumno,
   type NotasEvaluacion,
+  type Rol,
 } from '@cursus/shared'
 import {
   useEffect,
@@ -24,8 +25,10 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
+import { RecorreccionesNotas } from './RecorreccionesNotas'
 
 interface Props {
+  rol: Rol
   seccionId: string
   evaluacionId: string
   // NOT-09: actualiza el resumen de la lista con lo que acaba de responder
@@ -47,6 +50,7 @@ interface Props {
 // todas las notas guardadas se envía a revisión, y desde ahí los campos
 // quedan de solo lectura hasta que el profesor responda.
 export function NotasDeEvaluacion({
+  rol,
   seccionId,
   evaluacionId,
   alActualizar,
@@ -91,6 +95,13 @@ export function NotasDeEvaluacion({
         <p className="dashboard__texto">
           La sección no tiene alumnos inscritos
         </p>
+      ) : rol === 'PROFESOR' && datos.estado === 'APROBADA' ? (
+        <RecorreccionesNotas
+          ruta={ruta}
+          alumnos={datos.alumnos}
+          alGuardar={fijar}
+          alRecargar={recargar}
+        />
       ) : (
         <FormularioNotas
           // Un cambio de estado (el envío) reinicia el formulario con las
@@ -98,7 +109,7 @@ export function NotasDeEvaluacion({
           key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
-          editable={EDITABLE.includes(datos.estado)}
+          editable={rol === 'AYUDANTE' && EDITABLE.includes(datos.estado)}
           alGuardar={() => setAviso('Borrador guardado.')}
           // El POST devuelve la evaluación ya en revisión: se aplica sin
           // esperar otra recarga, en la que los campos volverían a editarse.

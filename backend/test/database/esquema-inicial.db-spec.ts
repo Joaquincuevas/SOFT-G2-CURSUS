@@ -183,6 +183,17 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-15: conserva notas y auditoría al retirar la marca y su política.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ restosRecorreccion }] = await bd.query<
+      { restosRecorreccion: string }[]
+    >(
+      `SELECT count(*) AS "restosRecorreccion" FROM information_schema.columns
+        WHERE table_name='nota' AND column_name='recorreccion_id'`,
+    )
+    expect(Number(restosRecorreccion)).toBe(0)
+
     // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(TABLAS)
@@ -257,7 +268,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó NOT-13.
+    await bd.undoLastMigration() // runMigrations también reaplicó NOT-15.
+    await bd.undoLastMigration() // NOT-13 sale antes de NOT-03.
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
     await bd.undoLastMigration()

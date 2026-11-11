@@ -467,6 +467,7 @@ describe('contrato del schema', () => {
       },
       { tabla: 'nota', politica: 'pol_nota_lectura_alumno', comando: 'SELECT' },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
+      { tabla: 'nota', politica: 'pol_nota_recorreccion', comando: 'UPDATE' },
       {
         tabla: 'revision_notas',
         politica: 'pol_revision_notas_aprobacion',

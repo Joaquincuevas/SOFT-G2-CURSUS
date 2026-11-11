@@ -16,7 +16,8 @@ import {
 const MIS_NOTAS = `
   SELECT e.id AS "evaluacionId", e.nombre,
          to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.ponderacion,
-         n.valor::float8 AS nota
+         n.valor::float8 AS nota,
+         n.recorreccion_id IS NOT NULL AS recorregida
     FROM evaluacion e
     LEFT JOIN nota n ON n.evaluacion_id = e.id
                     AND n.universidad_id = e.universidad_id

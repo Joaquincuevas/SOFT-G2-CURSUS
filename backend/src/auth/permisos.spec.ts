@@ -154,7 +154,7 @@ for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
 const NOTA: Record<Rol, AccionConcreta[]> = {
   DIRECTOR: LECTURA,
   ADMINISTRATIVO: [],
-  PROFESOR: LECTURA,
+  PROFESOR: ['read', 'update'],
   AYUDANTE: ['read', 'update'],
   ALUMNO: [],
 }

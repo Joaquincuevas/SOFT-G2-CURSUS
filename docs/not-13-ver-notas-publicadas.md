@@ -30,7 +30,7 @@ El profesor y el ayudante siguen viendo la lista de evaluaciones de antes en esa
 - **Un alumno con la inscripción archivada no ve sus notas** (403, como en `mi-asistencia`). `IntegranteSeccionGuard` exige una inscripción activa. Era un pendiente de NOT-11: si hace falta que un alumno retirado consulte sus notas, se resuelve en una tarjeta aparte.
 - **Para las próximas tarjetas:**
   - NOT-14 (nota final) debe reutilizar esta consulta (`MisNotasService`) en vez de leer las notas por otro camino.
-  - NOT-15 (recorrección) agregará a `NotaPropia` la marca de nota recorregida.
+  - NOT-15 (recorrección) agrega `recorregida` a `NotaPropia` y muestra la marca junto a la nota nueva; ver [recorrecciones](not-15-recorreccion-notas.md).
 
 ## API
 
@@ -44,14 +44,16 @@ El profesor y el ayudante siguen viendo la lista de evaluaciones de antes en esa
       "nombre": "Control 1",
       "fecha": "2026-09-01",
       "ponderacion": 20,
-      "nota": 5
+      "nota": 5,
+      "recorregida": false
     },
     {
       "evaluacionId": "…",
       "nombre": "Solemne 1",
       "fecha": "2026-10-05",
       "ponderacion": 30,
-      "nota": null
+      "nota": null,
+      "recorregida": false
     }
   ]
 }

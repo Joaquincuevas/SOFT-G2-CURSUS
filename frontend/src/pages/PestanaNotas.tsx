@@ -40,6 +40,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
   const [historial, setHistorial] = useState<string | null>(null)
   const [avisoEdicion, setAvisoEdicion] = useState(false)
   const ingresaNotas = rol === 'AYUDANTE'
+  const consultaNotas = ingresaNotas || rol === 'PROFESOR'
   const editaEvaluaciones = rol === 'PROFESOR'
   const aviso =
     rol === 'PROFESOR' && datos
@@ -79,8 +80,8 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                 <th scope="col">Fecha</th>
                 <th scope="col">Ponderación</th>
                 {ingresaNotas && <th scope="col">Estado del envío</th>}
-                {ingresaNotas && <th scope="col">Notas</th>}
                 {editaEvaluaciones && <th scope="col">Acciones</th>}
+                {consultaNotas && <th scope="col">Notas</th>}
               </tr>
             </thead>
             <tbody>
@@ -145,7 +146,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                       )}
                     </td>
                   )}
-                  {ingresaNotas && (
+                  {consultaNotas && (
                     <td>
                       <button
                         type="button"
@@ -160,12 +161,14 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                       >
                         {elegida === evaluacion.id
                           ? 'Ocultar'
-                          : evaluacion.envio?.estado === 'EN_REVISION' ||
-                              evaluacion.envio?.estado === 'APROBADA'
+                          : rol === 'PROFESOR'
                             ? 'Ver notas'
-                            : evaluacion.envio?.estado === 'DEVUELTA'
-                              ? 'Corregir notas'
-                              : 'Ingresar notas'}
+                            : evaluacion.envio?.estado === 'EN_REVISION' ||
+                                evaluacion.envio?.estado === 'APROBADA'
+                              ? 'Ver notas'
+                              : evaluacion.envio?.estado === 'DEVUELTA'
+                                ? 'Corregir notas'
+                                : 'Ingresar notas'}
                       </button>
                     </td>
                   )}
@@ -185,6 +188,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                     <td />
                   </>
                 )}
+                {rol === 'PROFESOR' && <td />}
               </tr>
             </tfoot>
           </table>
@@ -212,8 +216,9 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
           Evaluación actualizada.
         </p>
       )}
-      {ingresaNotas && elegida && (
+      {consultaNotas && elegida && (
         <NotasDeEvaluacion
+          rol={rol}
           key={elegida}
           seccionId={seccionId}
           evaluacionId={elegida}

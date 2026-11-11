@@ -59,9 +59,9 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
     expect(filas).toEqual([
-      'EvaluaciónFechaPonderaciónAcciones',
-      'Control 12026-09-0120 %EditarVer historial',
-      'Solemne 12026-10-0530 %EditarVer historial',
+      'EvaluaciónFechaPonderaciónAccionesNotas',
+      'Control 12026-09-0120 %EditarVer historialVer notas',
+      'Solemne 12026-10-0530 %EditarVer historialVer notas',
       'Suma de ponderaciones50 %',
     ])
   })

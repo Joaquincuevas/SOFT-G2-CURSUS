@@ -28,6 +28,7 @@ const NOTAS: MisNotasSeccion = {
       fecha: '2026-09-01',
       ponderacion: 20,
       nota: 5,
+      recorregida: false,
     },
     {
       evaluacionId: 'e2',
@@ -35,6 +36,7 @@ const NOTAS: MisNotasSeccion = {
       fecha: '2026-10-05',
       ponderacion: 30,
       nota: null,
+      recorregida: false,
     },
   ],
 }
@@ -82,6 +84,30 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
     expect(
       panel.queryByRole('button', { name: 'Historial de notas de Control 1' }),
     ).not.toBeInTheDocument()
+  })
+
+  test('muestra la nota nueva y la marca solo en una nota publicada recorregida', async () => {
+    const { panel } = await abrirNotas('ALUMNO', {
+      [MIS_NOTAS]: () => ({
+        evaluaciones: [
+          { ...NOTAS.evaluaciones[0], nota: 6.2, recorregida: true },
+          NOTAS.evaluaciones[1],
+          { ...NOTAS.evaluaciones[0], evaluacionId: 'e3', nombre: 'Control 2' },
+        ],
+      }),
+    })
+
+    const tabla = await panel.findByRole('table', {
+      name: 'Mis notas por evaluación',
+    })
+    const corregida = within(
+      within(tabla).getByText('Control 1').closest('tr')!,
+    )
+    expect(corregida.getByText('6,2', { exact: false })).toBeInTheDocument()
+    expect(corregida.getByText('Recorregida')).toBeInTheDocument()
+    expect(within(tabla).getAllByText('Recorregida')).toHaveLength(1)
+    expect(within(tabla).queryByText('5,5')).not.toBeInTheDocument()
+    expect(panel.queryAllByRole('button')).toHaveLength(0)
   })
 
   test('sin evaluaciones muestra el estado vacío', async () => {

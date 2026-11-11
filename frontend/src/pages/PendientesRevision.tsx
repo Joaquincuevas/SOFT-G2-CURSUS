@@ -103,6 +103,7 @@ export function PendientesRevision() {
                     <tr>
                       <td colSpan={6}>
                         <NotasDeEvaluacion
+                          rol="PROFESOR"
                           seccionId={p.seccion.id}
                           evaluacionId={p.evaluacion.id}
                           // Aprobada o devuelta (o ya no pendiente): se

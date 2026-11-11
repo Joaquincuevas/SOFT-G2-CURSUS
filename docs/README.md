@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [NOT-15: recorrección de notas publicadas y auditoría](not-15-recorreccion-notas.md)
 - [NOT-16 · Historial de cambios de una nota y guía de revisión](not-16-historial-nota.md)
 - [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)

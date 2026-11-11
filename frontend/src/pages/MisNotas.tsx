@@ -50,6 +50,9 @@ export function MisNotas({ seccionId }: { seccionId: string }) {
                   {evaluacion.nota === null
                     ? 'Sin publicar'
                     : FORMATO_NOTA.format(evaluacion.nota)}
+                  {evaluacion.nota !== null && evaluacion.recorregida && (
+                    <span className="notas__recorregida">Recorregida</span>
+                  )}
                 </td>
               </tr>
             ))}
