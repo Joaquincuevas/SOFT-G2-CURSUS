@@ -53,7 +53,7 @@ Permisos (CASL, `Material`): el profesor tiene `create` y `read`; nadie más rec
 
 ## Datos
 
-La migración `1792850000000-CrearMaterial` crea `material`:
+La migración `1792860000000-CrearMaterial` crea `material`:
 
 | Columna       | Detalle                                                                                         |
 | ------------- | ----------------------------------------------------------------------------------------------- |

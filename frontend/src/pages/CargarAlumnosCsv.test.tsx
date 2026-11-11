@@ -60,15 +60,44 @@ async function abrir(
     Promise.resolve(json(RESULTADO)),
   rol: Rol = 'ADMINISTRATIVO',
 ) {
+  let cargados = 0
   const fetch = vi.fn((ruta: string, init?: RequestInit) => {
     if (ruta === '/api/auth/yo')
       return Promise.resolve(json(usuarioDePrueba(rol)))
     if (ruta === '/api/cursos/curso-1') return Promise.resolve(json(CURSO))
-    if (ruta === '/api/secciones/s1/alumnos/csv') return responder(init)
+    if (ruta === '/api/secciones/s1/integrantes')
+      return Promise.resolve(
+        json({
+          seccion: {
+            id: 's1',
+            numero: 1,
+            curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
+          },
+          integrantes: Array.from({ length: cargados }, (_, i) => ({
+            id: `a${i}`,
+            nombre: `Alumno ${i}`,
+            correo: `alumno${i}@u.cl`,
+            rol: 'ALUMNO',
+          })),
+        }),
+      )
+    if (ruta === '/api/secciones/s1/alumnos/csv')
+      return responder(init).then(async (res) => {
+        if (res.ok) {
+          const resultado = (await res.clone().json()) as ResultadoCargaAlumnos
+          cargados += resultado.cargados
+        }
+        return res
+      })
     return Promise.resolve(json([]))
   })
   vi.stubGlobal('fetch', fetch)
-  renderApp('/cursos/curso-1', 'jwt-de-prueba')
+  renderApp(
+    rol === 'ADMINISTRATIVO'
+      ? '/secciones/s1/integrantes?rol=ALUMNO'
+      : '/cursos/curso-1',
+    'jwt-de-prueba',
+  )
   await screen.findByRole('navigation', { name: 'Navegación principal' })
   if (rol === 'ADMINISTRATIVO')
     fireEvent.click(
@@ -128,7 +157,7 @@ test('envía el CSV con sesión, muestra resumen y errores y actualiza el conteo
   )
   fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
   expect(
-    screen.getByRole('link', { name: 'Ver los 2 alumnos de la sección 1' }),
+    await screen.findByRole('button', { name: 'Alumnos (2)' }),
   ).toBeInTheDocument()
   expect(screen.queryByText('password-solo-test')).not.toBeInTheDocument()
   fireEvent.click(

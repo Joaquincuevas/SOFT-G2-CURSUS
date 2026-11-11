@@ -11,8 +11,8 @@ const ROL_APP = 'cursus_app'
 // cursos son de un solo período, así que la herencia entre períodos no existe
 // todavía (docs/mat-04-subir-material.md). El contenido es un archivo de
 // MAT-01, ya confirmado en S3: aquí no se guardan bytes.
-export class CrearMaterial1792850000000 implements MigrationInterface {
-  name = 'CrearMaterial1792850000000'
+export class CrearMaterial1792860000000 implements MigrationInterface {
+  name = 'CrearMaterial1792860000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // La FK compuesta (archivo, universidad) usa uq_archivo_id_universidad,
