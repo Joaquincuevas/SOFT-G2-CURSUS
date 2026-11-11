@@ -5,6 +5,7 @@ Documentación del proyecto:
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 
 - [MAT-09: entrega y reemplazo de informes con plazo](mat-09-entrega-informe.md)
+- [MAT-10: el equipo docente lista y descarga los informes entregados](mat-10-descargar-entregas.md)
 
 - [NOT-15: recorrección de notas publicadas y auditoría](not-15-recorreccion-notas.md)
 - [NOT-16 · Historial de cambios de una nota y guía de revisión](not-16-historial-nota.md)
