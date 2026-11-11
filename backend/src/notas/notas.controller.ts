@@ -31,7 +31,7 @@ import { validarGuardarNotas } from './guardar-notas.dto.js'
 import { NotasService } from './notas.service.js'
 
 // Roles en la sección que leen las notas propuestas. El alumno ve las suyas,
-// publicadas, en NOT-13.
+// publicadas, en mis-notas (NOT-13).
 const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 
 // NOT-05 (RN-10): notas de una evaluación en el espacio de una sección. Cada

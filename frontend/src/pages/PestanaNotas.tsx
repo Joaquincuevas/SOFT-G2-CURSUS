@@ -13,6 +13,7 @@ import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { HistorialDeNota } from './HistorialDeNota'
+import { MisNotas } from './MisNotas'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
@@ -21,11 +22,17 @@ import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
 
 // NOT-01 (RN-10): evaluaciones de la sección con su ponderación y la suma
-// total. Las crea solo el profesor de la sección; el ayudante, el alumno y
-// el Director ven la lista. NOT-02 advierte cuánto falta o sobra para 100 %.
+// total. Las crea solo el profesor de la sección; el ayudante y el Director
+// ven la lista. NOT-02 advierte cuánto falta o sobra para 100 %.
 // NOT-05: el ayudante abre cada evaluación para ingresar las notas; el
-// profesor las revisa en NOT-10.
+// profesor las revisa en NOT-10. NOT-13: el alumno ve sus notas publicadas.
 export function PestanaNotas({ seccionId, rol }: PropsPestana) {
+  if (rol === 'ALUMNO')
+    return <MisNotas key={seccionId} seccionId={seccionId} />
+  return <EvaluacionesDeSeccion seccionId={seccionId} rol={rol} />
+}
+
+function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)

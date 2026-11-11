@@ -183,6 +183,15 @@ describe('migraciones', () => {
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
 
+    // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ lecturaAlumno }] = await bd.query<{ lecturaAlumno: string }[]>(
+      `SELECT count(*) AS "lecturaAlumno" FROM pg_policies
+        WHERE policyname = 'pol_nota_lectura_alumno'`,
+    )
+    expect(Number(lecturaAlumno)).toBe(0)
+
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
     const SIN_EDICION_EVALUACION = TABLAS.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
@@ -248,6 +257,7 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // runMigrations también reaplicó NOT-13.
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
     await bd.undoLastMigration()
