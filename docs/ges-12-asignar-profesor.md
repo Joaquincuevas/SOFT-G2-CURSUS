@@ -1,5 +1,7 @@
 # GES-12: asignar el profesor de una sección
 
+> GES-26 reúne ahora estas acciones en la [vista Integrantes](ges-26-integrantes-seccion.md). Los endpoints y las reglas de esta tarjeta se mantienen.
+
 Tarjeta: [GES-12](https://trello.com/c/eQz4gcJe). Referencia: RN-05. Depende de GES-09.
 
 ## Comportamiento
