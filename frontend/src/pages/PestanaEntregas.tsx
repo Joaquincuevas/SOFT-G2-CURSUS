@@ -11,6 +11,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import './PestanaEntregas.css'
 import { useDatos } from './useDatos'
+import { MiEntrega } from './MiEntrega'
 import type { PropsPestana } from './VistaSeccion'
 
 // Fecha y hora límite en la zona de la universidad, con el año completo y
@@ -71,6 +72,13 @@ export function PestanaEntregas({ seccionId, rol }: PropsPestana) {
                 <p className="entregas__instrucciones">
                   {actividad.instrucciones}
                 </p>
+                {rol === 'ALUMNO' && (
+                  <MiEntrega
+                    key={`${seccionId}-${actividad.id}`}
+                    ruta={`${ruta}/${actividad.id}`}
+                    actividad={actividad}
+                  />
+                )}
               </article>
             </li>
           ))}

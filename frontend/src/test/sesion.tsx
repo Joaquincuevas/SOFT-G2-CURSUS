@@ -163,6 +163,10 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     () => new Response(null, { status: 204 }),
   ],
   // Actividades de entrega de la sección (MAT-08).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/mi-entrega$/,
+    () => ({ entrega: null, cerrada: false }),
+  ],
   [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
 ]
 
