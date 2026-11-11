@@ -87,7 +87,7 @@ export function PestanaMaterial({ seccionId, rol }: PropsPestana) {
 
   return (
     <section className="material" aria-label="Materiales del curso">
-      <AdministrarSilabo ruta={ruta} />
+      <AdministrarSilabo ruta={ruta} puedePublicar={rol === 'PROFESOR'} />
       <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
       {rol === 'PROFESOR' && (
         <FormularioMaterial ruta={ruta} alSubir={recargar} />

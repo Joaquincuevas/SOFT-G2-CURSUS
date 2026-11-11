@@ -10,7 +10,15 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { subirAS3 } from './subirArchivo'
 import { useDatos } from './useDatos'
 
-export function AdministrarSilabo({ ruta }: { ruta: string }) {
+// MAT-02. El historial y la descarga son de todos los integrantes; publicar
+// es solo del profesor (MAT-06 abre la pestaña Material al resto).
+export function AdministrarSilabo({
+  ruta,
+  puedePublicar,
+}: {
+  ruta: string
+  puedePublicar: boolean
+}) {
   const { fetchConSesion } = useAuth()
   const destino = `${ruta}/silabo`
   const [historial, recargar, , fijar] = useDatos<VersionSilabo[]>(destino)
@@ -105,44 +113,46 @@ export function AdministrarSilabo({ ruta }: { ruta: string }) {
   return (
     <section className="material" aria-label="Sílabo del curso">
       <h3 className="vista-seccion__subtitulo">Sílabo del curso</h3>
-      <form
-        className="material__formulario"
-        aria-label="Cargar sílabo"
-        onSubmit={(evento) => void publicar(evento)}
-      >
-        <label className="material__campo">
-          Sílabo (PDF, hasta 10 MiB)
-          <input
-            type="file"
-            ref={input}
-            accept="application/pdf,.pdf"
-            disabled={ocupado}
-            onChange={(evento) => {
-              confirmado.current = null
-              setArchivo(evento.target.files?.[0] ?? null)
-              setError('')
-              setAviso('')
-            }}
-          />
-        </label>
-        <button
-          className="material__boton"
-          type="submit"
-          disabled={!archivo || ocupado}
+      {puedePublicar && (
+        <form
+          className="material__formulario"
+          aria-label="Cargar sílabo"
+          onSubmit={(evento) => void publicar(evento)}
         >
-          {ocupado ? 'Publicando…' : 'Publicar sílabo'}
-        </button>
-        {error && (
-          <p className="material__error" role="alert">
-            {error}
-          </p>
-        )}
-        {aviso && (
-          <p className="material__aviso" role="status">
-            {aviso}
-          </p>
-        )}
-      </form>
+          <label className="material__campo">
+            Sílabo (PDF, hasta 10 MiB)
+            <input
+              type="file"
+              ref={input}
+              accept="application/pdf,.pdf"
+              disabled={ocupado}
+              onChange={(evento) => {
+                confirmado.current = null
+                setArchivo(evento.target.files?.[0] ?? null)
+                setError('')
+                setAviso('')
+              }}
+            />
+          </label>
+          <button
+            className="material__boton"
+            type="submit"
+            disabled={!archivo || ocupado}
+          >
+            {ocupado ? 'Publicando…' : 'Publicar sílabo'}
+          </button>
+          {aviso && (
+            <p className="material__aviso" role="status">
+              {aviso}
+            </p>
+          )}
+        </form>
+      )}
+      {error && (
+        <p className="material__error" role="alert">
+          {error}
+        </p>
+      )}
       {historial === null && (
         <ErrorEstado
           mensaje="No pudimos cargar las versiones del sílabo."

@@ -56,7 +56,7 @@ En la pestaña **Material**, cada material muestra su archivo, con su tamaño, y
 2. la pantalla pide la URL firmada y abre un enlace con ella; el navegador descarga el archivo con su nombre;
 3. si falla, muestra "No pudimos descargar «_título_». Inténtalo nuevamente." (`role="alert"`). El botón se desbloquea siempre, en un `finally`.
 
-El formulario **Subir material** solo aparece para el profesor.
+El formulario **Subir material** solo aparece para el profesor. Lo mismo con **Publicar sílabo** de [MAT-02](mat-02-silabo-curso.md), que está en la misma pestaña: el ayudante y el alumno ven el historial del sílabo y lo descargan, pero no publican (la API ya les respondía 403).
 
 ## Verificación
 

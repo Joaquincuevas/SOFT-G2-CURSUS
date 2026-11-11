@@ -65,6 +65,31 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
   expect(publicar).toHaveBeenCalledTimes(1)
 })
 
+// MAT-06 abre la pestaña al ayudante y al alumno: ven el historial del sílabo
+// y lo descargan, pero solo el profesor publica.
+test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
+  '%s ve el historial del sílabo sin el formulario para publicar',
+  async (rol) => {
+    await renderConSesion(rol, VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
+      [MATERIALES]: () => [],
+      [`${BASE}/silabo`]: () => [
+        { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
+      ],
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+    const panel = within(
+      await screen.findByRole('region', { name: 'Sílabo del curso' }),
+    )
+
+    expect(
+      await panel.findByRole('button', { name: 'Descargar versión 1' }),
+    ).toBeEnabled()
+    expect(panel.queryByRole('form', { name: 'Cargar sílabo' })).toBeNull()
+    expect(panel.queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
+  },
+)
+
 const RESUMEN: SeccionResumen = {
   id: 'seccion-1',
   numero: 1,
