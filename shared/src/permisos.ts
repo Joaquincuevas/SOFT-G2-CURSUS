@@ -31,6 +31,7 @@ export type SujetoTabla =
   | 'Anuncio'
   | 'Evaluacion'
   | 'Actividad'
+  | 'Entrega'
   | 'Nota'
   | 'RevisionNotas'
   | 'Archivo'
@@ -184,6 +185,10 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // equipo docente. El Administrativo no recibe nada. Nadie los borra.
   if (SUBEN_ARCHIVOS.includes(usuario.rol)) can(['create', 'read'], 'Archivo')
   if (usuario.rol === 'DIRECTOR') can('read', 'Archivo')
+
+  // MAT-09: solo el alumno consulta y confirma su entrega. La descarga del
+  // equipo docente se habilita en MAT-10.
+  if (usuario.rol === 'ALUMNO') can(['create', 'read'], 'Entrega')
 
   return build()
 }
