@@ -215,7 +215,7 @@ describe('GES-10: editor del horario', () => {
     expect(screen.getByRole('table')).toHaveTextContent('Ana Ayudante')
     expect(
       screen.getByRole('link', { name: 'Ver los 2 alumnos de la sección 1' }),
-    ).toHaveAttribute('href', '/secciones/seccion-1/alumnos')
+    ).toHaveAttribute('href', '/secciones/seccion-1/integrantes?rol=ALUMNO')
     expect(
       screen.getByRole('button', { name: 'Editar horario de la sección 1' }),
     ).toBeInTheDocument()
@@ -277,29 +277,52 @@ describe('GES-10: editor del horario', () => {
   })
 
   test('cargar alumnos por CSV conserva el horario y editarlo conserva el conteo', async () => {
+    let cargados = false
     await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
-      '/api/cursos/curso-1': () => curso(EXISTENTE.resumen),
+      '/api/cursos/curso-1': () => ({
+        ...curso(EXISTENTE.resumen),
+        secciones: curso(EXISTENTE.resumen).secciones.map((s) => ({
+          ...s,
+          alumnos: cargados ? 3 : 2,
+        })),
+      }),
+      '/api/secciones/seccion-1/integrantes': () => ({
+        seccion: {
+          id: 'seccion-1',
+          numero: 1,
+          curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
+        },
+        integrantes: [],
+      }),
       [RUTA]: (init) =>
         init?.method === 'PUT' ? respuestaCorrecta(init) : EXISTENTE,
-      '/api/secciones/seccion-1/alumnos/csv': () => ({
-        total: 1,
-        cargados: 1,
-        errores: 0,
-        filas: [
-          {
-            fila: 2,
-            correo: 'ana@norte.cursus.test',
-            estado: 'cargado',
-            cuentaCreada: false,
-            alumno: {
-              id: 'alumno-3',
-              nombre: 'Ana',
+      '/api/secciones/seccion-1/alumnos/csv': () => (
+        (cargados = true),
+        {
+          total: 1,
+          cargados: 1,
+          errores: 0,
+          filas: [
+            {
+              fila: 2,
               correo: 'ana@norte.cursus.test',
+              estado: 'cargado',
+              cuentaCreada: false,
+              alumno: {
+                id: 'alumno-3',
+                nombre: 'Ana',
+                correo: 'ana@norte.cursus.test',
+              },
             },
-          },
-        ],
-      }),
+          ],
+        }
+      ),
     })
+    fireEvent.click(
+      await screen.findByRole('link', {
+        name: 'Ver los 2 alumnos de la sección 1',
+      }),
+    )
     fireEvent.click(
       await screen.findByRole('button', { name: 'Cargar CSV en la sección 1' }),
     )
@@ -314,6 +337,8 @@ describe('GES-10: editor del horario', () => {
     fireEvent.submit(screen.getByLabelText('Archivo CSV').closest('form')!)
     await screen.findByText('1 de 1 cargados, 0 con error.')
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar' }))
+    fireEvent.click(screen.getByRole('link', { name: '← Volver al curso' }))
+    await screen.findByRole('table', { name: 'Secciones' })
     expect(resumenVisible()).toBe(EXISTENTE.resumen)
 
     fireEvent.click(
