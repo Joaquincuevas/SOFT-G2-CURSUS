@@ -484,6 +484,73 @@ describe('pestaña Material (MAT-04)', () => {
       })
     })
 
+    test('si el registro se guardó pero se perdió la respuesta, el reintento con 409 lo da por subido sin subir de nuevo', async () => {
+      // El servidor guarda el material en el primer intento, pero la
+      // respuesta no llega (falla la red).
+      const guardados: Material[] = []
+      let intento = 0
+      const { llamadas } = await abrirMaterial({
+        materiales: guardados,
+        registrar: () => {
+          if (++intento === 1) {
+            guardados.push({
+              ...EXISTENTE,
+              id: 'material-1',
+              titulo: 'Guía 1',
+              archivo: {
+                ...SUBIDA.archivo,
+                subidoEn: '2026-11-10T12:00:00.000Z',
+              },
+            })
+            return Promise.reject(new TypeError('Failed to fetch'))
+          }
+          return json(
+            {
+              statusCode: 409,
+              message: 'Ese archivo ya está registrado como material',
+            },
+            409,
+          )
+        },
+      })
+      completar()
+      enviar()
+      ;(await subidaEnCurso()).terminar(204)
+      expect(await panel().findByRole('alert')).toBeInTheDocument()
+      desbloqueado()
+
+      enviar()
+
+      await waitFor(() =>
+        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+      )
+      expect(panel().queryByRole('alert')).toBeNull()
+      expect(await panel().findByText('Guía 1')).toBeInTheDocument()
+      // Una sola subida a S3, un solo archivo pedido y un solo material.
+      expect(XhrFalso.enviadas).toHaveLength(1)
+      expect(llamadas.filter((l) => l === `POST ${ARCHIVOS}`)).toHaveLength(1)
+      expect(guardados).toHaveLength(1)
+    })
+
+    test('un 409 por otro registro del mismo archivo sigue siendo un error', async () => {
+      await abrirMaterial({
+        registrar: () =>
+          json(
+            {
+              statusCode: 409,
+              message: 'Ese archivo ya está registrado como material',
+            },
+            409,
+          ),
+      })
+      completar()
+      enviar()
+      ;(await subidaEnCurso()).terminar(204)
+      expect(await panel().findByRole('alert')).toHaveTextContent(
+        'Ese archivo ya está registrado como material.',
+      )
+    })
+
     test('al registrar con otro archivo, sube el nuevo', async () => {
       let intento = 0
       await abrirMaterial({
