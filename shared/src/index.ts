@@ -37,6 +37,7 @@ export interface UsuarioSesion {
 export * from './permisos.js'
 export * from './archivos.js'
 export * from './cursos.js'
+export * from './integrantes.js'
 export * from './periodos.js'
 export * from './perfil.js'
 export * from './horarios.js'

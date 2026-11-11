@@ -1,5 +1,7 @@
 # GES-25: una sección puede tener varios profesores
 
+> GES-26 reúne ahora estas acciones en la [vista Integrantes](ges-26-integrantes-seccion.md). Los endpoints y las reglas de esta tarjeta se mantienen.
+
 Tarjeta: [GES-25](https://trello.com/c/O5fAznBp). Depende de GES-12 (asignar profesor), GES-13 (ayudantes) y GES-14 (quitar con motivo), y toca las tarjetas que exigen "el profesor de la sección": NOT-01/02/10/11/12, ASI-01/02/04/05, ANU-01/05 y MAT-08.
 
 **Como** Administrativo, **quiero** asignar varios profesores a una sección, **para** que todos tengan los mismos permisos sobre ella.

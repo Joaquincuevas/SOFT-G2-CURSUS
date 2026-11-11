@@ -183,6 +183,12 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // GES-26: retira solo el motivo del alumno.
+    const [{ motivoRetiro }] = await bd.query<{ motivoRetiro: string }[]>(
+      `SELECT count(*) AS "motivoRetiro" FROM information_schema.columns
+       WHERE table_name='inscripcion' AND column_name='motivo_retiro'`,
+    )
+    expect(Number(motivoRetiro)).toBe(0)
     await bd.undoLastMigration() // MAT-09 sale antes de NOT-15.
     const SIN_ENTREGA = TABLAS.filter((tabla) => tabla !== 'entrega')
     expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
@@ -276,7 +282,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-09.
+    await bd.undoLastMigration() // runMigrations también reaplicó GES-26.
+    await bd.undoLastMigration() // MAT-09.
     await bd.undoLastMigration() // runMigrations también reaplicó NOT-15.
     await bd.undoLastMigration() // NOT-13 sale antes de NOT-03.
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.

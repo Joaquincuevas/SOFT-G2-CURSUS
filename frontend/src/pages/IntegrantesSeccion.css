@@ -1,0 +1,37 @@
+.integrantes__tipos,
+.integrantes__buscar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.integrantes__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 0;
+}
+.integrantes__buscar .cursos__campo {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.integrantes__resultados ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.integrantes__resultados li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.integrantes__correo {
+  display: block;
+  color: var(--color-text-secondary);
+  font: var(--font-caption);
+}
