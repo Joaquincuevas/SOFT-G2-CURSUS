@@ -73,3 +73,20 @@ export interface Material {
   // Fecha ISO 8601 en que se registró el material.
   creadoEn: string
 }
+
+// MAT-09: el archivo ya pasó por la subida y confirmación de MAT-01.
+export interface EntregarInforme {
+  archivoId: string
+}
+
+export interface EntregaInforme {
+  id: string
+  archivo: ArchivoResumen
+  // Hora del servidor en ISO 8601, no la del navegador ni la de la subida.
+  entregadaEn: string
+}
+
+export interface MiEntregaActividad {
+  entrega: EntregaInforme | null
+  cerrada: boolean
+}

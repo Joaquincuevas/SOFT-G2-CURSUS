@@ -3,6 +3,8 @@ import { EspacioModule } from '../espacio/espacio.module.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
 import { EvaluacionesController } from './evaluaciones.controller.js'
 import { EvaluacionesService } from './evaluaciones.service.js'
+import { MisNotasController } from './mis-notas.controller.js'
+import { MisNotasService } from './mis-notas.service.js'
 import { NotasController } from './notas.controller.js'
 import { NotasService } from './notas.service.js'
 import { PonderacionesService } from './ponderaciones.service.js'
@@ -12,10 +14,11 @@ import { PonderacionesService } from './ponderaciones.service.js'
 // transacción.
 @Module({
   imports: [EspacioModule],
-  controllers: [EvaluacionesController, NotasController],
+  controllers: [EvaluacionesController, NotasController, MisNotasController],
   providers: [
     EvaluacionesService,
     AuditoriaNotasService,
+    MisNotasService,
     NotasService,
     PonderacionesService,
   ],

@@ -26,6 +26,7 @@ const TABLAS = [
   'clase',
   'curso',
   'curso_cambio',
+  'entrega',
   'evaluacion',
   'evaluacion_cambio',
   'facultad',
@@ -183,18 +184,14 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-
-    // MAT-04: quita material, su trigger y la restricción que agregó a
-    // archivo. Revertir, aplicar y revertir de nuevo deja lo mismo. Desde
-    // aquí, SIN_MATERIAL es lo que siguen esperando las migraciones
-    // anteriores.
+    // MAT-04 es la última: quita material y su trigger. La restricción
+    // uq_archivo_id_universidad es de MAT-09 y queda. Revertir, aplicar y
+    // revertir de nuevo deja lo mismo.
     await bd.undoLastMigration()
     const SIN_MATERIAL = TABLAS.filter((tabla) => tabla !== 'material')
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
     const [restosMaterial] = await bd.query<{ restos: string }[]>(
-      `SELECT (SELECT count(*) FROM pg_proc WHERE proname = 'validar_material')
-            + (SELECT count(*) FROM pg_constraint
-                WHERE conname = 'uq_archivo_id_universidad') AS restos`,
+      `SELECT count(*) AS restos FROM pg_proc WHERE proname = 'validar_material'`,
     )
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
@@ -202,8 +199,36 @@ describe('migraciones', () => {
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
 
+    await bd.undoLastMigration() // MAT-09 sale antes de NOT-15.
+    const SIN_ENTREGA = SIN_MATERIAL.filter((tabla) => tabla !== 'entrega')
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ funcionEntrega }] = await bd.query<
+      { funcionEntrega: string | null }[]
+    >(`SELECT to_regprocedure('public.validar_entrega()') AS "funcionEntrega"`)
+    expect(funcionEntrega).toBeNull()
+
+    // NOT-15: conserva notas y auditoría al retirar la marca y su política.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ restosRecorreccion }] = await bd.query<
+      { restosRecorreccion: string }[]
+    >(
+      `SELECT count(*) AS "restosRecorreccion" FROM information_schema.columns
+        WHERE table_name='nota' AND column_name='recorreccion_id'`,
+    )
+    expect(Number(restosRecorreccion)).toBe(0)
+
+    // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ lecturaAlumno }] = await bd.query<{ lecturaAlumno: string }[]>(
+      `SELECT count(*) AS "lecturaAlumno" FROM pg_policies
+        WHERE policyname = 'pol_nota_lectura_alumno'`,
+    )
+    expect(Number(lecturaAlumno)).toBe(0)
+
     await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
-    const SIN_EDICION_EVALUACION = SIN_MATERIAL.filter(
+    const SIN_EDICION_EVALUACION = SIN_ENTREGA.filter(
       (tabla) => tabla !== 'evaluacion_cambio',
     )
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
@@ -267,8 +292,11 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // MAT-04 sale antes que NOT-03.
-    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-04,
+    await bd.undoLastMigration() // MAT-09,
+    await bd.undoLastMigration() // NOT-15
+    await bd.undoLastMigration() // y NOT-13, que salen antes de NOT-03.
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
     await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
     expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
     await bd.undoLastMigration()

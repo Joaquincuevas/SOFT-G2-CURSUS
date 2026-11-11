@@ -167,6 +167,22 @@ export interface NotaAlumno {
   nombre: string
   nota: number | null
   estado: EstadoNota | null
+  // NOT-15: la nota publicada tiene una recorrección en la auditoría.
+  recorregida?: boolean
+}
+
+// La nota que vio el profesor evita sobrescribir otra recorrección realizada
+// desde una segunda pestaña. El servidor conserva la anterior real.
+export interface RecorregirNota {
+  notaAnterior: number
+  notaNueva: number
+  motivo: string
+}
+
+export interface ErrorNotaRecorregida {
+  statusCode: 409
+  message: string
+  notaActual: number
 }
 
 // GET y respuesta del PUT: los alumnos activos de la sección por nombre.
@@ -220,4 +236,23 @@ export interface ErrorListaNotas {
   message: string
   sobrantes: string[]
   repetidos: string[]
+}
+
+// NOT-13 (RE-02): las notas propias del alumno en una sección
+// (/api/espacio/secciones/:id/mis-notas). Cada evaluación activa de la
+// sección, por fecha, con la nota del alumno solo si está publicada: null si
+// aún no hay nota o está propuesta (en borrador, en revisión o devuelta).
+export interface NotaPropia {
+  evaluacionId: string
+  nombre: string
+  // YYYY-MM-DD.
+  fecha: string
+  ponderacion: number
+  nota: number | null
+  // NOT-15: solo la marca de recorrección; la auditoría es del profesor.
+  recorregida: boolean
+}
+
+export interface MisNotasSeccion {
+  evaluaciones: NotaPropia[]
 }

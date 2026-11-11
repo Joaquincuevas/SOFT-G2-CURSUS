@@ -117,6 +117,11 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
       porcentaje: null,
     }),
   ],
+  // Notas propias del alumno (NOT-13).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
+    () => ({ evaluaciones: [] }),
+  ],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
     () => ({ total: 0, alumnos: [] }),
@@ -158,6 +163,10 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     () => new Response(null, { status: 204 }),
   ],
   // Actividades de entrega de la sección (MAT-08).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/mi-entrega$/,
+    () => ({ entrega: null, cerrada: false }),
+  ],
   [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
 ]
 

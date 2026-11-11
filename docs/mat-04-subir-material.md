@@ -53,7 +53,7 @@ Permisos (CASL, `Material`): el profesor tiene `create` y `read`; nadie más rec
 
 ## Datos
 
-La migración `1792830000000-CrearMaterial` crea `material`:
+La migración `1792850000000-CrearMaterial` crea `material`:
 
 | Columna       | Detalle                                                                                         |
 | ------------- | ----------------------------------------------------------------------------------------------- |
@@ -65,7 +65,7 @@ La migración `1792830000000-CrearMaterial` crea `material`:
 | `subido_por`  | Quién lo registró (FK compuesta por universidad)                                                |
 | `archived_at` | Nada se elimina: un material se archiva                                                         |
 
-También agrega `uq_archivo_id_universidad` a `archivo`, para la FK compuesta.
+La FK compuesta a `archivo` usa `uq_archivo_id_universidad`, que crea `CrearEntrega` (MAT-09, `1792840000000`); por eso esta migración va después y no la crea ni la quita.
 
 - **El archivo se valida en un trigger** (`tg_material_validar`, `validar_material()`), porque un CHECK no consulta otras tablas. Al registrar, el archivo debe estar **confirmado** (`subido_at`), no archivado, ser **de una sección de ese curso** y haberlo subido quien registra el material. Si no, `23514`. Después de registrado, el curso, el archivo y `subido_por` no cambian. El trigger corre antes que la política de `INSERT`, así que un archivo que no calza se rechaza con `23514` aunque el rol tampoco pueda escribir.
 - **RLS** (`ENABLE`; sin `DELETE` para `cursus_app`):

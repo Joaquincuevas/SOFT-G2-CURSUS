@@ -11,16 +11,12 @@ const ROL_APP = 'cursus_app'
 // cursos son de un solo período, así que la herencia entre períodos no existe
 // todavía (docs/mat-04-subir-material.md). El contenido es un archivo de
 // MAT-01, ya confirmado en S3: aquí no se guardan bytes.
-export class CrearMaterial1792830000000 implements MigrationInterface {
-  name = 'CrearMaterial1792830000000'
+export class CrearMaterial1792850000000 implements MigrationInterface {
+  name = 'CrearMaterial1792850000000'
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Permite que material referencie (archivo, universidad) con una FK
-    // compuesta, como el resto de las tablas con universidad_id.
-    await queryRunner.query(`
-      ALTER TABLE archivo
-        ADD CONSTRAINT uq_archivo_id_universidad UNIQUE (id, universidad_id)
-    `)
+    // La FK compuesta (archivo, universidad) usa uq_archivo_id_universidad,
+    // que crea CrearEntrega (MAT-09, 1792840000000) y es de esa migración.
 
     // Nada se elimina: un material se archiva con archived_at. archivo_id es
     // único: un archivo pertenece a un solo material (aunque se archive).
@@ -173,8 +169,6 @@ export class CrearMaterial1792830000000 implements MigrationInterface {
     // permisos. Los archivos de MAT-01 y los objetos del bucket no se tocan.
     await queryRunner.query(`DROP TABLE material`)
     await queryRunner.query(`DROP FUNCTION public.validar_material()`)
-    await queryRunner.query(
-      `ALTER TABLE archivo DROP CONSTRAINT uq_archivo_id_universidad`,
-    )
+    // uq_archivo_id_universidad queda: es de CrearEntrega (MAT-09).
   }
 }
