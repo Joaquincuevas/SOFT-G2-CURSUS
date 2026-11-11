@@ -181,6 +181,19 @@ function FormularioMaterial({
     return ((await confirmada.json()) as ArchivoResumen).id
   }
 
+  // Si el listado de la sección ya tiene un material con ese archivo.
+  async function yaRegistrado(archivoId: string): Promise<boolean> {
+    try {
+      const res = await fetchConSesion(`${ruta}/materiales`)
+      if (!res.ok) return false
+      return ((await res.json()) as Material[]).some(
+        (m) => m.archivo.id === archivoId,
+      )
+    } catch {
+      return false
+    }
+  }
+
   async function registrar(archivoId: string, categoria: CategoriaMaterial) {
     setEtapa('registrando')
     const datos: CrearMaterial = {
@@ -198,6 +211,10 @@ function FormularioMaterial({
     })
     if (res.ok) return
     if (res.status === 409) {
+      // El archivo ya es un material. Si es el de este reintento (el registro
+      // anterior se guardó pero su respuesta se perdió), ya quedó subido:
+      // se trata como éxito y el listado lo muestra.
+      if (await yaRegistrado(archivoId)) return
       // Otro registro ganó: ese archivo ya no sirve para reintentar.
       confirmado.current = null
     }
