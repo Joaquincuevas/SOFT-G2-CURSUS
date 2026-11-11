@@ -3,7 +3,12 @@ import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
-import { rutaSeccion, textoBloque } from './misSecciones'
+import {
+  nombresProfesores,
+  rutaSeccion,
+  textoBloque,
+  textoProfesores,
+} from './misSecciones'
 import { useDatos } from './useDatos'
 import { EVENTO_LECTURA_ANUNCIOS } from './anuncios'
 
@@ -34,7 +39,15 @@ export function SeccionesAlumno() {
       ) : (
         <ul className="dashboard__tarjetas">
           {secciones.map(
-            ({ id, curso, numero, horario, profesor, anunciosNuevos }) => (
+            ({
+              id,
+              curso,
+              numero,
+              horario,
+              profesores,
+              profesor,
+              anunciosNuevos,
+            }) => (
               <li key={id}>
                 <Link className="dashboard__tarjeta" to={rutaSeccion(id)}>
                   <span className="dashboard__codigo">{curso.codigo}</span>
@@ -57,9 +70,9 @@ export function SeccionesAlumno() {
                     </ul>
                   )}
                   <p className="dashboard__texto">
-                    {profesor
-                      ? `Profesor a cargo: ${profesor.nombre}`
-                      : 'Sin profesor asignado'}
+                    {textoProfesores(
+                      nombresProfesores({ profesores, profesor }),
+                    )}
                   </p>
                 </Link>
               </li>

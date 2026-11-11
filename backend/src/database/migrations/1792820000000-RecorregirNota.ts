@@ -3,8 +3,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // NOT-15: la nota apunta al último evento de recorrección, que conserva el
 // valor anterior, el nuevo, el motivo, el profesor y la fecha. El alumno solo
 // recibe la marca; no obtiene permisos de lectura sobre la auditoría.
-export class RecorregirNota1792780000000 implements MigrationInterface {
-  name = 'RecorregirNota1792780000000'
+export class RecorregirNota1792820000000 implements MigrationInterface {
+  name = 'RecorregirNota1792820000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`ALTER TABLE nota_cambio
@@ -20,14 +20,14 @@ export class RecorregirNota1792780000000 implements MigrationInterface {
           ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
           JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
           WHERE e.id = nota.evaluacion_id AND e.universidad_id = nota.universidad_id
-            AND s.profesor_id = usuario_actual() AND e.archived_at IS NULL
+            AND es_profesor_de_seccion(s.id, usuario_actual()) AND e.archived_at IS NULL
             AND s.archived_at IS NULL AND c.archived_at IS NULL))
       WITH CHECK (universidad_id = universidad_actual() AND rol_actual() = 'PROFESOR'
         AND estado = 'PUBLICADA' AND archived_at IS NULL AND recorreccion_id IS NOT NULL
         AND EXISTS (SELECT 1 FROM evaluacion e JOIN seccion s
           ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
           WHERE e.id = nota.evaluacion_id AND e.universidad_id = nota.universidad_id
-            AND s.profesor_id = usuario_actual()))`)
+            AND es_profesor_de_seccion(s.id, usuario_actual())))`)
     await q.query(`
       CREATE FUNCTION validar_recorreccion_nota() RETURNS trigger
       LANGUAGE plpgsql AS $$

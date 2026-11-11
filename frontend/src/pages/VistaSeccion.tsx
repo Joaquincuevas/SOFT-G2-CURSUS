@@ -6,7 +6,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
-import { textoBloque } from './misSecciones'
+import { nombresProfesores, textoBloque } from './misSecciones'
 import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
@@ -75,7 +75,8 @@ export function VistaSeccion() {
       />
     )
   }
-  const { curso, numero, rol, horario, profesor, ayudantes } = seccion
+  const { curso, numero, rol, horario, ayudantes } = seccion
+  const profesores = nombresProfesores(seccion)
   const Contenido = activa && CONTENIDO[activa]
   return (
     <section className="dashboard" aria-label="Vista del curso">
@@ -124,8 +125,13 @@ export function VistaSeccion() {
 
       <h3 className="vista-seccion__subtitulo">Equipo docente</h3>
       <dl className="vista-seccion__equipo">
-        <dt>Profesor</dt>
-        <dd>{profesor?.nombre ?? 'Sin profesor asignado'}</dd>
+        {/* GES-25: todos los profesores vigentes. */}
+        <dt>{profesores.length > 1 ? 'Profesores' : 'Profesor'}</dt>
+        <dd>
+          {profesores.length > 0
+            ? profesores.join(', ')
+            : 'Sin profesor asignado'}
+        </dd>
         <dt>Ayudantes</dt>
         {ayudantes.length === 0 ? (
           <dd>Sin ayudantes asignados</dd>

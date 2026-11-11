@@ -1,5 +1,6 @@
 import type {
   GuardarNotas,
+  HistorialNota,
   NotasEvaluacion,
   Rol,
   SeccionEspacio,
@@ -9,6 +10,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   Param,
   ParseUUIDPipe,
@@ -30,7 +32,7 @@ import { NotasService } from './notas.service.js'
 import { RecorregirNotaDto } from './recorregir-nota.dto.js'
 
 // Roles en la sección que leen las notas propuestas. El alumno ve las suyas,
-// publicadas, en NOT-13.
+// publicadas, en mis-notas (NOT-13).
 const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 
 // NOT-05 (RN-10): notas de una evaluación en el espacio de una sección. Cada
@@ -74,6 +76,26 @@ export class NotasController {
       throw new ForbiddenException()
     }
     return this.notas.obtener(contexto, seccion, evaluacionId)
+  }
+
+  @Puede('read', 'Nota')
+  @IntegranteDeSeccion()
+  @Get(':alumnoId/historial')
+  @Header('Cache-Control', 'no-store')
+  historial(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+    @Param('alumnoId', ParseUUIDPipe) alumnoId: string,
+  ): Promise<HistorialNota> {
+    return this.notas.historial(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+      alumnoId,
+    )
   }
 
   // PUT: guardar las mismas notas otra vez no cambia nada ni deja eventos.

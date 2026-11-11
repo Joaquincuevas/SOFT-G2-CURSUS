@@ -361,6 +361,8 @@ describe('contrato del schema', () => {
         'lectura_anuncio',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
         'evaluacion',
+        // Auditoría de solo adición: test/notas/evaluaciones (NOT-03).
+        'evaluacion_cambio',
         // Auditoría sin filas en el seed: test/notas/auditoria (NOT-04).
         'nota_cambio',
         // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-02).
@@ -373,8 +375,12 @@ describe('contrato del schema', () => {
         'nota',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-07).
         'revision_notas',
+        // GES-25: su RLS la prueba test/gestion/profesores-seccion.
+        'seccion_profesor',
         // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
         'superadmin_cambio',
+        // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).
+        'archivo',
       ].sort(),
     )
     for (const tabla of tablas) {
@@ -384,18 +390,20 @@ describe('contrato del schema', () => {
         // UPDATE a la API. La del superadmin la escribe un trigger, así que la
         // API solo la lee.
         comandos:
-          tabla.tabla === 'superadmin_cambio'
-            ? ['SELECT']
-            : [
-                  'curso_cambio',
-                  'asignacion_cambio',
-                  'nota_cambio',
-                  'anuncio_cambio',
-                  'asistencia_cambio',
-                  'lectura_anuncio',
-                ].includes(tabla.tabla)
-              ? ['INSERT', 'SELECT']
-              : ['INSERT', 'SELECT', 'UPDATE'],
+          tabla.tabla === 'evaluacion_cambio'
+            ? []
+            : tabla.tabla === 'superadmin_cambio'
+              ? ['SELECT']
+              : [
+                    'curso_cambio',
+                    'asignacion_cambio',
+                    'nota_cambio',
+                    'anuncio_cambio',
+                    'asistencia_cambio',
+                    'lectura_anuncio',
+                  ].includes(tabla.tabla)
+                ? ['INSERT', 'SELECT']
+                : ['INSERT', 'SELECT', 'UPDATE'],
       })
     }
   })
@@ -412,7 +420,7 @@ describe('contrato del schema', () => {
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'r'
           AND c.relname NOT IN ('curso_cambio', 'asignacion_cambio',
-                                'nota_cambio', 'anuncio_cambio', 'asistencia_cambio', 'superadmin_cambio',
+                                'nota_cambio', 'anuncio_cambio', 'asistencia_cambio', 'superadmin_cambio', 'evaluacion_cambio',
                                 'lectura_anuncio')
           AND (c.relname = 'universidad' OR EXISTS (
             SELECT FROM information_schema.columns col
@@ -427,10 +435,11 @@ describe('contrato del schema', () => {
     expect(sinTrigger).toEqual([])
   })
 
-  // NOT-11, NOT-12 y NOT-15: aprobación, devolución y recorrección del
-  // profesor. Si otra migración empieza a usar usuario_actual(), este test
-  // obliga a revisar que la API lo fije (fijarUsuario).
-  it('las políticas con usuario_actual() son las de aprobación, devolución y recorrección', async () => {
+  // Estas políticas requieren que la API fije la identidad de sesión:
+  // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
+  // archivos propios, NOT-03 para editar evaluaciones y NOT-13 para que el
+  // alumno lea sus notas publicadas.
+  it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
     >(
@@ -441,6 +450,22 @@ describe('contrato del schema', () => {
         ORDER BY tablename, policyname`,
     )
     expect(politicas).toEqual([
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_modificacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'evaluacion',
+        politica: 'pol_evaluacion_modificacion',
+        comando: 'UPDATE',
+      },
+      { tabla: 'nota', politica: 'pol_nota_lectura_alumno', comando: 'SELECT' },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
       { tabla: 'nota', politica: 'pol_nota_recorreccion', comando: 'UPDATE' },
       {

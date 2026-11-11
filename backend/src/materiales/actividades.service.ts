@@ -86,7 +86,7 @@ export class ActividadesService {
            JOIN periodo p ON p.id = c.periodo_id
           WHERE s.universidad_id = $1 AND s.id = $2
             AND s.archived_at IS NULL AND c.archived_at IS NULL
-            AND s.profesor_id = $7
+            AND es_profesor_de_seccion(s.id, $7)
             AND $5::date BETWEEN p.fecha_inicio AND p.fecha_termino
             AND ($5::date + $6::time) AT TIME ZONE $8 > now()
          RETURNING id, titulo, instrucciones, plazo, plazo <= now() AS cerrada`,
@@ -110,7 +110,7 @@ export class ActividadesService {
         inicio: string
         termino: string
       }>(
-        `SELECT s.profesor_id = $3 AS es_profesor,
+        `SELECT es_profesor_de_seccion(s.id, $3) AS es_profesor,
                 $4::date BETWEEN p.fecha_inicio AND p.fecha_termino AS en_periodo,
                 to_char(p.fecha_inicio, 'YYYY-MM-DD') AS inicio,
                 to_char(p.fecha_termino, 'YYYY-MM-DD') AS termino

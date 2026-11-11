@@ -81,7 +81,7 @@ export class ClasesService {
         `WITH f AS (
            SELECT COALESCE($3::date, (now() AT TIME ZONE $5)::date) AS fecha
          )
-         SELECT s.profesor_id = $6 AS es_profesor,
+         SELECT es_profesor_de_seccion(s.id, $6) AS es_profesor,
                 to_char(f.fecha, 'YYYY-MM-DD') AS fecha,
                 EXTRACT(ISODOW FROM f.fecha)::int AS dia,
                 f.fecha BETWEEN p.fecha_inicio AND p.fecha_termino AS en_periodo,

@@ -6,6 +6,7 @@ import {
   type ErrorNotasFaltantes,
   type EstadoRevisionNotas,
   type GuardarNotas,
+  type HistorialNota,
   type EstadoNota,
   type NotasEvaluacion,
   type SeccionEspacio,
@@ -28,6 +29,7 @@ import {
   fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
+import { bloquearNotasDe } from './bloqueo-notas.js'
 import {
   COMENTARIO_DEVOLUCION_NOTAS,
   ESTADO_REVISION_NOTAS,
@@ -87,13 +89,6 @@ const FUERA_DE_REVISION: Record<
 
 type Consulta = Pick<BaseDeDatos, 'query'>
 
-// Un guardado, envío, aprobación o devolución a la vez por evaluación (ver
-// bloquearEvaluacionEditable).
-const bloquearNotasDe = (bd: Consulta, evaluacionId: string) =>
-  bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-    `notas:${evaluacionId.toLowerCase()}`,
-  ])
-
 // NOT-11 y NOT-12: dentro de la transacción de una aprobación o una
 // devolución. Fija el usuario para la RLS (usuario_actual()), toma el lock de
 // la evaluación y comprueba que existe (404), que quien revisa sigue siendo
@@ -112,7 +107,7 @@ async function bloquearEvaluacionEnRevision(
     es_profesor: boolean
     estado: EstadoRevisionNotas
   }>(
-    `SELECT ${ESTADO_REVISION}, s.profesor_id = $4 AS es_profesor
+    `SELECT ${ESTADO_REVISION}, es_profesor_de_seccion(s.id, $4) AS es_profesor
        ${DESDE_EVALUACION} ${CON_REVISION}
       WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
         AND e.archived_at IS NULL AND s.archived_at IS NULL
@@ -256,18 +251,18 @@ export class NotasService {
       await bloquearNotasDe(bd, evaluacionId)
       // Fija la sección para que una reasignación del profesor espere al
       // término de la recorrección, y vuelve a comprobar su pertenencia.
-      const [evaluacion] = await bd.query<{ profesorId: string | null }>(
-        `SELECT s.profesor_id AS "profesorId"
+      const [evaluacion] = await bd.query<{ esProfesor: boolean }>(
+        `SELECT es_profesor_de_seccion(s.id, $4) AS "esProfesor"
            FROM evaluacion e
            JOIN seccion s ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
            JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
           WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
             AND e.archived_at IS NULL AND s.archived_at IS NULL AND c.archived_at IS NULL
           FOR SHARE OF e, s, c`,
-        [contexto.universidadId, seccion.id, evaluacionId],
+        [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
       )
       if (!evaluacion) throw new NotFoundException('La evaluación no existe')
-      if (evaluacion.profesorId !== usuarioId) {
+      if (!evaluacion.esProfesor) {
         throw new ForbiddenException(
           'Solo el profesor de la sección registra recorrecciones',
         )
@@ -370,6 +365,69 @@ export class NotasService {
       throw new NotFoundException('La evaluación no existe')
     }
     return fila
+  }
+
+  async historial(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+    alumnoId: string,
+  ): Promise<HistorialNota> {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo un profesor vigente de la sección puede ver el historial',
+      )
+    }
+
+    // La autorización y los eventos se leen en la misma instantánea.
+    // Una nota aún sin eventos tiene historial vacío, aunque la evaluación
+    // ya haya tenido envíos o devoluciones de otros alumnos.
+    const [fila] = await this.bd.consultarEnUniversidad<
+      HistorialNota & { autorizado: boolean; inscrito: boolean }
+    >(
+      contexto,
+      `WITH alcance AS (
+        SELECT e.id, e.universidad_id,
+               es_profesor_de_seccion(s.id, $4) AS autorizado,
+               EXISTS (
+                 SELECT 1 FROM inscripcion i
+                  WHERE i.universidad_id = e.universidad_id AND i.seccion_id = s.id
+                    AND i.usuario_id = $5 AND i.archived_at IS NULL
+               ) AS inscrito
+          FROM evaluacion e
+          JOIN seccion s ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
+          JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
+         WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+           AND e.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+      )
+      SELECT a.autorizado, a.inscrito,
+             COALESCE((
+               SELECT json_agg(json_build_object(
+                 'id', c.id, 'tipo', c.tipo, 'fecha', c.fecha,
+                 'responsable', json_build_object('id', u.id, 'nombre', u.nombre),
+                 'notaAnterior', c.nota_anterior, 'notaNueva', c.nota_nueva,
+                 'motivo', c.motivo
+               ) ORDER BY c.fecha, c.id)
+                 FROM nota_cambio c
+                 JOIN usuario u ON u.id = c.responsable_id AND u.universidad_id = c.universidad_id
+                WHERE a.autorizado AND a.inscrito AND c.universidad_id = a.universidad_id
+                  AND c.evaluacion_id = a.id
+                  AND (c.alumno_id = $5 OR (c.alumno_id IS NULL AND EXISTS (
+                    SELECT 1 FROM nota_cambio propia
+                     WHERE propia.universidad_id = a.universidad_id
+                       AND propia.evaluacion_id = a.id AND propia.alumno_id = $5
+                  )))
+             ), '[]') AS eventos
+        FROM alcance a`,
+      [seccion.id, evaluacionId, usuarioId, alumnoId],
+    )
+    if (!fila) throw new NotFoundException('La evaluación no existe')
+    if (!fila.autorizado) throw new ForbiddenException()
+    if (!fila.inscrito) {
+      throw new NotFoundException('El alumno no está inscrito en esta sección')
+    }
+    return { eventos: fila.eventos }
   }
 
   // Guarda como propuesta las notas recibidas, de cualquier subconjunto de

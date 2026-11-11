@@ -3,6 +3,8 @@
 Documentación del proyecto:
 
 - [NOT-15: recorrección de notas publicadas y auditoría](not-15-recorreccion-notas.md)
+- [NOT-16 · Historial de cambios de una nota y guía de revisión](not-16-historial-nota.md)
+- [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
 - [UI-04: tema institucional, contraste y guía de revisión](ui-04-tema-universidad.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
@@ -10,6 +12,7 @@ Documentación del proyecto:
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
 - [ASI-04: corregir asistencia con motivo e historial, y guía de revisión](asi-04-corregir-asistencia.md)
 - [ASI-03: marcar todos presentes, ajustar excepciones y guía de revisión](asi-03-marcar-todos-presentes.md)
+- [GES-25: una sección puede tener varios profesores y guía de revisión](ges-25-varios-profesores.md)
 - [GES-24: el superadmin crea cuentas de cualquier rol, y guía de revisión](ges-24-cuentas-superadmin.md)
 - [GES-23: el superadmin gestiona universidades y facultades, y guía de revisión](ges-23-universidades-facultades.md)
 - [NOT-06: rechazo de notas fuera de la escala 1,0 a 7,0 y guía de revisión](not-06-escala-notas.md)
@@ -18,6 +21,7 @@ Documentación del proyecto:
 - [NOT-10: el profesor ve las evaluaciones pendientes de revisión y guía de revisión](not-10-pendientes-revision.md)
 - [NOT-11: el profesor aprueba y publica las notas y guía de revisión](not-11-aprobar-publicar.md)
 - [NOT-12: el profesor devuelve un envío de notas al ayudante y guía de revisión](not-12-devolver-envio.md)
+- [NOT-13: el alumno ve sus notas publicadas y guía de revisión](not-13-ver-notas-publicadas.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))
@@ -30,6 +34,7 @@ Documentación del proyecto:
 
 - ASI-01: `GET /api/espacio/secciones/:id/clases` devuelve `Clase[]` (clases activas de la sección por fecha y bloque, con fecha, inicio, término y sala) al profesor y a los ayudantes de la sección y al Director (solo lectura); al alumno (ve su asistencia en ASI-06), al Administrativo y a quien no es integrante, 403. `POST` con `{ fecha?, inicio }` registra una clase y responde 201: solo el profesor de la sección (al resto, 403). Sin fecha, el backend usa hoy en America/Santiago; la fecha debe estar dentro del período del curso, e `inicio` debe ser un bloque activo del horario (GES-10) en ese día de la semana: la clase copia ese bloque (inicio, término y sala). Sin bloque ese día, o sin horario, 400; misma sección, fecha y bloque, 409. Sin DELETE: se archiva (`archived_at`).
 - NOT-01: `GET /api/espacio/secciones/:id/evaluaciones` devuelve `EvaluacionesSeccion` (evaluaciones activas de la sección por fecha, con nombre, fecha y ponderación entera, y `sumaPonderaciones`) al profesor, a los ayudantes y alumnos de la sección y al Director (solo lectura); al Administrativo y a quien no es integrante, 403. `POST` con `{ nombre, fecha, ponderacion }` crea una evaluación y responde 201: solo el profesor de la sección (al resto, 403); ponderación entera de 1 a 100 (DTO y CHECK) y fecha dentro del período del curso (si no, 400). La evaluación es de la sección, no del curso. Sin DELETE: se archiva (`archived_at`).
+- [MAT-01: bucket S3 privado para los archivos de los cursos y guía de revisión](mat-01-bucket-archivos.md)
 - [ANU-01: anuncios para todo el curso y guía de revisión](anu-01-anuncios-curso.md)
 
 - [ESP-03: cursos del alumno en el dashboard y guía de revisión](esp-03-dashboard-alumno.md)

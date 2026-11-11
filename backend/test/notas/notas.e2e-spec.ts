@@ -211,3 +211,24 @@ describe('POST .../notas/:alumnoId/recorreccion (NOT-15)', () => {
       .expect(400)
   })
 })
+
+// NOT-13: las notas propias del alumno. Los permisos por rol en la sección
+// necesitan la base: están en notas.db-spec.ts.
+describe('GET .../mis-notas (NOT-13)', () => {
+  const MIS_NOTAS =
+    '/api/espacio/secciones/00000000-0000-4000-8000-000000000010/mis-notas'
+
+  it('responde 401 sin sesión', async () => {
+    await request(app.getHttpServer()).get(MIS_NOTAS).expect(401)
+  })
+
+  it.each(['post', 'put', 'patch', 'delete'] as const)(
+    'no hay ruta %s: es de solo lectura',
+    async (metodo) => {
+      await request(app.getHttpServer())
+        [metodo](MIS_NOTAS)
+        .set('Authorization', sesion('ALUMNO'))
+        .expect(404)
+    },
+  )
+})

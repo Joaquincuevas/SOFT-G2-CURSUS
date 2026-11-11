@@ -1,4 +1,9 @@
-import type { NotasEvaluacion, RecorregirNota, Rol } from '@cursus/shared'
+import type {
+  MisNotasSeccion,
+  NotasEvaluacion,
+  RecorregirNota,
+  Rol,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -193,6 +198,45 @@ afterAll(async () => {
 })
 
 describe('NOT-15: recorrección de notas publicadas', () => {
+  it('el alumno ve la nota nueva y su marca sin acceder a la auditoría ni a otras notas', async () => {
+    const e = await escenario()
+    const propuesta = await escenario('PROPUESTA')
+    const token = await tokenDe(ALUMNO)
+    const leerPropias = async () => {
+      const respuesta = await request(app.getHttpServer())
+        .get(`/api/espacio/secciones/${seccion}/mis-notas`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      return respuesta.body as MisNotasSeccion
+    }
+    expect(
+      (await leerPropias()).evaluaciones.find((n) => n.evaluacionId === e),
+    ).toMatchObject({ nota: 5.5, recorregida: false })
+    expect((await corregir(e)).status).toBe(200)
+    const propias = await leerPropias()
+    expect(
+      propias.evaluaciones.find((n) => n.evaluacionId === e),
+    ).toMatchObject({
+      nota: 6.2,
+      recorregida: true,
+    })
+    expect(
+      propias.evaluaciones.find((n) => n.evaluacionId === propuesta),
+    ).toMatchObject({
+      nota: null,
+      recorregida: false,
+    })
+    expect(JSON.stringify(propias)).not.toMatch(
+      /responsable|motivo|notaAnterior|alumnoId|recorreccion_id/,
+    )
+    await request(app.getHttpServer())
+      .get(
+        `/api/espacio/secciones/${seccion}/evaluaciones/${e}/notas/${alumno}/historial`,
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403)
+  })
+
   it('conserva ambas notas, el motivo, la fecha y el profesor, y la respuesta marca la nota nueva', async () => {
     const e = await escenario()
     const [{ ahora }] = await bd.query<{ ahora: Date }[]>(
@@ -348,6 +392,51 @@ describe('NOT-15: recorrección de notas publicadas', () => {
     expect((await corregir('invalida')).status).toBe(400)
     expect((await corregir(e, cambio(), PROFESOR, 'invalido')).status).toBe(400)
     await request(app.getHttpServer()).post(ruta(e)).send(cambio()).expect(401)
+  })
+  it('un segundo profesor vigente puede recorregir, y pierde el permiso al retirarse', async () => {
+    const e = await escenario()
+    const segundoProfesor = await idDe(otroProfesor)
+    const [{ id: asignacion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion_profesor (universidad_id,seccion_id,usuario_id)
+       VALUES ($1,$2,$3) RETURNING id`,
+      [universidad, seccion, segundoProfesor],
+    )
+    try {
+      const [{ profesor_id: principal }] = await bd.query<
+        { profesor_id: string }[]
+      >('SELECT profesor_id FROM seccion WHERE id=$1', [seccion])
+      expect(principal).toBe(profesor)
+      const respuesta = await corregir(e, cambio(), otroProfesor)
+      expect(respuesta.status, JSON.stringify(respuesta.body)).toBe(200)
+      expect((await eventosDe(e))[0].responsable_id).toBe(segundoProfesor)
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [asignacion],
+      )
+      expect(
+        (
+          await corregir(
+            e,
+            cambio({ notaAnterior: 6.2, notaNueva: 6.5 }),
+            otroProfesor,
+          )
+        ).status,
+      ).toBe(403)
+      await comoApp('PROFESOR', segundoProfesor, async (q) => {
+        const [, filas] = await q.query<[unknown[], number]>(
+          'UPDATE nota SET valor=6.5 WHERE evaluacion_id=$1 RETURNING id',
+          [e],
+        )
+        expect(filas).toBe(0)
+      })
+      expect((await notaDe(e)).valor).toBe('6.2')
+      expect(await eventosDe(e)).toHaveLength(1)
+    } finally {
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [asignacion],
+      )
+    }
   })
   it.each(['evaluacion', 'seccion', 'curso'])(
     'rechaza la %s archivada sin modificar la nota',

@@ -118,7 +118,7 @@ MATRIZ.PROFESOR.Asistencia = ['create', 'read', 'update']
 const EVALUACION: Record<Rol, AccionConcreta[]> = {
   DIRECTOR: LECTURA,
   ADMINISTRATIVO: [],
-  PROFESOR: ['create', 'read'],
+  PROFESOR: ['create', 'read', 'update'],
   AYUDANTE: LECTURA,
   ALUMNO: LECTURA,
   SUPERADMIN: [],

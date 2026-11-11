@@ -32,10 +32,15 @@ export interface Evaluacion {
   // YYYY-MM-DD, dentro del período del curso.
   fecha: string
   ponderacion: number
+  // Solo en el listado del profesor. La escritura vuelve a verificarlo.
+  tieneNotas?: boolean
   // NOT-09: solo en el listado del ayudante de la sección. Los demás roles
   // no reciben el estado ni el comentario por el listado de evaluaciones.
   envio?: EstadoEnvioNotas
 }
+
+export const EVALUACION_CON_NOTAS =
+  'Esta evaluación ya tiene notas ingresadas y no se puede editar.'
 
 // GET: evaluaciones activas por fecha, con la suma de sus ponderaciones (el
 // aviso de que no suman 100 % es NOT-02).
@@ -64,6 +69,21 @@ export const TIPOS_EVENTO_NOTA = [
 ] as const
 
 export type TipoEventoNota = (typeof TIPOS_EVENTO_NOTA)[number]
+
+// NOT-16: eventos de un alumno y de su evaluación, ordenados por fecha e id.
+export interface EventoHistorialNota {
+  id: string
+  tipo: TipoEventoNota
+  fecha: string
+  responsable: { id: string; nombre: string }
+  notaAnterior: number | null
+  notaNueva: number | null
+  motivo: string | null
+}
+
+export interface HistorialNota {
+  eventos: EventoHistorialNota[]
+}
 
 // Motivo de una devolución o una recorrección (NOT-12 y NOT-15).
 export const LARGO_MOTIVO_NOTA = 500
@@ -216,4 +236,23 @@ export interface ErrorListaNotas {
   message: string
   sobrantes: string[]
   repetidos: string[]
+}
+
+// NOT-13 (RE-02): las notas propias del alumno en una sección
+// (/api/espacio/secciones/:id/mis-notas). Cada evaluación activa de la
+// sección, por fecha, con la nota del alumno solo si está publicada: null si
+// aún no hay nota o está propuesta (en borrador, en revisión o devuelta).
+export interface NotaPropia {
+  evaluacionId: string
+  nombre: string
+  // YYYY-MM-DD.
+  fecha: string
+  ponderacion: number
+  nota: number | null
+  // NOT-15: solo la marca de recorrección; la auditoría es del profesor.
+  recorregida: boolean
+}
+
+export interface MisNotasSeccion {
+  evaluaciones: NotaPropia[]
 }
