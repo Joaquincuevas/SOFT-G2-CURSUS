@@ -117,6 +117,11 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
       porcentaje: null,
     }),
   ],
+  // Entregas de una actividad para el equipo docente (MAT-10).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/entregas$/,
+    () => [],
+  ],
   // Notas propias del alumno (NOT-13).
   [
     /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
