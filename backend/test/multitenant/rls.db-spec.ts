@@ -442,7 +442,8 @@ describe('contrato del schema', () => {
 
   // Estas políticas requieren que la API fije la identidad de sesión:
   // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
-  // archivos propios, MAT-04 para registrar materiales, NOT-03 para editar
+  // archivos propios, MAT-04 para registrar materiales, MAT-10 para que el
+  // equipo docente lea las entregas de su sección, NOT-03 para editar
   // evaluaciones y NOT-13 para que el alumno lea sus notas publicadas.
   it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
     const politicas = await bd.query<
@@ -473,6 +474,11 @@ describe('contrato del schema', () => {
       {
         tabla: 'entrega',
         politica: 'pol_entrega_lectura',
+        comando: 'SELECT',
+      },
+      {
+        tabla: 'entrega',
+        politica: 'pol_entrega_lectura_docente',
         comando: 'SELECT',
       },
       {

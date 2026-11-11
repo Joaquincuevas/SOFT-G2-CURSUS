@@ -184,7 +184,16 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // MAT-04 es la última: quita material y su trigger. La restricción
+    // MAT-10 es la última: solo quita la lectura docente de entrega.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ docente }] = await bd.query<{ docente: string }[]>(
+      `SELECT count(*) AS docente FROM pg_policies
+        WHERE tablename = 'entrega' AND policyname = 'pol_entrega_lectura_docente'`,
+    )
+    expect(Number(docente)).toBe(0)
+
+    // MAT-04 sigue: quita material y su trigger. La restricción
     // uq_archivo_id_universidad es de MAT-09 y queda. Revertir, aplicar y
     // revertir de nuevo deja lo mismo.
     await bd.undoLastMigration()
@@ -196,6 +205,7 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // MAT-10, reaplicada por runMigrations.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
 
@@ -298,7 +308,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-04,
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-10,
+    await bd.undoLastMigration() // MAT-04,
     await bd.undoLastMigration() // GES-26,
     await bd.undoLastMigration() // MAT-09,
     await bd.undoLastMigration() // NOT-15
