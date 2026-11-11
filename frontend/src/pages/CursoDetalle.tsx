@@ -1,71 +1,58 @@
 import type {
-  AsignacionQuitada,
-  AsignarProfesor as CuerpoAsignar,
-  AyudanteQuitado,
   CursoDetalle as DatosCurso,
   HorarioSeccion,
-  ProfesorOpcion,
   SeccionDetalle,
 } from '@cursus/shared'
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
-import { AgregarAlumnoDialogo } from './AgregarAlumno'
-import { CargarAlumnosCsvDialogo } from './CargarAlumnosCsv'
-import { AsignarAyudantesDialogo } from './AsignarAyudantes'
-import {
-  QuitarAsignacionDialogo,
-  type TipoAsignacion,
-} from './QuitarAsignacion'
 import { EditarHorarioDialogo } from './EditarHorario'
 import './Cursos.css'
+import { nombresProfesores } from './misSecciones'
 import { useDatos } from './useDatos'
 
 const SIN_ASIGNAR = 'Sin asignar'
 
 // Lo que no está asignado se muestra como "Sin asignar". Con verAlumnos, el
 // número de alumnos enlaza a su lista (GES-18). Las acciones por sección
-// dependen de los permisos de la sesión: asignar o cambiar el profesor
-// (GES-12), agregar alumnos (GES-15/16), asignar ayudantes (GES-13), editar
-// el horario (GES-10) y quitar al profesor o a un ayudante (GES-14), si los
-// tiene.
+// dependen de los permisos de la sesión: los profesores de la sección
+// se gestionan en Integrantes (GES-26); el horario conserva su edición.
 function FilaSeccion({
   seccion,
   verAlumnos,
-  onAsignar,
-  onAgregarAlumno,
-  onCargarCsv,
-  onAsignarAyudantes,
-  onQuitar,
+  gestionar,
   onHorario,
 }: {
   seccion: SeccionDetalle
   verAlumnos: boolean
-  onAsignar?: () => void
-  onAgregarAlumno?: () => void
-  onCargarCsv?: () => void
-  onAsignarAyudantes?: () => void
-  onQuitar?: (tipo: TipoAsignacion) => void
+  gestionar: boolean
   onHorario?: () => void
 }) {
+  const integrantes = `/secciones/${seccion.id}/integrantes`
   return (
     <tr>
       <td>{seccion.numero}</td>
       <td>{seccion.horario ?? SIN_ASIGNAR}</td>
-      <td>{seccion.profesor ?? SIN_ASIGNAR}</td>
       <td>
-        {seccion.ayudantes.length > 0
-          ? seccion.ayudantes.join(', ')
+        {seccion.profesores.length
+          ? seccion.profesores.join(', ')
           : SIN_ASIGNAR}
+      </td>
+      <td>
+        {seccion.ayudantes.length ? seccion.ayudantes.join(', ') : SIN_ASIGNAR}
       </td>
       <td>
         {verAlumnos ? (
           <Link
             className="cursos__enlace"
-            to={`/secciones/${seccion.id}/alumnos`}
+            to={
+              gestionar
+                ? `${integrantes}?rol=ALUMNO`
+                : `/secciones/${seccion.id}/alumnos`
+            }
             aria-label={`Ver los ${seccion.alumnos} alumnos de la sección ${seccion.numero}`}
           >
             {seccion.alumnos}
@@ -74,72 +61,17 @@ function FilaSeccion({
           seccion.alumnos
         )}
       </td>
-      {(onAsignar ||
-        onAgregarAlumno ||
-        onCargarCsv ||
-        onAsignarAyudantes ||
-        onHorario) && (
+      {(gestionar || onHorario) && (
         <td>
           <div className="cursos__acciones">
-            {onAsignar && (
-              <button
+            {gestionar && (
+              <Link
                 className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`${seccion.profesor ? 'Cambiar' : 'Asignar'} profesor de la sección ${seccion.numero}`}
-                onClick={onAsignar}
+                to={integrantes}
+                aria-label={`Integrantes de la sección ${seccion.numero}`}
               >
-                {seccion.profesor ? 'Cambiar profesor' : 'Asignar profesor'}
-              </button>
-            )}
-            {onQuitar && seccion.profesor && (
-              <button
-                className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`Quitar profesor de la sección ${seccion.numero}`}
-                onClick={() => onQuitar('PROFESOR')}
-              >
-                Quitar profesor
-              </button>
-            )}
-            {onAgregarAlumno && (
-              <button
-                className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`Agregar alumno a la sección ${seccion.numero}`}
-                onClick={onAgregarAlumno}
-              >
-                Agregar alumno
-              </button>
-            )}
-            {onCargarCsv && (
-              <button
-                className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`Cargar CSV en la sección ${seccion.numero}`}
-                onClick={onCargarCsv}
-              >
-                Cargar CSV
-              </button>
-            )}
-            {onAsignarAyudantes && (
-              <button
-                className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`Asignar ayudantes a la sección ${seccion.numero}`}
-                onClick={onAsignarAyudantes}
-              >
-                Asignar ayudantes
-              </button>
-            )}
-            {onQuitar && seccion.ayudantes.length > 0 && (
-              <button
-                className="cursos__boton cursos__boton--secundario"
-                type="button"
-                aria-label={`Quitar ayudante de la sección ${seccion.numero}`}
-                onClick={() => onQuitar('AYUDANTE')}
-              >
-                Quitar ayudante
-              </button>
+                Integrantes
+              </Link>
             )}
             {onHorario && (
               <button
@@ -155,143 +87,6 @@ function FilaSeccion({
         </td>
       )}
     </tr>
-  )
-}
-
-// Formulario para asignar el profesor de una sección (GES-12). Si la sección
-// ya tiene uno, pide confirmar el reemplazo antes de guardar.
-function AsignarProfesor({
-  seccion,
-  profesores,
-  onReintentar,
-  onAsignada,
-  onCancelar,
-}: {
-  seccion: SeccionDetalle
-  profesores: ProfesorOpcion[] | null | undefined
-  onReintentar: () => void
-  onAsignada: (seccion: SeccionDetalle) => void
-  onCancelar: () => void
-}) {
-  const { fetchConSesion } = useAuth()
-  const [profesorId, setProfesorId] = useState('')
-  const [confirmando, setConfirmando] = useState(false)
-  const [guardando, setGuardando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const elegido = profesores?.find((profesor) => profesor.id === profesorId)
-
-  async function guardar() {
-    setGuardando(true)
-    setError(null)
-    try {
-      const respuesta = await fetchConSesion(
-        `/api/secciones/${seccion.id}/profesor`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ profesorId } satisfies CuerpoAsignar),
-        },
-      )
-      const cuerpo = (await respuesta.json().catch(() => ({}))) as Partial<
-        SeccionDetalle & { message: string }
-      >
-      if (respuesta.ok) {
-        onAsignada(cuerpo as SeccionDetalle)
-        return
-      }
-      // El 404 (sección o profesor que ya no existen) trae un mensaje.
-      setError(
-        typeof cuerpo.message === 'string'
-          ? cuerpo.message
-          : 'No se pudo asignar el profesor.',
-      )
-    } catch {
-      setError('No se pudo asignar el profesor.')
-    }
-    setConfirmando(false)
-    setGuardando(false)
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (seccion.profesor && !confirmando) {
-      setConfirmando(true)
-      return
-    }
-    void guardar()
-  }
-
-  let contenido
-  if (profesores === undefined) {
-    contenido = <Cargando texto="Cargando profesores…" />
-  } else if (profesores === null) {
-    contenido = (
-      <ErrorEstado
-        mensaje="No se pudieron cargar los profesores."
-        onReintentar={onReintentar}
-      />
-    )
-  } else {
-    contenido = (
-      <>
-        <label className="cursos__campo">
-          Profesor
-          <select
-            className="cursos__input"
-            name="profesorId"
-            value={profesorId}
-            disabled={confirmando || guardando}
-            onChange={(event) => setProfesorId(event.target.value)}
-            required
-          >
-            <option value="" disabled>
-              Selecciona un profesor
-            </option>
-            {profesores.map((profesor) => (
-              <option key={profesor.id} value={profesor.id}>
-                {profesor.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-        {confirmando && (
-          <p className="cursos__mensaje" role="status">
-            La sección {seccion.numero} ya tiene a {seccion.profesor} como
-            profesor a cargo. ¿Reemplazarlo por {elegido?.nombre}?
-          </p>
-        )}
-        {error && (
-          <p className="cursos__error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="cursos__acciones">
-          <button className="cursos__boton" type="submit" disabled={guardando}>
-            {confirmando ? 'Reemplazar' : 'Guardar'}
-          </button>
-          <button
-            className="cursos__boton cursos__boton--secundario"
-            type="button"
-            onClick={confirmando ? () => setConfirmando(false) : onCancelar}
-          >
-            {confirmando ? 'Volver' : 'Cancelar'}
-          </button>
-        </div>
-      </>
-    )
-  }
-
-  return (
-    <form
-      className="cursos__tarjeta"
-      aria-label={`Profesor de la sección ${seccion.numero}`}
-      onSubmit={handleSubmit}
-    >
-      <h3 className="cursos__titulo">
-        Profesor de la sección {seccion.numero}
-      </h3>
-      {contenido}
-    </form>
   )
 }
 
@@ -321,103 +116,15 @@ function Detalle({ id }: { id: string }) {
   const [nuevas, setNuevas] = useState<SeccionDetalle[]>([])
   const [creando, setCreando] = useState(false)
   const [aviso, setAviso] = useState<{ exito: boolean; texto: string }>()
-  // GES-15: sección con el diálogo abierto, y alumnos agregados aquí por
-  // sección, que se suman al conteo sin volver a pedir el curso.
   const puedeInscribir = usePuede('create', 'Inscripcion')
-  // La lista de alumnos es solo de la universidad de la sesión: el Director
-  // no la ve en los cursos de otras universidades (el backend responde 404).
   const { user } = useSession()
   const puedeVerAlumnos = usePuede('read', 'Inscripcion')
-  const [inscribirEn, setInscribirEn] = useState<SeccionDetalle | null>(null)
-  const [csvEn, setCsvEn] = useState<SeccionDetalle | null>(null)
-  const [agregados, setAgregados] = useState<Record<string, number>>({})
-  const puedeAsignarAyudantes = usePuede('update', 'Seccion')
-  const [asignarEn, setAsignarEn] = useState<SeccionDetalle | null>(null)
-  const [ayudantesAsignados, setAyudantesAsignados] = useState<
-    Record<string, string[]>
-  >({})
   const [editarHorarioEn, setEditarHorarioEn] = useState<SeccionDetalle | null>(
     null,
   )
   const [horariosGuardados, setHorariosGuardados] = useState<
     Record<string, HorarioSeccion>
   >({})
-  // GES-12: sección cuyo profesor se está asignando, y profesores asignados
-  // aquí (id de sección → profesor, o null si se quitó con GES-14), que
-  // reemplazan al de la tabla sin volver a pedir el curso. La lista de
-  // profesores se pide al abrir el formulario.
-  const [asignando, setAsignando] = useState<SeccionDetalle>()
-  const [asignados, setAsignados] = useState<
-    Record<string, ProfesorOpcion | null>
-  >({})
-  // GES-14: sección y tipo de la asignación que se está quitando. La sección
-  // se toma de la tabla en cada render, para que el diálogo muestre al
-  // profesor actual si cambió (409).
-  const [quitando, setQuitando] = useState<{
-    seccionId: string
-    tipo: TipoAsignacion
-  } | null>(null)
-  const [pedirProfesores, setPedirProfesores] = useState(false)
-  const [profesores, recargarProfesores] = useDatos<ProfesorOpcion[]>(
-    pedirProfesores ? '/api/profesores' : null,
-  )
-
-  function abrirAsignacion(seccion: SeccionDetalle) {
-    setPedirProfesores(true)
-    setAviso(undefined)
-    setInscribirEn(null)
-    setAsignarEn(null)
-    setAsignando(seccion)
-  }
-
-  function asignada(seccion: SeccionDetalle) {
-    setAsignados((anteriores) => ({
-      ...anteriores,
-      [seccion.id]: {
-        id: seccion.profesorId as string,
-        nombre: seccion.profesor as string,
-      },
-    }))
-    setAsignando(undefined)
-    setAviso({
-      exito: true,
-      texto: `${seccion.profesor} quedó a cargo de la sección ${seccion.numero}.`,
-    })
-  }
-
-  function quitada(
-    seccion: SeccionDetalle,
-    tipo: TipoAsignacion,
-    resultado: AsignacionQuitada | AyudanteQuitado,
-  ) {
-    if ('ayudantes' in resultado) {
-      setAyudantesAsignados((anteriores) => ({
-        ...anteriores,
-        [seccion.id]: resultado.ayudantes.map((a) => a.nombre),
-      }))
-    } else {
-      setAsignados((anteriores) => ({ ...anteriores, [seccion.id]: null }))
-    }
-    setQuitando(null)
-    setAviso({
-      exito: true,
-      texto: `${resultado.quitado.nombre} ya no es ${tipo === 'PROFESOR' ? 'el profesor' : 'ayudante'} de la sección ${seccion.numero}.`,
-    })
-  }
-
-  // 409 al quitar al profesor: la sección cambió desde que se cargó. Se
-  // muestra al actual; si ya no tiene, no queda nada que quitar y se cierra.
-  function profesorCambiado(
-    seccion: SeccionDetalle,
-    profesor: ProfesorOpcion | null,
-    mensaje: string,
-  ) {
-    setAsignados((anteriores) => ({ ...anteriores, [seccion.id]: profesor }))
-    if (!profesor) {
-      setQuitando(null)
-      setAviso({ exito: false, texto: mensaje })
-    }
-  }
 
   async function crearSeccion() {
     setCreando(true)
@@ -467,19 +174,11 @@ function Detalle({ id }: { id: string }) {
     (!curso.universidadId || curso.universidadId === user.universidadId)
   const secciones = [...curso.secciones, ...nuevas].map((seccion) => ({
     ...seccion,
-    ...(seccion.id in asignados && {
-      profesor: asignados[seccion.id]?.nombre ?? null,
-      profesorId: asignados[seccion.id]?.id ?? null,
-    }),
-    alumnos: seccion.alumnos + (agregados[seccion.id] ?? 0),
-    ayudantes: ayudantesAsignados[seccion.id] ?? seccion.ayudantes,
+    profesores: nombresProfesores(seccion),
     horario: horariosGuardados[seccion.id]
       ? horariosGuardados[seccion.id].resumen
       : seccion.horario,
   }))
-  const seccionQuitando = quitando
-    ? secciones.find((seccion) => seccion.id === quitando.seccionId)
-    : undefined
   const subtitulo = [
     curso.universidadNombre,
     curso.carreraNombre,
@@ -540,10 +239,10 @@ function Detalle({ id }: { id: string }) {
               <tr>
                 <th scope="col">Sección</th>
                 <th scope="col">Horario</th>
-                <th scope="col">Profesor</th>
+                <th scope="col">Profesores</th>
                 <th scope="col">Ayudantes</th>
                 <th scope="col">Alumnos</th>
-                {(puedeAsignar || puedeInscribir || puedeAsignarAyudantes) && (
+                {(puedeAsignar || puedeInscribir) && (
                   <th scope="col">Acciones</th>
                 )}
               </tr>
@@ -557,45 +256,12 @@ function Detalle({ id }: { id: string }) {
                     puedeAsignar
                       ? () => {
                           setAviso(undefined)
-                          setAsignando(undefined)
                           setEditarHorarioEn(seccion)
                         }
                       : undefined
                   }
-                  onAsignar={
-                    puedeAsignar ? () => abrirAsignacion(seccion) : undefined
-                  }
+                  gestionar={puedeAsignar}
                   verAlumnos={verAlumnos}
-                  onCargarCsv={
-                    puedeInscribir ? () => setCsvEn(seccion) : undefined
-                  }
-                  onAgregarAlumno={
-                    puedeInscribir
-                      ? () => {
-                          setAviso(undefined)
-                          setAsignando(undefined)
-                          setInscribirEn(seccion)
-                        }
-                      : undefined
-                  }
-                  onAsignarAyudantes={
-                    puedeAsignarAyudantes
-                      ? () => {
-                          setAviso(undefined)
-                          setAsignando(undefined)
-                          setAsignarEn(seccion)
-                        }
-                      : undefined
-                  }
-                  onQuitar={
-                    puedeAsignar
-                      ? (tipo) => {
-                          setAviso(undefined)
-                          setAsignando(undefined)
-                          setQuitando({ seccionId: seccion.id, tipo })
-                        }
-                      : undefined
-                  }
                 />
               ))}
             </tbody>
@@ -617,83 +283,6 @@ function Detalle({ id }: { id: string }) {
             })
           }}
           onCerrar={() => setEditarHorarioEn(null)}
-        />
-      )}
-      {asignando && (
-        <AsignarProfesor
-          // La key reinicia el formulario al pasar a otra sección.
-          key={asignando.id}
-          seccion={asignando}
-          profesores={profesores}
-          onReintentar={recargarProfesores}
-          onAsignada={asignada}
-          onCancelar={() => setAsignando(undefined)}
-        />
-      )}
-      {seccionQuitando && quitando && (
-        <QuitarAsignacionDialogo
-          // La key reinicia el diálogo al pasar a otra sección o tipo.
-          key={`${seccionQuitando.id}-${quitando.tipo}`}
-          seccion={seccionQuitando}
-          tipo={quitando.tipo}
-          onQuitada={(resultado) =>
-            quitada(seccionQuitando, quitando.tipo, resultado)
-          }
-          onProfesorCambiado={(profesor, mensaje) =>
-            profesorCambiado(seccionQuitando, profesor, mensaje)
-          }
-          onCerrar={() => setQuitando(null)}
-        />
-      )}
-      {asignarEn && (
-        <AsignarAyudantesDialogo
-          seccionId={asignarEn.id}
-          numero={asignarEn.numero}
-          onAsignados={(ayudantes) => {
-            setAyudantesAsignados((anteriores) => ({
-              ...anteriores,
-              [asignarEn.id]: ayudantes.map((a) => a.nombre),
-            }))
-            setAviso({
-              exito: true,
-              texto: `Ayudantes asignados a la sección ${asignarEn.numero}.`,
-            })
-          }}
-          onCerrar={() => setAsignarEn(null)}
-        />
-      )}
-      {inscribirEn && (
-        <AgregarAlumnoDialogo
-          seccionId={inscribirEn.id}
-          numero={inscribirEn.numero}
-          onAgregado={({ alumno }) => {
-            setAgregados((anteriores) => ({
-              ...anteriores,
-              [inscribirEn.id]: (anteriores[inscribirEn.id] ?? 0) + 1,
-            }))
-            setAviso({
-              exito: true,
-              texto: `${alumno.nombre} agregado a la sección ${inscribirEn.numero}.`,
-            })
-          }}
-          onCerrar={() => setInscribirEn(null)}
-        />
-      )}
-      {csvEn && (
-        <CargarAlumnosCsvDialogo
-          seccionId={csvEn.id}
-          numero={csvEn.numero}
-          onCargados={(cantidad) => {
-            setAgregados((anteriores) => ({
-              ...anteriores,
-              [csvEn.id]: (anteriores[csvEn.id] ?? 0) + cantidad,
-            }))
-            setAviso({
-              exito: true,
-              texto: `${cantidad} alumnos cargados a la sección ${csvEn.numero}.`,
-            })
-          }}
-          onCerrar={() => setCsvEn(null)}
         />
       )}
     </section>

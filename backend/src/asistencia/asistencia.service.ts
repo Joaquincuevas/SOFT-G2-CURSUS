@@ -119,7 +119,7 @@ export class AsistenciaService {
       presente: boolean
       es_profesor: boolean
     }>(
-      `SELECT a.id, a.presente, s.profesor_id = $5 AS es_profesor
+      `SELECT a.id, a.presente, es_profesor_de_seccion(s.id, $5) AS es_profesor
          ${DESDE_CLASE}
          JOIN usuario u ON u.id = $5 AND u.universidad_id = s.universidad_id
          JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
@@ -309,7 +309,7 @@ export class AsistenciaService {
   ): Promise<AsistenciaClase> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
       const [fila] = await bd.query<FilaAsistencia & { es_profesor: boolean }>(
-        `SELECT s.profesor_id = $4 AS es_profesor, ${COLUMNAS_CLASE},
+        `SELECT es_profesor_de_seccion(s.id, $4) AS es_profesor, ${COLUMNAS_CLASE},
                 ${REGISTRO}, ${ALUMNOS_SECCION}
            ${DESDE_CLASE}
           WHERE c.universidad_id = $1 AND s.id = $2 AND c.id = $3

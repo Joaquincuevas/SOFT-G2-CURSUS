@@ -1,35 +1,23 @@
-# MAT-02: sílabo PDF del curso con historial
+# MAT-02 · Profesor publica el sílabo del curso
 
-## Comportamiento
+En **Mis Cursos → sección → Material**, cualquier profesor vigente de la sección puede publicar un PDF de hasta 10 MiB. Cada publicación conserva las versiones anteriores y el historial muestra el profesor responsable y la fecha.
 
-El profesor asignado a una sección puede cargar un PDF desde la pestaña **Material**. El sílabo pertenece al curso, que ya está asociado a un período académico; no se guarda una relación con la cuenta del profesor que lo cargó. Cada carga crea una versión nueva y conserva las anteriores. El profesor, los ayudantes y los alumnos de las secciones del curso pueden consultar el historial y descargar cualquier versión. El Director puede leerlo en solo lectura; el Administrativo no accede al material.
+La interfaz pide la subida firmada a MAT-01, envía el PDF al bucket privado y confirma el archivo. Después publica la referencia con `POST /api/espacio/secciones/:id/silabo` y el cuerpo `{ archivoId }`. La API comprueba que el archivo sea propio, esté confirmado, corresponda a esa sección y tenga tamaño y tipo PDF válidos. Lee la cabecera del objeto de S3 y guarda su identificador de versión para que la descarga futura entregue los mismos bytes. El bloqueo del curso serializa la numeración y repetir el registro del mismo archivo devuelve la versión existente.
 
-Se aceptan PDF de hasta 10 MiB. El servidor comprueba el tipo MIME y la firma `%PDF-`; la base también limita el tamaño. Los bytes se guardan en PostgreSQL (`bytea`), ya que este proyecto aún no tiene un bucket ni integración S3 configurados.
+La migración `1792870000000-CrearSilabo` guarda `archivo_id`, `curso_id`, `version`, `subido_por`, `subido_en` y `version_objeto`, además de los identificadores de fila y universidad. La RLS verifica la identidad de sesión, la asignación vigente y el archivo de origen. La tabla usa el trigger de auditoría del superadmin y solo admite adiciones desde el rol de la aplicación.
 
-## API
+`GET /api/espacio/secciones/:id/silabo` lista las versiones del curso. `GET /api/espacio/secciones/:id/silabo/:version` entrega una URL firmada a los integrantes de la sección. La descarga genérica de MAT-01 excluye los archivos vinculados a un sílabo. El bucket necesita versionado activo y el rol que firma las descargas necesita `s3:GetObjectVersion`.
 
-Las rutas usan el id de una sección para aplicar el control de acceso de ESP-06; el recurso se resuelve por el curso de esa sección.
+## Cómo revisar
 
-| Método | Ruta                                         | Resultado                                                                         |
-| ------ | -------------------------------------------- | --------------------------------------------------------------------------------- |
-| `GET`  | `/api/espacio/secciones/:id/silabo`          | Versiones del curso, de la más reciente a la más antigua (`version`, `subidoEn`)  |
-| `GET`  | `/api/espacio/secciones/:id/silabo/:version` | Descarga del PDF de esa versión                                                   |
-| `POST` | `/api/espacio/secciones/:id/silabo`          | Recibe multipart con el campo `archivo`; crea la siguiente versión y responde 201 |
+1. Como profesor, publicar dos PDF desde Material y comprobar las versiones 2 y 1 con su fecha y responsable. Repetir con un co-profesor de GES-25.
+2. Descargar ambas versiones. Comprobar que cada URL contiene el identificador de la versión del objeto publicada.
+3. Como integrante de otra sección del mismo curso, consultar el historial por API. Probar también con un Director y con un profesor ajeno a la sección.
+4. Intentar publicar un archivo sin confirmar, ajeno o con cabecera inválida. Revisar que la API rechace la publicación y conserve el historial.
 
-El profesor debe estar asignado a la sección usada para cargar. Ayudantes y alumnos necesitan ser integrantes de la sección para leer. Una sección distinta del mismo curso presenta el mismo historial porque las versiones están asociadas al curso y no a la sección.
+```sh
+npm run test --workspace=frontend -- src/pages/PestanaMaterial.test.tsx src/pages/VistaSeccion.test.tsx
+npm run test:db --workspace=backend -- test/archivos/archivos.db-spec.ts test/database/esquema-inicial.db-spec.ts test/multitenant/rls.db-spec.ts
+```
 
-## Base de datos
-
-La migración `CrearSilabo` crea `silabo` con `curso_id`, `universidad_id`, número de versión, bytes PDF y fecha de carga. La FK compuesta asegura que el curso pertenece a la misma universidad. La unicidad `(curso_id, version)` y un bloqueo del curso serializan las cargas concurrentes. No se guarda `subido_por`. Las versiones son de solo adición: la API y el rol `cursus_app` no tienen permisos de modificación ni borrado.
-
-RLS restringe la lectura a la universidad, con lectura global de solo lectura para el Director; solo el rol `PROFESOR` puede insertar. El servicio vuelve a comprobar dentro de la transacción que el profesor sigue asignado a la sección y que el curso no está archivado.
-
-## Revisión
-
-Con PostgreSQL local levantado, aplicar migraciones y seed, ejecutar backend y frontend, e ingresar con usuarios de demo:
-
-1. Como profesor de una sección, abrir el curso y la pestaña **Material**. Cargar un PDF; debe aparecer la versión 1.
-2. Cargar otro PDF; debe aparecer la versión 2 y conservarse la versión 1 en el historial.
-3. Como alumno de una sección del curso, descargar ambas versiones. No debe aparecer un formulario de carga.
-4. Probar un archivo no PDF, un profesor no asignado, un usuario que no pertenece a la sección y una cuenta de otra universidad; deben rechazarse.
-5. Ejecutar `npm run test:db --workspace=backend` para comprobar versionado, descarga, autorización y RLS con PostgreSQL real.
+Las pruebas de integración usan PostgreSQL real y simulan el bucket para comprobar qué versión se valida y se firma.

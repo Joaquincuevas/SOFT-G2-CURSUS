@@ -15,6 +15,7 @@ const RESUMEN: SeccionResumen = {
   rol: 'PROFESOR',
   horario: [],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [],
 }
 
@@ -176,7 +177,9 @@ describe('pestaña Entregas (MAT-08)', () => {
       expect(
         panel.queryByRole('form', { name: 'Nueva actividad' }),
       ).not.toBeInTheDocument()
-      expect(panel.queryByRole('button')).not.toBeInTheDocument()
+      expect(
+        panel.queryByRole('button', { name: 'Crear actividad' }),
+      ).not.toBeInTheDocument()
     },
   )
 

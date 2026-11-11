@@ -50,7 +50,7 @@ El ayudante ve la evaluación como "Estado: Devuelta", con los campos editables,
 | **404**                                                   | La evaluación no existe, está archivada, es de otra sección o de otra universidad.                                                                                                                      |
 | **401**                                                   | Sin sesión.                                                                                                                                                                                             |
 
-El comentario se guarda sin los espacios de los extremos. Los permisos son los de NOT-11: CASL `@Puede('update', 'RevisionNotas')`, `IntegranteSeccionGuard` con el rol `PROFESOR` en la sección, y el servicio comprueba `seccion.profesor_id` dentro de la transacción.
+El comentario se guarda sin los espacios de los extremos. Los permisos son los de NOT-11: CASL `@Puede('update', 'RevisionNotas')`, `IntegranteSeccionGuard` con el rol `PROFESOR` en la sección, y el servicio comprueba dentro de la transacción que sea profesor de la sección (desde [GES-25](ges-25-varios-profesores.md), cualquiera de sus profesores vigentes).
 
 La devolución, en una transacción:
 
@@ -71,7 +71,7 @@ La migración `1792740000000-DevolverNotas` no crea tablas.
 - **`GRANT UPDATE (comentario_devolucion)`** a `cursus_app`, junto al `UPDATE (estado, actualizado_por)` de NOT-08. Sin `DELETE`.
 - **`tg_revision_notas_comentario_al_devolver`**: el GRANT es por columna y no por política, así que el envío del ayudante y la aprobación también podrían escribir el comentario. El trigger solo deja escribirlo al pasar de `EN_REVISION` a `DEVUELTA` (`check_violation`), también para el dueño de la tabla, y lo borra al pasar de `DEVUELTA` a `EN_REVISION`.
 - **`pol_revision_notas_devolucion`** (UPDATE de `revision_notas`), solo para el rol `PROFESOR` y con `usuario_actual()`, como en NOT-11:
-  - `USING`: la revisión está `EN_REVISION` y la sección de la evaluación tiene como profesor a `usuario_actual()`.
+  - `USING`: la revisión está `EN_REVISION` y la sección de la evaluación tiene como profesor a `usuario_actual()` (desde [GES-25](ges-25-varios-profesores.md), cualquiera de sus profesores vigentes): `es_profesor_de_seccion`.
   - `WITH CHECK`: queda `DEVUELTA`, a su nombre (`actualizado_por = usuario_actual()`), con comentario y en la misma condición de sección.
 - **Sin cambios en `nota`:** las políticas del ayudante de NOT-08 ya aceptan `DEVUELTA` (`ESCRIBE_AYUDANTE_EDITABLE`), y su política de envío pasa de `DEVUELTA` a `EN_REVISION`.
 

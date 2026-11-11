@@ -296,9 +296,10 @@ export class CuentasService {
       inscripciones: number
     }>(
       `SELECT
-         (SELECT count(*)::int FROM seccion
-           WHERE universidad_id = $1 AND profesor_id = $2
-             AND archived_at IS NULL) AS secciones,
+         (SELECT count(*)::int FROM seccion_profesor sp
+            JOIN seccion s ON s.id = sp.seccion_id AND s.universidad_id = sp.universidad_id
+           WHERE sp.universidad_id = $1 AND sp.usuario_id = $2
+             AND sp.archived_at IS NULL AND s.archived_at IS NULL) AS secciones,
          (SELECT count(*)::int FROM ayudante_seccion
            WHERE universidad_id = $1 AND usuario_id = $2
              AND archived_at IS NULL) AS ayudantias,

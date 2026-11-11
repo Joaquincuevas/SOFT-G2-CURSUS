@@ -6,9 +6,13 @@ import {
   type ErrorNotasFaltantes,
   type EstadoRevisionNotas,
   type GuardarNotas,
+  type HistorialNota,
   type EstadoNota,
   type NotasEvaluacion,
   type SeccionEspacio,
+  type RecorregirNota,
+  type ErrorNotaRecorregida,
+  LARGO_MOTIVO_NOTA,
 } from '@cursus/shared'
 import {
   BadRequestException,
@@ -25,6 +29,7 @@ import {
   fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
+import { bloquearNotasDe } from './bloqueo-notas.js'
 import {
   COMENTARIO_DEVOLUCION_NOTAS,
   ESTADO_REVISION_NOTAS,
@@ -41,7 +46,8 @@ const COLUMNAS_EVALUACION = `json_build_object(
 const ALUMNOS_CON_NOTA = `
   COALESCE((SELECT json_agg(json_build_object(
                      'id', u.id, 'nombre', u.nombre,
-                     'nota', n.valor::float8, 'estado', n.estado)
+                     'nota', n.valor::float8, 'estado', n.estado,
+                     'recorregida', n.recorreccion_id IS NOT NULL)
                    ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo)
               FROM inscripcion i
               JOIN usuario u ON u.id = i.usuario_id
@@ -83,13 +89,6 @@ const FUERA_DE_REVISION: Record<
 
 type Consulta = Pick<BaseDeDatos, 'query'>
 
-// Un guardado, envío, aprobación o devolución a la vez por evaluación (ver
-// bloquearEvaluacionEditable).
-const bloquearNotasDe = (bd: Consulta, evaluacionId: string) =>
-  bd.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-    `notas:${evaluacionId.toLowerCase()}`,
-  ])
-
 // NOT-11 y NOT-12: dentro de la transacción de una aprobación o una
 // devolución. Fija el usuario para la RLS (usuario_actual()), toma el lock de
 // la evaluación y comprueba que existe (404), que quien revisa sigue siendo
@@ -108,7 +107,7 @@ async function bloquearEvaluacionEnRevision(
     es_profesor: boolean
     estado: EstadoRevisionNotas
   }>(
-    `SELECT ${ESTADO_REVISION}, s.profesor_id = $4 AS es_profesor
+    `SELECT ${ESTADO_REVISION}, es_profesor_de_seccion(s.id, $4) AS es_profesor
        ${DESDE_EVALUACION} ${CON_REVISION}
       WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
         AND e.archived_at IS NULL AND s.archived_at IS NULL
@@ -217,6 +216,128 @@ export class NotasService {
     private readonly auditoria: AuditoriaNotasService,
   ) {}
 
+  // NOT-15: el profesor corrige una nota publicada sin perder su valor
+  // anterior. El mismo lock de la evaluación serializa las escrituras.
+  async recorregir(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+    alumnoId: string,
+    datos: RecorregirNota,
+  ): Promise<NotasEvaluacion> {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo el profesor de la sección registra recorrecciones',
+      )
+    }
+    const motivo = typeof datos.motivo === 'string' ? datos.motivo.trim() : ''
+    if (!esNotaValida(datos.notaAnterior) || !esNotaValida(datos.notaNueva)) {
+      throw new BadRequestException(
+        'Nota inválida: usa la escala de 1,0 a 7,0 con un decimal',
+      )
+    }
+    if (
+      !motivo ||
+      [...motivo].length > LARGO_MOTIVO_NOTA ||
+      !/^(?:[\t\n\r]|\P{Cc})*$/u.test(motivo)
+    ) {
+      throw new BadRequestException(
+        `El motivo es obligatorio y admite hasta ${LARGO_MOTIVO_NOTA} caracteres`,
+      )
+    }
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      await bloquearNotasDe(bd, evaluacionId)
+      // Fija la sección para que una reasignación del profesor espere al
+      // término de la recorrección, y vuelve a comprobar su pertenencia.
+      const [evaluacion] = await bd.query<{ esProfesor: boolean }>(
+        `SELECT es_profesor_de_seccion(s.id, $4) AS "esProfesor"
+           FROM evaluacion e
+           JOIN seccion s ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
+           JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
+          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+            AND e.archived_at IS NULL AND s.archived_at IS NULL AND c.archived_at IS NULL
+          FOR SHARE OF e, s, c`,
+        [contexto.universidadId, seccion.id, evaluacionId, usuarioId],
+      )
+      if (!evaluacion) throw new NotFoundException('La evaluación no existe')
+      if (!evaluacion.esProfesor) {
+        throw new ForbiddenException(
+          'Solo el profesor de la sección registra recorrecciones',
+        )
+      }
+      const [actual] = await bd.query<{ valor: string; estado: EstadoNota }>(
+        `SELECT n.valor, n.estado FROM nota n
+          JOIN inscripcion i ON i.usuario_id = n.alumno_id
+            AND i.universidad_id = n.universidad_id AND i.seccion_id = $2
+          JOIN usuario u ON u.id = i.usuario_id AND u.universidad_id = i.universidad_id
+         WHERE n.universidad_id = $1 AND n.evaluacion_id = $3 AND n.alumno_id = $4
+           AND n.archived_at IS NULL AND i.archived_at IS NULL AND u.archived_at IS NULL
+         FOR SHARE OF i`,
+        [contexto.universidadId, seccion.id, evaluacionId, alumnoId],
+      )
+      if (!actual) throw new NotFoundException('La nota no existe')
+      if (actual.estado !== 'PUBLICADA') {
+        throw new ConflictException(
+          'Solo se pueden recorregir notas publicadas',
+        )
+      }
+      const notaActual = Number(actual.valor)
+      if (notaActual !== datos.notaAnterior) {
+        const error: ErrorNotaRecorregida = {
+          statusCode: 409,
+          message:
+            'La nota cambió desde que abriste el formulario. Recarga las notas antes de corregirla.',
+          notaActual,
+        }
+        throw new ConflictException(error)
+      }
+      if (notaActual === datos.notaNueva) {
+        throw new BadRequestException(
+          'La nota nueva debe ser distinta de la publicada',
+        )
+      }
+      const eventoId = await this.auditoria.registrar(bd, {
+        universidadId: contexto.universidadId,
+        evaluacionId,
+        alumnoId,
+        tipo: 'RECORRECCION',
+        notaAnterior: actual.valor,
+        notaNueva: datos.notaNueva,
+        motivo,
+        responsableId: usuarioId,
+      })
+      const [{ filas }] = await bd.query<{ filas: number }>(
+        `WITH corregida AS (
+           UPDATE nota SET valor = $4, recorreccion_id = $5
+            WHERE universidad_id = $1 AND evaluacion_id = $2 AND alumno_id = $3
+              AND estado = 'PUBLICADA' AND archived_at IS NULL AND valor = $6
+           RETURNING 1)
+         SELECT count(*)::int AS filas FROM corregida`,
+        [
+          contexto.universidadId,
+          evaluacionId,
+          alumnoId,
+          datos.notaNueva,
+          eventoId,
+          notaActual,
+        ],
+      )
+      if (filas !== 1) {
+        throw new ConflictException(
+          'La nota ya no se puede recorregir. Recarga las notas.',
+        )
+      }
+      const [corregida] = await bd.query<NotasEvaluacion>(
+        `SELECT ${COLUMNAS_NOTAS} ${DESDE_EVALUACION} ${CON_REVISION}
+          WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3`,
+        [contexto.universidadId, seccion.id, evaluacionId],
+      )
+      return corregida
+    })
+  }
+
   // La evaluación debe ser de la sección y no estar archivada; si no, 404.
   // El Director la lee en cualquier universidad, en una transacción READ
   // ONLY.
@@ -244,6 +365,69 @@ export class NotasService {
       throw new NotFoundException('La evaluación no existe')
     }
     return fila
+  }
+
+  async historial(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    evaluacionId: string,
+    alumnoId: string,
+  ): Promise<HistorialNota> {
+    if (contexto.rol !== 'PROFESOR' || seccion.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo un profesor vigente de la sección puede ver el historial',
+      )
+    }
+
+    // La autorización y los eventos se leen en la misma instantánea.
+    // Una nota aún sin eventos tiene historial vacío, aunque la evaluación
+    // ya haya tenido envíos o devoluciones de otros alumnos.
+    const [fila] = await this.bd.consultarEnUniversidad<
+      HistorialNota & { autorizado: boolean; inscrito: boolean }
+    >(
+      contexto,
+      `WITH alcance AS (
+        SELECT e.id, e.universidad_id,
+               es_profesor_de_seccion(s.id, $4) AS autorizado,
+               EXISTS (
+                 SELECT 1 FROM inscripcion i
+                  WHERE i.universidad_id = e.universidad_id AND i.seccion_id = s.id
+                    AND i.usuario_id = $5 AND i.archived_at IS NULL
+               ) AS inscrito
+          FROM evaluacion e
+          JOIN seccion s ON s.id = e.seccion_id AND s.universidad_id = e.universidad_id
+          JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
+         WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
+           AND e.archived_at IS NULL AND s.archived_at IS NULL AND cu.archived_at IS NULL
+      )
+      SELECT a.autorizado, a.inscrito,
+             COALESCE((
+               SELECT json_agg(json_build_object(
+                 'id', c.id, 'tipo', c.tipo, 'fecha', c.fecha,
+                 'responsable', json_build_object('id', u.id, 'nombre', u.nombre),
+                 'notaAnterior', c.nota_anterior, 'notaNueva', c.nota_nueva,
+                 'motivo', c.motivo
+               ) ORDER BY c.fecha, c.id)
+                 FROM nota_cambio c
+                 JOIN usuario u ON u.id = c.responsable_id AND u.universidad_id = c.universidad_id
+                WHERE a.autorizado AND a.inscrito AND c.universidad_id = a.universidad_id
+                  AND c.evaluacion_id = a.id
+                  AND (c.alumno_id = $5 OR (c.alumno_id IS NULL AND EXISTS (
+                    SELECT 1 FROM nota_cambio propia
+                     WHERE propia.universidad_id = a.universidad_id
+                       AND propia.evaluacion_id = a.id AND propia.alumno_id = $5
+                  )))
+             ), '[]') AS eventos
+        FROM alcance a`,
+      [seccion.id, evaluacionId, usuarioId, alumnoId],
+    )
+    if (!fila) throw new NotFoundException('La evaluación no existe')
+    if (!fila.autorizado) throw new ForbiddenException()
+    if (!fila.inscrito) {
+      throw new NotFoundException('El alumno no está inscrito en esta sección')
+    }
+    return { eventos: fila.eventos }
   }
 
   // Guarda como propuesta las notas recibidas, de cualquier subconjunto de

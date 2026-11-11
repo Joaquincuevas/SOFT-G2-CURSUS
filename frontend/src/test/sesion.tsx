@@ -102,6 +102,7 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
 // alumnos de una sección para su profesor (ESP-05): vacía salvo que el test
 // la simule.
 const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
+  [/^\/api\/espacio\/secciones\/[^/]+\/silabo$/, () => []],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/asistencia\/resumen$/,
     () => ({ clasesRegistradas: 0, alumnos: [] }),
@@ -116,6 +117,11 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
       sinMarca: 0,
       porcentaje: null,
     }),
+  ],
+  // Notas propias del alumno (NOT-13).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
+    () => ({ evaluaciones: [] }),
   ],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
@@ -158,9 +164,11 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
     () => new Response(null, { status: 204 }),
   ],
   // Actividades de entrega de la sección (MAT-08).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/mi-entrega$/,
+    () => ({ entrega: null, cerrada: false }),
+  ],
   [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
-  // Historial del sílabo de la sección (MAT-02).
-  [/^\/api\/espacio\/secciones\/[^/]+\/silabo$/, () => []],
 ]
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh

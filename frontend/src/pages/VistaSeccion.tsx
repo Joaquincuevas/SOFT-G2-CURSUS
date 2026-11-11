@@ -6,7 +6,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
-import { textoBloque } from './misSecciones'
+import { nombresProfesores, textoBloque } from './misSecciones'
 import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
@@ -32,12 +32,16 @@ export interface PropsPestana {
 
 // Contenido de cada pestaña ya implementada; las demás siguen deshabilitadas.
 const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
-  Material: PestanaMaterial,
   Asistencia: PestanaAsistencia,
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,
   Entregas: PestanaEntregas,
+  Material: PestanaMaterial,
 }
+
+// Pestañas que por ahora solo abre el profesor. Material (MAT-04): el listado
+// y la descarga para el resto son de MAT-05 y MAT-06.
+const SOLO_PROFESOR: readonly Pestana[] = ['Material']
 
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,
 // ayudante y alumno. Hoy no hay acciones por rol: llegan en la Fase 4 con
@@ -77,7 +81,8 @@ export function VistaSeccion() {
       />
     )
   }
-  const { curso, numero, rol, horario, profesor, ayudantes } = seccion
+  const { curso, numero, rol, horario, ayudantes } = seccion
+  const profesores = nombresProfesores(seccion)
   const Contenido = activa && CONTENIDO[activa]
   return (
     <section className="dashboard" aria-label="Vista del curso">
@@ -98,7 +103,10 @@ export function VistaSeccion() {
             role="tab"
             aria-selected={activa === pestana}
             className="vista-seccion__pestana"
-            disabled={!CONTENIDO[pestana]}
+            disabled={
+              !CONTENIDO[pestana] ||
+              (SOLO_PROFESOR.includes(pestana) && rol !== 'PROFESOR')
+            }
             onClick={() => setActiva(activa === pestana ? null : pestana)}
           >
             {pestana}
@@ -126,8 +134,13 @@ export function VistaSeccion() {
 
       <h3 className="vista-seccion__subtitulo">Equipo docente</h3>
       <dl className="vista-seccion__equipo">
-        <dt>Profesor</dt>
-        <dd>{profesor?.nombre ?? 'Sin profesor asignado'}</dd>
+        {/* GES-25: todos los profesores vigentes. */}
+        <dt>{profesores.length > 1 ? 'Profesores' : 'Profesor'}</dt>
+        <dd>
+          {profesores.length > 0
+            ? profesores.join(', ')
+            : 'Sin profesor asignado'}
+        </dd>
         <dt>Ayudantes</dt>
         {ayudantes.length === 0 ? (
           <dd>Sin ayudantes asignados</dd>

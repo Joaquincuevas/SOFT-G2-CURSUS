@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import './Dashboard.css'
-import { rutaSeccion } from './misSecciones'
+import { nombresProfesores, rutaSeccion, textoProfesores } from './misSecciones'
 import { useDatos } from './useDatos'
 
 // ESP-02: secciones donde el usuario es ayudante en el período activo.
@@ -48,16 +48,14 @@ export function SeccionesAyudante() {
 // Misma tarjeta que la del profesor (ESP-01), con el profesor a cargo en vez
 // del horario y los alumnos.
 function TarjetaAyudante({ seccion }: { seccion: SeccionAyudante }) {
-  const { curso, numero, profesor } = seccion
+  const { curso, numero } = seccion
   return (
     <Link className="dashboard__tarjeta" to={rutaSeccion(seccion.id)}>
       <span className="dashboard__codigo">{curso.codigo}</span>
       <h3 className="dashboard__curso">{curso.nombre}</h3>
       <p className="dashboard__seccion">Sección {numero}</p>
       <p className="dashboard__texto">
-        {profesor
-          ? `Profesor a cargo: ${profesor.nombre}`
-          : 'Sin profesor asignado'}
+        {textoProfesores(nombresProfesores(seccion))}
       </p>
     </Link>
   )

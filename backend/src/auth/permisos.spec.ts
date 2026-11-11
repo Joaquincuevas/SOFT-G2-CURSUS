@@ -24,9 +24,10 @@ const SUJETOS: SujetoTabla[] = [
   'Evaluacion',
   'Anuncio',
   'Actividad',
-  'Silabo',
+  'Entrega',
   'Nota',
   'RevisionNotas',
+  'Material',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -119,7 +120,7 @@ MATRIZ.PROFESOR.Asistencia = ['create', 'read', 'update']
 const EVALUACION: Record<Rol, AccionConcreta[]> = {
   DIRECTOR: LECTURA,
   ADMINISTRATIVO: [],
-  PROFESOR: ['create', 'read'],
+  PROFESOR: ['create', 'read', 'update'],
   AYUDANTE: LECTURA,
   ALUMNO: LECTURA,
   SUPERADMIN: [],
@@ -149,16 +150,20 @@ const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
 }
 for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
 
-// MAT-02: carga el profesor del curso; leen sus integrantes y el Director.
-const SILABO: Record<Rol, AccionConcreta[]> = {
-  DIRECTOR: LECTURA,
+// MAT-04: materiales de un curso. Los sube el profesor y, hasta MAT-05, solo
+// él los lee. Nadie más recibe nada, tampoco el Director.
+const MATERIAL: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: [],
   ADMINISTRATIVO: [],
   PROFESOR: ['create', 'read'],
-  AYUDANTE: LECTURA,
-  ALUMNO: LECTURA,
+  AYUDANTE: [],
+  ALUMNO: [],
   SUPERADMIN: [],
 }
-for (const rol of ROLES) MATRIZ[rol].Silabo = SILABO[rol]
+for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]
+
+// MAT-09: lectura y entrega propias, sin descarga del equipo docente aún.
+MATRIZ.ALUMNO.Entrega = ['create', 'read']
 
 // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante; leen el
 // profesor y el Director. El alumno (NOT-13) y el Administrativo no reciben
@@ -166,7 +171,7 @@ for (const rol of ROLES) MATRIZ[rol].Silabo = SILABO[rol]
 const NOTA: Record<Rol, AccionConcreta[]> = {
   DIRECTOR: LECTURA,
   ADMINISTRATIVO: [],
-  PROFESOR: LECTURA,
+  PROFESOR: ['read', 'update'],
   AYUDANTE: ['read', 'update'],
   ALUMNO: [],
 }

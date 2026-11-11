@@ -31,9 +31,11 @@ export type SujetoTabla =
   | 'Anuncio'
   | 'Evaluacion'
   | 'Actividad'
-  | 'Silabo'
+  | 'Entrega'
   | 'Nota'
   | 'RevisionNotas'
+  | 'Archivo'
+  | 'Material'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -55,6 +57,7 @@ const LEEN_ANUNCIOS: readonly Rol[] = [
   'ALUMNO',
   'DIRECTOR',
 ]
+const SUBEN_ARCHIVOS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO']
 const LEEN_EVALUACIONES: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
@@ -64,12 +67,6 @@ const LEEN_EVALUACIONES: readonly Rol[] = [
 // NOT-05: el alumno ve sus notas publicadas en NOT-13.
 const LEEN_NOTAS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 const LEEN_ACTIVIDADES: readonly Rol[] = [
-  'PROFESOR',
-  'AYUDANTE',
-  'ALUMNO',
-  'DIRECTOR',
-]
-const LEEN_SILABO: readonly Rol[] = [
   'PROFESOR',
   'AYUDANTE',
   'ALUMNO',
@@ -155,7 +152,7 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // controlador exige además que sea el profesor de esa sección) y las leen
   // el ayudante, el alumno y el Director, este en solo lectura. Editar es
   // NOT-03; nadie las borra.
-  if (usuario.rol === 'PROFESOR') can('create', 'Evaluacion')
+  if (usuario.rol === 'PROFESOR') can(['create', 'update'], 'Evaluacion')
   if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
 
   // MAT-08 (RN-08): actividades de entrega de una sección. Las crea el
@@ -165,17 +162,14 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   if (usuario.rol === 'PROFESOR') can('create', 'Actividad')
   if (LEEN_ACTIVIDADES.includes(usuario.rol)) can('read', 'Actividad')
 
-  // MAT-02: el sílabo pertenece al curso y su período, no al profesor que lo
-  // cargó. Cualquier profesor del curso puede agregar una versión; sus
-  // integrantes y el Director pueden consultar el historial.
-  if (usuario.rol === 'PROFESOR') can('create', 'Silabo')
-  if (LEEN_SILABO.includes(usuario.rol)) can('read', 'Silabo')
-
   // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante como
   // propuesta (el controlador exige además que sea ayudante de esa sección) y
   // las leen el profesor y el Director, este en solo lectura. El alumno y el
   // Administrativo no reciben nada. Nadie las borra.
-  if (usuario.rol === 'AYUDANTE') can('update', 'Nota')
+  // NOT-15: el profesor solo modifica publicadas mediante recorrección; el
+  // PUT de propuestas y el envío siguen exigiendo AYUDANTE en el controlador.
+  if (usuario.rol === 'AYUDANTE' || usuario.rol === 'PROFESOR')
+    can('update', 'Nota')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
 
   // NOT-11 y NOT-12: revisión de las notas de una evaluación
@@ -185,6 +179,23 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // parte de ingresarlas.
   if (usuario.rol === 'PROFESOR') can('update', 'RevisionNotas')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'RevisionNotas')
+  // MAT-01: archivos de una sección (sílabo, materiales y entregas). Los
+  // suben el profesor, el ayudante y el alumno de la sección, y los descargan
+  // ellos y el Director, este en solo lectura. El controlador exige además
+  // ser integrante (ESP-06) y que el alumno solo descargue lo suyo o lo del
+  // equipo docente. El Administrativo no recibe nada. Nadie los borra.
+  if (SUBEN_ARCHIVOS.includes(usuario.rol)) can(['create', 'read'], 'Archivo')
+  if (usuario.rol === 'DIRECTOR') can('read', 'Archivo')
+
+  // MAT-04: materiales de un curso. Los sube el profesor (el controlador
+  // exige además que sea el profesor de esa sección) y, por ahora, solo él los
+  // lee: el listado y la descarga para el resto son de MAT-05 y MAT-06. El
+  // Administrativo no recibe nada. Nadie los borra.
+  if (usuario.rol === 'PROFESOR') can(['create', 'read'], 'Material')
+
+  // MAT-09: solo el alumno consulta y confirma su entrega. La descarga del
+  // equipo docente se habilita en MAT-10.
+  if (usuario.rol === 'ALUMNO') can(['create', 'read'], 'Entrega')
 
   return build()
 }

@@ -20,5 +20,34 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3 local para los archivos de los cursos (MAT-01). Versión fija: las más
+  # nuevas de LocalStack piden una cuenta. Al arrancar crea el bucket
+  # (infra/localstack/crear-bucket.sh); los archivos se pierden al reiniciar.
+  s3:
+    image: localstack/localstack:4.9.2
+    container_name: cursus-s3
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      S3_BUCKET: ${S3_BUCKET:-cursus-archivos}
+    ports:
+      - '127.0.0.1:${S3_PORT:-4566}:4566'
+    # Sintaxis larga con create_host_path: false. Si el script no existe (por
+    # ejemplo, en una rama anterior a MAT-01 y el contenedor se reinicia solo),
+    # Docker no crea en su lugar una carpeta de root que después impide
+    # cambiar de rama: LocalStack simplemente no arranca.
+    volumes:
+      - type: bind
+        source: ./infra/localstack/crear-bucket.sh
+        target: /etc/localstack/init/ready.d/crear-bucket.sh
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ['CMD-SHELL', 'awslocal s3api head-bucket --bucket $${S3_BUCKET}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   postgres_data:

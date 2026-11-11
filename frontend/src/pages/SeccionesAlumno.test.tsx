@@ -15,6 +15,7 @@ const SECCIONES: SeccionAlumno[] = [
       { dia: 3, inicio: '10:00', termino: '11:00', sala: 'Laboratorio' },
     ],
     profesor: { id: 'profesor', nombre: 'Camila Rojas' },
+    profesores: ['Camila Rojas'],
   },
   {
     id: 'seccion-2',
@@ -23,6 +24,7 @@ const SECCIONES: SeccionAlumno[] = [
     curso: { id: 'curso-1', codigo: 'ICC101', nombre: 'Programación' },
     horario: [],
     profesor: null,
+    profesores: [],
   },
 ]
 const resumen: SeccionResumen = {

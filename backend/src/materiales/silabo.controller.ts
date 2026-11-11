@@ -1,24 +1,16 @@
+import type { SeccionEspacio } from '@cursus/shared'
 import {
-  MAX_TAMANO_SILABO_BYTES,
-  type Rol,
-  type SeccionEspacio,
-  type VersionSilabo,
-} from '@cursus/shared'
-import {
-  BadRequestException,
+  Body,
   Controller,
   ForbiddenException,
   Get,
-  HttpCode,
+  Header,
   Param,
   ParseIntPipe,
   Post,
   Req,
-  StreamableFile,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
+import { IsUUID } from 'class-validator'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
@@ -29,74 +21,66 @@ import {
 } from '../espacio/integrante-seccion.guard.js'
 import { SilaboService } from './silabo.service.js'
 
-const ROLES_LECTURA: readonly Rol[] = [
-  'PROFESOR',
-  'AYUDANTE',
-  'ALUMNO',
-  'DIRECTOR',
-]
+class PublicarSilaboDto {
+  @IsUUID()
+  archivoId!: string
+}
+
+function exigirIntegrante(seccion: SeccionEspacio) {
+  if (!['PROFESOR', 'AYUDANTE', 'ALUMNO'].includes(seccion.rol))
+    throw new ForbiddenException()
+}
 
 @Controller('espacio/secciones/:id/silabo')
 export class SilaboController {
-  constructor(private readonly silabo: SilaboService) {}
+  constructor(private readonly silabos: SilaboService) {}
 
-  @Puede('read', 'Silabo')
+  @Puede('read', 'Archivo')
   @IntegranteDeSeccion()
   @Get()
   listar(
     @UniversidadActual() contexto: ContextoUniversidad,
     @SeccionActual() seccion: SeccionEspacio,
-  ): Promise<VersionSilabo[]> {
-    if (!ROLES_LECTURA.includes(seccion.rol)) throw new ForbiddenException()
-    return this.silabo.listar(contexto, seccion)
+    @Req() req: RequestConUsuario,
+  ) {
+    exigirIntegrante(seccion)
+    return this.silabos.listar(contexto, seccion, req.usuario?.sub as string)
   }
 
-  @Puede('read', 'Silabo')
+  @Puede('read', 'Archivo')
   @IntegranteDeSeccion()
   @Get(':version')
-  async descargar(
+  @Header('Cache-Control', 'no-store')
+  descargar(
     @UniversidadActual() contexto: ContextoUniversidad,
     @SeccionActual() seccion: SeccionEspacio,
+    @Req() req: RequestConUsuario,
     @Param('version', ParseIntPipe) version: number,
-  ): Promise<StreamableFile> {
-    if (!ROLES_LECTURA.includes(seccion.rol)) throw new ForbiddenException()
-    const pdf = await this.silabo.obtener(contexto, seccion, version)
-    return new StreamableFile(pdf, {
-      type: 'application/pdf',
-      disposition: `attachment; filename="silabo-v${version}.pdf"`,
-      length: pdf.byteLength,
-    })
+  ) {
+    exigirIntegrante(seccion)
+    return this.silabos.descargar(
+      contexto,
+      seccion,
+      req.usuario?.sub as string,
+      version,
+    )
   }
 
-  @Puede('create', 'Silabo')
+  @Puede('create', 'Archivo')
   @IntegranteDeSeccion()
-  @UseInterceptors(
-    FileInterceptor('archivo', {
-      limits: { fileSize: MAX_TAMANO_SILABO_BYTES },
-    }),
-  )
   @Post()
-  @HttpCode(201)
-  subir(
+  publicar(
     @UniversidadActual() contexto: ContextoUniversidad,
-    @Req() req: RequestConUsuario,
     @SeccionActual() seccion: SeccionEspacio,
-    @UploadedFile() archivo: { mimetype: string; buffer: Buffer } | undefined,
-  ): Promise<VersionSilabo> {
-    if (seccion.rol !== 'PROFESOR') {
-      throw new ForbiddenException('Solo el profesor del curso carga el sílabo')
-    }
-    if (!archivo?.buffer?.length) {
-      throw new BadRequestException('Selecciona un archivo PDF')
-    }
-    if (
-      archivo.mimetype !== 'application/pdf' ||
-      archivo.buffer.subarray(0, 5).toString('ascii') !== '%PDF-'
-    ) {
-      throw new BadRequestException('El archivo debe ser un PDF válido')
-    }
-    const usuarioId = req.usuario?.sub
-    if (!usuarioId) throw new ForbiddenException()
-    return this.silabo.subir(contexto, usuarioId, seccion, archivo.buffer)
+    @Req() req: RequestConUsuario,
+    @Body() datos: PublicarSilaboDto,
+  ) {
+    if (seccion.rol !== 'PROFESOR') throw new ForbiddenException()
+    return this.silabos.publicar(
+      contexto,
+      seccion,
+      req.usuario?.sub as string,
+      datos.archivoId,
+    )
   }
 }

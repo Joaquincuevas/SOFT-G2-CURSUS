@@ -10,7 +10,10 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  Param,
+  ParseUUIDPipe,
   Post,
+  Put,
   Req,
 } from '@nestjs/common'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
@@ -34,6 +37,25 @@ const LEEN: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO', 'DIRECTOR']
 @Controller('espacio/secciones/:id/evaluaciones')
 export class EvaluacionesController {
   constructor(private readonly evaluaciones: EvaluacionesService) {}
+
+  @Puede('update', 'Evaluacion')
+  @IntegranteDeSeccion()
+  @Put(':evaluacionId')
+  editar(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('evaluacionId', ParseUUIDPipe) evaluacionId: string,
+    @Body() datos: CrearEvaluacionDto,
+  ): Promise<Evaluacion> {
+    return this.evaluaciones.editar(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      evaluacionId,
+      datos,
+    )
+  }
 
   @Puede('read', 'Evaluacion')
   @IntegranteDeSeccion()

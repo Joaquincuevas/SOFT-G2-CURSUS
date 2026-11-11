@@ -1,4 +1,10 @@
-import type { EvaluacionesSeccion, Rol, SeccionResumen } from '@cursus/shared'
+import type {
+  EvaluacionesSeccion,
+  HistorialNota,
+  NotasEvaluacion,
+  Rol,
+  SeccionResumen,
+} from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
@@ -15,6 +21,7 @@ const RESUMEN: SeccionResumen = {
   rol: 'PROFESOR',
   horario: [],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [],
 }
 
@@ -52,9 +59,9 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
     expect(filas).toEqual([
-      'EvaluaciónFechaPonderación',
-      'Control 12026-09-0120 %',
-      'Solemne 12026-10-0530 %',
+      'EvaluaciónFechaPonderaciónAccionesNotas',
+      'Control 12026-09-0120 %EditarVer historialVer notas',
+      'Solemne 12026-10-0530 %EditarVer historialVer notas',
       'Suma de ponderaciones50 %',
     ])
   })
@@ -139,36 +146,33 @@ describe('pestaña Notas (NOT-01)', () => {
 
   // El Director lee por la API (db-spec), pero no tiene ruta a esta vista:
   // /mis-cursos no está en su menú.
-  test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
-    '%s ve la lista pero no el formulario',
-    async (rol) => {
-      const { panel } = await abrirNotas(rol)
+  // El alumno ve sus notas en vez de la lista (NOT-13, MisNotas.test.tsx).
+  test('el ayudante ve la lista pero no el formulario', async () => {
+    const { panel } = await abrirNotas('AYUDANTE')
 
-      expect(await panel.findByText('Control 1')).toBeInTheDocument()
-      expect(panel.getByText('50 %')).toBeInTheDocument()
-      expect(
-        panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
-      ).not.toBeInTheDocument()
-      expect(
-        panel.queryByRole('form', { name: 'Nueva evaluación' }),
-      ).not.toBeInTheDocument()
-      expect(
-        panel.queryByRole('button', { name: 'Crear evaluación' }),
-      ).not.toBeInTheDocument()
-      // NOT-05: el ayudante tiene exactamente un botón por evaluación para
-      // ingresar sus notas, y ningún otro; el alumno, ninguno.
-      const esperados =
-        rol === 'AYUDANTE' ? ['Notas de Control 1', 'Notas de Solemne 1'] : []
-      const botones = panel.queryAllByRole('button')
-      expect(botones).toHaveLength(esperados.length)
-      botones.forEach((boton, indice) =>
-        expect(boton).toHaveAccessibleName(esperados[indice]),
-      )
-      expect(botones.map((boton) => boton.textContent)).toEqual(
-        esperados.map(() => 'Ingresar notas'),
-      )
-    },
-  )
+    expect(await panel.findByText('Control 1')).toBeInTheDocument()
+    expect(panel.getByText('50 %')).toBeInTheDocument()
+    expect(
+      panel.queryByRole('status', { name: 'Aviso de ponderaciones' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('form', { name: 'Nueva evaluación' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel.queryByRole('button', { name: 'Crear evaluación' }),
+    ).not.toBeInTheDocument()
+    // NOT-05: el ayudante tiene exactamente un botón por evaluación para
+    // ingresar sus notas, y ningún otro.
+    const esperados = ['Notas de Control 1', 'Notas de Solemne 1']
+    const botones = panel.queryAllByRole('button')
+    expect(botones).toHaveLength(esperados.length)
+    botones.forEach((boton, indice) =>
+      expect(boton).toHaveAccessibleName(esperados[indice]),
+    )
+    expect(botones.map((boton) => boton.textContent)).toEqual(
+      esperados.map(() => 'Ingresar notas'),
+    )
+  })
 
   test('sin evaluaciones muestra el estado vacío', async () => {
     const { panel } = await abrirNotas('AYUDANTE', () => ({
@@ -183,7 +187,7 @@ describe('pestaña Notas (NOT-01)', () => {
 
   test('si falla la carga permite reintentar', async () => {
     let intentos = 0
-    const { panel } = await abrirNotas('ALUMNO', () =>
+    const { panel } = await abrirNotas('AYUDANTE', () =>
       ++intentos === 1 ? json({}, 500) : LISTA,
     )
 
@@ -192,6 +196,230 @@ describe('pestaña Notas (NOT-01)', () => {
     ).toBeInTheDocument()
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Control 1')).toBeInTheDocument()
+  })
+})
+
+describe('historial de una nota (NOT-16)', () => {
+  const NOTAS = `${EVALUACIONES}/e1/notas`
+  const ANA = `${NOTAS}/a1/historial`
+  const BRUNO = `${NOTAS}/a2/historial`
+  const alumnos: NotasEvaluacion = {
+    evaluacion: LISTA.evaluaciones[0],
+    estado: 'APROBADA',
+    alumnos: [
+      { id: 'a1', nombre: 'Ana Ávila', nota: 6.5, estado: 'PUBLICADA' },
+      { id: 'a2', nombre: 'Bruno Díaz', nota: null, estado: null },
+    ],
+  }
+  const fecha = '2026-10-02T13:00:00Z'
+  const historial: HistorialNota = {
+    eventos: [
+      {
+        id: '1',
+        tipo: 'PROPUESTA',
+        fecha,
+        responsable: { id: 'a', nombre: 'Lucía Reyes' },
+        notaAnterior: null,
+        notaNueva: 5.5,
+        motivo: null,
+      },
+      {
+        id: '2',
+        tipo: 'APROBACION',
+        fecha: '2026-10-03T13:00:00Z',
+        responsable: { id: 'p', nombre: 'Camila Rojas' },
+        notaAnterior: null,
+        notaNueva: null,
+        motivo: null,
+      },
+      {
+        id: '3',
+        tipo: 'RECORRECCION',
+        fecha: '2026-10-04T13:00:00Z',
+        responsable: { id: 'p', nombre: 'Camila Rojas' },
+        notaAnterior: 5.5,
+        notaNueva: 6.5,
+        motivo: 'Se revisó la rúbrica.',
+      },
+    ],
+  }
+
+  test('consulta al seleccionar un alumno y muestra sus eventos en una tabla de solo lectura', async () => {
+    const peticiones: string[] = []
+    let intentoBruno = 0
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => RESUMEN,
+      [EVALUACIONES]: () => LISTA,
+      [NOTAS]: () => alumnos,
+      [ANA]: (init) => {
+        peticiones.push(init?.method ?? 'GET')
+        return historial
+      },
+      [BRUNO]: (init) => {
+        peticiones.push(init?.method ?? 'GET')
+        return intentoBruno++ === 0 ? json({}, 503) : { eventos: [] }
+      },
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    const abrir = await screen.findByRole('button', {
+      name: 'Historial de notas de Control 1',
+    })
+    expect(peticiones).toEqual([])
+    fireEvent.click(abrir)
+    expect(abrir).toHaveAttribute('aria-expanded', 'true')
+    const seleccion = await screen.findByRole('combobox', {
+      name: 'Alumno para consultar',
+    })
+    expect(peticiones).toEqual([])
+    fireEvent.change(seleccion, { target: { value: 'a1' } })
+    const tabla = await screen.findByRole('table', {
+      name: 'Historial de Ana Ávila',
+    })
+    const filas = within(tabla).getAllByRole('row').slice(1)
+    expect(
+      filas.map((fila) =>
+        within(fila)
+          .getAllByRole('cell')
+          .slice(1)
+          .map((celda) => celda.textContent),
+      ),
+    ).toEqual([
+      ['Lucía Reyes', 'Propuesta', '—', '5,5', '—'],
+      ['Camila Rojas', 'Aprobación', '—', '—', '—'],
+      ['Camila Rojas', 'Recorrección', '5,5', '6,5', 'Se revisó la rúbrica.'],
+    ])
+    expect(filas[0].querySelector('time')).toHaveAttribute('datetime', fecha)
+    expect(within(tabla).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(tabla).queryByRole('button')).not.toBeInTheDocument()
+
+    fireEvent.change(seleccion, { target: { value: 'a2' } })
+    expect(
+      screen.queryByRole('table', { name: 'Historial de Ana Ávila' }),
+    ).not.toBeInTheDocument()
+    expect(
+      await screen.findByText('No pudimos cargar el historial de esta nota.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByText(
+        'Este alumno aún no tiene cambios de nota registrados.',
+      ),
+    ).toBeInTheDocument()
+    expect(peticiones).toEqual(['GET', 'GET', 'GET'])
+  })
+
+  // El alumno ve MisNotas, sin historial (NOT-13, MisNotas.test.tsx).
+  test.each(['AYUDANTE'] as const)(
+    'no ofrece historial al rol %s',
+    async (rol) => {
+      const { panel } = await abrirNotas(rol)
+      await panel.findByText('Control 1')
+      expect(
+        panel.queryByRole('button', {
+          name: 'Historial de notas de Control 1',
+        }),
+      ).not.toBeInTheDocument()
+    },
+  )
+})
+
+describe('NOT-03: edición de evaluaciones', () => {
+  const EDICION = `${EVALUACIONES}/e1`
+
+  async function abrirEdicion(
+    guardar: (init?: RequestInit) => Response,
+    listar = () => LISTA,
+  ) {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => RESUMEN,
+      [EVALUACIONES]: listar,
+      [EDICION]: guardar,
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Editar Control 1' }),
+    )
+    return within(screen.getByRole('form', { name: 'Editar Control 1' }))
+  }
+
+  test('precarga y guarda los tres campos, y actualiza el total', async () => {
+    const cambios: unknown[] = []
+    let lista = LISTA
+    const nuevo = {
+      nombre: 'Control corregido',
+      fecha: '2026-09-02',
+      ponderacion: 40,
+    }
+    const form = await abrirEdicion(
+      (init) => {
+        expect(init?.method).toBe('PUT')
+        cambios.push(JSON.parse(String(init?.body)))
+        lista = {
+          evaluaciones: [{ id: 'e1', ...nuevo }, LISTA.evaluaciones[1]],
+          sumaPonderaciones: 70,
+        }
+        return json({ id: 'e1', ...nuevo })
+      },
+      () => lista,
+    )
+    expect(form.getByLabelText('Nombre')).toHaveValue('Control 1')
+    expect(form.getByLabelText('Fecha')).toHaveValue('2026-09-01')
+    expect(form.getByLabelText('Ponderación (%)')).toHaveValue(20)
+    fireEvent.change(form.getByLabelText('Nombre'), {
+      target: { value: nuevo.nombre },
+    })
+    fireEvent.change(form.getByLabelText('Fecha'), {
+      target: { value: nuevo.fecha },
+    })
+    fireEvent.change(form.getByLabelText('Ponderación (%)'), {
+      target: { value: '40' },
+    })
+    fireEvent.click(form.getByRole('button', { name: 'Guardar cambios' }))
+    expect(
+      await screen.findByText('Evaluación actualizada.'),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Control corregido')).toBeInTheDocument()
+    expect(screen.getByText('70 %')).toBeInTheDocument()
+    expect(cambios).toEqual([nuevo])
+  })
+
+  test('explica el bloqueo al cargar una evaluación que ya tiene notas', async () => {
+    const { panel } = await abrirNotas('PROFESOR', () => ({
+      ...LISTA,
+      evaluaciones: LISTA.evaluaciones.map((e) => ({ ...e, tieneNotas: true })),
+    }))
+    expect(await panel.findAllByText(/ya tiene notas ingresadas/)).toHaveLength(
+      2,
+    )
+    expect(
+      panel.queryByRole('button', { name: /Editar/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('un 409 concurrente conserva el motivo y deshabilita el guardado', async () => {
+    let tieneNotas = false
+    const form = await abrirEdicion(
+      () => {
+        tieneNotas = true
+        return json({ statusCode: 409 }, 409)
+      },
+      () => ({
+        ...LISTA,
+        evaluaciones: [
+          { ...LISTA.evaluaciones[0], tieneNotas },
+          LISTA.evaluaciones[1],
+        ],
+      }),
+    )
+    fireEvent.click(form.getByRole('button', { name: 'Guardar cambios' }))
+    expect(await form.findByRole('alert')).toHaveTextContent(
+      'ya tiene notas ingresadas',
+    )
+    expect(form.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
+    fireEvent.click(form.getByRole('button', { name: 'Cancelar' }))
+    expect(
+      screen.queryByRole('button', { name: 'Editar Control 1' }),
+    ).not.toBeInTheDocument()
   })
 })
 

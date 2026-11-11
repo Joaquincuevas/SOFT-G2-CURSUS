@@ -26,10 +26,8 @@ export class ResumenAsistenciaService {
       WITH vigente AS (
         SELECT s.id, s.universidad_id FROM seccion s
         JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
-        JOIN usuario pr ON pr.id = s.profesor_id AND pr.universidad_id = s.universidad_id
-        WHERE s.universidad_id = $1 AND s.id = $2 AND s.profesor_id = $3
+        WHERE s.universidad_id = $1 AND s.id = $2 AND es_profesor_de_seccion(s.id, $3)
           AND s.archived_at IS NULL AND cu.archived_at IS NULL
-          AND pr.archived_at IS NULL AND pr.rol = 'PROFESOR'
       ), registradas AS (
         SELECT c.id, c.universidad_id FROM clase c
         JOIN vigente s ON s.id = c.seccion_id AND s.universidad_id = c.universidad_id

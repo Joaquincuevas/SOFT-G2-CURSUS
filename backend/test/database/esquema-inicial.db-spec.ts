@@ -17,6 +17,7 @@ const TABLAS = [
   'actividad',
   'anuncio',
   'anuncio_cambio',
+  'archivo',
   'asignacion_cambio',
   'asistencia',
   'asistencia_cambio',
@@ -25,18 +26,22 @@ const TABLAS = [
   'clase',
   'curso',
   'curso_cambio',
+  'entrega',
   'evaluacion',
+  'evaluacion_cambio',
   'facultad',
   'horario_seccion',
   'inscripcion',
   'lectura_anuncio',
   'limite_login',
+  'material',
   'nota',
   'nota_cambio',
   'periodo',
   'refresh_token',
   'revision_notas',
   'seccion',
+  'seccion_profesor',
   'sesion_auth',
   'silabo',
   'superadmin_cambio',
@@ -180,20 +185,152 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-
-    // MAT-02: el sílabo se revierte sin afectar los cursos.
-    await bd.undoLastMigration()
+    await bd.undoLastMigration() // MAT-02: quita el historial y el filtro de descarga genérica.
     const SIN_SILABO = TABLAS.filter((tabla) => tabla !== 'silabo')
     expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    // MAT-04 quita material y su trigger. La restricción
+    // uq_archivo_id_universidad es de MAT-09 y queda. Revertir, aplicar y
+    // revertir de nuevo deja lo mismo.
+    await bd.undoLastMigration()
+    const SIN_MATERIAL = SIN_SILABO.filter((tabla) => tabla !== 'material')
+    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
+    const [restosMaterial] = await bd.query<{ restos: string }[]>(
+      `SELECT count(*) AS restos FROM pg_proc WHERE proname = 'validar_material'`,
+    )
+    expect(Number(restosMaterial.restos)).toBe(0)
+    await bd.runMigrations()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // MAT-02.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
+
+    await bd.undoLastMigration() // GES-26: retira solo el motivo del alumno.
+    const [{ motivoRetiro }] = await bd.query<{ motivoRetiro: string }[]>(
+      `SELECT count(*) AS "motivoRetiro" FROM information_schema.columns
+       WHERE table_name='inscripcion' AND column_name='motivo_retiro'`,
+    )
+    expect(Number(motivoRetiro)).toBe(0)
+    await bd.undoLastMigration() // MAT-09 sale antes de NOT-15.
+    const SIN_ENTREGA = SIN_MATERIAL.filter((tabla) => tabla !== 'entrega')
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ funcionEntrega }] = await bd.query<
+      { funcionEntrega: string | null }[]
+    >(`SELECT to_regprocedure('public.validar_entrega()') AS "funcionEntrega"`)
+    expect(funcionEntrega).toBeNull()
+
+    // NOT-15: conserva notas y auditoría al retirar la marca y su política.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ restosRecorreccion }] = await bd.query<
+      { restosRecorreccion: string }[]
+    >(
+      `SELECT count(*) AS "restosRecorreccion" FROM information_schema.columns
+        WHERE table_name='nota' AND column_name='recorreccion_id'`,
+    )
+    expect(Number(restosRecorreccion)).toBe(0)
+
+    // NOT-13: no crea tablas. Solo quita la lectura del alumno en nota.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    const [{ lecturaAlumno }] = await bd.query<{ lecturaAlumno: string }[]>(
+      `SELECT count(*) AS "lecturaAlumno" FROM pg_policies
+        WHERE policyname = 'pol_nota_lectura_alumno'`,
+    )
+    expect(Number(lecturaAlumno)).toBe(0)
+
+    await bd.undoLastMigration() // NOT-03: elimina el historial de edición.
+    const SIN_EDICION_EVALUACION = SIN_ENTREGA.filter(
+      (tabla) => tabla !== 'evaluacion_cambio',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    const [edicionRevertida] = await bd.query<
+      {
+        auditoria: string | null
+        bloqueo: string | null
+        updateTabla: boolean
+      }[]
+    >(`
+      SELECT to_regprocedure('public.validar_y_auditar_edicion_evaluacion()') AS auditoria,
+             to_regprocedure('public.bloquear_nueva_nota_para_edicion()') AS bloqueo,
+             has_table_privilege('cursus_app', 'evaluacion', 'UPDATE') AS "updateTabla"
+    `)
+    expect(edicionRevertida).toEqual({
+      auditoria: null,
+      bloqueo: null,
+      updateTabla: true,
+    })
+
+    // GES-25: quita seccion_profesor, la función, los triggers de
+    // sincronización, y deja las políticas de NOT-11/12 y el trigger de ASI-04
+    // con s.profesor_id. Revertir, aplicar y revertir de nuevo deja
+    // exactamente lo mismo.
+    const definiciones = () =>
+      bd.query<{ nombre: string; definicion: string }[]>(
+        `SELECT policyname AS nombre,
+                coalesce(qual, '') || ' | ' || coalesce(with_check, '') AS definicion
+           FROM pg_policies
+          WHERE policyname IN ('pol_nota_publicacion',
+                               'pol_revision_notas_aprobacion',
+                               'pol_revision_notas_devolucion')
+         UNION ALL
+         SELECT proname, prosrc FROM pg_proc
+          WHERE proname = 'auditar_correccion_asistencia'
+         ORDER BY 1`,
+      )
+    await bd.undoLastMigration()
+    const SIN_SECCION_PROFESOR = SIN_EDICION_EVALUACION.filter(
+      (t) => t !== 'seccion_profesor',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_SECCION_PROFESOR)
+    const anteriores = await definiciones()
+    expect(anteriores).toHaveLength(4)
+    for (const { nombre, definicion } of anteriores) {
+      expect(definicion, nombre).not.toContain('es_profesor_de_seccion')
+      expect(definicion, nombre).toMatch(
+        nombre === 'auditar_correccion_asistencia'
+          ? /s\.profesor_id = profesor/
+          : /s\.profesor_id = usuario_actual\(\)/,
+      )
+    }
+    const [{ restosVariosProfesores }] = await bd.query<
+      { restosVariosProfesores: string }[]
+    >(
+      `SELECT count(*) AS "restosVariosProfesores" FROM pg_proc
+        WHERE proname IN ('es_profesor_de_seccion',
+                          'sincronizar_profesor_de_seccion',
+                          'sincronizar_seccion_profesor')`,
+    )
+    expect(Number(restosVariosProfesores)).toBe(0)
+    await bd.runMigrations()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-02,
+    await bd.undoLastMigration() // MAT-04,
+    await bd.undoLastMigration() // GES-26,
+    await bd.undoLastMigration() // MAT-09,
+    await bd.undoLastMigration() // NOT-15
+    await bd.undoLastMigration() // y NOT-13, que salen antes de NOT-03.
+    expect(await tablasExistentes()).toEqual(SIN_ENTREGA)
+    await bd.undoLastMigration() // NOT-03 debe salir antes de quitar el helper de GES-25.
+    expect(await tablasExistentes()).toEqual(SIN_EDICION_EVALUACION)
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_SECCION_PROFESOR)
+    expect(await definiciones()).toEqual(anteriores)
+
+    // CrearArchivo (MAT-01): solo quita su tabla.
+    await bd.undoLastMigration()
+    const SIN_ARCHIVO = SIN_SECCION_PROFESOR.filter(
+      (tabla) => tabla !== 'archivo',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // UI-04: inicializa colores; al revertir conserva los datos elegidos.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // NOT-12: no crea tablas. Quita la política de la devolución, el trigger
     // del comentario, su UPDATE y la columna.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosDevolucion }] = await bd.query<
       { restosDevolucion: string }[]
     >(
@@ -214,7 +351,7 @@ describe('migraciones', () => {
     // trigger de la publicación y usuario_actual(), y nota_cambio vuelve a
     // los tipos de NOT-04.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosAprobacion }] = await bd.query<
       { restosAprobacion: string }[]
     >(
@@ -238,13 +375,13 @@ describe('migraciones', () => {
       `SELECT to_regprocedure('public.total_clases_asistencia(uuid)')::text AS funcion`,
     )
     expect(funcion).toBeNull()
-    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
 
     // NOT-08: no crea tablas. Quita la política de envío y el UPDATE sobre
     // revision_notas, y deja las políticas del ayudante en nota sin la
     // condición del estado.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    expect(await tablasExistentes()).toEqual(SIN_ARCHIVO)
     const [{ restosEnvio }] = await bd.query<{ restosEnvio: string }[]>(
       `SELECT (SELECT count(*) FROM pg_policies
                 WHERE policyname = 'pol_revision_notas_envio')
@@ -260,7 +397,7 @@ describe('migraciones', () => {
 
     // NOT-07: quita el estado de las notas con su trigger del superadmin.
     await bd.undoLastMigration()
-    const SIN_REVISION_NOTAS = SIN_SILABO.filter((t) => t !== 'revision_notas')
+    const SIN_REVISION_NOTAS = SIN_ARCHIVO.filter((t) => t !== 'revision_notas')
     expect(await tablasExistentes()).toEqual(SIN_REVISION_NOTAS)
 
     await bd.undoLastMigration() // ASI-04: conserva las marcas corregidas.
@@ -544,8 +681,9 @@ describe('migraciones', () => {
         t !== 'nota_cambio' &&
         t !== 'anuncio_cambio' &&
         t !== 'asistencia_cambio' &&
-        t !== 'lectura_anuncio' &&
+        t !== 'evaluacion_cambio' &&
         t !== 'silabo' &&
+        t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {
       const columnas = filas.filter((fila) => fila.table_name === tabla)
@@ -571,6 +709,7 @@ describe('migraciones', () => {
       [
         'actividad',
         'anuncio',
+        'archivo',
         'asistencia',
         'ayudante_seccion',
         'carrera',
@@ -580,8 +719,10 @@ describe('migraciones', () => {
         'facultad',
         'horario_seccion',
         'inscripcion',
+        'material',
         'nota',
         'seccion',
+        'seccion_profesor',
         'universidad',
         'usuario',
       ].map((tabla) => ({

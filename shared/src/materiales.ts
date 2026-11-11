@@ -1,9 +1,19 @@
+import type { ArchivoResumen } from './archivos.js'
+
 // MAT-08 (RN-08): actividades de entrega de una sección
 // (/api/espacio/secciones/:id/actividades). Cada actividad es de una
 // sección: el profesor que la crea y quienes la ven son los de esa sección.
 
 export const LARGO_TITULO_ACTIVIDAD = 100
 export const LARGO_INSTRUCCIONES_ACTIVIDAD = 2000
+
+export const MAX_TAMANO_SILABO_BYTES = 10 * 1024 * 1024
+
+export interface VersionSilabo {
+  version: number
+  subidoEn: string
+  responsable: string
+}
 
 // Elemento de GET y respuesta del POST.
 export interface Actividad {
@@ -28,9 +38,63 @@ export interface CrearActividad {
   hora: string
 }
 
-export const MAX_TAMANO_SILABO_BYTES = 10 * 1024 * 1024
+// MAT-04: materiales de un curso (/api/espacio/secciones/:id/materiales).
+// Cada material es del curso, no de quien lo subió: lo ven y lo gestionan los
+// profesores vigentes de cualquier sección del curso, así que lo hereda el
+// próximo profesor. Su contenido es un archivo de MAT-01 ya confirmado.
 
-export interface VersionSilabo {
-  version: number
-  subidoEn: string
+export const CATEGORIAS_MATERIAL = [
+  'GUIA',
+  'PRESENTACION',
+  'PRUEBA_ANTERIOR',
+  'CODIGO',
+] as const
+
+export type CategoriaMaterial = (typeof CATEGORIAS_MATERIAL)[number]
+
+export const CATEGORIA_MATERIAL_LABEL: Record<CategoriaMaterial, string> = {
+  GUIA: 'Guía',
+  PRESENTACION: 'Presentación',
+  PRUEBA_ANTERIOR: 'Prueba anterior',
+  CODIGO: 'Código',
+}
+
+export const LARGO_TITULO_MATERIAL = 100
+export const LARGO_DESCRIPCION_MATERIAL = 1000
+
+// Body de POST. archivoId es un archivo de la sección ya confirmado
+// (MAT-01: pedir la subida, subir a S3 y confirmar).
+export interface CrearMaterial {
+  archivoId: string
+  categoria: CategoriaMaterial
+  titulo: string
+  descripcion?: string
+}
+
+// Elemento de GET y respuesta del POST.
+export interface Material {
+  id: string
+  categoria: CategoriaMaterial
+  titulo: string
+  descripcion: string | null
+  archivo: ArchivoResumen
+  // Fecha ISO 8601 en que se registró el material.
+  creadoEn: string
+}
+
+// MAT-09: el archivo ya pasó por la subida y confirmación de MAT-01.
+export interface EntregarInforme {
+  archivoId: string
+}
+
+export interface EntregaInforme {
+  id: string
+  archivo: ArchivoResumen
+  // Hora del servidor en ISO 8601, no la del navegador ni la de la subida.
+  entregadaEn: string
+}
+
+export interface MiEntregaActividad {
+  entrega: EntregaInforme | null
+  cerrada: boolean
 }

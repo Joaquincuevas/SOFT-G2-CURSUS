@@ -21,6 +21,7 @@ const RESUMEN: SeccionResumen = {
     { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
   ],
   profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+  profesores: ['Camila Rojas'],
   ayudantes: [
     { id: 'ayudante-1', nombre: 'Diego Muñoz' },
     { id: 'ayudante-2', nombre: 'Sofía Pérez' },
@@ -95,15 +96,9 @@ describe('vista de la sección (ESP-04)', () => {
       'Asistencia',
       'Entregas',
     ])
-    // Implementadas: Material (MAT-02), Notas (NOT-01), Anuncios (ANU-01),
-    // Asistencia (ASI-01) y Entregas (MAT-08).
-    const HABILITADAS = [
-      'Material',
-      'Notas',
-      'Anuncios',
-      'Asistencia',
-      'Entregas',
-    ]
+    // Implementadas: Notas (NOT-01), Anuncios (ANU-01), Asistencia (ASI-01) y
+    // Entregas (MAT-08).
+    const HABILITADAS = ['Notas', 'Anuncios', 'Asistencia', 'Entregas']
     for (const pestana of pestanas) {
       if (HABILITADAS.includes(pestana.textContent ?? '')) {
         expect(pestana).toBeEnabled()
@@ -122,6 +117,7 @@ describe('vista de la sección (ESP-04)', () => {
         ...RESUMEN,
         horario: [],
         profesor: null,
+        profesores: [],
         ayudantes: [],
       }),
     })
