@@ -90,3 +90,13 @@ export interface MiEntregaActividad {
   entrega: EntregaInforme | null
   cerrada: boolean
 }
+
+// MAT-10: GET /api/espacio/secciones/:id/actividades/:actividadId/entregas,
+// para el profesor y los ayudantes de la sección. Un elemento por alumno
+// inscrito vigente, con su última entrega o null si no entregó. versiones
+// cuenta las entregas del alumno en la actividad (la última incluida). La
+// descarga (…/entregas/:entregaId/descarga) responde DescargaArchivo.
+export interface EntregaDeAlumno {
+  alumno: { id: string; nombre: string; correo: string }
+  entrega: (EntregaInforme & { versiones: number }) | null
+}
