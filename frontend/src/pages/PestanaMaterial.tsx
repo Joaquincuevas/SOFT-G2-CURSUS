@@ -181,16 +181,17 @@ function FormularioMaterial({
     return ((await confirmada.json()) as ArchivoResumen).id
   }
 
-  // Si el listado de la sección ya tiene un material con ese archivo.
-  async function yaRegistrado(archivoId: string): Promise<boolean> {
+  // Si el listado de la sección ya tiene un material con ese archivo; null
+  // si el listado no respondió y no se sabe.
+  async function yaRegistrado(archivoId: string): Promise<boolean | null> {
     try {
       const res = await fetchConSesion(`${ruta}/materiales`)
-      if (!res.ok) return false
+      if (!res.ok) return null
       return ((await res.json()) as Material[]).some(
         (m) => m.archivo.id === archivoId,
       )
     } catch {
-      return false
+      return null
     }
   }
 
@@ -214,7 +215,15 @@ function FormularioMaterial({
       // El archivo ya es un material. Si es el de este reintento (el registro
       // anterior se guardó pero su respuesta se perdió), ya quedó subido:
       // se trata como éxito y el listado lo muestra.
-      if (await yaRegistrado(archivoId)) return
+      const registrado = await yaRegistrado(archivoId)
+      if (registrado) return
+      // Sin listado no se sabe: se conserva el archivo para volver a
+      // verificar sin subirlo otra vez.
+      if (registrado === null) {
+        throw new ErrorDeFlujo(
+          'No pudimos comprobar si el material quedó registrado. Inténtalo nuevamente.',
+        )
+      }
       // Otro registro ganó: ese archivo ya no sirve para reintentar.
       confirmado.current = null
     }
