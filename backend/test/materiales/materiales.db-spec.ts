@@ -1208,8 +1208,10 @@ describe('RLS y restricciones de material (SQL directo)', () => {
 
   describe('UPDATE', () => {
     let materialId: string
+    let otroCursoId: string
     beforeAll(async () => {
       materialId = await materialSql('Para modificar')
+      otroCursoId = await cursoDe(secciones.otroCurso)
     })
 
     const modificar = (q: QueryRunner, cambio: string) =>
@@ -1238,7 +1240,7 @@ describe('RLS y restricciones de material (SQL directo)', () => {
     })
 
     it.each([
-      ['el curso', () => `curso_id = '${cursoIcc101.replace(/.$/, '0')}'`],
+      ['el curso', () => `curso_id = '${otroCursoId}'`],
       ['el archivo', () => `archivo_id = gen_random_uuid()`],
       ['quien lo subió', () => `subido_por = '${usuarios[PROFESOR_S1]}'`],
     ])('no cambia %s: 23514', async (_que, cambio) => {
