@@ -11,6 +11,7 @@ import { PestanaAsistencia } from './PestanaAsistencia'
 import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
+import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
@@ -35,7 +36,12 @@ const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,
   Entregas: PestanaEntregas,
+  Material: PestanaMaterial,
 }
+
+// Pestañas que por ahora solo abre el profesor. Material (MAT-04): el listado
+// y la descarga para el resto son de MAT-05 y MAT-06.
+const SOLO_PROFESOR: readonly Pestana[] = ['Material']
 
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,
 // ayudante y alumno. Hoy no hay acciones por rol: llegan en la Fase 4 con
@@ -97,7 +103,10 @@ export function VistaSeccion() {
             role="tab"
             aria-selected={activa === pestana}
             className="vista-seccion__pestana"
-            disabled={!CONTENIDO[pestana]}
+            disabled={
+              !CONTENIDO[pestana] ||
+              (SOLO_PROFESOR.includes(pestana) && rol !== 'PROFESOR')
+            }
             onClick={() => setActiva(activa === pestana ? null : pestana)}
           >
             {pestana}

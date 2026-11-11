@@ -30,7 +30,7 @@ La vista de la sección (ESP-04) suma la pestaña **Entregas** (`PestanaEntregas
 
 El profesor de la sección ve además el formulario **Nueva actividad**: Título, Instrucciones, Fecha límite y Hora límite, todos obligatorios, con el aviso de que la hora es de Chile continental. Al crear una actividad, el formulario se limpia, aparece "Actividad creada" y la lista se actualiza. Un 400 muestra el mensaje de la API (por ejemplo, que el plazo ya pasó) y conserva lo escrito.
 
-La pestaña usa el mismo mecanismo que las otras (`CONTENIDO` en `VistaSeccion.tsx`, con `PropsPestana`). Va aparte de **Material**, como en el Figma: Material es para los archivos del curso (sílabo y materiales, MAT-02 y MAT-04) y sigue deshabilitada. El Figma llama a esta pestaña "Entregar Trabajo" en la vista del alumno; aquí se usa "Entregas" para todos los roles. MAT-09 y MAT-10 agregarán aquí las entregas y su descarga.
+La pestaña usa el mismo mecanismo que las otras (`CONTENIDO` en `VistaSeccion.tsx`, con `PropsPestana`). Va aparte de **Material**, como en el Figma: Material es para los archivos del curso (sílabo y materiales, MAT-02 y MAT-04): MAT-04 la habilita para el profesor ([guía](mat-04-subir-material.md)). El Figma llama a esta pestaña "Entregar Trabajo" en la vista del alumno; aquí se usa "Entregas" para todos los roles. MAT-09 y MAT-10 agregarán aquí las entregas y su descarga.
 
 ## API
 

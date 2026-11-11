@@ -27,6 +27,7 @@ const SUJETOS: SujetoTabla[] = [
   'Entrega',
   'Nota',
   'RevisionNotas',
+  'Material',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -148,6 +149,18 @@ const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
   ALUMNO: LECTURA,
 }
 for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
+
+// MAT-04: materiales de un curso. Los sube el profesor y, hasta MAT-05, solo
+// él los lee. Nadie más recibe nada, tampoco el Director.
+const MATERIAL: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: [],
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: [],
+  ALUMNO: [],
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]
 
 // MAT-09: lectura y entrega propias, sin descarga del equipo docente aún.
 MATRIZ.ALUMNO.Entrega = ['create', 'read']

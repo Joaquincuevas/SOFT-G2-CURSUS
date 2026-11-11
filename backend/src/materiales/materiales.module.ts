@@ -5,11 +5,17 @@ import { ActividadesService } from './actividades.service.js'
 import { ArchivosModule } from '../archivos/archivos.module.js'
 import { EntregasController } from './entregas.controller.js'
 import { EntregasService } from './entregas.service.js'
+import { MaterialesController } from './materiales.controller.js'
+import { MaterialesService } from './materiales.service.js'
 
 // Materiales (F4). Importa EspacioModule por IntegranteSeccionGuard.
 @Module({
   imports: [EspacioModule, ArchivosModule],
-  controllers: [ActividadesController, EntregasController],
-  providers: [ActividadesService, EntregasService],
+  controllers: [
+    ActividadesController,
+    EntregasController,
+    MaterialesController,
+  ],
+  providers: [ActividadesService, EntregasService, MaterialesService],
 })
 export class MaterialesModule {}
