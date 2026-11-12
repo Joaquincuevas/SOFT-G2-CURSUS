@@ -447,6 +447,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         [CURSOS_RUTA]: () => ({
           ...CURSOS,
           universidad: { id: 'u-sur', nombre: 'Universidad Demo Sur' },
+          facultad: { id: 'f-otra', nombre: 'Facultad de Sur' },
         }),
       },
     )
@@ -456,9 +457,49 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(
       await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
     ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
-    expect(migas.getByRole('link', { name: 'Ingeniería' })).toHaveAttribute(
+    // La URL trae f-ing, pero la carrera es de otra facultad: el enlace usa la
+    // de la API y conserva el período.
+    expect(
+      migas.getByRole('link', { name: 'Facultad de Sur' }),
+    ).toHaveAttribute(
       'href',
-      '/indicadores/universidades/u-sur/facultades/f-ing?periodo=2026-1',
+      '/indicadores/universidades/u-sur/facultades/f-otra?periodo=2026-1',
+    )
+  })
+
+  // Cambiar el período no borra el orden de la tabla: permite comparar
+  // semestres sin volver a ordenar.
+  test('al cambiar el período se conservan el orden y la dirección', async () => {
+    const pedidas: string[] = []
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-2&orden=promedio&direccion=desc',
+      {
+        [CURSOS_RUTA]: (_init, url) => {
+          pedidas.push(url ?? '')
+          return CURSOS
+        },
+      },
+    )
+    const tabla = await screen.findByRole('table', {
+      name: 'Cursos de la carrera',
+    })
+    expect(
+      within(tabla).getByRole('columnheader', { name: 'Promedio' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Período' }), {
+      target: { value: '2026-1' },
+    })
+    await waitFor(() =>
+      expect(pedidas).toContain(`${CURSOS_RUTA}?periodo=2026-1`),
+    )
+    expect(
+      within(
+        await screen.findByRole('table', { name: 'Cursos de la carrera' }),
+      ).getByRole('columnheader', { name: 'Promedio' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-1',
     )
   })
 
