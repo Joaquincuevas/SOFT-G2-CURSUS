@@ -73,7 +73,11 @@ bash infra/aws/stack.sh staging --dry-run   # debe agregar el bucket, su políti
 bash infra/aws/stack.sh staging
 ```
 
-El orden respecto del merge no importa: sin `S3_BUCKET`, la API arranca igual y las rutas de archivos responden 503 hasta que se aplica el stack.
+**El stack va antes del primer deploy de la imagen de la fase 4.** `stack.sh` corre `aws cloudformation deploy`, que crea el bucket, agrega `S3_BUCKET` y `RolTarea` a la definición de tarea y da a `PoliticaDespliegue` el `iam:PassRole` sobre `RolTarea`. Sin eso, el workflow de deploy falla con `AccessDenied` en `register-task-definition` (pasa un rol que el usuario de GitHub no puede pasar) y, aunque pasara, la API arrancaría sin `S3_BUCKET` y las rutas de archivos responderían 503. El orden es:
+
+1. `bash infra/aws/stack.sh staging` y, si el entorno está apagado, `start.sh staging`; si está encendido, reintentar el workflow de deploy.
+2. Validar en staging: migraciones aplicadas, `/api/health/db` en 200 y una subida y descarga de archivo.
+3. `bash infra/aws/stack.sh production` y recién entonces el merge a `main`, que dispara el deploy de producción.
 
 En local, el bucket lo da LocalStack (ver "Archivos local (S3)" en el README principal).
 
