@@ -29,6 +29,7 @@ export interface PropsPestana {
   seccionId: string
   numeroSeccion?: number
   rol: SeccionResumen['rol']
+  cursoCerrado?: boolean
   alPublicarSilabo?: () => void
 }
 
@@ -89,6 +90,12 @@ export function VistaSeccion() {
       <h2 className="dashboard__titulo">{curso.nombre}</h2>
       <p className="dashboard__seccion">Sección {numero}</p>
       <p className="dashboard__texto">Entras como {ROL_LABEL[rol]}</p>
+      {seccion.cursoCerrado && (
+        <p className="dashboard__texto" role="status">
+          Curso cerrado. Las notas, evaluaciones y asistencia son de solo
+          lectura.
+        </p>
+      )}
 
       {['ALUMNO', 'AYUDANTE', 'PROFESOR'].includes(rol) && (
         <SilaboDelCurso key={`silabo:${id}:${publicaciones}`} seccionId={id} />
@@ -120,6 +127,7 @@ export function VistaSeccion() {
             seccionId={id}
             numeroSeccion={numero}
             rol={rol}
+            cursoCerrado={seccion.cursoCerrado}
             alPublicarSilabo={() => setPublicaciones((n) => n + 1)}
           />
         </div>

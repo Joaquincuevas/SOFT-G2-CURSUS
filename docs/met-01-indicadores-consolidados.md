@@ -44,7 +44,7 @@ Todo el cálculo está en una consulta (`MetricasService`), en la transacción R
 
 ## Base de datos
 
-Migración `CalcularNotaFinal1792910000000`: función SQL `nota_final(ponderaciones integer[], notas numeric[])`, `IMMUTABLE`, que devuelve `(tipo, nota, porcentaje_evaluado)` con la aritmética de `calcularNotaFinal`. Es pura (recibe las ponderaciones y notas publicadas de las evaluaciones activas de una sección) para que MET-02 a MET-08 la reutilicen. NOT-14 sigue con la función de TypeScript; el test de base comprueba que coinciden con los mismos datos. Sin tablas ni políticas nuevas.
+Migración `CalcularNotaFinal1792920000000`: función SQL `nota_final(ponderaciones integer[], notas numeric[])`, `IMMUTABLE`, que devuelve `(tipo, nota, porcentaje_evaluado)` con la aritmética de `calcularNotaFinal`. Es pura (recibe las ponderaciones y notas publicadas de las evaluaciones activas de una sección) para que MET-02 a MET-08 la reutilicen. NOT-14 sigue con la función de TypeScript; el test de base comprueba que coinciden con los mismos datos. Sin tablas ni políticas nuevas.
 
 ## Interfaz
 

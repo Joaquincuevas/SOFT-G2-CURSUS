@@ -17,6 +17,7 @@ import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { exigirCursoAbierto } from '../database/curso-abierto.js'
 import { ALUMNOS_SECCION } from '../gestion/alumnos.sql.js'
 import type { GuardarAsistenciaDto } from './guardar-asistencia.dto.js'
 import type { CorregirAsistenciaDto } from './corregir-asistencia.dto.js'
@@ -146,6 +147,7 @@ export class AsistenciaService {
     datos: CorregirAsistenciaDto,
   ): Promise<AsistenciaClase> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       const marca = await this.marcaEditable(
         bd,
         contexto,
@@ -308,6 +310,7 @@ export class AsistenciaService {
     datos: GuardarAsistenciaDto,
   ): Promise<AsistenciaClase> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       const [fila] = await bd.query<FilaAsistencia & { es_profesor: boolean }>(
         `SELECT es_profesor_de_seccion(s.id, $4) AS es_profesor, ${COLUMNAS_CLASE},
                 ${REGISTRO}, ${ALUMNOS_SECCION}

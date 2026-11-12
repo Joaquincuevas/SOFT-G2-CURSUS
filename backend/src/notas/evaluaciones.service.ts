@@ -16,6 +16,7 @@ import {
   fijarUsuario,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { exigirCursoAbierto } from '../database/curso-abierto.js'
 import type { CrearEvaluacionDto } from './crear-evaluacion.dto.js'
 import { bloquearPonderaciones } from './ponderaciones.service.js'
 import { bloquearNotasDe } from './bloqueo-notas.js'
@@ -87,6 +88,7 @@ export class EvaluacionesService {
     datos: CrearEvaluacionDto,
   ): Promise<Evaluacion> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       await bloquearPonderaciones(bd, contexto, seccion.id)
       const [creada] = await bd.query<Evaluacion>(
         `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
@@ -153,6 +155,7 @@ export class EvaluacionesService {
       throw new ForbiddenException()
 
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       // Primero el lock de ponderaciones de la sección, después el de notas.
       await bloquearPonderaciones(bd, contexto, seccion.id)
       await bloquearNotasDe(bd, evaluacionId)

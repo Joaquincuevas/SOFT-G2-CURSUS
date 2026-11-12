@@ -15,6 +15,7 @@ import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { exigirCursoAbierto } from '../database/curso-abierto.js'
 import type { CrearClaseDto } from './crear-clase.dto.js'
 
 // Código de PostgreSQL para una restricción única violada.
@@ -77,6 +78,7 @@ export class ClasesService {
     datos: CrearClaseDto,
   ): Promise<Clase> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       const [v] = await bd.query<Validacion>(
         `WITH f AS (
            SELECT COALESCE($3::date, (now() AT TIME ZONE $5)::date) AS fecha

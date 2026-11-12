@@ -76,6 +76,39 @@ const elegirFecha = (panel: ReturnType<typeof within>, fecha: string) =>
   })
 
 describe('pestaña Asistencia (ASI-01)', () => {
+  test('HIS-02: el profesor puede leer las marcas, sin registrar clases ni corregir asistencia', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, cursoCerrado: true }),
+      [CLASES]: () => LISTA,
+      [`${CLASES}/c1/asistencia`]: () => ({
+        clase: LISTA[0],
+        registrada: {
+          por: { nombre: 'Camila Rojas' },
+          en: '2026-09-07T14:00:00Z',
+        },
+        alumnos: [{ id: 'a1', nombre: 'Ana', presente: true }],
+      }),
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    expect(screen.getByText(/Curso cerrado/)).toBeVisible()
+    expect(screen.queryByRole('form', { name: 'Nueva clase' })).toBeNull()
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Asistencia del 2026-09-07 a las 08:30',
+      }),
+    )
+    const tabla = await screen.findByRole('table', {
+      name: 'Asistencia registrada',
+    })
+    expect(within(tabla).getByText('Presente')).toBeVisible()
+    expect(
+      within(tabla).queryByRole('button', { name: /Corregir asistencia/ }),
+    ).toBeNull()
+    expect(
+      within(tabla).getByRole('button', { name: /Historial/ }),
+    ).toBeVisible()
+  })
+
   test('el profesor ve el formulario y las clases por fecha', async () => {
     const panel = await abrirAsistencia('PROFESOR')
 

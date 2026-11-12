@@ -31,6 +31,7 @@ interface Props {
   rol: Rol
   seccionId: string
   evaluacionId: string
+  cursoCerrado?: boolean
   // NOT-09: actualiza el resumen de la lista con lo que acaba de responder
   // el servidor, sin recargar ni desmontar el formulario y perder su edición.
   alActualizar?: (notas: NotasEvaluacion) => void
@@ -53,6 +54,7 @@ export function NotasDeEvaluacion({
   rol,
   seccionId,
   evaluacionId,
+  cursoCerrado,
   alActualizar,
   alRevisar,
 }: Props) {
@@ -77,6 +79,7 @@ export function NotasDeEvaluacion({
       />
     )
   }
+  const cerrado = cursoCerrado || datos.cursoCerrado
   return (
     <section
       className="notas__evaluacion"
@@ -88,6 +91,11 @@ export function NotasDeEvaluacion({
       <p className="dashboard__texto">
         Estado: {ESTADO_REVISION[datos.estado]}
       </p>
+      {datos.cursoCerrado && !cursoCerrado && (
+        <p className="dashboard__texto" role="status">
+          Curso cerrado
+        </p>
+      )}
       {datos.estado === 'DEVUELTA' && (
         <ComentarioDevolucion comentario={datos.comentarioDevolucion} />
       )}
@@ -99,6 +107,7 @@ export function NotasDeEvaluacion({
         <RecorreccionesNotas
           ruta={ruta}
           alumnos={datos.alumnos}
+          editable={!cerrado}
           alGuardar={fijar}
           alRecargar={recargar}
         />
@@ -109,7 +118,9 @@ export function NotasDeEvaluacion({
           key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
-          editable={rol === 'AYUDANTE' && EDITABLE.includes(datos.estado)}
+          editable={
+            !cerrado && rol === 'AYUDANTE' && EDITABLE.includes(datos.estado)
+          }
           alGuardar={() => setAviso('Borrador guardado.')}
           // El POST devuelve la evaluación ya en revisión: se aplica sin
           // esperar otra recarga, en la que los campos volverían a editarse.
@@ -129,7 +140,8 @@ export function NotasDeEvaluacion({
           }}
         />
       )}
-      {alRevisar &&
+      {!cerrado &&
+        alRevisar &&
         datos.estado === 'EN_REVISION' &&
         datos.alumnos.length > 0 && (
           <RevisarNotas ruta={ruta} alTerminar={alRevisar} />

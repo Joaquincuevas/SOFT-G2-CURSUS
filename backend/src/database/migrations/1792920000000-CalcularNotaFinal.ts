@@ -8,8 +8,8 @@ import type { MigrationInterface, QueryRunner } from 'typeorm'
 // evaluaciones tienen nota y las ponderaciones suman 100. Es una función
 // pura: recibe las ponderaciones y las notas publicadas (null si falta) de
 // las evaluaciones activas de una sección, en el mismo orden.
-export class CalcularNotaFinal1792910000000 implements MigrationInterface {
-  name = 'CalcularNotaFinal1792910000000'
+export class CalcularNotaFinal1792920000000 implements MigrationInterface {
+  name = 'CalcularNotaFinal1792920000000'
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`
