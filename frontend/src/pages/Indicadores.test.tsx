@@ -177,8 +177,9 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     const lista = within(
       await screen.findByRole('region', { name: 'Universidades' }),
     )
+    // La región aparece mientras carga: se espera a que lleguen los datos.
     expect(
-      lista.getByText(
+      await lista.findByText(
         /Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %/,
       ),
     ).toBeInTheDocument()
@@ -301,9 +302,9 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     )
     await screen.findByRole('list', { name: 'Facultades' })
     expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
-    expect(
-      screen.getByRole('combobox', { name: 'Período' }),
-    ).toHaveValue('2026-1')
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-1',
+    )
   })
 
   test('sin período en la URL, los tres niveles piden el activo', async () => {
