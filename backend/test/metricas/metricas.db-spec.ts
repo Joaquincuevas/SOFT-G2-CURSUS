@@ -1,5 +1,6 @@
 import type {
   MetricasConsolidadas,
+  MetricasFacultad,
   MetricasUniversidad,
   ReporteFacultad,
   ResumenUniversidad,
@@ -512,7 +513,160 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       `${RUTA_UNIVERSIDADES}/${id}/facultades${consulta}`,
       estado,
     )
+  const carreras = (id: string, consulta = '', estado = 200) =>
+    obtener<MetricasFacultad>(
+      DIRECTOR,
+      `/api/metricas/facultades/${id}/carreras${consulta}`,
+      estado,
+    )
   const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
+
+  it('lista carreras de una facultad, con indicadores y carreras sin datos', async () => {
+    const facultad = await facultadDe(ids.norte)
+    const [{ id: carreraSinDatosId }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       SELECT universidad_id, id, 'Carrera sin datos'
+       FROM facultad WHERE id = $1 RETURNING id`,
+      [facultad],
+    )
+    try {
+      const reporte = await carreras(facultad)
+      expect(reporte.universidad.nombre).toBe('Universidad Demo Norte')
+      expect(reporte.facultad.id).toBe(facultad)
+      const carreraConDatos = reporte.carreras.find(
+        (c) => c.aprobacion.evaluados > 0,
+      )
+      expect(carreraConDatos).toMatchObject({
+        aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+        promedio: { valor: 4.5, alumnos: 2 },
+        asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+      })
+      const carreraSinDatos = reporte.carreras.find(
+        (c) => c.id === carreraSinDatosId,
+      )
+      expect(carreraSinDatos).toMatchObject({
+        aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+        promedio: { valor: null, alumnos: 0 },
+        asistencia: { valor: null, presentes: 0, registros: 0 },
+      })
+    } finally {
+      await bd.query('DELETE FROM carrera WHERE id = $1', [carreraSinDatosId])
+    }
+  })
+
+  it('mantiene el cálculo cuando se archiva el curso del período cerrado', async () => {
+    const [{ cursoId }] = await bd.query<{ cursoId: string }[]>(
+      `SELECT curso_id AS "cursoId" FROM seccion WHERE id = $1`,
+      [ids.norte],
+    )
+    const facultad = await facultadDe(ids.norte)
+    const antes = await carreras(facultad)
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      cursoId,
+    ])
+    try {
+      expect(await carreras(facultad)).toEqual(antes)
+    } finally {
+      await bd.query('UPDATE curso SET archived_at = NULL WHERE id = $1', [
+        cursoId,
+      ])
+    }
+  })
+
+  // El Director es de una universidad, pero ve las facultades de todas.
+  it('el Director abre las carreras de una facultad de otra universidad', async () => {
+    const facultadSur = await facultadDe(ids.sur)
+    const r = await carreras(facultadSur)
+    expect(r.universidad.nombre).toBe('Universidad Demo Sur')
+    expect(r.facultad.id).toBe(facultadSur)
+    expect(r.periodo).toEqual({ anio: 2026, semestre: 2 })
+    expect(r.carreras.find((c) => c.aprobacion.evaluados > 0)).toMatchObject({
+      aprobacion: { valor: 100, aprobados: 1, evaluados: 1 },
+      promedio: { valor: 4, alumnos: 1 },
+    })
+  })
+
+  it('una carrera archivada no aparece y las de otra facultad no se mezclan', async () => {
+    const facultad = await facultadDe(ids.norte)
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       SELECT universidad_id, id, 'Carrera archivada' FROM facultad WHERE id = $1
+       RETURNING id`,
+      [facultad],
+    )
+    try {
+      expect((await carreras(facultad)).carreras.map((c) => c.id)).toContain(id)
+      await bd.query('UPDATE carrera SET archived_at = now() WHERE id = $1', [
+        id,
+      ])
+      expect(
+        (await carreras(facultad)).carreras.map((c) => c.id),
+      ).not.toContain(id)
+    } finally {
+      await bd.query('DELETE FROM carrera WHERE id = $1', [id])
+    }
+    // Las carreras de la facultad pedida son solo de ella.
+    const propias = await bd.query<{ id: string }[]>(
+      `SELECT id FROM carrera WHERE facultad_id = $1 AND archived_at IS NULL`,
+      [facultad],
+    )
+    expect((await carreras(facultad)).carreras.map((c) => c.id).sort()).toEqual(
+      propias.map((c) => c.id).sort(),
+    )
+  })
+
+  it('una facultad inexistente o archivada da 404', async () => {
+    await carreras('00000000-0000-4000-8000-0000000000aa', '', 404)
+    const norte = await universidadId('norte.cursus.test')
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Facultad archivada')
+       RETURNING id`,
+      [norte],
+    )
+    try {
+      await carreras(id)
+      await bd.query('UPDATE facultad SET archived_at = now() WHERE id = $1', [
+        id,
+      ])
+      await carreras(id, '', 404)
+    } finally {
+      await bd.query('DELETE FROM facultad WHERE id = $1', [id])
+    }
+  })
+
+  it('un id que no es UUID o un período inválido dan 400', async () => {
+    const facultad = await facultadDe(ids.norte)
+    await carreras('no-es-uuid', '', 400)
+    for (const periodo of ['activo', '2026', '2026-0', '2026-99']) {
+      await carreras(facultad, `?periodo=${periodo}`, 400)
+    }
+  })
+
+  it.each([[PROFESOR], [AYUDANTE], [ALUMNO], [ADMIN_INGENIERIA]])(
+    '%s recibe 403 en las carreras de una facultad',
+    async (correo) => {
+      const facultad = await facultadDe(ids.norte)
+      await obtener(
+        correo,
+        `/api/metricas/facultades/${facultad}/carreras`,
+        403,
+      )
+    },
+  )
+
+  it('filtra el período y no mezcla facultades', async () => {
+    const ingenieria = await facultadDe(ids.norte)
+    const vacio = await carreras(ingenieria, '?periodo=2020-1')
+    expect(vacio.periodo).toBeNull()
+    expect(vacio.carreras.every((c) => c.aprobacion.valor === null)).toBe(true)
+    const economia = await bd.query<{ id: string }[]>(
+      `SELECT f.id FROM facultad f JOIN universidad u ON u.id = f.universidad_id
+        WHERE u.dominio_correo = 'norte.cursus.test'
+          AND f.id <> $1 ORDER BY f.id LIMIT 1`,
+      [ingenieria],
+    )
+    expect((await carreras(economia[0].id)).facultad.id).toBe(economia[0].id)
+  })
 
   it('el administrativo ve carreras y cursos solo de su facultad', async () => {
     const reporte = await obtener<ReporteFacultad>(
