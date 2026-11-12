@@ -5,6 +5,7 @@ import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { RutasIndicadores } from './pages/Indicadores'
+import { ReporteFacultad } from './pages/ReporteFacultad'
 import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
 import { Carreras } from './pages/Carreras'
@@ -78,6 +79,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     page: RutasIndicadores,
     title: () => 'Indicadores',
     subtitle: () => 'Período activo de todas las universidades',
+  },
+  {
+    // MET-08: reporte académico de la facultad del Administrativo.
+    to: '/reporte-facultad',
+    label: 'Reporte académico',
+    icon: 'grid',
+    permiso: { accion: 'read', sujeto: 'ReporteMetricasFacultad' },
+    page: ReporteFacultad,
+    title: () => 'Reporte académico',
+    subtitle: (user) => user.facultadNombre ?? 'Facultad',
   },
   {
     to: '/universidades',
