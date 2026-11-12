@@ -33,6 +33,11 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
     [MATERIALES]: () => [],
     [ARCHIVOS]: () => json(SUBIDA, 201),
     [CONFIRMAR]: () => SUBIDA.archivo,
+    [`${BASE}/silabo-vigente`]: () => ({
+      silabo: publicar.mock.calls.length
+        ? { version: 1, subidoEn: '2026-11-10T12:00:00Z' }
+        : null,
+    }),
     [`${BASE}/silabo`]: (init) =>
       init?.method === 'POST'
         ? publicar(init)
@@ -48,7 +53,7 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
   const panel = within(
-    await screen.findByRole('region', { name: 'Sílabo del curso' }),
+    await screen.findByRole('region', { name: 'Versiones del sílabo' }),
   )
   const pdf = new File(['%PDF-'], 'programa.pdf', { type: 'application/pdf' })
   fireEvent.change(panel.getByLabelText('Sílabo (PDF, hasta 10 MiB)'), {
@@ -63,6 +68,12 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
     await panel.findByRole('list', { name: 'Historial del sílabo' }),
   ).toHaveTextContent('Versión 1 · Camila Rojas')
   expect(publicar).toHaveBeenCalledTimes(1)
+  const destacado = within(
+    screen.getByRole('region', { name: 'Sílabo del curso' }),
+  )
+  expect(
+    await destacado.findByText('Versión vigente 1 · PDF'),
+  ).toBeInTheDocument()
 })
 
 // MAT-06 abre la pestaña al ayudante y al alumno: ven el historial del sílabo
@@ -79,7 +90,7 @@ test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
     })
     fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
     const panel = within(
-      await screen.findByRole('region', { name: 'Sílabo del curso' }),
+      await screen.findByRole('region', { name: 'Versiones del sílabo' }),
     )
 
     expect(

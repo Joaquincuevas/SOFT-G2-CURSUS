@@ -15,9 +15,11 @@ import { useDatos } from './useDatos'
 export function AdministrarSilabo({
   ruta,
   puedePublicar,
+  alPublicar,
 }: {
   ruta: string
   puedePublicar: boolean
+  alPublicar?: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const destino = `${ruta}/silabo`
@@ -85,6 +87,7 @@ export function AdministrarSilabo({
       if (input.current) input.current.value = ''
       setArchivo(null)
       setAviso('Sílabo publicado.')
+      alPublicar?.()
     } catch (falla) {
       setError(
         falla instanceof Error ? falla.message : 'No pudimos subir el PDF.',
@@ -111,8 +114,8 @@ export function AdministrarSilabo({
   }
 
   return (
-    <section className="material" aria-label="Sílabo del curso">
-      <h3 className="vista-seccion__subtitulo">Sílabo del curso</h3>
+    <section className="material" aria-label="Versiones del sílabo">
+      <h3 className="vista-seccion__subtitulo">Versiones del sílabo</h3>
       {puedePublicar && (
         <form
           className="material__formulario"

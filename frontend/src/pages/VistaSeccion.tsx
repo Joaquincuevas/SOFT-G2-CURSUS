@@ -29,6 +29,7 @@ export interface PropsPestana {
   seccionId: string
   numeroSeccion?: number
   rol: SeccionResumen['rol']
+  alPublicarSilabo?: () => void
 }
 
 // Contenido de cada pestaña ya implementada; las demás siguen deshabilitadas.
@@ -47,6 +48,7 @@ export function VistaSeccion() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const [activa, setActiva] = useState<Pestana | null>(null)
+  const [publicaciones, setPublicaciones] = useState(0)
   const [seccion, recargar, status] = useDatos<SeccionResumen>(
     `/api/espacio/secciones/${id}/resumen`,
   )
@@ -89,7 +91,7 @@ export function VistaSeccion() {
       <p className="dashboard__texto">Entras como {ROL_LABEL[rol]}</p>
 
       {['ALUMNO', 'AYUDANTE', 'PROFESOR'].includes(rol) && (
-        <SilaboDelCurso key={id} seccionId={id} />
+        <SilaboDelCurso key={`silabo:${id}:${publicaciones}`} seccionId={id} />
       )}
 
       <div
@@ -113,7 +115,13 @@ export function VistaSeccion() {
       </div>
       {Contenido && (
         <div role="tabpanel" aria-label={activa ?? undefined}>
-          <Contenido key={id} seccionId={id} numeroSeccion={numero} rol={rol} />
+          <Contenido
+            key={id}
+            seccionId={id}
+            numeroSeccion={numero}
+            rol={rol}
+            alPublicarSilabo={() => setPublicaciones((n) => n + 1)}
+          />
         </div>
       )}
 
