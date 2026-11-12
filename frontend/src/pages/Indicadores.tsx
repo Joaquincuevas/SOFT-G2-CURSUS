@@ -93,13 +93,20 @@ function usePeriodoDeLaUrl() {
   return { periodo, valido, consulta, sufijo: consulta }
 }
 
+// Valor de una opción: el año va con cuatro dígitos (Gestión admite del 1 al
+// 9999), que es la forma que la API y esta pantalla aceptan en ?periodo=.
+const valorDelPeriodo = ({ anio, semestre }: PeriodoDisponible) =>
+  `${String(anio).padStart(4, '0')}-${semestre}`
+
+// La vista por defecto ("") es el período activo de cada universidad, que
+// puede ser distinto entre ellas; elegir un año y semestre filtra todas por
+// ese período. Volver a la opción por defecto quita ?periodo= de la URL.
 function SelectorPeriodo({ periodo }: { periodo: string | null }) {
   const [periodosDisponibles, recargar] = useDatos<PeriodoDisponible[]>(
     '/api/metricas/periodos',
   )
   const [, fijarParams] = useSearchParams()
-  const activo = periodosDisponibles?.find((p) => p.activo)
-  const valor = periodo ?? (activo ? `${activo.anio}-${activo.semestre}` : '')
+  const valor = periodo ?? ''
   const cambiar = (valorNuevo: string) => {
     if (valorNuevo) fijarParams({ periodo: valorNuevo })
     else fijarParams({})
@@ -132,15 +139,14 @@ function SelectorPeriodo({ periodo }: { periodo: string | null }) {
         ) : periodosDisponibles.length === 0 ? (
           <option value="">No hay períodos disponibles</option>
         ) : (
-          periodosDisponibles.map((p) => (
-            <option
-              key={`${p.anio}-${p.semestre}`}
-              value={`${p.anio}-${p.semestre}`}
-            >
-              {p.anio}-{p.semestre}
-              {p.activo ? ' (activo)' : ''}
-            </option>
-          ))
+          <>
+            <option value="">Período activo de cada universidad</option>
+            {periodosDisponibles.map((p) => (
+              <option key={valorDelPeriodo(p)} value={valorDelPeriodo(p)}>
+                {valorDelPeriodo(p)}
+              </option>
+            ))}
+          </>
         )}
       </select>
     </label>
