@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router'
 import { useAuth } from '../auth/auth'
 import { etiquetaDe, navItemsFor } from '../navigation'
+import { RUTA_HISTORIAL } from '../pages/HistorialAlumno'
 import { useSession } from '../session/session'
 import { NavIcon, PowerIcon } from './icons'
 import './Sidebar.css'
@@ -25,19 +26,23 @@ export function Sidebar({ id, open, onNavigate }: Props) {
       <p className="sidebar__logo">CURSUS</p>
       <nav aria-label="Navegación principal">
         <ul className="sidebar__list">
-          {navItemsFor(ability).map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === '/'}
-                className="sidebar__item"
-                onClick={onNavigate}
-              >
-                <NavIcon name={item.icon} />
-                {etiquetaDe(item, user)}
-              </NavLink>
-            </li>
-          ))}
+          {navItemsFor(ability)
+            .filter((item) => !user.egresado || item.to === '/mis-cursos')
+            .map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={user.egresado ? RUTA_HISTORIAL : item.to}
+                  end={item.to === '/'}
+                  className="sidebar__item"
+                  onClick={onNavigate}
+                >
+                  <NavIcon name={item.icon} />
+                  {user.egresado
+                    ? 'Historial de notas'
+                    : etiquetaDe(item, user)}
+                </NavLink>
+              </li>
+            ))}
         </ul>
       </nav>
       <button

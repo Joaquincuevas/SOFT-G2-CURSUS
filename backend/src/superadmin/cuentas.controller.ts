@@ -65,6 +65,17 @@ export class CuentasController {
   }
 
   @Puede('update', 'Universidad')
+  @Patch(':cuentaId/egresar')
+  @HttpCode(204)
+  egresar(
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) universidadId: string,
+    @Param('cuentaId', ParseUUIDPipe) cuentaId: string,
+  ): Promise<void> {
+    return this.cuentas.egresar(this.superadmin(req), universidadId, cuentaId)
+  }
+
+  @Puede('update', 'Universidad')
   @Patch(':cuentaId/archivar')
   @HttpCode(204)
   archivar(

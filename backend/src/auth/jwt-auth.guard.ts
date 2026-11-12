@@ -15,6 +15,7 @@ import {
 } from './auth.service.js'
 import { PERMITIDA_CON_PROVISORIA } from './credencial-provisoria.decorator.js'
 import { ES_PUBLICO } from './publico.decorator.js'
+import { PERMITIDA_EGRESADO } from './permitida-egresado.decorator.js'
 
 // eleccion: la facultad en la que trabaja el superadmin (MT-04), leída de su
 // sesión en cada petición. La usa contextoDeLaSesion.
@@ -62,6 +63,17 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException()
     }
     req.eleccion = sesion.eleccion
+    if (
+      sesion.egresado &&
+      !this.reflector.getAllAndOverride<boolean>(PERMITIDA_EGRESADO, [
+        contexto.getHandler(),
+        contexto.getClass(),
+      ])
+    ) {
+      throw new ForbiddenException(
+        'La cuenta de egresado solo accede al historial de notas',
+      )
+    }
     // PER-03. Con la contraseña provisoria solo se puede consultar la sesión y
     // cambiarla. Se lee de la base y no del JWT, para que el cambio rija
     // apenas se guarda.

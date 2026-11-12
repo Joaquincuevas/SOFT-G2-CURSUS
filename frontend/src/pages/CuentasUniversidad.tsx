@@ -65,7 +65,10 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
   const ruta = `${RUTA_UNIVERSIDADES}/${universidad.id}/cuentas`
   const [cuentas, recargar] = useDatos<CuentaUniversidad[]>(ruta)
   const [editando, setEditando] = useState<CuentaUniversidad | null>(null)
-  const [porArchivar, setPorArchivar] = useState<CuentaUniversidad | null>(null)
+  const [cambio, setCambio] = useState<{
+    cuenta: CuentaUniversidad
+    accion: 'archivar' | 'egresar'
+  } | null>(null)
   const [archivando, setArchivando] = useState(false)
   const [creada, setCreada] = useState<CuentaCreada | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
@@ -102,23 +105,29 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
     return null
   }
 
-  async function archivar(cuenta: CuentaUniversidad) {
+  async function confirmarCambio() {
+    if (!cambio) return
+    const { cuenta, accion } = cambio
     setArchivando(true)
     setError(null)
     setAviso(null)
     const resultado = await enviar<void>(
       fetchConSesion,
-      `${ruta}/${cuenta.id}/archivar`,
+      `${ruta}/${cuenta.id}/${accion}`,
       'PATCH',
     )
     setArchivando(false)
-    setPorArchivar(null)
+    setCambio(null)
     if (!resultado.ok) {
       setError(resultado.error)
       return
     }
     if (editando?.id === cuenta.id) setEditando(null)
-    setAviso(`Cuenta de ${cuenta.nombre} archivada`)
+    setAviso(
+      accion === 'egresar'
+        ? `${cuenta.nombre} figura como egresado`
+        : `Cuenta de ${cuenta.nombre} archivada`,
+    )
     recargar()
   }
 
@@ -187,11 +196,11 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
               </select>
             </label>
           </div>
-          {porArchivar && (
+          {cambio && (
             <p className="administrar-universidad__afectados" role="status">
-              {porArchivar.nombre} dejará de poder iniciar sesión, y sus datos
-              se conservan. Si tiene secciones a cargo, seguirán mostrándola
-              hasta que se asigne a otra persona.
+              {cambio.accion === 'egresar'
+                ? `${cambio.cuenta.nombre} conservará el acceso a su historial de notas en solo lectura.`
+                : `${cambio.cuenta.nombre} dejará de poder iniciar sesión, y sus datos se conservan. Si tiene secciones a cargo, seguirán mostrándola hasta que se asigne a otra persona.`}
             </p>
           )}
           {cuentas === undefined ? (
@@ -224,16 +233,18 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
                   <tr key={cuenta.id}>
                     <td>{cuenta.nombre}</td>
                     <td>{cuenta.correo}</td>
-                    <td>{ROL_LABEL[cuenta.rol]}</td>
+                    <td>
+                      {cuenta.egresado ? 'Egresado' : ROL_LABEL[cuenta.rol]}
+                    </td>
                     <td>{cuenta.facultad?.nombre ?? 'Sin facultad'}</td>
                     <td>
-                      {porArchivar?.id === cuenta.id ? (
+                      {cambio?.cuenta.id === cuenta.id ? (
                         <div className="carreras__acciones">
                           <button
                             type="button"
                             className="carreras__primario"
                             disabled={archivando}
-                            onClick={() => void archivar(cuenta)}
+                            onClick={() => void confirmarCambio()}
                           >
                             Confirmar
                           </button>
@@ -241,13 +252,27 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
                             type="button"
                             className="carreras__secundario"
                             disabled={archivando}
-                            onClick={() => setPorArchivar(null)}
+                            onClick={() => setCambio(null)}
                           >
                             Cancelar
                           </button>
                         </div>
                       ) : (
                         <div className="carreras__acciones">
+                          {cuenta.rol === 'ALUMNO' && !cuenta.egresado && (
+                            <button
+                              type="button"
+                              className="carreras__secundario"
+                              disabled={archivando}
+                              aria-label={`Registrar egreso de ${cuenta.nombre}`}
+                              onClick={() => {
+                                setCambio({ cuenta, accion: 'egresar' })
+                                setError(null)
+                              }}
+                            >
+                              Registrar egreso
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="carreras__secundario"
@@ -260,18 +285,20 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
                           >
                             Editar
                           </button>
-                          <button
-                            type="button"
-                            className="carreras__secundario"
-                            disabled={archivando}
-                            aria-label={`Archivar ${cuenta.nombre}`}
-                            onClick={() => {
-                              setPorArchivar(cuenta)
-                              setError(null)
-                            }}
-                          >
-                            Archivar
-                          </button>
+                          {!cuenta.egresado && (
+                            <button
+                              type="button"
+                              className="carreras__secundario"
+                              disabled={archivando}
+                              aria-label={`Archivar ${cuenta.nombre}`}
+                              onClick={() => {
+                                setCambio({ cuenta, accion: 'archivar' })
+                                setError(null)
+                              }}
+                            >
+                              Archivar
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -366,7 +393,7 @@ function FormularioCuenta({
         className="cuentas__select"
         value={rol}
         onChange={(event) => setRol(event.target.value as RolCuenta)}
-        disabled={guardando}
+        disabled={guardando || inicial?.egresado}
       >
         {ROLES_CUENTA.map((opcion) => (
           <option key={opcion} value={opcion}>

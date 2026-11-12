@@ -354,7 +354,12 @@ describe('editar una cuenta', () => {
     await login(creada.cuenta.correo).expect(401)
     await login(correo).expect(200)
     const cambios = await auditoria(creada.cuenta.id)
-    expect(cambios.at(-1)?.operacion).toBe('UPDATE')
+    expect(
+      cambios.find((cambio) => cambio.operacion === 'UPDATE'),
+    ).toMatchObject({
+      anterior: { correo: creada.cuenta.correo },
+      nuevo: { nombre: 'Nombre Editado', correo },
+    })
   })
 
   it('rechaza otro dominio y un correo de otra cuenta, y acepta el propio', async () => {
@@ -515,6 +520,100 @@ describe('editar una cuenta', () => {
       .send({ nombre: 'X', correo: `x@${NORTE}`, rol: 'ALUMNO' })
       .expect(404)
     await pedir('patch', ruta(norte.id, `/${id}/archivar`)).expect(404)
+  })
+})
+
+describe('egreso de un alumno (HIS-06)', () => {
+  it('conserva el acceso al historial tras más de diez años y restringe los tokens anteriores', async () => {
+    const creada = await crearCuenta({ rol: 'ALUMNO' })
+    const { cuenta } = creada
+    const anterior = await conPasswordPropia(creada)
+    const administrativo = await tokenDe(ADMIN_NORTE)
+    const [{ curso, seccion }] = await bd.query<
+      { curso: string; seccion: string }[]
+    >(
+      `
+      WITH periodo_antiguo AS (
+        INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino)
+        VALUES ($1, 2013, 2, '2013-08-01', '2013-12-31') RETURNING id
+      ), curso_antiguo AS (
+        INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+        SELECT $1, c.carrera_id, p.id, 'HIS06', 'Curso de egreso'
+          FROM curso c CROSS JOIN periodo_antiguo p WHERE c.codigo = 'ICC101'
+        RETURNING id
+      ), seccion_antigua AS (
+        INSERT INTO seccion (universidad_id, curso_id, numero)
+        SELECT $1, id, 1 FROM curso_antiguo RETURNING id, curso_id
+      ), evaluacion_antigua AS (
+        INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+        SELECT $1, s.id, 'Examen', '2013-11-01', 100, u.id
+          FROM seccion_antigua s CROSS JOIN usuario u WHERE u.correo = $3
+        RETURNING id
+      ), nota_antigua AS (
+        INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, estado, propuesta_por)
+        SELECT $1, e.id, $2, 6, 'PUBLICADA', u.id
+          FROM evaluacion_antigua e CROSS JOIN usuario u WHERE u.correo = $4
+      )
+      SELECT curso_id AS curso, id AS seccion FROM seccion_antigua
+    `,
+      [norte.id, cuenta.id, `profesor@${NORTE}`, `ayudante@${NORTE}`],
+    )
+    await pedir('post', `/api/cursos/${curso}/cierre`, administrativo).expect(
+      200,
+    )
+    const egresar = ruta(norte.id, `/${cuenta.id}/egresar`)
+    await pedir('patch', ruta(sur.id, `/${cuenta.id}/egresar`)).expect(404)
+    await pedir('patch', egresar, administrativo).expect(403)
+    const noAlumno = (await listar(norte.id)).find((u) => u.rol === 'PROFESOR')
+    await pedir('patch', ruta(norte.id, `/${noAlumno?.id}/egresar`)).expect(409)
+    await pedir('get', '/api/dashboard/secciones-alumno', anterior).expect(200)
+    await pedir('patch', egresar).expect(204)
+    await pedir('patch', egresar).expect(204)
+    expect(
+      (await listar(norte.id)).find((u) => u.id === cuenta.id),
+    ).toMatchObject({ egresado: true })
+    expect(
+      (await auditoria(cuenta.id)).map(({ operacion }) => operacion).sort(),
+    ).toEqual(['INSERT', 'UPDATE'])
+    await pedir('patch', ruta(norte.id, `/${cuenta.id}/archivar`)).expect(409)
+
+    for (const url of [
+      '/api/dashboard/secciones-alumno',
+      `/api/espacio/secciones/${seccion}/mis-notas`,
+    ]) {
+      await pedir('get', url, anterior).expect(403)
+    }
+    await pedir('patch', '/api/perfil', anterior)
+      .send({ nombre: 'Nombre cambiado' })
+      .expect(403)
+    const yo = (await pedir('get', '/api/auth/yo', anterior).expect(200))
+      .body as UsuarioSesion
+    expect(yo.egresado).toBe(true)
+    await bd.query(
+      `UPDATE usuario SET egresado_en = now() - interval '11 years' WHERE id = $1`,
+      [cuenta.id],
+    )
+    const nuevo = await tokenDe(cuenta.correo)
+    const lista = await pedir('get', '/api/mis-cursos/historial', nuevo).expect(
+      200,
+    )
+    expect(lista.body).toMatchObject([
+      {
+        periodo: { anio: 2013 },
+        cursos: [{ seccionId: seccion, notaFinal: { tipo: 'FINAL', nota: 6 } }],
+      },
+    ])
+    const detalle = await pedir(
+      'get',
+      `/api/mis-cursos/historial/${seccion}`,
+      nuevo,
+    ).expect(200)
+    expect(detalle.body).toMatchObject({
+      evaluaciones: [{ nombre: 'Examen', nota: 6 }],
+    })
+    await pedir('patch', `/api/mis-cursos/historial/${seccion}`, nuevo).expect(
+      404,
+    )
   })
 })
 
