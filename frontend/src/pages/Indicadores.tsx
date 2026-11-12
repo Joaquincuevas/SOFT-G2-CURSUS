@@ -354,7 +354,11 @@ function CarrerasFacultad() {
       ? `/api/metricas/facultades/${facultadId}/carreras${consulta}`
       : null,
   )
-  const volverUniversidad = `/indicadores/universidades/${id}${sufijo}`
+  // La universidad de la facultad (la de la API) manda sobre la de la URL: un
+  // enlace directo puede traer una universidad que no es la de la facultad.
+  // Mientras no cargue, o si falla, vale la de la URL.
+  const universidadId = datos?.universidad.id ?? id
+  const volverUniversidad = `/indicadores/universidades/${universidadId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
   if (!valido) return <PeriodoInvalido periodo={periodo} />
 
