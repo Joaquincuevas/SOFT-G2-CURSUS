@@ -24,13 +24,20 @@ type Consultas = Pick<BaseDeDatos, 'query'>
 const UNIQUE = '23505'
 
 const SELECT_CUENTA = `
-  SELECT u.id, u.nombre, u.correo, u.rol,
+  SELECT u.id, u.nombre, u.correo, u.rol, u.egresado_en IS NOT NULL AS egresado,
          CASE WHEN f.id IS NULL THEN NULL
               ELSE json_build_object('id', f.id, 'nombre', f.nombre)
          END AS facultad
     FROM usuario u
     LEFT JOIN facultad f ON f.id = u.facultad_id
    WHERE u.universidad_id = $1`
+
+function cuentaPublica({
+  egresado,
+  ...cuenta
+}: CuentaUniversidad): CuentaUniversidad {
+  return { ...cuenta, ...(egresado && { egresado: true }) }
+}
 
 // El índice de correos incluye las cuentas archivadas: no se reutilizan.
 const correoRepetido = () =>
@@ -66,11 +73,12 @@ export class CuentasService {
       universidadId,
       async (tx) => {
         await this.dominioDe(tx, universidadId)
-        return tx.query<CuentaUniversidad>(
+        const cuentas = await tx.query<CuentaUniversidad>(
           `${SELECT_CUENTA} AND u.archived_at IS NULL
            ORDER BY lower(u.nombre), u.id`,
           [universidadId],
         )
+        return cuentas.map(cuentaPublica)
       },
     )
   }
@@ -139,8 +147,9 @@ export class CuentasService {
           const [actual] = await tx.query<{
             rol: string
             facultad_id: string | null
+            egresado: boolean
           }>(
-            `SELECT rol, facultad_id FROM usuario
+            `SELECT rol, facultad_id, egresado_en IS NOT NULL AS egresado FROM usuario
               WHERE universidad_id = $1 AND id = $2 AND archived_at IS NULL
               FOR UPDATE`,
             [universidadId, cuentaId],
@@ -159,6 +168,8 @@ export class CuentasService {
 
           cambioRol = actual.rol !== datos.rol
           if (cambioRol) {
+            if (actual.egresado)
+              throw new ConflictException('El egreso conserva el rol de alumno')
             await this.exigirSinAsignaciones(tx, universidadId, cuentaId)
           }
           let facultadId = actual.facultad_id
@@ -215,13 +226,51 @@ export class CuentasService {
           `WITH archivada AS (
              UPDATE usuario SET archived_at = now()
               WHERE universidad_id = $1 AND id = $2 AND archived_at IS NULL
+                AND egresado_en IS NULL
              RETURNING id)
            SELECT id FROM archivada`,
           [universidadId, cuentaId],
         )
         if (archivada.length === 0) {
+          const [egresado] = await tx.query<{ id: string }>(
+            'SELECT id FROM usuario WHERE universidad_id = $1 AND id = $2 AND egresado_en IS NOT NULL',
+            [universidadId, cuentaId],
+          )
+          if (egresado)
+            throw new ConflictException(
+              'La cuenta egresada conserva su acceso al historial',
+            )
           throw new NotFoundException('Cuenta no encontrada')
         }
+      },
+    )
+  }
+
+  async egresar(
+    superadmin: Superadmin,
+    universidadId: string,
+    cuentaId: string,
+  ): Promise<void> {
+    await this.bd.enUniversidadComoSuperadmin(
+      superadmin,
+      universidadId,
+      async (tx) => {
+        await this.dominioDe(tx, universidadId)
+        const [cuenta] = await tx.query<{ rol: string; egresado: boolean }>(
+          `SELECT rol, egresado_en IS NOT NULL AS egresado FROM usuario
+          WHERE universidad_id = $1 AND id = $2 AND archived_at IS NULL FOR UPDATE`,
+          [universidadId, cuentaId],
+        )
+        if (!cuenta) throw new NotFoundException('Cuenta no encontrada')
+        if (cuenta.rol !== 'ALUMNO')
+          throw new ConflictException(
+            'Solo pueden egresar las cuentas de alumno',
+          )
+        if (cuenta.egresado) return
+        await tx.query(
+          'UPDATE usuario SET egresado_en = clock_timestamp() WHERE universidad_id = $1 AND id = $2',
+          [universidadId, cuentaId],
+        )
       },
     )
   }
@@ -324,6 +373,6 @@ export class CuentasService {
       `${SELECT_CUENTA} AND u.id = $2`,
       [universidadId, cuentaId],
     )
-    return cuenta
+    return cuentaPublica(cuenta)
   }
 }

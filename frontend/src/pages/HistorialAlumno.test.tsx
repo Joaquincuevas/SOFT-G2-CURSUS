@@ -4,7 +4,7 @@ import type {
 } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
-import { renderConSesion } from '../test/sesion'
+import { renderConSesion, usuarioDePrueba } from '../test/sesion'
 
 const API = '/api/mis-cursos/historial'
 const HISTORIAL = '/mis-cursos/historial'
@@ -87,3 +87,26 @@ test('el profesor no puede abrir la ruta del historial del alumno', async () => 
   ).toBeVisible()
   expect(leer).not.toHaveBeenCalled()
 })
+
+test.each(['/', '/perfil', '/mis-cursos/secciones/actual'])(
+  'redirige al egresado desde %s y solo ofrece historial y cierre de sesión',
+  async (ruta) => {
+    const dashboard = vi.fn()
+    const perfil = vi.fn()
+    await renderConSesion('ALUMNO', ruta, {
+      '/api/auth/yo': () => ({ ...usuarioDePrueba('ALUMNO'), egresado: true }),
+      '/api/dashboard/secciones-alumno': dashboard,
+      '/api/perfil': perfil,
+    })
+    expect(
+      await screen.findByRole('heading', { name: 'Historial de notas' }),
+    ).toBeVisible()
+    expect(screen.getByText('Egresado')).toBeVisible()
+    expect(
+      screen.queryByRole('link', { name: /Mi perfil|Dashboard/ }),
+    ).toBeNull()
+    expect(screen.getByRole('button', { name: 'Cerrar Sesión' })).toBeVisible()
+    expect(dashboard).not.toHaveBeenCalled()
+    expect(perfil).not.toHaveBeenCalled()
+  },
+)

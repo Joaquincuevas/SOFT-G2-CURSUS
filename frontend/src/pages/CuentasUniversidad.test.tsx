@@ -82,6 +82,34 @@ const filas = () =>
     .map((fila) => fila.children[0].textContent)
 
 describe('lista de cuentas (GES-24)', () => {
+  test('registra el egreso del alumno y conserva su cuenta en el listado', async () => {
+    const alumno: CuentaUniversidad = {
+      ...DIRECTORA,
+      nombre: 'Ana Alumna',
+      rol: 'ALUMNO',
+    }
+    let egresado = false
+    const solicitud = registrar(() => {
+      egresado = true
+      return sinContenido()
+    })
+    await abrir({
+      [API]: () => [{ ...alumno, egresado }],
+      [`${API}/${alumno.id}/egresar`]: solicitud.ruta,
+    })
+    const iniciar = await screen.findByRole('button', {
+      name: 'Registrar egreso de Ana Alumna',
+    })
+    fireEvent.click(iniciar)
+    expect(solicitud.pedidas).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(await screen.findByText('Egresado')).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Archivar Ana Alumna' }),
+    ).toBeNull()
+    expect(solicitud.pedidas).toEqual([{ metodo: 'PATCH', cuerpo: undefined }])
+  })
+
   test('muestra nombre, correo, rol y facultad', async () => {
     await abrir()
 
