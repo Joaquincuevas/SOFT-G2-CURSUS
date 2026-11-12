@@ -195,9 +195,12 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   if (SUBEN_ARCHIVOS.includes(usuario.rol) || usuario.rol === 'DIRECTOR')
     can('read', 'Material')
 
-  // MAT-09: solo el alumno consulta y confirma su entrega. La descarga del
-  // equipo docente se habilita en MAT-10.
+  // MAT-09: el alumno consulta y confirma su entrega. MAT-10: el profesor y
+  // el ayudante leen y descargan las de su sección (el servicio y la RLS
+  // exigen además que lo sean de esa sección).
   if (usuario.rol === 'ALUMNO') can(['create', 'read'], 'Entrega')
+  if (usuario.rol === 'PROFESOR' || usuario.rol === 'AYUDANTE')
+    can('read', 'Entrega')
 
   return build()
 }

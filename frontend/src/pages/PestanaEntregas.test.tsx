@@ -1,6 +1,11 @@
-import type { Actividad, Rol, SeccionResumen } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import type {
+  Actividad,
+  EntregaDeAlumno,
+  Rol,
+  SeccionResumen,
+} from '@cursus/shared'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const VISTA = '/mis-cursos/secciones/seccion-1'
@@ -42,10 +47,12 @@ const LISTA: Actividad[] = [
 async function abrirEntregas(
   rol: Rol,
   actividades: (init?: RequestInit) => unknown = () => LISTA,
+  otras: Record<string, (init?: RequestInit) => unknown> = {},
 ) {
   await renderConSesion(rol, VISTA, {
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [ACTIVIDADES]: actividades,
+    ...otras,
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Entregas' }))
   expect(screen.getByRole('tab', { name: 'Entregas' })).toHaveAttribute(
@@ -202,5 +209,128 @@ describe('pestaña Entregas (MAT-08)', () => {
     ).toBeInTheDocument()
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Informe 1')).toBeInTheDocument()
+  })
+})
+
+const ENTREGAS = `${ACTIVIDADES}/a2/entregas`
+// 2026-11-10T18:05Z es el 10-11-2026 a las 15:05 en Chile.
+const ENTREGADAS: EntregaDeAlumno[] = [
+  {
+    alumno: { id: 'al1', nombre: 'Ana Pérez', correo: 'ana@x' },
+    entrega: {
+      id: 'e1',
+      entregadaEn: '2026-11-10T18:05:00.000Z',
+      versiones: 2,
+      archivo: {
+        id: 'f1',
+        nombre: 'Informe.pdf',
+        tipo: 'application/pdf',
+        tamano: 10,
+        subidoEn: '2026-11-10T18:04:00.000Z',
+      },
+    },
+  },
+  {
+    alumno: { id: 'al2', nombre: 'Bruno Soto', correo: 'bruno@x' },
+    entrega: null,
+  },
+]
+const SOLO_A2 = () => [LISTA[1]]
+
+describe('entregas de una actividad para el equipo docente (MAT-10)', () => {
+  test.each<Rol>(['PROFESOR', 'AYUDANTE'])(
+    '%s ve la tabla de alumnos con estado, fecha y hora',
+    async (rol) => {
+      const { panel } = await abrirEntregas(rol, SOLO_A2, {
+        [ENTREGAS]: () => ENTREGADAS,
+      })
+      const tabla = await panel.findByRole('table', {
+        name: 'Entregas de Informe 2',
+      })
+      const filas = within(tabla).getAllByRole('row')
+      expect(within(filas[1]).getByText('Ana Pérez')).toBeInTheDocument()
+      expect(within(filas[1]).getByText('Entregado')).toBeInTheDocument()
+      expect(
+        within(filas[1]).getByText('10-11-2026, 15:05'),
+      ).toBeInTheDocument()
+      expect(
+        within(filas[1]).getByText('2 versiones; se descarga la última'),
+      ).toBeInTheDocument()
+      expect(within(filas[2]).getByText('Sin entrega')).toBeInTheDocument()
+      expect(within(filas[2]).queryByRole('button')).toBeNull()
+      expect(panel.getByText('1 de 2 alumnos entregaron')).toBeInTheDocument()
+    },
+  )
+
+  test('el alumno no ve la tabla ni pide las entregas', async () => {
+    const pedidas = vi.fn(() => ENTREGADAS)
+    const { panel } = await abrirEntregas('ALUMNO', SOLO_A2, {
+      [ENTREGAS]: pedidas,
+    })
+    await panel.findByText('Informe 2')
+    expect(panel.queryByRole('table')).toBeNull()
+    expect(pedidas).not.toHaveBeenCalled()
+  })
+
+  test('sin alumnos inscritos muestra el estado vacío', async () => {
+    const { panel } = await abrirEntregas('PROFESOR', SOLO_A2, {
+      [ENTREGAS]: () => [],
+    })
+    expect(
+      await panel.findByText('No hay alumnos inscritos en la sección'),
+    ).toBeInTheDocument()
+  })
+
+  test('si falla la carga permite reintentar', async () => {
+    let intento = 0
+    const { panel } = await abrirEntregas('PROFESOR', SOLO_A2, {
+      [ENTREGAS]: () => (++intento === 1 ? json({}, 500) : ENTREGADAS),
+    })
+    expect(
+      await panel.findByText('No pudimos cargar las entregas.'),
+    ).toBeInTheDocument()
+    fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
+    expect(await panel.findByRole('table')).toBeInTheDocument()
+  })
+
+  test('descarga el informe con la URL firmada de esa entrega', async () => {
+    const clic = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    const descarga = vi.fn(() => ({
+      url: 'https://s3.test/informe?firma',
+      expiraEn: '2026-11-11T00:00:00.000Z',
+    }))
+    const { panel } = await abrirEntregas('AYUDANTE', SOLO_A2, {
+      [ENTREGAS]: () => ENTREGADAS,
+      [`${ENTREGAS}/e1/descarga`]: descarga,
+    })
+    fireEvent.click(
+      await panel.findByRole('button', {
+        name: 'Descargar el informe de Ana Pérez',
+      }),
+    )
+    await waitFor(() => expect(clic).toHaveBeenCalledTimes(1))
+    expect(descarga).toHaveBeenCalledTimes(1)
+    expect((clic.mock.contexts[0] as HTMLAnchorElement).href).toBe(
+      'https://s3.test/informe?firma',
+    )
+    clic.mockRestore()
+  })
+
+  test('si la descarga falla muestra el error y desbloquea el botón', async () => {
+    const { panel } = await abrirEntregas('PROFESOR', SOLO_A2, {
+      [ENTREGAS]: () => ENTREGADAS,
+      [`${ENTREGAS}/e1/descarga`]: () => json({}, 503),
+    })
+    const boton = await panel.findByRole('button', {
+      name: 'Descargar el informe de Ana Pérez',
+    })
+    fireEvent.click(boton)
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'No pudimos descargar el informe. Inténtalo nuevamente.',
+    )
+    expect(boton).toBeEnabled()
+    expect(boton).toHaveTextContent('Descargar')
   })
 })

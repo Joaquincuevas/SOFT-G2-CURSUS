@@ -1,4 +1,6 @@
 import type {
+  DescargaArchivo,
+  EntregaDeAlumno,
   EntregaInforme,
   EntregarInforme,
   MiEntregaActividad,
@@ -196,5 +198,132 @@ export class EntregasService {
         throw new ConflictException(CERRADA)
       throw error
     }
+  }
+
+  // MAT-10: solo el profesor o el ayudante de la sección, con ese rol en la
+  // sesión. La RLS (pol_entrega_lectura_docente) vuelve a exigirlo con el
+  // usuario fijado: otro docente no lee filas aunque llegue hasta aquí.
+  private exigirDocente(
+    contexto: ContextoUniversidad,
+    seccion: SeccionEspacio,
+  ) {
+    const docente = (rol: string) => rol === 'PROFESOR' || rol === 'AYUDANTE'
+    if (!docente(contexto.rol) || seccion.rol !== contexto.rol) {
+      throw new ForbiddenException(
+        'Solo el profesor y los ayudantes de la sección ven las entregas',
+      )
+    }
+  }
+
+  private async actividadDeSeccion(
+    bd: Consulta,
+    universidad: string,
+    seccion: string,
+    actividad: string,
+  ) {
+    const [fila] = await bd.query(
+      `SELECT a.id FROM actividad a
+        JOIN seccion s ON s.id=a.seccion_id AND s.universidad_id=a.universidad_id
+        JOIN curso c ON c.id=s.curso_id AND c.universidad_id=s.universidad_id
+       WHERE a.universidad_id=$1 AND s.id=$2 AND a.id=$3
+         AND a.archived_at IS NULL AND s.archived_at IS NULL AND c.archived_at IS NULL`,
+      [universidad, seccion, actividad],
+    )
+    if (!fila) throw new NotFoundException('La actividad no existe')
+  }
+
+  // Todos los alumnos inscritos vigentes, con su última entrega o null. Lo
+  // que el docente puede leer lo decide la RLS de entrega.
+  async listar(
+    contexto: ContextoUniversidad,
+    usuario: string,
+    seccion: SeccionEspacio,
+    actividad: string,
+  ): Promise<EntregaDeAlumno[]> {
+    this.exigirDocente(contexto, seccion)
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuario)
+      await this.actividadDeSeccion(
+        bd,
+        contexto.universidadId,
+        seccion.id,
+        actividad,
+      )
+      const filas = await bd.query<EntregaDeAlumno>(
+        `SELECT json_build_object('id',u.id,'nombre',u.nombre,'correo',u.correo) AS alumno,
+          CASE WHEN e.id IS NULL THEN NULL ELSE json_build_object(
+            'id',e.id,'entregadaEn',e.entregada_at,'versiones',e.versiones,
+            'archivo',json_build_object('id',f.id,'nombre',f.nombre,'tipo',f.tipo,
+              'tamano',f.tamano,'subidoEn',f.subido_at)) END AS entrega
+         FROM inscripcion i
+         JOIN usuario u ON u.id=i.usuario_id AND u.universidad_id=i.universidad_id
+         LEFT JOIN LATERAL (
+           SELECT x.id, x.archivo_id, x.entregada_at,
+                  count(*) OVER () AS versiones
+             FROM entrega x
+            WHERE x.universidad_id=i.universidad_id AND x.actividad_id=$3
+              AND x.alumno_id=u.id
+            ORDER BY x.entregada_at DESC, x.id DESC LIMIT 1) e ON true
+         LEFT JOIN archivo f ON f.id=e.archivo_id AND f.universidad_id=i.universidad_id
+        WHERE i.universidad_id=$1 AND i.seccion_id=$2
+          AND i.archived_at IS NULL AND u.archived_at IS NULL AND u.rol='ALUMNO'
+        ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo`,
+        [contexto.universidadId, seccion.id, actividad],
+      )
+      // json_build_object entrega la fecha sin la Z de ISO.
+      return filas.map(({ alumno, entrega }) => ({
+        alumno,
+        entrega: entrega && {
+          ...entrega,
+          entregadaEn: new Date(entrega.entregadaEn).toISOString(),
+          versiones: Number(entrega.versiones),
+        },
+      }))
+    })
+  }
+
+  // URL firmada de la versión acreditada (version_objeto) de esa entrega,
+  // no de la última del objeto. Sin fila (otra sección, otra actividad o sin
+  // permiso por RLS) responde 404, sin revelar si existe.
+  async descarga(
+    contexto: ContextoUniversidad,
+    usuario: string,
+    seccion: SeccionEspacio,
+    actividad: string,
+    entrega: string,
+  ): Promise<DescargaArchivo> {
+    this.exigirDocente(contexto, seccion)
+    const archivo = await this.bd.enTransaccionEnUniversidad(
+      contexto,
+      async (bd) => {
+        await fijarUsuario(bd, usuario)
+        await this.actividadDeSeccion(
+          bd,
+          contexto.universidadId,
+          seccion.id,
+          actividad,
+        )
+        const [fila] = await bd.query<{
+          clave: string
+          nombre: string
+          version: string
+        }>(
+          `SELECT f.clave, f.nombre, e.version_objeto AS version
+             FROM entrega e
+             JOIN archivo f ON f.id=e.archivo_id AND f.universidad_id=e.universidad_id
+            WHERE e.universidad_id=$1 AND e.actividad_id=$2 AND e.id=$3
+              AND f.seccion_id=$4`,
+          [contexto.universidadId, actividad, entrega, seccion.id],
+        )
+        return fila
+      },
+    )
+    if (!archivo) throw new NotFoundException('La entrega no existe')
+    const { url, expiraEn } = await this.almacenamiento.firmarDescarga(
+      archivo.clave,
+      archivo.nombre,
+      archivo.version,
+    )
+    return { url, expiraEn: expiraEn.toISOString() }
   }
 }

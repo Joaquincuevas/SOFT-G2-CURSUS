@@ -4,6 +4,8 @@ import {
   ZONA_HORARIA_UNIVERSIDAD,
   type Actividad,
   type CrearActividad,
+  type DescargaArchivo,
+  type EntregaDeAlumno,
 } from '@cursus/shared'
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
@@ -29,7 +31,8 @@ const fechaHora = (iso: string) =>
 
 // MAT-08 (RN-08): actividades de entrega de la sección, por plazo. Las crea
 // solo el profesor de la sección; el ayudante, el alumno y el Director ven la
-// lista. Una actividad cuyo plazo pasó se muestra como cerrada.
+// lista. Una actividad cuyo plazo pasó se muestra como cerrada. MAT-10: el
+// profesor y el ayudante ven y descargan las entregas de cada actividad.
 export function PestanaEntregas({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/actividades`
   const [actividades, recargar] = useDatos<Actividad[]>(ruta)
@@ -79,12 +82,120 @@ export function PestanaEntregas({ seccionId, rol }: PropsPestana) {
                     actividad={actividad}
                   />
                 )}
+                {(rol === 'PROFESOR' || rol === 'AYUDANTE') && (
+                  <EntregasActividad
+                    key={`${seccionId}-${actividad.id}-entregas`}
+                    ruta={`${ruta}/${actividad.id}/entregas`}
+                    titulo={actividad.titulo}
+                  />
+                )}
               </article>
             </li>
           ))}
         </ul>
       )}
     </section>
+  )
+}
+
+// MAT-10: un alumno inscrito por fila, con su última entrega o "Sin entrega".
+// La descarga pide una URL firmada de esa versión y la abre; el archivo se
+// descarga con su nombre (Content-Disposition: attachment).
+function EntregasActividad({ ruta, titulo }: { ruta: string; titulo: string }) {
+  const { fetchConSesion } = useAuth()
+  const [entregas, recargar] = useDatos<EntregaDeAlumno[]>(ruta)
+  const [descargando, setDescargando] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function descargar(entregaId: string) {
+    setDescargando(entregaId)
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${ruta}/${entregaId}/descarga`)
+      if (!res.ok) throw new Error()
+      const { url } = (await res.json()) as DescargaArchivo
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.click()
+    } catch {
+      setError('No pudimos descargar el informe. Inténtalo nuevamente.')
+    } finally {
+      // Siempre se desbloquea, también si la descarga falló.
+      setDescargando(null)
+    }
+  }
+
+  if (entregas === undefined) return <Cargando texto="Cargando entregas…" />
+  if (entregas === null)
+    return (
+      <ErrorEstado
+        mensaje="No pudimos cargar las entregas."
+        onReintentar={recargar}
+      />
+    )
+  if (entregas.length === 0)
+    return (
+      <p className="dashboard__texto">No hay alumnos inscritos en la sección</p>
+    )
+  const entregados = entregas.filter((f) => f.entrega).length
+  return (
+    <div className="entregas__docente">
+      <p className="entregas__resumen">
+        {entregados} de {entregas.length} alumnos entregaron
+      </p>
+      <table className="entregas__tabla" aria-label={`Entregas de ${titulo}`}>
+        <thead>
+          <tr>
+            <th scope="col">Alumno</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Fecha y hora</th>
+            <th scope="col">Informe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entregas.map(({ alumno, entrega }) => (
+            <tr key={alumno.id}>
+              <th scope="row">{alumno.nombre}</th>
+              <td>
+                <span
+                  className={`entregas__estado ${
+                    entrega
+                      ? 'entregas__estado--abierta'
+                      : 'entregas__estado--cerrada'
+                  }`}
+                >
+                  {entrega ? 'Entregado' : 'Sin entrega'}
+                </span>
+              </td>
+              <td>{entrega ? fechaHora(entrega.entregadaEn) : '—'}</td>
+              <td>
+                {entrega && (
+                  <button
+                    className="entregas__boton entregas__boton--secundario"
+                    type="button"
+                    aria-label={`Descargar el informe de ${alumno.nombre}`}
+                    disabled={descargando !== null}
+                    onClick={() => void descargar(entrega.id)}
+                  >
+                    {descargando === entrega.id ? 'Descargando…' : 'Descargar'}
+                  </button>
+                )}
+                {entrega && entrega.versiones > 1 && (
+                  <span className="entregas__ayuda">
+                    {entrega.versiones} versiones; se descarga la última
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {error && (
+        <p className="entregas__error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 

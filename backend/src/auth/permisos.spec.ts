@@ -163,8 +163,11 @@ const MATERIAL: Record<Rol, AccionConcreta[]> = {
 }
 for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]
 
-// MAT-09: lectura y entrega propias, sin descarga del equipo docente aún.
+// MAT-09: lectura y entrega propias. MAT-10: el equipo docente las lee y
+// descarga.
 MATRIZ.ALUMNO.Entrega = ['create', 'read']
+MATRIZ.PROFESOR.Entrega = ['read']
+MATRIZ.AYUDANTE.Entrega = ['read']
 
 // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante; leen el
 // profesor y el Director. El alumno (NOT-13) y el Administrativo no reciben

@@ -110,7 +110,9 @@ export class AlmacenamientoService {
     }
   }
 
-  // URL firmada para descargar el objeto con su nombre original.
+  // URL firmada para descargar el objeto con su nombre original. Con version
+  // (MAT-10) firma esa versión del objeto, no la última, y pide no guardarla
+  // en caché: una entrega se descarga tal como se acreditó.
   async firmarDescarga(
     clave: string,
     nombre: string,
@@ -124,6 +126,7 @@ export class AlmacenamientoService {
         Key: clave,
         ...(version && { VersionId: version }),
         ResponseContentDisposition: disposicionDescarga(nombre),
+        ...(version && { ResponseCacheControl: 'no-store' }),
       }),
       { expiresIn: SEGUNDOS_DESCARGA },
     )

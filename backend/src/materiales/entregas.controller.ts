@@ -1,4 +1,9 @@
-import type { MiEntregaActividad, SeccionEspacio } from '@cursus/shared'
+import type {
+  DescargaArchivo,
+  EntregaDeAlumno,
+  MiEntregaActividad,
+  SeccionEspacio,
+} from '@cursus/shared'
 import {
   Body,
   Controller,
@@ -56,6 +61,50 @@ export class EntregasController {
       seccion,
       actividadId,
       datos,
+    )
+  }
+}
+
+// MAT-10: el profesor y los ayudantes de la sección listan y descargan las
+// entregas de una actividad. El servicio exige el rol en la sesión y en la
+// sección; la RLS, que sean de esa sección.
+@Controller('espacio/secciones/:id/actividades/:actividadId/entregas')
+export class EntregasDocentesController {
+  constructor(private readonly entregas: EntregasService) {}
+
+  @Puede('read', 'Entrega')
+  @IntegranteDeSeccion()
+  @Get()
+  listar(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('actividadId', ParseUUIDPipe) actividadId: string,
+  ): Promise<EntregaDeAlumno[]> {
+    return this.entregas.listar(
+      contexto,
+      req.usuario!.sub,
+      seccion,
+      actividadId,
+    )
+  }
+
+  @Puede('read', 'Entrega')
+  @IntegranteDeSeccion()
+  @Get(':entregaId/descarga')
+  descarga(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('actividadId', ParseUUIDPipe) actividadId: string,
+    @Param('entregaId', ParseUUIDPipe) entregaId: string,
+  ): Promise<DescargaArchivo> {
+    return this.entregas.descarga(
+      contexto,
+      req.usuario!.sub,
+      seccion,
+      actividadId,
+      entregaId,
     )
   }
 }

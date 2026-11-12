@@ -136,6 +136,23 @@ describe('AlmacenamientoService', () => {
     expect(url.searchParams.get('response-content-disposition')).toBe(
       disposicionDescarga('Guía 1.pdf'),
     )
+    expect(url.searchParams.has('versionId')).toBe(false)
+  })
+
+  it('con version firma esa versión del objeto, sin caché', async () => {
+    const descarga = await servicioCon(ENTORNO).firmarDescarga(
+      'u/s/a',
+      'Informe.pdf',
+      'v-acreditada',
+    )
+    const url = new URL(descarga.url)
+
+    expect(url.pathname).toBe('/u/s/a')
+    expect(url.searchParams.get('versionId')).toBe('v-acreditada')
+    expect(url.searchParams.get('response-cache-control')).toBe('no-store')
+    expect(url.searchParams.get('response-content-disposition')).toBe(
+      disposicionDescarga('Informe.pdf'),
+    )
   })
 
   it('con endpoint local firma con el bucket en la ruta', async () => {

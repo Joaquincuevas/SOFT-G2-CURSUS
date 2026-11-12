@@ -23,7 +23,7 @@ En **Mis cursos → sección → Entregas**, el alumno ve en cada actividad:
 
 Se reutilizan los tipos y el límite de MAT-01: un archivo no vacío de hasta 20 MB. La subida va directamente a S3; el JWT solo se envía a la API. El selector y el botón quedan bloqueados durante la operación. Un fallo conserva el archivo elegido y el comprobante anterior. Reintentar continúa desde el último paso completado, sin volver a subir lo ya confirmado. Una firma rechazada se renueva.
 
-El cierre que decide la API prevalece sobre el estado de la pantalla: empezar a subir antes del plazo no garantiza que la entrega llegue a tiempo. El archivo debe quedar registrado como entrega antes del plazo. No se ofrecen descargas del equipo docente en esta tarjeta; corresponden a MAT-10.
+El cierre que decide la API prevalece sobre el estado de la pantalla: empezar a subir antes del plazo no garantiza que la entrega llegue a tiempo. El archivo debe quedar registrado como entrega antes del plazo. Las descargas del equipo docente son de [MAT-10](mat-10-descargar-entregas.md).
 
 ## API
 

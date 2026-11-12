@@ -5,7 +5,10 @@ import { ActividadesController } from './actividades.controller.js'
 import { ActividadesService } from './actividades.service.js'
 import { SilaboVigenteController } from './silabo-vigente.controller.js'
 import { SilaboVigenteService } from './silabo-vigente.service.js'
-import { EntregasController } from './entregas.controller.js'
+import {
+  EntregasController,
+  EntregasDocentesController,
+} from './entregas.controller.js'
 import { EntregasService } from './entregas.service.js'
 import { MaterialesController } from './materiales.controller.js'
 import { MaterialesService } from './materiales.service.js'
@@ -18,6 +21,7 @@ import { SilaboService } from './silabo.service.js'
   controllers: [
     ActividadesController,
     EntregasController,
+    EntregasDocentesController,
     MaterialesController,
     SilaboController,
     SilaboVigenteController,

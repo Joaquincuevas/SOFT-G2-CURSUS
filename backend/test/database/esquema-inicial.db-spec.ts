@@ -185,6 +185,14 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    // MAT-10 es la última: solo quita la lectura docente de entrega.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ docente }] = await bd.query<{ docente: string }[]>(
+      `SELECT count(*) AS docente FROM pg_policies
+        WHERE tablename = 'entrega' AND policyname = 'pol_entrega_lectura_docente'`,
+    )
+    expect(Number(docente)).toBe(0)
     await bd.undoLastMigration() // MAT-02: quita el historial y el filtro de descarga genérica.
     const SIN_SILABO = TABLAS.filter((tabla) => tabla !== 'silabo')
     expect(await tablasExistentes()).toEqual(SIN_SILABO)
@@ -200,6 +208,7 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // MAT-10, reaplicada por runMigrations.
     await bd.undoLastMigration() // MAT-02.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
@@ -303,7 +312,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-02,
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-10,
+    await bd.undoLastMigration() // MAT-02,
     await bd.undoLastMigration() // MAT-04,
     await bd.undoLastMigration() // GES-26,
     await bd.undoLastMigration() // MAT-09,
