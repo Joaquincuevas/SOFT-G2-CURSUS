@@ -1,4 +1,5 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm'
+import { SUMA_PONDERACIONES_REQUERIDA } from '@cursus/shared'
 
 // HIS-01: un registro de cierre por curso. La función comprueba las notas
 // sin conceder al administrativo permisos para leer las calificaciones.
@@ -31,6 +32,18 @@ export class CrearCierreCurso1792900000000 implements MigrationInterface {
         EXECUTE FUNCTION auditar_superadmin();
     `)
     await q.query(`
+      -- HIS-02: los roles de la universidad pueden consultar solo el estado.
+      CREATE FUNCTION public.curso_cerrado(curso uuid) RETURNS boolean
+      LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+        SELECT EXISTS (
+          SELECT 1 FROM public.cierre_curso cc
+           WHERE cc.id = curso AND cc.universidad_id = public.universidad_actual()
+        )
+      $$;
+
+      REVOKE ALL ON FUNCTION public.curso_cerrado(uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.curso_cerrado(uuid) TO cursus_app;
+
       CREATE FUNCTION public.cerrar_curso(curso uuid) RETURNS jsonb
       LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
       DECLARE
@@ -39,6 +52,8 @@ export class CrearCierreCurso1792900000000 implements MigrationInterface {
         cerrado timestamptz;
         cierre jsonb;
         pendientes jsonb;
+        ponderaciones jsonb;
+        requerida constant integer := ${SUMA_PONDERACIONES_REQUERIDA};
       BEGIN
         IF public.rol_actual() IS DISTINCT FROM 'ADMINISTRATIVO' OR responsable IS NULL THEN
           RETURN NULL;
@@ -93,8 +108,24 @@ export class CrearCierreCurso1792900000000 implements MigrationInterface {
                 AND n.archived_at IS NULL AND n.estado = 'PUBLICADA'
            ));
 
-        IF jsonb_array_length(pendientes) > 0 THEN
-          RETURN jsonb_build_object('pendientes', pendientes);
+        -- NOT-02: suma por sección de las evaluaciones vigentes. Una sección
+        -- vigente sin evaluaciones tiene 0 %, igual que en la nota final.
+        SELECT coalesce(jsonb_agg(jsonb_build_object(
+                 'seccion', s.numero, 'sumaPonderaciones', s.suma,
+                 'faltan', greatest(0, requerida - s.suma),
+                 'sobran', greatest(0, s.suma - requerida)
+               ) ORDER BY s.numero), '[]'::jsonb) INTO ponderaciones
+          FROM (
+            SELECT s.numero, coalesce(sum(e.ponderacion), 0)::int AS suma
+              FROM public.seccion s
+              LEFT JOIN public.evaluacion e ON e.seccion_id = s.id
+                AND e.universidad_id = s.universidad_id AND e.archived_at IS NULL
+             WHERE s.curso_id = curso AND s.universidad_id = universidad AND s.archived_at IS NULL
+             GROUP BY s.id, s.numero
+          ) s WHERE s.suma <> requerida;
+
+        IF jsonb_array_length(pendientes) > 0 OR jsonb_array_length(ponderaciones) > 0 THEN
+          RETURN jsonb_build_object('pendientes', pendientes, 'ponderaciones', ponderaciones);
         END IF;
 
         INSERT INTO public.cierre_curso (id, universidad_id, responsable_id)
@@ -110,6 +141,7 @@ export class CrearCierreCurso1792900000000 implements MigrationInterface {
 
   async down(q: QueryRunner): Promise<void> {
     await q.query('DROP FUNCTION public.cerrar_curso(uuid)')
+    await q.query('DROP FUNCTION public.curso_cerrado(uuid)')
     await q.query('DROP TABLE cierre_curso')
   }
 }

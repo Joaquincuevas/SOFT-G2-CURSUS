@@ -47,7 +47,10 @@ describe('detalle de un curso', () => {
       .mockReturnValueOnce(
         json(
           {
-            message: 'Hay evaluaciones con notas sin publicar.',
+            message: 'Hay requisitos pendientes para cerrar el curso.',
+            ponderaciones: [
+              { seccion: 1, sumaPonderaciones: 120, faltan: 0, sobran: 20 },
+            ],
             pendientes: [
               {
                 evaluacionId: 'prueba',
@@ -68,12 +71,16 @@ describe('detalle de un curso', () => {
 
     const iniciar = await screen.findByRole('button', { name: 'Cerrar curso' })
     fireEvent.click(iniciar)
+    expect(screen.getByText(/no se puede deshacer/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
     expect(cerrar).not.toHaveBeenCalled()
     fireEvent.click(iniciar)
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Sección 2 · Prueba 1 · 2 notas sin publicar',
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Sección 1 · Las ponderaciones suman 120 %. Sobran 20 puntos porcentuales',
     )
     expect(cerrar.mock.calls[0][0]?.method).toBe('POST')
 

@@ -1,8 +1,9 @@
 import type {
   CierreCurso,
   CursoDetalle,
-  EvaluacionPendienteDeCierre,
+  PendientesCierreCurso,
 } from '@cursus/shared'
+import { avisoPonderaciones } from '@cursus/shared'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
 
@@ -11,10 +12,9 @@ export function GestionarCierreCurso({ curso }: { curso: CursoDetalle }) {
   const [cierre, setCierre] = useState<CierreCurso>()
   const [confirmando, setConfirmando] = useState(false)
   const [guardando, setGuardando] = useState(false)
-  const [error, setError] = useState<{
-    message: string
-    pendientes?: EvaluacionPendienteDeCierre[]
-  }>()
+  const [error, setError] = useState<
+    { message: string } & Partial<PendientesCierreCurso>
+  >()
   const titulo = useRef<HTMLHeadingElement>(null)
   const boton = useRef<HTMLButtonElement>(null)
 
@@ -75,11 +75,14 @@ export function GestionarCierreCurso({ curso }: { curso: CursoDetalle }) {
           <h3 id="confirmar-cierre" ref={titulo} tabIndex={-1}>
             Confirmar cierre del curso
           </h3>
-          <p>El cierre quedará registrado con la fecha y tu usuario.</p>
+          <p>
+            El cierre quedará registrado con la fecha y tu usuario. Esta acción
+            no se puede deshacer.
+          </p>
           {error && (
             <div className="cursos__error" role="alert">
               <p>{error.message}</p>
-              {error.pendientes && (
+              {!!error.pendientes?.length && (
                 <ul>
                   {error.pendientes.map(
                     ({ evaluacionId, nombre, seccion, notasPendientes }) => (
@@ -93,6 +96,16 @@ export function GestionarCierreCurso({ curso }: { curso: CursoDetalle }) {
                       </li>
                     ),
                   )}
+                </ul>
+              )}
+              {!!error.ponderaciones?.length && (
+                <ul>
+                  {error.ponderaciones.map(({ seccion, sumaPonderaciones }) => (
+                    <li key={seccion}>
+                      Sección {seccion} ·{' '}
+                      {avisoPonderaciones(sumaPonderaciones)}
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>

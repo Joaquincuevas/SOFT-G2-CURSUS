@@ -8,7 +8,7 @@ import type {
   CursoCreado,
   CursoDetalle,
   CursoListado,
-  EvaluacionPendienteDeCierre,
+  PendientesCierreCurso,
   DocenteCreado,
   FiltroCursos,
   MotivoErrorCsv,
@@ -326,14 +326,13 @@ export class GestionService {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
       await fijarUsuario(bd, usuarioId)
       const [{ resultado }] = await bd.query<{
-        resultado:
-          CierreCurso | { pendientes: EvaluacionPendienteDeCierre[] } | null
+        resultado: CierreCurso | PendientesCierreCurso | null
       }>('SELECT public.cerrar_curso($1) AS resultado', [cursoId])
       if (!resultado) throw new NotFoundException('El curso no existe')
       if ('pendientes' in resultado) {
         throw new ConflictException({
-          message: 'Hay evaluaciones con notas sin publicar.',
-          pendientes: resultado.pendientes,
+          message: 'Hay requisitos pendientes para cerrar el curso.',
+          ...resultado,
         })
       }
       return resultado

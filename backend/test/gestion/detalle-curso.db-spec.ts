@@ -207,7 +207,7 @@ describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
     await cerrar(DIRECTOR, curso, 403)
   })
 
-  it('reporta notas faltantes y propuestas en todas las secciones y registra un solo cierre', async () => {
+  it('exige notas publicadas y 100 % por sección antes de registrar un solo cierre', async () => {
     const [{ id: curso }] = await bd.query<{ id: string }[]>(
       `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
        SELECT universidad_id, carrera_id, periodo_id, 'HIS01', 'Curso de cierre'
@@ -215,17 +215,24 @@ describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
     )
     await bd.query(
       `INSERT INTO seccion (universidad_id, curso_id, numero)
-       SELECT universidad_id, id, numero FROM curso CROSS JOIN (VALUES (1), (2)) AS n(numero)
+       SELECT universidad_id, id, numero FROM curso CROSS JOIN (VALUES (1), (2), (3)) AS n(numero)
         WHERE id = $1`,
       [curso],
     )
     const evaluaciones = await bd.query<{ id: string; nombre: string }[]>(
       `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
-       SELECT s.universidad_id, s.id, 'Control ' || s.numero, current_date, 100, u.id
+       SELECT s.universidad_id, s.id, 'Control ' || s.numero, current_date,
+              CASE WHEN s.numero = 1 THEN 80 ELSE 100 END, u.id
          FROM seccion s JOIN usuario u ON u.universidad_id = s.universidad_id
         WHERE s.curso_id = $1 AND s.numero IN (1, 2) AND u.correo = $2
         RETURNING id, nombre`,
       [curso, PROFESOR],
+    )
+    await bd.query(
+      `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por, archived_at)
+       SELECT universidad_id, seccion_id, 'Control archivado', fecha, 20, creada_por, now()
+         FROM evaluacion WHERE id = $1`,
+      [evaluaciones.find((e) => e.nombre === 'Control 1')?.id],
     )
     await bd.query(
       `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
@@ -250,8 +257,13 @@ describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
     )
 
     const intento = await cerrar(ADMIN_INGENIERIA, curso, 409)
+    const ponderaciones = [
+      { seccion: 1, sumaPonderaciones: 80, faltan: 20, sobran: 0 },
+      { seccion: 3, sumaPonderaciones: 0, faltan: 100, sobran: 0 },
+    ]
     expect(intento.body).toEqual({
-      message: 'Hay evaluaciones con notas sin publicar.',
+      message: 'Hay requisitos pendientes para cerrar el curso.',
+      ponderaciones,
       pendientes: [1, 2].map((seccion) => ({
         evaluacionId: evaluaciones.find(
           (e) => e.nombre === `Control ${seccion}`,
@@ -275,6 +287,28 @@ describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
       [evaluaciones.map((e) => e.id), AYUDANTE],
     )
 
+    expect((await cerrar(ADMIN_INGENIERIA, curso, 409)).body).toMatchObject({
+      pendientes: [],
+      ponderaciones,
+    })
+    expect((await detalle(ADMIN_INGENIERIA, curso)).cierre).toBeUndefined()
+    await bd.query(
+      `WITH complemento AS (
+         INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+         SELECT universidad_id, seccion_id, 'Control complementario', fecha, 20, creada_por
+           FROM evaluacion WHERE id = $1
+         RETURNING id, universidad_id
+       )
+       INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por, estado)
+       SELECT c.universidad_id, c.id, n.alumno_id, n.valor, n.propuesta_por, 'PUBLICADA'
+         FROM complemento c CROSS JOIN nota n WHERE n.evaluacion_id = $1`,
+      [evaluaciones.find((e) => e.nombre === 'Control 1')?.id],
+    )
+    await bd.query(
+      `UPDATE seccion SET archived_at = now() WHERE curso_id = $1 AND numero = 3`,
+      [curso],
+    )
+
     const [actor] = await bd.query<{ id: string }[]>(
       'SELECT id FROM usuario WHERE correo = $1',
       [ADMIN_INGENIERIA],
@@ -285,5 +319,22 @@ describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
     expect(Number.isFinite(Date.parse(cierre.fecha))).toBe(true)
     expect((await detalle(ADMIN_INGENIERIA, curso)).cierre).toEqual(cierre)
     expect((await cerrar(ADMIN_INGENIERIA, curso, 200)).body).toEqual(cierre)
+
+    const universidades = await bd.query<{ universidad_id: string }[]>(
+      'SELECT universidad_id FROM usuario WHERE correo IN ($1, $2) ORDER BY correo',
+      [ADMIN_SUR, PROFESOR],
+    )
+    await bd.transaction(async (tx) => {
+      await tx.query('SET LOCAL ROLE cursus_app')
+      await tx.query("SELECT set_config('app.rol', 'PROFESOR', true)")
+      for (const [i, { universidad_id }] of universidades.entries()) {
+        await tx.query("SELECT set_config('app.universidad_id', $1, true)", [
+          universidad_id,
+        ])
+        expect(
+          await tx.query('SELECT curso_cerrado($1) AS cerrado', [curso]),
+        ).toEqual([{ cerrado: i === 1 }])
+      }
+    })
   })
 })

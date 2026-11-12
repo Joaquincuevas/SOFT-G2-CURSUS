@@ -86,6 +86,16 @@ export interface EvaluacionPendienteDeCierre {
   notasPendientes: number
 }
 
+export interface PendientesCierreCurso {
+  pendientes: EvaluacionPendienteDeCierre[]
+  ponderaciones: {
+    seccion: number
+    sumaPonderaciones: number
+    faltan: number
+    sobran: number
+  }[]
+}
+
 // Respuesta de GET /api/cursos/:id (GES-08).
 export interface CursoDetalle {
   id: string
