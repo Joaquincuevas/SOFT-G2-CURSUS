@@ -2,7 +2,7 @@ import type {
   IndicadoresFacultad,
   MetricasConsolidadas,
   MetricasUniversidad,
-  PeriodoMetrica,
+  PeriodoDisponible,
   ResumenUniversidad,
 } from '@cursus/shared'
 import {
@@ -34,17 +34,7 @@ export function Indicadores() {
 
   return (
     <section className="indicadores" aria-label="Indicadores consolidados">
-      {/* MET-03 agrega el filtro: hoy siempre es el período activo. */}
-      <label className="indicadores__periodo">
-        Período
-        <select disabled aria-label="Período" value="activo">
-          <option value="activo">
-            {metricas
-              ? periodos(metricas)
-              : 'Período activo de cada universidad'}
-          </option>
-        </select>
-      </label>
+      <SelectorPeriodo periodo={periodo} />
       {metricas === undefined ? (
         <Cargando texto="Cargando indicadores…" />
       ) : metricas === null ? (
@@ -93,7 +83,7 @@ export function Indicadores() {
 // niveles (consolidado, universidades y facultades) piden el mismo. Sin él, es
 // el período activo. MET-03 agrega el selector que lo escribe. Un valor que no
 // tiene la forma AAAA-S no se envía: se avisa (valido = false).
-const FORMATO_PERIODO = /^\d{4}-\d{1,2}$/
+const FORMATO_PERIODO = /^\d{4}-[12]$/
 
 function usePeriodoDeLaUrl() {
   const [params] = useSearchParams()
@@ -101,6 +91,54 @@ function usePeriodoDeLaUrl() {
   const consulta = periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''
   const valido = periodo === null || FORMATO_PERIODO.test(periodo)
   return { periodo, valido, consulta, sufijo: consulta }
+}
+
+function SelectorPeriodo({ periodo }: { periodo: string | null }) {
+  const [periodosDisponibles, recargar] = useDatos<PeriodoDisponible[]>(
+    '/api/metricas/periodos',
+  )
+  const [, fijarParams] = useSearchParams()
+  const activo = periodosDisponibles?.find((p) => p.activo)
+  const valor = periodo ?? (activo ? `${activo.anio}-${activo.semestre}` : '')
+  const cambiar = (valorNuevo: string) => {
+    if (valorNuevo) fijarParams({ periodo: valorNuevo })
+    else fijarParams({})
+  }
+
+  if (periodosDisponibles === null) {
+    return (
+      <div className="indicadores__periodo" role="alert">
+        <span>No pudimos cargar los períodos.</span>{' '}
+        <button type="button" onClick={recargar}>
+          Reintentar
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <label className="indicadores__periodo">
+      Período
+      <select
+        aria-label="Período"
+        value={valor}
+        disabled={periodosDisponibles === undefined || periodosDisponibles.length === 0}
+        onChange={(e) => cambiar(e.target.value)}
+      >
+        {periodosDisponibles === undefined ? (
+          <option value="">Cargando períodos…</option>
+        ) : periodosDisponibles.length === 0 ? (
+          <option value="">No hay períodos disponibles</option>
+        ) : (
+          periodosDisponibles.map((p) => (
+            <option key={`${p.anio}-${p.semestre}`} value={`${p.anio}-${p.semestre}`}>
+              {p.anio}-{p.semestre}{p.activo ? ' (activo)' : ''}
+            </option>
+          ))
+        )}
+      </select>
+    </label>
+  )
 }
 
 // El 400 del período no es "la universidad no existe": se dice qué falló y se
@@ -220,15 +258,7 @@ function FacultadesUniversidad() {
           </li>
         </ol>
       </nav>
-      {/* MET-03 agrega el filtro: hoy muestra el período de la URL. */}
-      <label className="indicadores__periodo">
-        Período
-        <select disabled aria-label="Período" value="actual">
-          <option value="actual">
-            {datos ? etiquetaPeriodo(datos.periodo) : 'Período activo'}
-          </option>
-        </select>
-      </label>
+      <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
         <Cargando texto="Cargando facultades…" />
       ) : datos === null ? (
@@ -291,9 +321,6 @@ function FacultadesUniversidad() {
   )
 }
 
-const etiquetaPeriodo = (p: PeriodoMetrica | null) =>
-  p ? `${p.anio}-${p.semestre}` : 'Sin período en esta universidad'
-
 function Tarjeta({
   titulo,
   valor,
@@ -330,15 +357,3 @@ function Tarjeta({
 
 const plural = (n: number, nombre: string) =>
   `${n} ${nombre}${n === 1 ? '' : 's'}`
-
-// "2026-2 (Norte, Sur)" o, si difieren, "Norte 2026-2 · Sur 2026-1".
-function periodos({ periodos }: MetricasConsolidadas): string {
-  if (periodos.length === 0) return 'Sin período activo'
-  const etiquetas = new Set(periodos.map((p) => `${p.anio}-${p.semestre}`))
-  if (etiquetas.size === 1) {
-    return `${[...etiquetas][0]} (${periodos.map((p) => p.universidad).join(', ')})`
-  }
-  return periodos
-    .map((p) => `${p.universidad} ${p.anio}-${p.semestre}`)
-    .join(' · ')
-}
