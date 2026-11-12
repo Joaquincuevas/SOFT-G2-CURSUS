@@ -7,6 +7,10 @@ import type { ArchivoResumen } from './archivos.js'
 export const LARGO_TITULO_ACTIVIDAD = 100
 export const LARGO_INSTRUCCIONES_ACTIVIDAD = 2000
 
+export interface SilaboVigente {
+  silabo: Pick<VersionSilabo, 'version' | 'subidoEn'> | null
+}
+
 export const MAX_TAMANO_SILABO_BYTES = 10 * 1024 * 1024
 
 export interface VersionSilabo {

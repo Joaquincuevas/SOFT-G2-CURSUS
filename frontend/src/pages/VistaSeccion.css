@@ -36,6 +36,38 @@
   color: var(--color-text-primary);
 }
 
+.vista-seccion__silabo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-inline-start: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+
+.vista-seccion__silabo-descarga {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-background);
+  font: var(--font-button);
+  cursor: pointer;
+}
+
+.vista-seccion__silabo-descarga:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.vista-seccion__silabo-error {
+  margin: 0;
+  color: var(--color-error);
+}
+
 .vista-seccion__equipo {
   display: grid;
   grid-template-columns: max-content 1fr;

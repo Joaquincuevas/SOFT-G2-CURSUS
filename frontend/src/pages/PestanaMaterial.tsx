@@ -53,7 +53,11 @@ async function motivoDe(res: Response): Promise<string | null> {
 // materiales; el profesor, el ayudante y el alumno los ven y los descargan. El
 // material es del curso: aquí se ven también los que subió el profesor de otra
 // sección.
-export function PestanaMaterial({ seccionId, rol }: PropsPestana) {
+export function PestanaMaterial({
+  seccionId,
+  rol,
+  alPublicarSilabo,
+}: PropsPestana) {
   const { fetchConSesion } = useAuth()
   const ruta = `/api/espacio/secciones/${seccionId}`
   const [materiales, recargar] = useDatos<Material[]>(`${ruta}/materiales`)
@@ -87,7 +91,11 @@ export function PestanaMaterial({ seccionId, rol }: PropsPestana) {
 
   return (
     <section className="material" aria-label="Materiales del curso">
-      <AdministrarSilabo ruta={ruta} puedePublicar={rol === 'PROFESOR'} />
+      <AdministrarSilabo
+        ruta={ruta}
+        puedePublicar={rol === 'PROFESOR'}
+        alPublicar={alPublicarSilabo}
+      />
       <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
       {rol === 'PROFESOR' && (
         <FormularioMaterial ruta={ruta} alSubir={recargar} />

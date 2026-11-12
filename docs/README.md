@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [MAT-03 · Sílabo vigente en la vista del curso](mat-03-silabo-vigente.md)
 - [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)

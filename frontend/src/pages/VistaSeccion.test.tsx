@@ -1,10 +1,11 @@
 import type { AlumnosEspacio, Rol, SeccionResumen } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const RUTA = '/api/espacio/secciones/seccion-1/resumen'
 const VISTA = '/mis-cursos/secciones/seccion-1'
+const SILABO = '/api/espacio/secciones/seccion-1/silabo-vigente'
 
 const RESUMEN: SeccionResumen = {
   id: 'seccion-1',
@@ -30,6 +31,78 @@ const RESUMEN: SeccionResumen = {
 
 const vista = async () =>
   within(await screen.findByRole('region', { name: 'Vista del curso' }))
+
+describe('sílabo vigente (MAT-03)', () => {
+  test('destaca el PDF en el curso y pide una URL al descargar', async () => {
+    const url = 'https://archivos.test/silabo.pdf?firma=prueba'
+    const destinos: string[] = []
+    const clic = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(function (this: HTMLAnchorElement) {
+        destinos.push(this.href)
+      })
+    const pedir = vi.fn(() => ({ url, expiraEn: '2026-11-10T13:00:00Z' }))
+    try {
+      await renderConSesion('ALUMNO', VISTA, {
+        [RUTA]: () => RESUMEN,
+        [SILABO]: () => ({
+          silabo: { version: 2, subidoEn: '2026-11-09T15:00:00Z' },
+        }),
+        [`${SILABO}/descarga`]: pedir,
+      })
+      const tarjeta = within(
+        await screen.findByRole('region', { name: 'Sílabo del curso' }),
+      )
+      expect(
+        await tarjeta.findByText('Versión vigente 2 · PDF'),
+      ).toBeInTheDocument()
+      expect(pedir).not.toHaveBeenCalled()
+      fireEvent.click(tarjeta.getByRole('button', { name: 'Descargar sílabo' }))
+      await tarjeta.findByRole('button', { name: 'Descargar sílabo' })
+      expect(pedir).toHaveBeenCalledTimes(1)
+      expect(destinos).toEqual([url])
+    } finally {
+      clic.mockRestore()
+    }
+  })
+
+  test('muestra un aviso cuando todavía no se ha publicado el sílabo', async () => {
+    await renderConSesion('ALUMNO', VISTA, { [RUTA]: () => RESUMEN })
+    const tarjeta = within(
+      await screen.findByRole('region', { name: 'Sílabo del curso' }),
+    )
+    expect(
+      await tarjeta.findByText(
+        'Aún no hay un sílabo publicado para este curso.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      tarjeta.queryByRole('button', { name: 'Descargar sílabo' }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('permite reintentar cuando el servidor no entrega la descarga', async () => {
+    await renderConSesion('ALUMNO', VISTA, {
+      [RUTA]: () => RESUMEN,
+      [SILABO]: () => ({
+        silabo: { version: 1, subidoEn: '2026-11-09T15:00:00Z' },
+      }),
+      [`${SILABO}/descarga`]: () => json({}, 503),
+    })
+    const tarjeta = within(
+      await screen.findByRole('region', { name: 'Sílabo del curso' }),
+    )
+    fireEvent.click(
+      await tarjeta.findByRole('button', { name: 'Descargar sílabo' }),
+    )
+    expect(await tarjeta.findByRole('alert')).toHaveTextContent(
+      'No pudimos descargar el sílabo.',
+    )
+    expect(
+      tarjeta.getByRole('button', { name: 'Descargar sílabo' }),
+    ).toBeEnabled()
+  })
+})
 
 describe('vista de la sección (ESP-04)', () => {
   test.each<[Rol, string]>([
