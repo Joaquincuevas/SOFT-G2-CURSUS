@@ -3,6 +3,13 @@
 Documentación del proyecto:
 
 - [MAT-03 · Sílabo vigente en la vista del curso](mat-03-silabo-vigente.md)
+- [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
+
+- [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
+
+- [MAT-09: entrega y reemplazo de informes con plazo](mat-09-entrega-informe.md)
+
+- [NOT-15: recorrección de notas publicadas y auditoría](not-15-recorreccion-notas.md)
 - [NOT-16 · Historial de cambios de una nota y guía de revisión](not-16-historial-nota.md)
 - [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
@@ -21,11 +28,14 @@ Documentación del proyecto:
 - [NOT-10: el profesor ve las evaluaciones pendientes de revisión y guía de revisión](not-10-pendientes-revision.md)
 - [NOT-11: el profesor aprueba y publica las notas y guía de revisión](not-11-aprobar-publicar.md)
 - [NOT-12: el profesor devuelve un envío de notas al ayudante y guía de revisión](not-12-devolver-envio.md)
+- [NOT-13: el alumno ve sus notas publicadas y guía de revisión](not-13-ver-notas-publicadas.md)
 - [ANU-05: edición de anuncios por su autor e historial](anu-05-editar-anuncio.md)
 - [NOT-05: ingreso de notas del ayudante como propuesta y guía de revisión](not-05-ingreso-notas.md)
 - [MT-04: superadmin con acceso a todas las universidades y guía de revisión](mt-04-superadmin.md) (decisión en el [ADR 0002](adr/0002-superadmin-con-acceso-a-todas-las-universidades.md))
 - [ANU-04: anuncios nuevos del alumno, contador y guía de revisión](anu-04-anuncios-nuevos.md)
+- [MAT-04: el profesor sube un material con su categoría y guía de revisión](mat-04-subir-material.md)
 - [MAT-08: actividades de entrega con plazo y guía de revisión](mat-08-actividades-entrega.md)
+- [MAT-02: sílabo PDF del curso con historial de versiones](mat-02-silabo-curso.md)
 - [ANU-03: lectura de anuncios del alumno por fecha y guía de revisión](anu-03-lectura-anuncios-alumno.md)
 - [ANU-02: anuncios dirigidos a una sección y guía de revisión](anu-02-anuncios-seccion.md)
 - [ASI-02: marcar presente o ausente a cada alumno de una clase y guía de revisión](asi-02-marcar-asistencia.md)

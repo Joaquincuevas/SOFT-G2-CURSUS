@@ -22,7 +22,7 @@ function mensajeDe(cuerpo: { message?: unknown }): string | null {
 }
 
 // GES-25: profesores de una sección. Lista los asignados, agrega otro y quita
-// uno con motivo (queda en el historial, GES-14). onCambio recibe los profesores
+// uno con motivo (queda en el historial, GES-14). onCambio recibe los nombres
 // de los asignados después de cada cambio, para la tabla del curso.
 //
 // Con anterior (el curso llegó sin profesores: un backend anterior a GES-25
@@ -39,7 +39,7 @@ export function ProfesoresSeccionDialogo({
   seccionId: string
   numero: number
   anterior?: ProfesorOpcion | null
-  onCambio: (profesores: ProfesorResumen[]) => void
+  onCambio: (profesores: string[]) => void
   onCerrar: () => void
 }) {
   const { fetchConSesion } = useAuth()
@@ -81,7 +81,7 @@ export function ProfesoresSeccionDialogo({
 
   function actualizar(profesores: ProfesorResumen[], texto: string) {
     setAsignados(profesores)
-    onCambio(profesores)
+    onCambio(profesores.map((p) => p.nombre))
     setAviso(texto)
   }
 

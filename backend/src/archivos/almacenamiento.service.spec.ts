@@ -1,4 +1,5 @@
 import { tipoDeArchivo } from '@cursus/shared'
+import { S3Client } from '@aws-sdk/client-s3'
 import { ServiceUnavailableException } from '@nestjs/common'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -61,6 +62,25 @@ describe('configuracionDesde', () => {
 })
 
 describe('AlmacenamientoService', () => {
+  it('conserva la versión exacta reportada por S3 para acreditar una entrega', async () => {
+    const consulta = vi.spyOn(S3Client.prototype, 'send').mockReturnValueOnce(
+      Promise.resolve({
+        $metadata: {},
+        ContentLength: 100,
+        ContentType: 'application/pdf',
+        VersionId: 'version-aceptada',
+      }) as never,
+    )
+    try {
+      expect(await servicioCon(ENTORNO).objetoSubido('u/s/a')).toEqual({
+        tamano: 100,
+        tipo: 'application/pdf',
+        version: 'version-aceptada',
+      })
+    } finally {
+      consulta.mockRestore()
+    }
+  })
   it('sin bucket responde 503 en vez de firmar', async () => {
     vi.stubEnv('S3_BUCKET', '')
     const servicio = new AlmacenamientoService()

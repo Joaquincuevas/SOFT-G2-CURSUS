@@ -11,6 +11,7 @@ import {
 import { AlmacenamientoService } from '../archivos/almacenamiento.service.js'
 import {
   BaseDeDatos,
+  fijarUsuario,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 
@@ -19,6 +20,7 @@ interface ArchivoSilabo {
   subido_en: Date
   clave: string
   nombre: string
+  version_objeto: string
 }
 
 @Injectable()
@@ -52,6 +54,7 @@ export class SilaboVigenteService {
     const { url, expiraEn } = await this.almacenamiento.firmarDescarga(
       fila.clave,
       fila.nombre,
+      fila.version_objeto,
     )
     return { url, expiraEn: expiraEn.toISOString() }
   }
@@ -68,21 +71,12 @@ export class SilaboVigenteService {
       throw new ForbiddenException()
     }
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
-      // Durante el despliegue de MAT-02 puede haber bases sin el vínculo
-      // entre el sílabo y el archivo de MAT-01.
-      const [{ disponible }] = await bd.query<{ disponible: boolean }>(`
-        SELECT EXISTS (
-          SELECT 1 FROM pg_attribute
-           WHERE attrelid = to_regclass('public.silabo')
-             AND attname = 'archivo_id' AND attnum > 0 AND NOT attisdropped
-        ) AS disponible
-      `)
-      if (!disponible) return null
+      await fijarUsuario(bd, usuarioId)
 
       // El curso comparte el PDF entre sus secciones. Se comprueba la
       // pertenencia a la sección solicitada, no a la que subió el archivo.
       const [fila] = await bd.query<ArchivoSilabo>(
-        `SELECT si.version, a.subido_at AS subido_en, a.clave, a.nombre
+        `SELECT si.version, si.subido_en, si.version_objeto, a.clave, a.nombre
            FROM seccion s
            JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
            JOIN silabo si ON si.curso_id = c.id AND si.universidad_id = c.universidad_id

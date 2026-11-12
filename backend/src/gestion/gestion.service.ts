@@ -25,6 +25,7 @@ import { hash } from 'argon2'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarMotivo,
 } from '../database/base-de-datos.service.js'
 import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
@@ -467,8 +468,10 @@ export class GestionService {
     responsableId: string,
     seccionId: string,
     alumnoId: string,
+    motivo?: string,
   ): Promise<AlumnoQuitado> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      if (motivo) await fijarMotivo(bd, motivo)
       const universidad = contexto.universidadId
       const [seccion] = await bd.query<{ id: string }>(
         `SELECT s.id ${SECCION_VIGENTE}
@@ -488,7 +491,7 @@ export class GestionService {
       }>(
         `WITH quitada AS (
            UPDATE inscripcion
-              SET archived_at = now(), archivada_por = $4
+              SET archived_at = now(), archivada_por = $4, motivo_retiro = $5
             WHERE universidad_id = $1 AND seccion_id = $2 AND usuario_id = $3
               AND archived_at IS NULL
            RETURNING usuario_id, archived_at, archivada_por
@@ -500,7 +503,7 @@ export class GestionService {
            JOIN usuario u ON u.id = q.usuario_id
            -- RLS no deja ver al superadmin, que no tiene universidad (MT-04).
            LEFT JOIN usuario r ON r.id = q.archivada_por`,
-        [universidad, seccionId, alumnoId, responsableId],
+        [universidad, seccionId, alumnoId, responsableId, motivo ?? null],
       )
       if (!fila) {
         throw new NotFoundException(
@@ -580,6 +583,7 @@ export class GestionService {
     usuarioId: string,
     seccionId: string,
     datos: AgregarAlumnoDto,
+    alumnoEsperadoId?: string,
   ): Promise<AlumnoAgregado> {
     try {
       return await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
@@ -598,6 +602,11 @@ export class GestionService {
             WHERE universidad_id = $1 AND lower(correo) = $2`,
           [universidad, datos.correo],
         )
+        // GES-26 selecciona una cuenta por id: no inscribir otra persona si
+        // su correo cambió entre la búsqueda y la confirmación.
+        if (alumnoEsperadoId && alumno?.id !== alumnoEsperadoId) {
+          throw new NotFoundException('El alumno cambió. Vuelve a buscarlo.')
+        }
         if (alumno && alumno.rol !== 'ALUMNO') {
           throw conMotivo(
             new ConflictException(

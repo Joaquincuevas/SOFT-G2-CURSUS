@@ -221,7 +221,8 @@ test('aprobada solo permite consultar las notas', async () => {
   expect(detalle.queryByRole('note')).not.toBeInTheDocument()
 })
 
-test.each<Rol>(['ALUMNO', 'PROFESOR'])(
+// El alumno ve MisNotas en vez de este listado (NOT-13, MisNotas.test.tsx).
+test.each<Rol>(['PROFESOR'])(
   '%s no ve los estados ni comentarios del listado del ayudante',
   async (rol) => {
     const tabla = await abrir({ rol })

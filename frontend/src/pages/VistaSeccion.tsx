@@ -12,6 +12,7 @@ import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
 import { SilaboDelCurso } from './SilaboDelCurso'
+import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
 
 // Pestañas del espacio de la sección que agrega la Fase 4.
@@ -36,6 +37,7 @@ const CONTENIDO: Partial<Record<Pestana, ComponentType<PropsPestana>>> = {
   Notas: PestanaNotas,
   Anuncios: PestanaAnuncios,
   Entregas: PestanaEntregas,
+  Material: PestanaMaterial,
 }
 
 // ESP-04 (RE-04): vista general de una sección, la misma para profesor,

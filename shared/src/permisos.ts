@@ -31,9 +31,11 @@ export type SujetoTabla =
   | 'Anuncio'
   | 'Evaluacion'
   | 'Actividad'
+  | 'Entrega'
   | 'Nota'
   | 'RevisionNotas'
   | 'Archivo'
+  | 'Material'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -164,7 +166,10 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // propuesta (el controlador exige además que sea ayudante de esa sección) y
   // las leen el profesor y el Director, este en solo lectura. El alumno y el
   // Administrativo no reciben nada. Nadie las borra.
-  if (usuario.rol === 'AYUDANTE') can('update', 'Nota')
+  // NOT-15: el profesor solo modifica publicadas mediante recorrección; el
+  // PUT de propuestas y el envío siguen exigiendo AYUDANTE en el controlador.
+  if (usuario.rol === 'AYUDANTE' || usuario.rol === 'PROFESOR')
+    can('update', 'Nota')
   if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
 
   // NOT-11 y NOT-12: revisión de las notas de una evaluación
@@ -181,6 +186,18 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   // equipo docente. El Administrativo no recibe nada. Nadie los borra.
   if (SUBEN_ARCHIVOS.includes(usuario.rol)) can(['create', 'read'], 'Archivo')
   if (usuario.rol === 'DIRECTOR') can('read', 'Archivo')
+
+  // MAT-04 y MAT-06: materiales de un curso. Los sube el profesor (el
+  // controlador exige además que sea el profesor de esa sección). Los listan y
+  // descargan los integrantes de la sección y el Director, este en solo
+  // lectura. El Administrativo no recibe nada. Nadie los borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Material')
+  if (SUBEN_ARCHIVOS.includes(usuario.rol) || usuario.rol === 'DIRECTOR')
+    can('read', 'Material')
+
+  // MAT-09: solo el alumno consulta y confirma su entrega. La descarga del
+  // equipo docente se habilita en MAT-10.
+  if (usuario.rol === 'ALUMNO') can(['create', 'read'], 'Entrega')
 
   return build()
 }

@@ -22,6 +22,8 @@ export interface SubidaFirmada {
 export interface ObjetoSubido {
   tamano: number
   tipo: string | undefined
+  // MAT-09 fija esta versión para que otra subida no altere lo entregado.
+  version?: string
 }
 
 // Configuración del bucket desde el entorno. En AWS la define cursus.yml y las
@@ -112,6 +114,7 @@ export class AlmacenamientoService {
   async firmarDescarga(
     clave: string,
     nombre: string,
+    version?: string,
   ): Promise<{ url: string; expiraEn: Date }> {
     const { cliente, bucket } = this.conectado()
     const url = await getSignedUrl(
@@ -119,11 +122,28 @@ export class AlmacenamientoService {
       new GetObjectCommand({
         Bucket: bucket,
         Key: clave,
+        ...(version && { VersionId: version }),
         ResponseContentDisposition: disposicionDescarga(nombre),
       }),
       { expiresIn: SEGUNDOS_DESCARGA },
     )
     return { url, expiraEn: new Date(Date.now() + SEGUNDOS_DESCARGA * 1000) }
+  }
+
+  async tieneCabeceraPdf(clave: string, version: string): Promise<boolean> {
+    const { cliente, bucket } = this.conectado()
+    const objeto = await cliente.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: clave,
+        VersionId: version,
+        Range: 'bytes=0-4',
+      }),
+    )
+    const bytes = await objeto.Body?.transformToByteArray()
+    return (
+      bytes !== undefined && Buffer.from(bytes).equals(Buffer.from('%PDF-'))
+    )
   }
 
   // Tamaño y tipo del objeto ya subido, o null si todavía no está en S3.
@@ -133,7 +153,11 @@ export class AlmacenamientoService {
       const objeto = await cliente.send(
         new HeadObjectCommand({ Bucket: bucket, Key: clave }),
       )
-      return { tamano: objeto.ContentLength ?? 0, tipo: objeto.ContentType }
+      return {
+        tamano: objeto.ContentLength ?? 0,
+        tipo: objeto.ContentType,
+        ...(objeto.VersionId ? { version: objeto.VersionId } : {}),
+      }
     } catch (error) {
       if (error instanceof NotFound) return null
       throw error

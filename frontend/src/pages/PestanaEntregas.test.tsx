@@ -177,7 +177,9 @@ describe('pestaña Entregas (MAT-08)', () => {
       expect(
         panel.queryByRole('form', { name: 'Nueva actividad' }),
       ).not.toBeInTheDocument()
-      expect(panel.queryByRole('button')).not.toBeInTheDocument()
+      expect(
+        panel.queryByRole('button', { name: 'Crear actividad' }),
+      ).not.toBeInTheDocument()
     },
   )
 

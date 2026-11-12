@@ -371,6 +371,8 @@ describe('contrato del schema', () => {
         'asistencia_cambio',
         // Sin filas en el seed: su RLS la prueba test/materiales (MAT-08).
         'actividad',
+        // MAT-09: versiones de solo adición; prueba test/materiales/entregas.
+        'entrega',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-05).
         'nota',
         // Sin filas en el seed: su RLS la prueba test/notas (NOT-07).
@@ -381,6 +383,9 @@ describe('contrato del schema', () => {
         'superadmin_cambio',
         // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).
         'archivo',
+        // Sin filas en el seed: su RLS la prueba test/materiales (MAT-04).
+        'material',
+        'silabo',
       ].sort(),
     )
     for (const tabla of tablas) {
@@ -401,6 +406,8 @@ describe('contrato del schema', () => {
                     'anuncio_cambio',
                     'asistencia_cambio',
                     'lectura_anuncio',
+                    'entrega',
+                    'silabo',
                   ].includes(tabla.tabla)
                 ? ['INSERT', 'SELECT']
                 : ['INSERT', 'SELECT', 'UPDATE'],
@@ -437,7 +444,8 @@ describe('contrato del schema', () => {
 
   // Estas políticas requieren que la API fije la identidad de sesión:
   // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
-  // archivos propios y NOT-03 para editar evaluaciones.
+  // archivos propios, MAT-04 para registrar materiales, NOT-03 para editar
+  // evaluaciones y NOT-13 para que el alumno lea sus notas publicadas.
   it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
     const politicas = await bd.query<
       { tabla: string; politica: string; comando: string }[]
@@ -460,11 +468,38 @@ describe('contrato del schema', () => {
         comando: 'UPDATE',
       },
       {
+        tabla: 'entrega',
+        politica: 'pol_entrega_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'entrega',
+        politica: 'pol_entrega_lectura',
+        comando: 'SELECT',
+      },
+      {
         tabla: 'evaluacion',
         politica: 'pol_evaluacion_modificacion',
         comando: 'UPDATE',
       },
+      {
+        tabla: 'material',
+        politica: 'pol_material_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'material',
+        politica: 'pol_material_lectura',
+        comando: 'SELECT',
+      },
+      {
+        tabla: 'material',
+        politica: 'pol_material_modificacion',
+        comando: 'UPDATE',
+      },
+      { tabla: 'nota', politica: 'pol_nota_lectura_alumno', comando: 'SELECT' },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
+      { tabla: 'nota', politica: 'pol_nota_recorreccion', comando: 'UPDATE' },
       {
         tabla: 'revision_notas',
         politica: 'pol_revision_notas_aprobacion',
@@ -475,6 +510,8 @@ describe('contrato del schema', () => {
         politica: 'pol_revision_notas_devolucion',
         comando: 'UPDATE',
       },
+      { tabla: 'silabo', politica: 'pol_silabo_insercion', comando: 'INSERT' },
+      { tabla: 'silabo', politica: 'pol_silabo_lectura', comando: 'SELECT' },
     ])
   })
 

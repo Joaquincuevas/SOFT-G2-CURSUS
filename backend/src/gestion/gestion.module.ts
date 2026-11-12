@@ -12,9 +12,12 @@ import { AsignacionesService } from './asignaciones.service.js'
 
 import { ProfesoresController } from './profesores.controller.js'
 import { ProfesoresService } from './profesores.service.js'
+import { IntegrantesController } from './integrantes.controller.js'
+import { IntegrantesService } from './integrantes.service.js'
 
 @Module({
   controllers: [
+    IntegrantesController,
     GestionController,
     AyudantesController,
     HorariosController,
@@ -22,6 +25,7 @@ import { ProfesoresService } from './profesores.service.js'
     ProfesoresController,
   ],
   providers: [
+    IntegrantesService,
     GestionService,
     EdicionCursoService,
     CargaAlumnosService,
