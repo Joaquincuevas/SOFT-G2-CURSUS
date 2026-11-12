@@ -653,6 +653,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     })
     expect(histograma).toBeInTheDocument()
     expect(histograma).toHaveAccessibleName(/aprobación.*4,0/i)
+    // El histograma usa clases propias: las `indicadores__barra*` son de la
+    // comparación de MET-02 y su CSS no debe alcanzarlo (ni al revés).
+    expect(
+      histograma.querySelectorAll('.indicadores__histograma-barra'),
+    ).toHaveLength(6)
+    expect(histograma.querySelector('[class*="indicadores__barra"]')).toBeNull()
     // La línea de aprobación se rotula con la nota mínima de la API.
     expect(screen.getByText('Aprobación 4,0')).toBeInTheDocument()
     expect(
