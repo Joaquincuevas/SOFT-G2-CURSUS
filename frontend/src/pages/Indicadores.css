@@ -110,3 +110,85 @@
   font-size: 0.875rem;
   color: var(--color-text-secondary);
 }
+
+/* MET-02: comparación entre universidades, en tabla y en gráfico de barras. */
+.indicadores__tabla {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.indicadores__tabla table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.indicadores__tabla caption {
+  padding: 0.75rem 1rem 0;
+  text-align: left;
+  font-weight: 600;
+}
+
+.indicadores__tabla th,
+.indicadores__tabla td {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.indicadores__tabla tbody tr:last-child th,
+.indicadores__tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.indicadores__grafico {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.indicadores__barras {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.indicadores__barra {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr minmax(6rem, auto);
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.indicadores__barra-pista {
+  height: 1rem;
+  border-radius: 0.5rem;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.indicadores__barra-relleno {
+  display: block;
+  height: 100%;
+  border-radius: 0.5rem;
+  background: var(--color-primary);
+}
+
+.indicadores__barra-valor {
+  font-weight: 600;
+  text-align: right;
+}
+
+.indicadores__barra-valor--sin-datos {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}

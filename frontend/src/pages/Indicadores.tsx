@@ -5,6 +5,7 @@ import type {
   PeriodoDisponible,
   ResumenUniversidad,
 } from '@cursus/shared'
+import { useState } from 'react'
 import {
   Link,
   Navigate,
@@ -74,6 +75,12 @@ export function Indicadores() {
           </p>
         </>
       )}
+      <Link
+        className="indicadores__enlace"
+        to={`/indicadores/comparar${sufijo}`}
+      >
+        Comparar universidades
+      </Link>
       <ListaUniversidades consulta={consulta} sufijo={sufijo} />
     </section>
   )
@@ -235,12 +242,14 @@ function ResumenEnLinea({
   )
 }
 
-// Subrutas de /indicadores: el consolidado y, debajo, una universidad con sus
-// facultades (MET-04).
+// Subrutas de /indicadores: el consolidado, la comparación entre
+// universidades (MET-02) y, debajo, una universidad con sus facultades
+// (MET-04).
 export function RutasIndicadores() {
   return (
     <Routes>
       <Route index element={<Indicadores />} />
+      <Route path="comparar" element={<CompararUniversidades />} />
       <Route path="universidades/:id" element={<FacultadesUniversidad />} />
       <Route path="*" element={<Navigate to="/indicadores" replace />} />
     </Routes>
@@ -328,6 +337,165 @@ function FacultadesUniversidad() {
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  )
+}
+
+// MET-02: los tres indicadores de cada universidad lado a lado, en tabla y en
+// un gráfico de barras del indicador elegido. Usa la misma consulta que la
+// lista de universidades (MET-04), así que solo el Director la obtiene (403
+// para los demás roles) y respeta el período de la URL.
+const INDICADORES = {
+  aprobacion: { titulo: 'Tasa de aprobación', unidad: ' %', decimales: 1 },
+  promedio: { titulo: 'Promedio', unidad: '', decimales: 2 },
+  asistencia: { titulo: 'Asistencia', unidad: ' %', decimales: 2 },
+} as const
+
+type IndicadorComparado = keyof typeof INDICADORES
+
+// Largo de la barra: los porcentajes sobre 100 y el promedio sobre la escala
+// de notas 1,0 a 7,0 (NOT-06): un 1,0 es la barra vacía y un 7,0 la llena.
+function proporcion(indicador: IndicadorComparado, valor: number) {
+  const fraccion =
+    indicador === 'promedio' ? (valor - 1) / (7 - 1) : valor / 100
+  return Math.min(Math.max(fraccion, 0), 1)
+}
+
+const formatear = (indicador: IndicadorComparado, valor: number | null) => {
+  if (valor === null) return SIN_DATOS
+  const { unidad, decimales } = INDICADORES[indicador]
+  return `${valor.toLocaleString('es-CL', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  })}${unidad}`
+}
+
+const nombreDelPeriodo = (periodo: ResumenUniversidad['periodo']) =>
+  periodo ? `${periodo.anio}-${periodo.semestre}` : 'Sin período'
+
+function CompararUniversidades() {
+  const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
+  const [universidades, recargar] = useDatos<ResumenUniversidad[]>(
+    valido ? `/api/metricas/universidades${consulta}` : null,
+  )
+  const [graficado, fijarGraficado] = useState<IndicadorComparado>('aprobacion')
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
+
+  return (
+    <section
+      className="indicadores"
+      aria-label="Comparación entre universidades"
+    >
+      <nav className="indicadores__migas" aria-label="Ruta de navegación">
+        <ol>
+          <li>
+            <Link to={`/indicadores${sufijo}`}>Indicadores</Link>
+          </li>
+          <li aria-current="page">Comparar universidades</li>
+        </ol>
+      </nav>
+      <SelectorPeriodo periodo={periodo} />
+      {universidades === undefined ? (
+        <Cargando texto="Cargando universidades…" />
+      ) : universidades === null ? (
+        <ErrorEstado
+          mensaje="No pudimos cargar las universidades."
+          onReintentar={recargar}
+        />
+      ) : universidades.length === 0 ? (
+        <p className="indicadores__alcance">No hay universidades.</p>
+      ) : (
+        <>
+          <div className="indicadores__tabla">
+            <table>
+              <caption>Indicadores por universidad</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Universidad</th>
+                  <th scope="col">Período</th>
+                  {Object.values(INDICADORES).map(({ titulo }) => (
+                    <th key={titulo} scope="col">
+                      {titulo}
+                    </th>
+                  ))}
+                  <th scope="col">Alumnos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {universidades.map((u) => (
+                  <tr key={u.id}>
+                    <th scope="row">{u.nombre}</th>
+                    <td>{nombreDelPeriodo(u.periodo)}</td>
+                    {(Object.keys(INDICADORES) as IndicadorComparado[]).map(
+                      (clave) => (
+                        <td key={clave}>{formatear(clave, u[clave].valor)}</td>
+                      ),
+                    )}
+                    <td>{u.alumnos}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <section
+            className="indicadores__grafico"
+            aria-label="Gráfico comparativo"
+          >
+            <label className="indicadores__periodo">
+              Indicador a graficar
+              <select
+                aria-label="Indicador a graficar"
+                value={graficado}
+                onChange={(e) =>
+                  fijarGraficado(e.target.value as IndicadorComparado)
+                }
+              >
+                {(Object.keys(INDICADORES) as IndicadorComparado[]).map(
+                  (clave) => (
+                    <option key={clave} value={clave}>
+                      {INDICADORES[clave].titulo}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <ul
+              className="indicadores__barras"
+              aria-label={`${INDICADORES[graficado].titulo} por universidad`}
+            >
+              {universidades.map((u) => {
+                const valor = u[graficado].valor
+                return (
+                  <li key={u.id} className="indicadores__barra">
+                    <span className="indicadores__barra-nombre">
+                      {u.nombre}
+                    </span>
+                    <span className="indicadores__barra-pista" aria-hidden>
+                      {valor !== null && (
+                        <span
+                          className="indicadores__barra-relleno"
+                          style={{
+                            width: `${(proporcion(graficado, valor) * 100).toFixed(2)}%`,
+                          }}
+                        />
+                      )}
+                    </span>
+                    <span
+                      className={
+                        valor === null
+                          ? 'indicadores__barra-valor indicadores__barra-valor--sin-datos'
+                          : 'indicadores__barra-valor'
+                      }
+                    >
+                      {formatear(graficado, valor)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        </>
       )}
     </section>
   )
