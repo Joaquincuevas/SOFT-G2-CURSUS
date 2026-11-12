@@ -277,6 +277,36 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     )
   })
 
+  // Un enlace directo puede traer la universidad de la URL distinta a la de la
+  // facultad: el breadcrumb vuelve a la universidad que muestra, la de la API.
+  test('el breadcrumb vuelve a la universidad de la facultad y no a la de la URL', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-sur?periodo=2026-1',
+      {
+        '/api/metricas/facultades/f-sur/carreras': () => ({
+          ...CARRERAS,
+          universidad: { id: 'u-sur', nombre: 'Universidad Demo Sur' },
+          facultad: { id: 'f-sur', nombre: 'Facultad de Sur' },
+        }),
+      },
+    )
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    const enlace = await migas.findByRole('link', {
+      name: 'Universidad Demo Sur',
+    })
+    expect(enlace).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
+    )
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+  })
+
   test('carreras: vacío, error con reintento y facultad inexistente', async () => {
     await renderConSesion(
       'DIRECTOR',
