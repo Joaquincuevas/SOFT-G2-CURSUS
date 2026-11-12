@@ -12,6 +12,8 @@ import {
   type DescargaArchivo,
   type Material,
   type SubidaArchivo,
+  type VersionMaterial,
+  ZONA_HORARIA_UNIVERSIDAD,
 } from '@cursus/shared'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
@@ -30,6 +32,18 @@ const ACEPTADAS = EXTENSIONES.map((extension) => `.${extension}`).join(',')
 // corren.
 type Etapa = 'pidiendo' | 'subiendo' | 'confirmando' | 'registrando'
 
+// Fecha y hora en la zona de la universidad (por ejemplo, 14-11-2026, 23:59).
+const fechaHora = (iso: string) =>
+  new Date(iso).toLocaleString('es-CL', {
+    timeZone: ZONA_HORARIA_UNIVERSIDAD,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+
 // Falla un paso del flujo. El mensaje es para mostrar al profesor.
 class ErrorDeFlujo extends Error {}
 
@@ -47,6 +61,56 @@ async function motivoDe(res: Response): Promise<string | null> {
   const mensaje = cuerpo?.message
   if (typeof mensaje === 'string') return mensaje
   return Array.isArray(mensaje) ? mensaje.join('. ') : null
+}
+
+// Pide la subida, sube a S3 y confirma (MAT-01). Devuelve el id del archivo
+// confirmado. Lo usan el material nuevo (MAT-04) y la versión nueva (MAT-07).
+async function subirConfirmado(
+  fetchConSesion: ReturnType<typeof useAuth>['fetchConSesion'],
+  ruta: string,
+  elegido: File,
+  setEtapa: (etapa: Etapa) => void,
+  setProgreso: (progreso: number) => void,
+): Promise<string> {
+  setEtapa('pidiendo')
+  setProgreso(0)
+  const pedida = await fetchConSesion(`${ruta}/archivos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: elegido.name, tamano: elegido.size }),
+  })
+  if (!pedida.ok) {
+    throw new ErrorDeFlujo(
+      pedida.status === 503
+        ? 'El almacenamiento de archivos no está disponible por ahora. Inténtalo más tarde.'
+        : pedida.status === 403
+          ? 'Ya no eres profesor de esta sección.'
+          : ((pedida.status === 400 ? await motivoDe(pedida) : null) ??
+            'No pudimos preparar la subida del archivo. Inténtalo nuevamente.'),
+    )
+  }
+  const { archivo: registrado, subida } = (await pedida.json()) as SubidaArchivo
+
+  setEtapa('subiendo')
+  try {
+    await subirAS3(subida, elegido, setProgreso)
+  } catch {
+    throw new ErrorDeFlujo(
+      'No pudimos subir el archivo. Comprueba tu conexión e inténtalo nuevamente.',
+    )
+  }
+
+  setEtapa('confirmando')
+  const confirmada = await fetchConSesion(
+    `${ruta}/archivos/${registrado.id}/confirmar`,
+    { method: 'POST' },
+  )
+  if (!confirmada.ok) {
+    throw new ErrorDeFlujo(
+      'No pudimos confirmar el archivo subido. Inténtalo nuevamente.',
+    )
+  }
+  return ((await confirmada.json()) as ArchivoResumen).id
 }
 
 // MAT-04 y MAT-06: materiales del curso de la sección. Solo el profesor sube
@@ -134,6 +198,11 @@ export function PestanaMaterial({
                   <p className="material__archivo">
                     {material.archivo.nombre} ·{' '}
                     {tamanoLegible(material.archivo.tamano)}
+                    <br />
+                    {/* MAT-07: la fecha de la vigente y la del material. */}
+                    Versión {material.version}, del{' '}
+                    {fechaHora(material.versionEn)} · Publicado el{' '}
+                    {fechaHora(material.creadoEn)}
                   </p>
                   <button
                     type="button"
@@ -145,6 +214,13 @@ export function PestanaMaterial({
                     {descargando === material.id ? 'Descargando…' : 'Descargar'}
                   </button>
                 </div>
+                {rol === 'PROFESOR' && (
+                  <VersionesMaterial
+                    ruta={ruta}
+                    material={material}
+                    alSubir={recargar}
+                  />
+                )}
               </article>
             </li>
           ))}
@@ -193,50 +269,8 @@ function FormularioMaterial({
     return null
   }
 
-  // Pide la subida, sube a S3 y confirma. Devuelve el id del archivo
-  // confirmado.
-  async function subirArchivo(elegido: File): Promise<string> {
-    setEtapa('pidiendo')
-    setProgreso(0)
-    const pedida = await fetchConSesion(`${ruta}/archivos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: elegido.name, tamano: elegido.size }),
-    })
-    if (!pedida.ok) {
-      throw new ErrorDeFlujo(
-        pedida.status === 503
-          ? 'El almacenamiento de archivos no está disponible por ahora. Inténtalo más tarde.'
-          : pedida.status === 403
-            ? 'Ya no eres profesor de esta sección.'
-            : ((pedida.status === 400 ? await motivoDe(pedida) : null) ??
-              'No pudimos preparar la subida del archivo. Inténtalo nuevamente.'),
-      )
-    }
-    const { archivo: registrado, subida } =
-      (await pedida.json()) as SubidaArchivo
-
-    setEtapa('subiendo')
-    try {
-      await subirAS3(subida, elegido, setProgreso)
-    } catch {
-      throw new ErrorDeFlujo(
-        'No pudimos subir el archivo. Comprueba tu conexión e inténtalo nuevamente.',
-      )
-    }
-
-    setEtapa('confirmando')
-    const confirmada = await fetchConSesion(
-      `${ruta}/archivos/${registrado.id}/confirmar`,
-      { method: 'POST' },
-    )
-    if (!confirmada.ok) {
-      throw new ErrorDeFlujo(
-        'No pudimos confirmar el archivo subido. Inténtalo nuevamente.',
-      )
-    }
-    return ((await confirmada.json()) as ArchivoResumen).id
-  }
+  const subirArchivo = (elegido: File) =>
+    subirConfirmado(fetchConSesion, ruta, elegido, setEtapa, setProgreso)
 
   // Si el listado de la sección ya tiene un material con ese archivo; null
   // si el listado no respondió y no se sabe.
@@ -430,5 +464,213 @@ function FormularioMaterial({
         </p>
       )}
     </form>
+  )
+}
+
+// MAT-07: solo el profesor. Sube una versión nueva del material (pedir la
+// subida, subir a S3, confirmar y registrar) y ve el historial con fecha,
+// responsable y descarga. El resto ve solo la vigente en el listado.
+function VersionesMaterial({
+  ruta,
+  material,
+  alSubir,
+}: {
+  ruta: string
+  material: Material
+  alSubir: () => void
+}) {
+  const { fetchConSesion } = useAuth()
+  const rutaVersiones = `${ruta}/materiales/${material.id}/versiones`
+  const [abierto, setAbierto] = useState(false)
+  const [historial, recargarHistorial] = useDatos<VersionMaterial[]>(
+    abierto ? rutaVersiones : null,
+  )
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [etapa, setEtapa] = useState<Etapa | null>(null)
+  const [progreso, setProgreso] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const [versionInput, setVersionInput] = useState(0)
+  const [descargando, setDescargando] = useState<number | null>(null)
+  // Archivo ya confirmado cuyo registro falló: al reintentar no se sube otra
+  // vez (el POST es idempotente con el mismo archivo).
+  const confirmado = useRef<{ archivo: File; id: string } | null>(null)
+  const enCurso = useRef(false)
+
+  async function subirVersion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (enCurso.current) return
+    setAviso(null)
+    if (!archivo) {
+      setError('Elige un archivo')
+      return
+    }
+    if (!tipoDeArchivo(archivo.name)) {
+      setError(
+        `El archivo debe ser de uno de estos tipos: ${EXTENSIONES.join(', ')}`,
+      )
+      return
+    }
+    if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO_ARCHIVO) {
+      setError(
+        archivo.size === 0
+          ? 'El archivo está vacío'
+          : `El archivo pesa más de ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}`,
+      )
+      return
+    }
+    setError(null)
+    enCurso.current = true
+    try {
+      const previo = confirmado.current
+      const archivoId =
+        previo?.archivo === archivo
+          ? previo.id
+          : await subirConfirmado(
+              fetchConSesion,
+              ruta,
+              archivo,
+              setEtapa,
+              setProgreso,
+            )
+      confirmado.current = { archivo, id: archivoId }
+      setEtapa('registrando')
+      const res = await fetchConSesion(rutaVersiones, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archivoId }),
+      })
+      if (!res.ok) {
+        if (res.status === 409) confirmado.current = null
+        throw new ErrorDeFlujo(
+          res.status === 409
+            ? 'Ese archivo ya está registrado como material.'
+            : res.status === 403
+              ? 'Ya no eres profesor de este curso.'
+              : ((res.status === 400 ? await motivoDe(res) : null) ??
+                'No pudimos registrar la versión. Inténtalo nuevamente.'),
+        )
+      }
+      const { version } = (await res.json()) as VersionMaterial
+      confirmado.current = null
+      setArchivo(null)
+      setVersionInput((n) => n + 1)
+      setAviso(`Versión ${version} subida`)
+      alSubir()
+      if (abierto) recargarHistorial()
+    } catch (falla) {
+      setError(
+        falla instanceof ErrorDeFlujo
+          ? falla.message
+          : 'No pudimos subir la versión. Comprueba tu conexión e inténtalo nuevamente.',
+      )
+    } finally {
+      // Siempre se desbloquea, también si falló a mitad del flujo.
+      enCurso.current = false
+      setEtapa(null)
+    }
+  }
+
+  async function descargar(version: number) {
+    setDescargando(version)
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${rutaVersiones}/${version}/descarga`)
+      if (!res.ok) throw new Error()
+      const { url } = (await res.json()) as DescargaArchivo
+      const enlace = document.createElement('a')
+      enlace.href = url
+      enlace.click()
+    } catch {
+      setError(`No pudimos descargar la versión ${version}.`)
+    } finally {
+      setDescargando(null)
+    }
+  }
+
+  const TEXTO_ETAPA: Record<Etapa, string> = {
+    pidiendo: 'Preparando la subida…',
+    subiendo: `Subiendo archivo… ${progreso} %`,
+    confirmando: 'Confirmando el archivo…',
+    registrando: 'Registrando la versión…',
+  }
+
+  return (
+    <div className="material__versiones">
+      <form
+        className="material__version-nueva"
+        aria-label={`Subir nueva versión de ${material.titulo}`}
+        noValidate
+        onSubmit={(event) => void subirVersion(event)}
+      >
+        <label className="material__campo">
+          Nueva versión
+          <input
+            key={versionInput}
+            type="file"
+            accept={ACEPTADAS}
+            disabled={etapa !== null}
+            onChange={(event) => {
+              setAviso(null)
+              setError(null)
+              setArchivo(event.target.files?.[0] ?? null)
+            }}
+          />
+        </label>
+        <button
+          className="material__boton"
+          type="submit"
+          disabled={etapa !== null}
+        >
+          Subir nueva versión
+        </button>
+        {etapa && (
+          <p className="material__progreso" role="status">
+            {TEXTO_ETAPA[etapa]}
+          </p>
+        )}
+        {error && (
+          <p className="material__error" role="alert">
+            {error}
+          </p>
+        )}
+        {aviso && (
+          <p className="material__aviso" role="status">
+            {aviso}
+          </p>
+        )}
+      </form>
+      <details onToggle={(event) => setAbierto(event.currentTarget.open)}>
+        <summary>Historial de versiones</summary>
+        {!abierto ? null : historial === undefined ? (
+          <Cargando texto="Cargando versiones…" />
+        ) : historial === null ? (
+          <ErrorEstado
+            mensaje="No pudimos cargar las versiones."
+            onReintentar={recargarHistorial}
+          />
+        ) : (
+          <ol className="material__historial" aria-label="Versiones">
+            {historial.map((v) => (
+              <li key={v.version}>
+                <span>
+                  Versión {v.version} · {fechaHora(v.subidoEn)} ·{' '}
+                  {v.responsable} · {v.archivo.nombre}
+                </span>
+                <button
+                  type="button"
+                  className="material__descargar"
+                  aria-label={`Descargar versión ${v.version}`}
+                  disabled={descargando === v.version}
+                  onClick={() => void descargar(v.version)}
+                >
+                  {descargando === v.version ? 'Descargando…' : 'Descargar'}
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </details>
+    </div>
   )
 }
