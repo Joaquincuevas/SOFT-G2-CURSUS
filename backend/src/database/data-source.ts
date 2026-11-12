@@ -55,6 +55,7 @@ import { MotivoRetiroAlumno1792850000000 } from './migrations/1792850000000-Moti
 import { CrearMaterial1792860000000 } from './migrations/1792860000000-CrearMaterial.js'
 import { CrearSilabo1792870000000 } from './migrations/1792870000000-CrearSilabo.js'
 import { LeerEntregasDocentes1792880000000 } from './migrations/1792880000000-LeerEntregasDocentes.js'
+import { CrearMaterialVersion1792890000000 } from './migrations/1792890000000-CrearMaterialVersion.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -131,6 +132,7 @@ export function opcionesDataSource(
       CrearMaterial1792860000000,
       CrearSilabo1792870000000,
       LeerEntregasDocentes1792880000000,
+      CrearMaterialVersion1792890000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

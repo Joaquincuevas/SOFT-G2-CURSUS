@@ -386,6 +386,8 @@ describe('contrato del schema', () => {
         // Sin filas en el seed: su RLS la prueba test/materiales (MAT-04).
         'material',
         'silabo',
+        // MAT-07: versiones de solo adición; prueba test/materiales/versiones.
+        'material_version',
       ].sort(),
     )
     for (const tabla of tablas) {
@@ -408,6 +410,7 @@ describe('contrato del schema', () => {
                     'lectura_anuncio',
                     'entrega',
                     'silabo',
+                    'material_version',
                   ].includes(tabla.tabla)
                 ? ['INSERT', 'SELECT']
                 : ['INSERT', 'SELECT', 'UPDATE'],
@@ -444,7 +447,8 @@ describe('contrato del schema', () => {
 
   // Estas políticas requieren que la API fije la identidad de sesión:
   // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
-  // archivos propios, MAT-04 para registrar materiales, MAT-10 para que el
+  // archivos propios, MAT-04 para registrar materiales, MAT-07 para sus
+  // versiones, MAT-10 para que el
   // equipo docente lea las entregas de su sección, NOT-03 para editar
   // evaluaciones y NOT-13 para que el alumno lea sus notas publicadas.
   it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
@@ -502,6 +506,16 @@ describe('contrato del schema', () => {
         tabla: 'material',
         politica: 'pol_material_modificacion',
         comando: 'UPDATE',
+      },
+      {
+        tabla: 'material_version',
+        politica: 'pol_material_version_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'material_version',
+        politica: 'pol_material_version_lectura',
+        comando: 'SELECT',
       },
       { tabla: 'nota', politica: 'pol_nota_lectura_alumno', comando: 'SELECT' },
       { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
