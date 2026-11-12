@@ -122,7 +122,9 @@ function SelectorPeriodo({ periodo }: { periodo: string | null }) {
       <select
         aria-label="Período"
         value={valor}
-        disabled={periodosDisponibles === undefined || periodosDisponibles.length === 0}
+        disabled={
+          periodosDisponibles === undefined || periodosDisponibles.length === 0
+        }
         onChange={(e) => cambiar(e.target.value)}
       >
         {periodosDisponibles === undefined ? (
@@ -131,8 +133,12 @@ function SelectorPeriodo({ periodo }: { periodo: string | null }) {
           <option value="">No hay períodos disponibles</option>
         ) : (
           periodosDisponibles.map((p) => (
-            <option key={`${p.anio}-${p.semestre}`} value={`${p.anio}-${p.semestre}`}>
-              {p.anio}-{p.semestre}{p.activo ? ' (activo)' : ''}
+            <option
+              key={`${p.anio}-${p.semestre}`}
+              value={`${p.anio}-${p.semestre}`}
+            >
+              {p.anio}-{p.semestre}
+              {p.activo ? ' (activo)' : ''}
             </option>
           ))
         )}

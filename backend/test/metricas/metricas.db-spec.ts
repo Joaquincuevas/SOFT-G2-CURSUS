@@ -517,9 +517,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     const lista = await obtener<
       { anio: number; semestre: number; activo: boolean }[]
     >(DIRECTOR, '/api/metricas/periodos')
-    expect(lista).toEqual([
-      { anio: 2026, semestre: 2, activo: true },
-    ])
+    expect(lista).toEqual([{ anio: 2026, semestre: 2, activo: true }])
   })
 
   it('lista las universidades con sus indicadores', async () => {
