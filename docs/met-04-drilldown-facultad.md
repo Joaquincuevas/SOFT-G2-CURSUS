@@ -13,6 +13,12 @@ Tarjeta: MET-04 (drill-down). Depende de [MET-01](met-01-indicadores-consolidado
 | Se mantiene el período seleccionado al navegar.                                       | El período vive en la URL (`?periodo=AAAA-S`): se pide a la API en ambos niveles y los enlaces lo conservan. Sin él, es el período activo de cada universidad. El selector sigue deshabilitado: el filtro es MET-03. |
 | Solo el Director accede.                                                              | CASL `read Metricas` (solo DIRECTOR) en las tres rutas y `consultarEnTodasLasUniversidades`, que responde 403 a los demás roles.                                                                                     |
 
+## Período en los tres niveles
+
+El consolidado de MET-01 también acepta `?periodo=AAAA-S` (`GET /api/metricas/consolidado?periodo=2026-1`): con él, el consolidado, la lista de universidades y las facultades consultan el mismo período; sin él, los tres usan el activo de cada universidad. Con un período que ninguna universidad tiene, el consolidado queda vacío (`periodos: []`, indicadores `null`).
+
+En la interfaz, un `?periodo=` que no tiene la forma `AAAA-S` no se envía a la API: se muestra «El período … no es válido» con un enlace al período activo, distinto de «La universidad no existe».
+
 ## API
 
 - `GET /api/metricas/universidades?periodo=AAAA-S`: cada universidad vigente con `periodo`, los tres indicadores, `alumnos` y `cursos`. `periodo` es `null` si la universidad no tiene el período pedido.

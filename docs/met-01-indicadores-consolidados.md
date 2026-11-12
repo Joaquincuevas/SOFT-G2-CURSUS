@@ -40,7 +40,7 @@ Tarjeta: [MET-01](https://trello.com/c/x3YpxfYj). Depende de NOT-14 (nota final)
 }
 ```
 
-Todo el cálculo está en una consulta (`MetricasService`), en la transacción READ ONLY del Director con la RLS de `DIRECTOR`, que lee todas las universidades.
+Desde MET-04 acepta `?periodo=AAAA-S` ([guía](met-04-drilldown-facultad.md)); sin él, el período activo de cada universidad. Todo el cálculo está en una consulta (`MetricasService`), en la transacción READ ONLY del Director con la RLS de `DIRECTOR`, que lee todas las universidades.
 
 ## Base de datos
 
