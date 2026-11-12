@@ -139,6 +139,15 @@
   white-space: nowrap;
 }
 
+/* El nombre de la universidad puede ocupar varias líneas; una palabra sin
+   espacios se parte en vez de ensanchar la tabla. Las cifras no se parten. */
+.indicadores__tabla tbody th {
+  min-width: 8rem;
+  max-width: 16rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .indicadores__tabla tbody tr:last-child th,
 .indicadores__tabla tbody tr:last-child td {
   border-bottom: none;
@@ -163,13 +172,16 @@
 }
 
 /* En pantallas angostas, nombre y valor van en una fila y la barra debajo, a
-   todo el ancho. Con espacio suficiente, las tres partes van en una fila, con
-   la columna del valor fija para que todas las barras tengan el mismo largo.
-   Se mide el ancho del gráfico (no el de la ventana) porque el menú lateral
+   todo el ancho. El valor ocupa como máximo el 45 % de la fila, para que
+   «Sin datos suficientes» pase a dos líneas antes de partir el nombre, y una
+   palabra sin espacios más ancha que la columna se parte en vez de ensanchar
+   el gráfico. Con espacio suficiente, las tres partes van en una fila, con la
+   columna del valor fija para que todas las barras tengan el mismo largo. Se
+   mide el ancho del gráfico (no el de la ventana) porque el menú lateral
    también lo reduce. */
 .indicadores__barra {
   display: grid;
-  grid-template-columns: minmax(min-content, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) fit-content(45%);
   grid-template-areas:
     'nombre valor'
     'pista pista';
@@ -188,7 +200,8 @@
 
 .indicadores__barra-nombre {
   grid-area: nombre;
-  overflow-wrap: break-word;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .indicadores__barra-pista {
