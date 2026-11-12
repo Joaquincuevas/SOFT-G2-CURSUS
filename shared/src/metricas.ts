@@ -50,6 +50,11 @@ export interface PeriodoMetrica {
   semestre: number
 }
 
+// GET /api/metricas/periodos: períodos únicos disponibles para el Director.
+export interface PeriodoDisponible extends PeriodoMetrica {
+  activo: boolean
+}
+
 interface IndicadoresDeGrupo {
   aprobacion: IndicadorAprobacion
   promedio: IndicadorPromedio

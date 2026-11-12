@@ -102,12 +102,17 @@ describe('Indicadores del Director (MET-01)', () => {
     expect(
       screen.getByText('12 alumnos inscritos en 4 cursos del período activo.'),
     ).toBeInTheDocument()
-    // MET-03 agrega el filtro: el selector existe, pero no se puede usar.
+    // MET-03: el período activo viene seleccionado y el selector es funcional.
     const periodo = screen.getByRole('combobox', { name: 'Período' })
-    expect(periodo).toBeDisabled()
-    expect(periodo).toHaveTextContent(
-      '2026-2 (Universidad Demo Norte, Universidad Demo Sur)',
-    )
+    expect(periodo).not.toBeDisabled()
+    // Por defecto no es un semestre: es el activo de cada universidad.
+    expect(periodo).toHaveValue('')
+    expect(
+      within(periodo).getByRole('option', {
+        name: 'Período activo de cada universidad',
+        selected: true,
+      }),
+    ).toBeInTheDocument()
   })
 
   test('un indicador sin denominador dice "Sin datos suficientes" en vez de 0', async () => {
@@ -139,9 +144,7 @@ describe('Indicadores del Director (MET-01)', () => {
         '83,33',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveTextContent(
-      '2026-2 (Universidad Demo Norte)',
-    )
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue('')
   })
 
   test('si la API falla, avisa y permite reintentar', async () => {
@@ -179,8 +182,9 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     const lista = within(
       await screen.findByRole('region', { name: 'Universidades' }),
     )
+    // La región aparece mientras carga: se espera a que lleguen los datos.
     expect(
-      lista.getByText(
+      await lista.findByText(
         /Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %/,
       ),
     ).toBeInTheDocument()
@@ -208,7 +212,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         facultades.getByRole('article', { name: 'Ciencias' }),
       ).getAllByText('Sin datos suficientes'),
     ).toHaveLength(3)
-    expect(screen.getByRole('combobox', { name: 'Período' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Período' })).not.toBeDisabled()
   })
 
   // Los tres niveles piden el mismo período: el consolidado, la lista de
@@ -281,6 +285,30 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
+    )
+  })
+
+  test('cambiar el período actualiza los tres niveles y la URL', async () => {
+    const { pedidas, registrar } = registrador()
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: registrar(RUTA, METRICAS),
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+      [FACULTADES]: registrar(FACULTADES, DETALLE),
+    })
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Período' }), {
+      target: { value: '2026-1' },
+    })
+    await waitFor(() => {
+      expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
+      expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
+    })
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
+    )
+    await screen.findByRole('list', { name: 'Facultades' })
+    expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-1',
     )
   })
 
@@ -369,4 +397,78 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       expect(pedida).not.toHaveBeenCalled()
     },
   )
+
+  // Norte tiene 2026-2 activo y Sur, 2026-1: la vista por defecto combina
+  // ambos activos y no equivale a ningún semestre.
+  test('la vista por defecto es el activo de cada universidad y se puede volver a ella', async () => {
+    const { pedidas, registrar } = registrador()
+    const DISTINTOS: MetricasConsolidadas = {
+      ...METRICAS,
+      periodos: [
+        { universidad: 'Universidad Demo Norte', anio: 2026, semestre: 2 },
+        { universidad: 'Universidad Demo Sur', anio: 2026, semestre: 1 },
+      ],
+    }
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: registrar(RUTA, DISTINTOS),
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+    })
+    await screen.findByRole('list', { name: 'Indicadores' })
+    const selector = screen.getByRole('combobox', { name: 'Período' })
+    expect(selector).toHaveValue('')
+    expect(
+      within(selector)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Período activo de cada universidad', '2026-2', '2026-1'])
+    expect(pedidas.some((u) => u.includes('periodo='))).toBe(false)
+
+    fireEvent.change(selector, { target: { value: '2026-2' } })
+    await waitFor(() => expect(pedidas).toContain(`${RUTA}?periodo=2026-2`))
+    expect(selector).toHaveValue('2026-2')
+
+    // La opción explícita quita ?periodo= y vuelve a pedir el activo de cada
+    // universidad.
+    pedidas.length = 0
+    fireEvent.change(selector, { target: { value: '' } })
+    await waitFor(() => expect(pedidas).toContain(RUTA))
+    expect(pedidas).toContain(UNIVERSIDADES)
+    expect(pedidas.some((u) => u.includes('periodo='))).toBe(false)
+    expect(selector).toHaveValue('')
+    expect(
+      screen.getByRole('link', { name: 'Universidad Demo Norte' }),
+    ).toHaveAttribute('href', '/indicadores/universidades/u-norte')
+  })
+
+  // Gestión admite años del 1 al 9999: 999-1 se escribe 0999-1, que es el que
+  // la API y la pantalla aceptan.
+  test('un período de tres dígitos se elige como 0999-1 y se consulta', async () => {
+    const { pedidas, registrar } = registrador()
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      '/api/metricas/periodos': () => [
+        { anio: 2026, semestre: 2, activo: true },
+        { anio: 999, semestre: 1, activo: false },
+      ],
+      [RUTA]: registrar(RUTA, METRICAS),
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+    })
+    await screen.findByRole('list', { name: 'Indicadores' })
+    const selector = screen.getByRole('combobox', { name: 'Período' })
+    expect(
+      within(selector)
+        .getAllByRole('option')
+        .map((o) => o.getAttribute('value')),
+    ).toEqual(['', '2026-2', '0999-1'])
+    fireEvent.change(selector, { target: { value: '0999-1' } })
+    await waitFor(() => expect(pedidas).toContain(`${RUTA}?periodo=0999-1`))
+    expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=0999-1`)
+    // La pantalla lo acepta y muestra sus indicadores.
+    expect(screen.queryByText(/no es válido/)).toBeNull()
+    expect(
+      await screen.findByRole('list', { name: 'Indicadores' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('12 alumnos inscritos en 4 cursos del período 0999-1.'),
+    ).toBeInTheDocument()
+  })
 })

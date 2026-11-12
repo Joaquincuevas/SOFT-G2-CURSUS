@@ -50,7 +50,7 @@ Migración `CalcularNotaFinal1792930000000`: función SQL `nota_final(ponderacio
 
 Menú del Director: **Indicadores** (`/indicadores`, permiso `read Metricas`). Muestra:
 
-- un selector **Período** deshabilitado con el período activo (el filtro es MET-03);
+- un selector **Período** (MET-03): por defecto, «Período activo de cada universidad»; elegir un año y semestre filtra los tres niveles y vuelve a la vista por defecto quitando `?periodo=`;
 - tres tarjetas: **Tasa de aprobación** (%, "a de b alumnos con nota final"), **Promedio** ("n alumnos con nota final") y **Asistencia** (%, "p presentes de r registros");
 - cuántos alumnos y cursos entran;
 - estados de carga, error con **Reintentar** y "Sin datos suficientes" por tarjeta.

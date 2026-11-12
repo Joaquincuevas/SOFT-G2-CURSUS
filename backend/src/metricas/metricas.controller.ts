@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  PeriodoDisponible,
   ReporteFacultad,
   ResumenUniversidad,
 } from '@cursus/shared'
@@ -54,6 +55,14 @@ export class MetricasController {
       req.usuario?.sub as string,
       periodoDe(periodo),
     )
+  }
+
+  @Puede('read', 'Metricas')
+  @Get('periodos')
+  periodos(
+    @UniversidadActual() contexto: ContextoUniversidad,
+  ): Promise<PeriodoDisponible[]> {
+    return this.metricas.periodos(contexto)
   }
 
   @Puede('read', 'Metricas')

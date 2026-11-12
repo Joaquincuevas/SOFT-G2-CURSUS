@@ -57,6 +57,12 @@ const facultades = vi.fn((_c: unknown, id: string) =>
     ? Promise.resolve(META)
     : Promise.reject(new NotFoundException('La universidad no existe')),
 )
+const periodos = vi.fn(() =>
+  Promise.resolve([
+    { anio: 2026, semestre: 2, activo: true },
+    { anio: 2026, semestre: 1, activo: false },
+  ]),
+)
 const reporteFacultad = vi.fn(() => Promise.resolve(REPORTE))
 
 let app: INestApplication<App>
@@ -69,6 +75,7 @@ beforeAll(async () => {
       consolidado,
       universidades,
       facultades,
+      periodos,
       reporteFacultad,
     })
     .compile()
@@ -116,6 +123,24 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
   )
 })
 
+describe('períodos de métricas (MET-03)', () => {
+  it('solo el Director puede consultar los períodos disponibles', async () => {
+    await request(app.getHttpServer())
+      .get('/api/metricas/periodos')
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200)
+      .expect([
+        { anio: 2026, semestre: 2, activo: true },
+        { anio: 2026, semestre: 1, activo: false },
+      ])
+    expect(periodos).toHaveBeenCalled()
+    await request(app.getHttpServer())
+      .get('/api/metricas/periodos')
+      .set('Authorization', sesion('PROFESOR'))
+      .expect(403)
+  })
+})
+
 describe('drill-down de universidad a facultad (MET-04)', () => {
   const facultadesDe = (id: string, consulta = '') =>
     `${RUTA_UNIVERSIDADES}/${id}/facultades${consulta}`
@@ -157,7 +182,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       .expect(400)
   })
 
-  it.each(['activo', '2026', '2026-x'])(
+  it.each(['activo', '2026', '2026-x', '2026-0', '2026-99'])(
     'el período %s responde 400',
     async (periodo) => {
       await request(app.getHttpServer())
@@ -240,7 +265,7 @@ describe('consolidado con período (MET-04)', () => {
     expect(consolidado).toHaveBeenLastCalledWith(expect.anything(), null)
   })
 
-  it.each(['activo', '2026', '2026-x'])(
+  it.each(['activo', '2026', '2026-x', '2026-0', '2026-99'])(
     'el período %s responde 400',
     async (periodo) => {
       await request(app.getHttpServer())

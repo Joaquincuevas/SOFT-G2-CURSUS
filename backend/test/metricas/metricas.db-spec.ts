@@ -401,6 +401,27 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
     }
   })
 
+  it('incluye en los indicadores un curso archivado de un período cerrado', async () => {
+    const [{ curso_id: cursoId }] = await bd.query<{ curso_id: string }[]>(
+      'SELECT curso_id FROM seccion WHERE id = $1',
+      [ids.norte],
+    )
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      cursoId,
+    ])
+    try {
+      expect(await consolidado()).toMatchObject({
+        aprobacion: { aprobados: 2, evaluados: 3 },
+        promedio: { valor: 4.33, alumnos: 3 },
+        asistencia: { presentes: 4, registros: 7 },
+      })
+    } finally {
+      await bd.query('UPDATE curso SET archived_at = NULL WHERE id = $1', [
+        cursoId,
+      ])
+    }
+  })
+
   it.each([
     [PROFESOR, 'PROFESOR'],
     [AYUDANTE, 'AYUDANTE'],
@@ -606,6 +627,13 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     })
   })
 
+  it('lista períodos únicos de todas las universidades, del más reciente al antiguo', async () => {
+    const lista = await obtener<
+      { anio: number; semestre: number; activo: boolean }[]
+    >(DIRECTOR, '/api/metricas/periodos')
+    expect(lista).toEqual([{ anio: 2026, semestre: 2, activo: true }])
+  })
+
   it('lista las universidades con sus indicadores', async () => {
     const lista = await obtener<ResumenUniversidad[]>(
       DIRECTOR,
@@ -733,6 +761,128 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       cursos: 0,
     })
     await obtener(DIRECTOR, `${RUTA}?periodo=activo`, 400)
+  })
+
+  // Norte tiene 2026-2 activo y Sur, 2026-1: la vista por defecto combina cada
+  // activo y no equivale a ningún semestre; el filtro aplica uno a todas.
+  it('con activos distintos por universidad, el defecto combina cada activo y un semestre filtra todas', async () => {
+    const q = (sql: string) => bd.query(sql)
+    const sur = `(SELECT id FROM universidad WHERE dominio_correo = 'sur.cursus.test')`
+    await q(`INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
+             SELECT universidad_id, 2026, 1, fecha_inicio - 200, fecha_inicio - 20, false
+               FROM periodo WHERE universidad_id = ${sur} AND (anio, semestre) = (2026, 2)`)
+    await q(`UPDATE periodo SET activo = false WHERE universidad_id = ${sur}`)
+    await q(`UPDATE periodo SET activo = true
+              WHERE universidad_id = ${sur} AND (anio, semestre) = (2026, 1)`)
+    try {
+      const porDefecto = await consolidado()
+      expect(porDefecto.periodos).toEqual([
+        { universidad: 'Universidad Demo Norte', anio: 2026, semestre: 2 },
+        { universidad: 'Universidad Demo Sur', anio: 2026, semestre: 1 },
+      ])
+      // Los datos de Sur son de 2026-2: el activo de Sur (2026-1) no los trae.
+      expect(porDefecto.aprobacion).toEqual({
+        valor: 50,
+        aprobados: 1,
+        evaluados: 2,
+      })
+      // 2026-2 para todas: incluye a Sur y es otra vista.
+      const segundo = await obtener<MetricasConsolidadas>(
+        DIRECTOR,
+        `${RUTA}?periodo=2026-2`,
+      )
+      expect(segundo.periodos.map((p) => p.semestre)).toEqual([2, 2])
+      expect(segundo.aprobacion).toEqual({
+        valor: 66.7,
+        aprobados: 2,
+        evaluados: 3,
+      })
+      expect(segundo).not.toEqual(porDefecto)
+      // 2026-1 para todas: solo Sur lo tiene, sin datos.
+      const primero = await obtener<MetricasConsolidadas>(
+        DIRECTOR,
+        `${RUTA}?periodo=2026-1`,
+      )
+      expect(primero.periodos).toEqual([
+        { universidad: 'Universidad Demo Sur', anio: 2026, semestre: 1 },
+      ])
+      expect(primero.aprobacion.valor).toBeNull()
+      // El selector ofrece ambos semestres.
+      expect(
+        await obtener<{ anio: number; semestre: number }[]>(
+          DIRECTOR,
+          '/api/metricas/periodos',
+        ),
+      ).toMatchObject([
+        { anio: 2026, semestre: 2 },
+        { anio: 2026, semestre: 1, activo: true },
+      ])
+    } finally {
+      await q(`UPDATE periodo SET activo = false WHERE universidad_id = ${sur}`)
+      await q(`UPDATE periodo SET activo = true
+                WHERE universidad_id = ${sur} AND (anio, semestre) = (2026, 2)`)
+      await q(`DELETE FROM periodo
+                WHERE universidad_id = ${sur} AND (anio, semestre) = (2026, 1)`)
+    }
+  })
+
+  // Gestión admite años del 1 al 9999: el período 999-1 se consulta como
+  // 0999-1, el valor que genera el selector.
+  it('se pueden consultar los indicadores de un período de tres dígitos con 0999-1', async () => {
+    const norte = await universidadId('norte.cursus.test')
+    const [{ curso_id: cursoId, periodo_id: original }] = await bd.query<
+      { curso_id: string; periodo_id: string }[]
+    >(
+      `SELECT c.id AS curso_id, c.periodo_id FROM seccion s
+         JOIN curso c ON c.id = s.curso_id WHERE s.id = $1`,
+      [ids.norte],
+    )
+    const [{ id: periodoId }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
+       SELECT universidad_id, 999, 1, fecha_inicio, fecha_termino, false
+         FROM periodo WHERE id = $1
+       RETURNING id`,
+      [original],
+    )
+    await bd.query('UPDATE curso SET periodo_id = $2 WHERE id = $1', [
+      cursoId,
+      periodoId,
+    ])
+    try {
+      expect(
+        (
+          await obtener<{ anio: number }[]>(DIRECTOR, '/api/metricas/periodos')
+        ).map((p) => p.anio),
+      ).toContain(999)
+      const m = await obtener<MetricasConsolidadas>(
+        DIRECTOR,
+        `${RUTA}?periodo=0999-1`,
+      )
+      expect(m.periodos).toEqual([
+        { universidad: 'Universidad Demo Norte', anio: 999, semestre: 1 },
+      ])
+      expect(m.aprobacion).toEqual({ valor: 50, aprobados: 1, evaluados: 2 })
+      expect(m.asistencia).toEqual({ valor: 66.67, presentes: 4, registros: 6 })
+      const universidades = await obtener<ResumenUniversidad[]>(
+        DIRECTOR,
+        `${RUTA_UNIVERSIDADES}?periodo=0999-1`,
+      )
+      expect(universidades.find((u) => u.id === norte)?.periodo).toEqual({
+        anio: 999,
+        semestre: 1,
+      })
+      const f = await facultades(norte, '?periodo=0999-1')
+      expect(f.periodo).toEqual({ anio: 999, semestre: 1 })
+      expect(f.facultades.reduce((n, x) => n + x.aprobacion.evaluados, 0)).toBe(
+        2,
+      )
+    } finally {
+      await bd.query('UPDATE curso SET periodo_id = $2 WHERE id = $1', [
+        cursoId,
+        original,
+      ])
+      await bd.query('DELETE FROM periodo WHERE id = $1', [periodoId])
+    }
   })
 
   it.each([
