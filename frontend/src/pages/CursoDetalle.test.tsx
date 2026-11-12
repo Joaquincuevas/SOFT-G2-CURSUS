@@ -1,6 +1,6 @@
 import type { CursoDetalle, CursoListado } from '@cursus/shared'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
 const PERIODO = { id: 'periodo-2026-2', anio: 2026, semestre: 2 }
@@ -40,6 +40,58 @@ const filasDe = (tabla: HTMLElement) =>
     )
 
 describe('detalle de un curso', () => {
+  test('pide confirmación y muestra qué notas faltan antes de poder cerrar', async () => {
+    const fecha = '2026-12-15T18:00:00Z'
+    const cerrar = vi
+      .fn<RutaSimulada>()
+      .mockReturnValueOnce(
+        json(
+          {
+            message: 'Hay requisitos pendientes para cerrar el curso.',
+            ponderaciones: [
+              { seccion: 1, sumaPonderaciones: 120, faltan: 0, sobran: 20 },
+            ],
+            pendientes: [
+              {
+                evaluacionId: 'prueba',
+                nombre: 'Prueba 1',
+                seccion: 2,
+                notasPendientes: 2,
+              },
+            ],
+          },
+          409,
+        ),
+      )
+      .mockReturnValueOnce(json({ fecha, responsableId: 'admin' }))
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      ...ruta(() => CURSO),
+      '/api/cursos/curso-1/cierre': cerrar,
+    })
+
+    const iniciar = await screen.findByRole('button', { name: 'Cerrar curso' })
+    fireEvent.click(iniciar)
+    expect(screen.getByText(/no se puede deshacer/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(cerrar).not.toHaveBeenCalled()
+    fireEvent.click(iniciar)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sección 2 · Prueba 1 · 2 notas sin publicar',
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Sección 1 · Las ponderaciones suman 120 %. Sobran 20 puntos porcentuales',
+    )
+    expect(cerrar.mock.calls[0][0]?.method).toBe('POST')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar cierre' }))
+    expect(await screen.findByText(/Curso cerrado el/)).toHaveTextContent(
+      'Curso cerrado el',
+    )
+    expect(screen.queryByRole('button', { name: 'Cerrar curso' })).toBeNull()
+    expect(cerrar).toHaveBeenCalledTimes(2)
+  })
+
   test('muestra los datos del curso y sus secciones', async () => {
     await renderConSesion(
       'ADMINISTRATIVO',
@@ -106,6 +158,7 @@ describe('detalle de un curso', () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Cerrar curso' })).toBeNull()
     // Sin la columna Acciones (GES-12, GES-13 y GES-15).
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
     expect(screen.queryByRole('button', { name: /profesor/ })).toBeNull()

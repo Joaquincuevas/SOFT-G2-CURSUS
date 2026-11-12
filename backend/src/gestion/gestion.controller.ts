@@ -3,6 +3,7 @@ import type {
   AlumnoQuitado,
   ResultadoCargaAlumnos,
   AlumnosSeccion,
+  CierreCurso,
   CursoCreado,
   CursoDetalle,
   CursoEditable,
@@ -113,6 +114,17 @@ export class GestionController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<CursoDetalle> {
     return this.gestion.obtenerCurso(contexto, usuarioDe(req), id)
+  }
+
+  @Puede('update', 'Curso')
+  @Post('cursos/:id/cierre')
+  @HttpCode(200)
+  cerrarCurso(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CierreCurso> {
+    return this.gestion.cerrarCurso(contexto, usuarioDe(req), id)
   }
 
   @Puede('create', 'Curso')
