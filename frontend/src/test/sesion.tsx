@@ -130,7 +130,15 @@ const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
   // Notas propias del alumno (NOT-13).
   [
     /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
-    () => ({ evaluaciones: [] }),
+    () => ({
+      evaluaciones: [],
+      notaFinal: { tipo: 'PARCIAL', nota: null, porcentajeEvaluado: 0 },
+    }),
+  ],
+  // Notas finales de la sección para su profesor (NOT-14).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/notas-finales$/,
+    () => ({ alumnos: [] }),
   ],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,

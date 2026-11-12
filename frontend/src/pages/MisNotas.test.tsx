@@ -39,6 +39,7 @@ const NOTAS: MisNotasSeccion = {
       recorregida: false,
     },
   ],
+  notaFinal: { tipo: 'PARCIAL', nota: 5, porcentajeEvaluado: 20 },
 }
 
 // Abre la pestaña Notas de la sección con el rol dado.
@@ -89,6 +90,7 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
   test('muestra la nota nueva y la marca solo en una nota publicada recorregida', async () => {
     const { panel } = await abrirNotas('ALUMNO', {
       [MIS_NOTAS]: () => ({
+        ...NOTAS,
         evaluaciones: [
           { ...NOTAS.evaluaciones[0], nota: 6.2, recorregida: true },
           NOTAS.evaluaciones[1],
@@ -145,5 +147,56 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
       panel.queryByRole('region', { name: 'Mis notas' }),
     ).not.toBeInTheDocument()
     expect(misNotas).not.toHaveBeenCalled()
+  })
+})
+
+describe('NOT-14: el alumno ve su nota final', () => {
+  test('mientras falten notas ve la nota parcial con el porcentaje evaluado', async () => {
+    const { panel } = await abrirNotas('ALUMNO', { [MIS_NOTAS]: () => NOTAS })
+
+    expect(await panel.findByLabelText('Nota del curso')).toHaveTextContent(
+      'Nota parcial 5,0 (20 % evaluado)',
+    )
+  })
+
+  test('con todas las notas publicadas ve la nota final con un decimal', async () => {
+    const { panel } = await abrirNotas('ALUMNO', {
+      [MIS_NOTAS]: () => ({
+        ...NOTAS,
+        notaFinal: { tipo: 'FINAL', nota: 5.1, porcentajeEvaluado: 100 },
+      }),
+    })
+
+    expect(await panel.findByLabelText('Nota del curso')).toHaveTextContent(
+      /^Nota final 5,1$/,
+    )
+  })
+
+  test('sin notas publicadas lo dice, sin inventar un promedio', async () => {
+    const { panel } = await abrirNotas('ALUMNO', {
+      [MIS_NOTAS]: () => ({
+        ...NOTAS,
+        notaFinal: { tipo: 'PARCIAL', nota: null, porcentajeEvaluado: 0 },
+      }),
+    })
+
+    expect(await panel.findByLabelText('Nota del curso')).toHaveTextContent(
+      /^Sin notas publicadas$/,
+    )
+  })
+
+  test('con un backend que aún no envía notaFinal, la tabla sigue disponible', async () => {
+    const { panel } = await abrirNotas('ALUMNO', {
+      [MIS_NOTAS]: () => ({ evaluaciones: NOTAS.evaluaciones }),
+    })
+
+    expect(
+      await panel.findByRole('table', { name: 'Mis notas por evaluación' }),
+    ).toBeInTheDocument()
+    expect(panel.getByText('Control 1')).toBeInTheDocument()
+    expect(panel.queryByLabelText('Nota del curso')).not.toBeInTheDocument()
+    expect(
+      panel.queryByText('No pudimos cargar tus notas.'),
+    ).not.toBeInTheDocument()
   })
 })

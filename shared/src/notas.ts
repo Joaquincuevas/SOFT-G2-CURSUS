@@ -255,4 +255,33 @@ export interface NotaPropia {
 
 export interface MisNotasSeccion {
   evaluaciones: NotaPropia[]
+  // NOT-14: el mismo cálculo que ve el profesor en notas-finales.
+  notaFinal: NotaFinal
+}
+
+// NOT-14 (RE-02): nota final de un alumno en una sección, calculada en el
+// backend con sus notas publicadas. FINAL cuando todas las evaluaciones
+// activas tienen nota publicada y las ponderaciones suman 100; si no, es una
+// nota PARCIAL sobre el porcentaje ya evaluado.
+export type TipoNotaFinal = 'FINAL' | 'PARCIAL'
+
+export interface NotaFinal {
+  tipo: TipoNotaFinal
+  // Promedio ponderado de las notas publicadas, con un decimal; null si aún
+  // no hay ninguna.
+  nota: number | null
+  // Suma de las ponderaciones de las evaluaciones con nota publicada.
+  porcentajeEvaluado: number
+}
+
+// GET /api/espacio/secciones/:id/notas-finales: el profesor de la sección ve
+// la nota final de cada alumno activo, por nombre.
+export interface NotaFinalAlumno {
+  id: string
+  nombre: string
+  notaFinal: NotaFinal
+}
+
+export interface NotasFinalesSeccion {
+  alumnos: NotaFinalAlumno[]
 }

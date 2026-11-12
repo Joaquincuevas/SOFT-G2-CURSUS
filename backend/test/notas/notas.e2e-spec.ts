@@ -232,3 +232,34 @@ describe('GET .../mis-notas (NOT-13)', () => {
     },
   )
 })
+
+// NOT-14: la nota final de cada alumno, para el profesor. Los permisos por
+// rol en la sección necesitan la base: están en notas.db-spec.ts.
+describe('GET .../notas-finales (NOT-14)', () => {
+  const NOTAS_FINALES =
+    '/api/espacio/secciones/00000000-0000-4000-8000-000000000010/notas-finales'
+
+  it('responde 401 sin sesión', async () => {
+    await request(app.getHttpServer()).get(NOTAS_FINALES).expect(401)
+  })
+
+  it.each<Rol>(['ALUMNO', 'ADMINISTRATIVO'])(
+    '%s no tiene permiso CASL para leer: 403',
+    async (rol) => {
+      await request(app.getHttpServer())
+        .get(NOTAS_FINALES)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    },
+  )
+
+  it.each(['post', 'put', 'patch', 'delete'] as const)(
+    'no hay ruta %s: es de solo lectura',
+    async (metodo) => {
+      await request(app.getHttpServer())
+        [metodo](NOTAS_FINALES)
+        .set('Authorization', sesion('PROFESOR'))
+        .expect(404)
+    },
+  )
+})

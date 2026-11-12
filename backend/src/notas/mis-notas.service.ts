@@ -9,10 +9,13 @@ import {
   type ContextoUniversidad,
   fijarUsuario,
 } from '../database/base-de-datos.service.js'
+import { calcularNotaFinal } from './nota-final.js'
 
 // NOT-13 (RE-02): evaluaciones activas de la sección, por fecha como la lista
 // de evaluaciones, con la nota publicada del alumno o null. El filtro de la
 // nota repite la RLS (pol_nota_lectura_alumno), que es la que lo garantiza.
+// NOT-14 calcula la nota final con estas mismas filas, y notas-finales
+// (profesor) repite el mismo filtro de nota publicada.
 const MIS_NOTAS = `
   SELECT e.id AS "evaluacionId", e.nombre,
          to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.ponderacion,
@@ -52,6 +55,6 @@ export class MisNotasService {
         ])
       },
     )
-    return { evaluaciones }
+    return { evaluaciones, notaFinal: calcularNotaFinal(evaluaciones) }
   }
 }
