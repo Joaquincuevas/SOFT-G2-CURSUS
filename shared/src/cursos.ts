@@ -1,5 +1,7 @@
 // DTOs de gestión académica.
 
+import type { Clase } from './asistencia.js'
+
 export interface PeriodoResumen {
   id: string
   anio: number
@@ -36,6 +38,29 @@ export interface CursoCreado {
   nombre: string
   carreraNombre: string
   periodo: PeriodoResumen
+}
+
+export interface CursoArchivadoListado extends CursoCreado {
+  archivadoEn: string
+}
+
+export interface SeccionArchivada {
+  id: string
+  numero: number
+  evaluaciones: {
+    id: string
+    nombre: string
+    fecha: string
+    ponderacion: number
+    notas: { alumnoId: string; alumno: string; valor: number }[]
+  }[]
+  clases: (Clase & {
+    marcas: { alumnoId: string; alumno: string; presente: boolean }[]
+  })[]
+}
+
+export interface CursoArchivado extends CursoArchivadoListado {
+  secciones: SeccionArchivada[]
 }
 
 // Query opcional de GET /api/cursos (GES-04): se pueden combinar.

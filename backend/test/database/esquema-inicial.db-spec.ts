@@ -187,8 +187,8 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // MET-01 es la última: solo quita la función nota_final.
-    await bd.undoLastMigration()
+    await bd.undoLastMigration() // HIS-04: quita la consulta histórica.
+    await bd.undoLastMigration() // MET-01: quita la función nota_final.
     expect(await tablasExistentes()).toEqual(TABLAS)
     const [{ notaFinal }] = await bd.query<{ notaFinal: string }[]>(
       `SELECT count(*) AS "notaFinal" FROM pg_proc WHERE proname = 'nota_final'`,
@@ -238,7 +238,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -347,7 +348,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MET-01,
+    await bd.undoLastMigration() // runMigrations también reaplicó HIS-04,
+    await bd.undoLastMigration() // MET-01,
     await bd.undoLastMigration() // HIS-03,
     await bd.undoLastMigration() // HIS-02,
     await bd.undoLastMigration() // HIS-01,
