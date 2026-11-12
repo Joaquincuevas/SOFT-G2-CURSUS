@@ -37,6 +37,8 @@ export type SujetoTabla =
   | 'Archivo'
   | 'Material'
   | 'MaterialVersion'
+  // MET-01: indicadores consolidados del Directorio.
+  | 'Metricas'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -92,6 +94,8 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
         'Seccion',
         'Inscripcion',
       ])
+      // MET-01: indicadores consolidados de todas las universidades.
+      can('read', 'Metricas')
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
       break

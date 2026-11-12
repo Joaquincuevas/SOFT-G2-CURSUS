@@ -4,6 +4,7 @@ import { Secciones } from './pages/AlumnosSeccion'
 import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
+import { Indicadores } from './pages/Indicadores'
 import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
 import { Carreras } from './pages/Carreras'
@@ -67,6 +68,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     page: RutasSuperadmin,
     title: () => 'Administrar universidad',
     subtitle: () => 'Universidades y facultades de CURSUS',
+  },
+  {
+    // MET-01: indicadores consolidados del Directorio.
+    to: '/indicadores',
+    label: 'Indicadores',
+    icon: 'grid',
+    permiso: { accion: 'read', sujeto: 'Metricas' },
+    page: Indicadores,
+    title: () => 'Indicadores',
+    subtitle: () => 'Período activo de todas las universidades',
   },
   {
     to: '/universidades',

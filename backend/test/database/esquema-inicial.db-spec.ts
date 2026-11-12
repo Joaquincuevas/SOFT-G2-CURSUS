@@ -187,13 +187,20 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    // MET-01 es la última: solo quita la función nota_final.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ notaFinal }] = await bd.query<{ notaFinal: string }[]>(
+      `SELECT count(*) AS "notaFinal" FROM pg_proc WHERE proname = 'nota_final'`,
+    )
+    expect(Number(notaFinal)).toBe(0)
     await bd.undoLastMigration() // HIS-03: quita la protección del archivo.
     await bd.undoLastMigration() // HIS-02: quita los triggers de protección.
     await bd.undoLastMigration() // HIS-01: quita el cierre y su función.
     const SIN_CIERRE = TABLAS.filter((tabla) => tabla !== 'cierre_curso')
     expect(await tablasExistentes()).toEqual(SIN_CIERRE)
-    // MAT-07 es la última: quita el historial de versiones y devuelve el
-    // bloqueo del material solo a quien lo subió.
+    // MAT-07: quita el historial de versiones y devuelve el bloqueo del
+    // material solo a quien lo subió.
     await bd.undoLastMigration()
     const SIN_VERSIONES = SIN_CIERRE.filter(
       (tabla) => tabla !== 'material_version',
@@ -231,7 +238,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -339,7 +347,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó HIS-03,
+    await bd.undoLastMigration() // runMigrations también reaplicó MET-01,
+    await bd.undoLastMigration() // HIS-03,
     await bd.undoLastMigration() // HIS-02,
     await bd.undoLastMigration() // HIS-01,
     await bd.undoLastMigration() // MAT-07,
