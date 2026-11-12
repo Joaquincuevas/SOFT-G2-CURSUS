@@ -145,6 +145,7 @@
 }
 
 .indicadores__grafico {
+  container: comparacion / inline-size;
   display: grid;
   gap: 1rem;
   padding: 1rem 1.25rem;
@@ -161,15 +162,37 @@
   gap: 0.75rem;
 }
 
+/* En pantallas angostas, nombre y valor van en una fila y la barra debajo, a
+   todo el ancho. Con espacio suficiente, las tres partes van en una fila, con
+   la columna del valor fija para que todas las barras tengan el mismo largo.
+   Se mide el ancho del gráfico (no el de la ventana) porque el menú lateral
+   también lo reduce. */
 .indicadores__barra {
   display: grid;
-  grid-template-columns: minmax(8rem, 14rem) 1fr minmax(6rem, auto);
+  grid-template-columns: minmax(min-content, 1fr) auto;
+  grid-template-areas:
+    'nombre valor'
+    'pista pista';
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   font-size: 0.875rem;
 }
 
+@container comparacion (min-width: 36rem) {
+  .indicadores__barra {
+    grid-template-columns: minmax(8rem, 14rem) minmax(0, 1fr) 10rem;
+    grid-template-areas: 'nombre pista valor';
+    row-gap: 0;
+  }
+}
+
+.indicadores__barra-nombre {
+  grid-area: nombre;
+  overflow-wrap: break-word;
+}
+
 .indicadores__barra-pista {
+  grid-area: pista;
   height: 1rem;
   border-radius: 0.5rem;
   background: var(--color-border);
@@ -184,11 +207,14 @@
 }
 
 .indicadores__barra-valor {
+  grid-area: valor;
   font-weight: 600;
   text-align: right;
+  white-space: nowrap;
 }
 
 .indicadores__barra-valor--sin-datos {
+  white-space: normal;
   font-weight: 400;
   color: var(--color-text-secondary);
 }
