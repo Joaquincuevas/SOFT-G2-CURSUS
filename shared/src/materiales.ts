@@ -81,9 +81,30 @@ export interface Material {
   categoria: CategoriaMaterial
   titulo: string
   descripcion: string | null
+  // El archivo de la versión vigente (MAT-07).
   archivo: ArchivoResumen
   // Fecha ISO 8601 en que se registró el material.
   creadoEn: string
+  // MAT-07: número y fecha ISO 8601 de la versión vigente.
+  version: number
+  versionEn: string
+}
+
+// MAT-07: POST …/materiales/:materialId/versiones. El archivo ya pasó por la
+// subida y confirmación de MAT-01.
+export interface SubirVersionMaterial {
+  archivoId: string
+}
+
+// MAT-07: elemento de GET …/materiales/:materialId/versiones (solo profesor),
+// de la más reciente a la más antigua, y respuesta del POST.
+export interface VersionMaterial {
+  version: number
+  archivo: ArchivoResumen
+  // Fecha ISO 8601 en que se subió la versión.
+  subidoEn: string
+  // Nombre de quien la subió.
+  responsable: string
 }
 
 // MAT-09: el archivo ya pasó por la subida y confirmación de MAT-01.

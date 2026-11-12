@@ -206,13 +206,18 @@ export class ArchivosService {
   ): Promise<DescargaArchivo> {
     const vigente =
       'subido_at IS NOT NULL AND archived_at IS NULL AND NOT es_archivo_silabo(id)'
+    // MAT-07: el archivo de una versión anterior de un material solo lo
+    // descarga el profesor (de esta sección, que es del curso), como en las
+    // rutas de materiales. El resto, incluido el Director, solo la vigente.
+    const anterior = 'es_version_anterior_material(id)'
     // El Director lee en cualquier universidad, en una transacción READ ONLY.
     const [archivo] =
       contexto.rol === 'DIRECTOR'
         ? await this.bd.consultarEnTodasLasUniversidades<FilaArchivo>(
             contexto,
             `SELECT ${COLUMNAS} FROM archivo
-              WHERE seccion_id = $1 AND id = $2 AND ${vigente}`,
+              WHERE seccion_id = $1 AND id = $2 AND ${vigente}
+                AND NOT ${anterior}`,
             [seccion.id, archivoId],
           )
         : await this.bd.consultarEnUniversidad<FilaArchivo>(
@@ -220,6 +225,7 @@ export class ArchivosService {
             `SELECT ${COLUMNAS} FROM archivo
               WHERE universidad_id = $1 AND seccion_id = $2 AND id = $3
                 AND ${vigente}
+                AND ($4::text = 'PROFESOR' OR NOT ${anterior})
                 AND ($4::text <> 'ALUMNO' OR subido_por = $5
                      OR subido_como <> 'ALUMNO')`,
             [seccion.id, archivoId, seccion.rol, usuarioId],

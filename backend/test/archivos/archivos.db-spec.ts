@@ -487,6 +487,10 @@ describe('MAT-03: sílabo vigente del curso', () => {
       await bd.query('DELETE FROM silabo WHERE archivo_id = ANY($1::uuid[])', [
         archivosPublicados,
       ])
+      // MAT-07: primero su versión 1.
+      await bd.query('DELETE FROM material_version WHERE material_id = $1', [
+        materialAnterior,
+      ])
       await bd.query('DELETE FROM material WHERE id = $1', [materialAnterior])
     })
 

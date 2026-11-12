@@ -1,6 +1,7 @@
 import type {
   DescargaArchivo,
   Material,
+  VersionMaterial,
   Rol,
   SubidaArchivo,
 } from '@cursus/shared'
@@ -22,6 +23,7 @@ import { configurarApp } from '../../src/config/configurar-app.js'
 import { ROL_APP } from '../../src/database/base-de-datos.service.js'
 import { crearSuperadmin } from '../../src/database/crear-superadmin.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
+import { CrearMaterialVersion1792890000000 } from '../../src/database/migrations/1792890000000-CrearMaterialVersion.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
 
 // MAT-04: base propia con el seed cargado, que se crea y se borra en cada
@@ -76,11 +78,13 @@ class AlmacenamientoFalso {
     })
   }
 
-  // El nombre va en la URL para revisar que se descarga con el original.
-  firmarDescarga(clave: string, nombre: string) {
+  // El nombre va en la URL para revisar que se descarga con el original, y
+  // la versión de S3 para revisar que se firma la fijada (MAT-07).
+  firmarDescarga(clave: string, nombre: string, version?: string) {
     this.conectado()
+    const fijada = version ? `&version=${version}` : ''
     return Promise.resolve({
-      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}`,
+      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}${fijada}`,
       expiraEn: new Date(Date.now() + 300_000),
     })
   }
@@ -148,6 +152,7 @@ async function subir(
     almacenamiento.objetos.set(clave, {
       tamano: archivo.tamano,
       tipo: archivo.tipo,
+      version: `v-${archivo.id}`,
     })
     await confirmar(correo, seccionId, archivo.id)
   }
@@ -419,6 +424,8 @@ describe('POST /api/espacio/secciones/:id/materiales (MAT-04)', () => {
         subidoEn: expect.any(String) as string,
       },
       creadoEn: expect.any(String) as string,
+      version: 1,
+      versionEn: expect.any(String) as string,
     })
     // Queda asociado al curso, no a la sección ni solo al profesor.
     const [fila] = await bd.query<
@@ -847,7 +854,8 @@ describe('GET /api/espacio/secciones/:id/materiales/:materialId/descarga (MAT-06
         200,
       )
       expect(url).toBe(
-        `https://s3.test/${material.clave}?nombre=${encodeURIComponent('Guía 1 de Cálculo.pdf')}`,
+        // MAT-07: con la versión de S3 fijada al registrarlo.
+        `https://s3.test/${material.clave}?nombre=${encodeURIComponent('Guía 1 de Cálculo.pdf')}&version=v-${material.archivoId}`,
       )
       const minutos = (Date.parse(expiraEn) - Date.now()) / 60_000
       expect(minutos).toBeGreaterThan(4)
@@ -951,6 +959,7 @@ async function materialSql(titulo = 'Material de prueba') {
      RETURNING id`,
     [secciones.s1, archivoId, titulo, await idDe(PROFESOR)],
   )
+  // MAT-07: tg_material_version_inicial crea su versión 1, sin VersionId.
   return id
 }
 
@@ -1446,8 +1455,6 @@ describe('RLS y restricciones de material (SQL directo)', () => {
       ['el ayudante', AYUDANTE, 'AYUDANTE'],
       ['un alumno', ALUMNO, 'ALUMNO'],
       ['el profesor de otro curso', PROFESOR_OTRO_CURSO, 'PROFESOR'],
-      // Hoy solo modifica quien lo registró (como archivo): ver la guía.
-      ['otro profesor del curso', PROFESOR_S1, 'PROFESOR'],
     ])('%s no lo modifica: 0 filas', async (_quien, correo, rol) => {
       await comoApp(
         {
@@ -1460,6 +1467,31 @@ describe('RLS y restricciones de material (SQL directo)', () => {
         },
       )
     })
+  })
+
+  // MAT-07: otro profesor del curso bloquea el material para numerar sus
+  // versiones (USING), pero solo quien lo registró lo modifica (WITH CHECK).
+  it('otro profesor del curso lo bloquea, pero no lo modifica: 42501', async () => {
+    const materialId = await materialSql('Bloqueo compartido')
+    await comoApp(
+      {
+        universidadId: norte,
+        rol: 'PROFESOR',
+        usuarioId: usuarios[PROFESOR_S1],
+      },
+      async (q) => {
+        expect(
+          await q.query('SELECT id FROM material WHERE id = $1 FOR UPDATE', [
+            materialId,
+          ]),
+        ).toEqual([{ id: materialId }])
+        await expect(
+          q.query(`UPDATE material SET titulo = 'Ajeno' WHERE id = $1`, [
+            materialId,
+          ]),
+        ).rejects.toMatchObject({ code: SIN_PERMISO })
+      },
+    )
   })
 
   it('el rol de la API no puede borrar materiales: 42501', async () => {
@@ -1573,5 +1605,553 @@ describe('RLS y restricciones de material (SQL directo)', () => {
          VALUES ($1, $2, $3, 'GUIA', 'Para auditar', $4) RETURNING id`,
         [norte, cursoIcc101, archivoId, usuarios[PROFESOR]],
       ) as Promise<{ id: string }[]>
+  })
+})
+
+// MAT-07: versiones de un material. Cualquier profesor vigente del curso sube
+// una nueva; el resto ve y descarga solo la vigente, también con SQL directo.
+describe('MAT-07: versiones de un material', () => {
+  let norte: string
+  let sur: string
+  const usuarios: Record<string, string> = {}
+
+  beforeAll(async () => {
+    norte = await universidadDe('norte.cursus.test')
+    sur = await universidadDe('sur.cursus.test')
+    for (const correo of [
+      PROFESOR,
+      PROFESOR_S1,
+      PROFESOR_S2,
+      PROFESOR_OTRO_CURSO,
+      PROFESOR_SUR,
+      AYUDANTE,
+      ALUMNO,
+    ]) {
+      usuarios[correo] = await idDe(correo)
+    }
+  })
+
+  const ruta = (seccionId: string, materialId: string, resto = '') =>
+    `/api/espacio/secciones/${seccionId}/materiales/${materialId}/versiones${resto}`
+
+  async function subirVersion(
+    correo: string,
+    seccionId: string,
+    materialId: string,
+    archivoId: string,
+    estado: number,
+  ) {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .post(ruta(seccionId, materialId))
+      .set('Authorization', `Bearer ${token}`)
+      .send({ archivoId })
+      .expect(estado)
+    return respuesta.body as VersionMaterial
+  }
+
+  async function obtener<T>(
+    correo: string,
+    url: string,
+    estado = 200,
+  ): Promise<T> {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .get(url)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return respuesta.body as T
+  }
+
+  // Material de ICC101 registrado por PROFESOR en la sección 1 (versión 1).
+  async function materialConV1(nombre = 'v1.pdf') {
+    const archivoId = await subir(PROFESOR, secciones.s1, nombre)
+    const { id } = await registrar(
+      PROFESOR,
+      secciones.s1,
+      { archivoId, categoria: 'GUIA', titulo: 'Versionado' },
+      201,
+    )
+    return { id, archivoId }
+  }
+
+  const claveDe = async (archivoId: string) =>
+    (
+      await bd.query<{ clave: string }[]>(
+        'SELECT clave FROM archivo WHERE id = $1',
+        [archivoId],
+      )
+    )[0].clave
+
+  const versionesEnBase = async (materialId: string) =>
+    (
+      await bd.query<{ version: number }[]>(
+        'SELECT version FROM material_version WHERE material_id = $1 ORDER BY version',
+        [materialId],
+      )
+    ).map((fila) => fila.version)
+
+  it('un co-profesor sube la versión 2 y el alumno ve y descarga solo esa', async () => {
+    const { id } = await materialConV1()
+    const v2 = await subir(PROFESOR_S1, secciones.s1, 'v2.pdf')
+    const creada = await subirVersion(PROFESOR_S1, secciones.s1, id, v2, 201)
+    expect(creada).toEqual({
+      version: 2,
+      archivo: expect.objectContaining({ id: v2, nombre: 'v2.pdf' }) as object,
+      subidoEn: expect.any(String) as string,
+      responsable: 'Usuario de prueba',
+    })
+
+    const [delAlumno] = (await listar(ALUMNO, secciones.s1)).filter(
+      (m) => m.id === id,
+    )
+    expect(delAlumno).toMatchObject({ version: 2, archivo: { id: v2 } })
+    // El profesor, que lee todas las versiones, también ve la vigente.
+    const [delProfesor] = (await listar(PROFESOR, secciones.s1)).filter(
+      (m) => m.id === id,
+    )
+    expect(delProfesor).toMatchObject({ version: 2, archivo: { id: v2 } })
+    expect(Date.parse(delAlumno.versionEn)).toBeGreaterThanOrEqual(
+      Date.parse(delAlumno.creadoEn),
+    )
+    const { url } = await obtener<DescargaArchivo>(
+      ALUMNO,
+      `/api/espacio/secciones/${secciones.s1}/materiales/${id}/descarga`,
+    )
+    expect(url).toBe(
+      `https://s3.test/${await claveDe(v2)}?nombre=v2.pdf&version=v-${v2}`,
+    )
+  })
+
+  it('el profesor de otra sección del curso también sube versiones', async () => {
+    const { id } = await materialConV1()
+    const v2 = await subir(PROFESOR_S2, secciones.s2, 'v2.pdf')
+    expect(
+      (await subirVersion(PROFESOR_S2, secciones.s2, id, v2, 201)).version,
+    ).toBe(2)
+  })
+
+  it('el profesor ve el historial y descarga la versión 1 fijada', async () => {
+    const { id, archivoId } = await materialConV1()
+    const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    await subirVersion(PROFESOR, secciones.s1, id, v2, 201)
+
+    const historial = await obtener<VersionMaterial[]>(
+      PROFESOR_S2,
+      ruta(secciones.s2, id),
+    )
+    expect(historial.map((v) => [v.version, v.archivo.id])).toEqual([
+      [2, v2],
+      [1, archivoId],
+    ])
+    const { url } = await obtener<DescargaArchivo>(
+      PROFESOR,
+      ruta(secciones.s1, id, '/1/descarga'),
+    )
+    expect(url).toBe(
+      `https://s3.test/${await claveDe(archivoId)}?nombre=v1.pdf&version=v-${archivoId}`,
+    )
+    await obtener(PROFESOR, ruta(secciones.s1, id, '/3/descarga'), 404)
+    await obtener(PROFESOR, ruta(secciones.s1, id, '/0/descarga'), 404)
+  })
+
+  it.each([
+    ['el ayudante', AYUDANTE],
+    ['un alumno', ALUMNO],
+  ])(
+    '%s no sube, no ve el historial ni descarga versiones: 403',
+    async (_q, correo) => {
+      const { id } = await materialConV1()
+      const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+      await subirVersion(correo, secciones.s1, id, v2, 403)
+      await obtener(correo, ruta(secciones.s1, id), 403)
+      await obtener(correo, ruta(secciones.s1, id, '/1/descarga'), 403)
+      expect(await versionesEnBase(id)).toEqual([1])
+    },
+  )
+
+  it('reintentar con el mismo archivo devuelve la misma versión', async () => {
+    const { id } = await materialConV1()
+    const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    const primera = await subirVersion(PROFESOR, secciones.s1, id, v2, 201)
+    const segunda = await subirVersion(PROFESOR, secciones.s1, id, v2, 201)
+    expect(segunda).toEqual(primera)
+    expect(await versionesEnBase(id)).toEqual([1, 2])
+  })
+
+  it('409 si el archivo ya es otro material o una versión de otro', async () => {
+    const a = await materialConV1()
+    const b = await materialConV1()
+    await subirVersion(PROFESOR, secciones.s1, a.id, b.archivoId, 409)
+    const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    await subirVersion(PROFESOR, secciones.s1, b.id, v2, 201)
+    await subirVersion(PROFESOR, secciones.s1, a.id, v2, 409)
+    // Tampoco se registra como material nuevo (MAT-04).
+    await registrar(
+      PROFESOR,
+      secciones.s1,
+      { archivoId: v2, categoria: 'GUIA', titulo: 'Repetido' },
+      409,
+    )
+    expect(await versionesEnBase(a.id)).toEqual([1])
+  })
+
+  it('numera sin repetir con subidas simultáneas', async () => {
+    const { id } = await materialConV1()
+    const archivos = [
+      await subir(PROFESOR, secciones.s1, 'a.pdf'),
+      await subir(PROFESOR_S1, secciones.s1, 'b.pdf'),
+      await subir(PROFESOR_S2, secciones.s2, 'c.pdf'),
+    ]
+    const [t1, t2, t3] = [
+      await tokenDe(PROFESOR),
+      await tokenDe(PROFESOR_S1),
+      await tokenDe(PROFESOR_S2),
+    ]
+    const pedir = (token: string, seccionId: string, archivoId: string) =>
+      request(app.getHttpServer())
+        .post(ruta(seccionId, id))
+        .set('Authorization', `Bearer ${token}`)
+        .send({ archivoId })
+    const respuestas = await Promise.all([
+      pedir(t1, secciones.s1, archivos[0]),
+      pedir(t2, secciones.s1, archivos[1]),
+      pedir(t3, secciones.s2, archivos[2]),
+    ])
+    expect(respuestas.map((r) => r.status)).toEqual([201, 201, 201])
+    expect(await versionesEnBase(id)).toEqual([1, 2, 3, 4])
+  })
+
+  it('rechaza un archivo publicado como sílabo: 400', async () => {
+    const { id } = await materialConV1()
+    const pdf = await subir(PROFESOR, secciones.s1, 'silabo.pdf')
+    await bd.query(
+      `INSERT INTO silabo (universidad_id, curso_id, archivo_id, version, version_objeto, subido_por)
+       SELECT a.universidad_id, s.curso_id, a.id, 1, 'v', a.subido_por
+         FROM archivo a JOIN seccion s ON s.id = a.seccion_id WHERE a.id = $1`,
+      [pdf],
+    )
+    await subirVersion(PROFESOR, secciones.s1, id, pdf, 400)
+  })
+
+  it('400 si el objeto de S3 no calza y 503 sin versionado', async () => {
+    const { id } = await materialConV1()
+    const otro = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    const clave = await claveDe(otro)
+    almacenamiento.objetos.set(clave, { tamano: 1, tipo: 'application/pdf' })
+    await subirVersion(PROFESOR, secciones.s1, id, otro, 400)
+    almacenamiento.objetos.set(clave, { tamano: 100, tipo: 'application/pdf' })
+    await subirVersion(PROFESOR, secciones.s1, id, otro, 503)
+    expect(await versionesEnBase(id)).toEqual([1])
+  })
+
+  // La descarga genérica de MAT-01 aplica la misma regla que las rutas de
+  // materiales: quien ya conocía el id del archivo reemplazado no obtiene una
+  // URL nueva, salvo el profesor.
+  it.each([
+    ['un alumno', ALUMNO, 404],
+    ['el ayudante', AYUDANTE, 404],
+    ['el Director', DIRECTOR, 404],
+    ['el profesor que lo subió', PROFESOR, 200],
+    ['el co-profesor', PROFESOR_S1, 200],
+  ] as const)(
+    'descarga genérica de la versión anterior: %s (%s) responde %i; la vigente, 200',
+    async (_q, correo, estado) => {
+      const { id, archivoId } = await materialConV1()
+      const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+      await subirVersion(PROFESOR, secciones.s1, id, v2, 201)
+      const generica = (archivo: string) =>
+        `/api/espacio/secciones/${secciones.s1}/archivos/${archivo}/descarga`
+      await obtener(correo, generica(archivoId), estado)
+      await obtener(correo, generica(v2), 200)
+    },
+  )
+
+  // Despliegue: la migración corre antes de que ECS cambie de backend. El
+  // anterior registra el material sin su versión; el trigger la crea.
+  it('un material que registra el backend anterior sigue visible y descargable', async () => {
+    const archivoId = await subir(PROFESOR, secciones.s1, 'anterior.pdf')
+    const q = bd.createQueryRunner()
+    await q.startTransaction()
+    let id: string
+    try {
+      await q.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await q.query(
+        `SELECT set_config('app.universidad_id', $1, true),
+                set_config('app.rol', 'PROFESOR', true),
+                set_config('app.usuario_id', $2, true)`,
+        [norte, usuarios[PROFESOR]],
+      )
+      // El INSERT de MAT-04 antes de MAT-07, sin material_version.
+      ;[{ id }] = (await q.query(
+        `INSERT INTO material
+           (universidad_id, curso_id, archivo_id, categoria, titulo, subido_por)
+         SELECT universidad_id, curso_id, $2, 'GUIA', 'Del backend anterior', $3
+           FROM seccion WHERE id = $1
+         RETURNING id`,
+        [secciones.s1, archivoId, usuarios[PROFESOR]],
+      )) as { id: string }[]
+      await q.commitTransaction()
+    } finally {
+      if (q.isTransactionActive) await q.rollbackTransaction()
+      await q.release()
+    }
+
+    const [visto] = (await listar(ALUMNO, secciones.s1)).filter(
+      (m) => m.id === id,
+    )
+    expect(visto).toMatchObject({ version: 1, archivo: { id: archivoId } })
+    const { url } = await obtener<DescargaArchivo>(
+      ALUMNO,
+      `/api/espacio/secciones/${secciones.s1}/materiales/${id}/descarga`,
+    )
+    expect(url).toBe(
+      `https://s3.test/${await claveDe(archivoId)}?nombre=anterior.pdf`,
+    )
+    // Y el backend nuevo sigue numerando desde ahí.
+    const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    expect(
+      (await subirVersion(PROFESOR, secciones.s1, id, v2, 201)).version,
+    ).toBe(2)
+  })
+
+  it('la versión 1 migrada, sin versión de S3, se descarga sin VersionId', async () => {
+    const id = await materialSql('Migrado')
+    const { url } = await obtener<DescargaArchivo>(
+      ALUMNO,
+      `/api/espacio/secciones/${secciones.s1}/materiales/${id}/descarga`,
+    )
+    expect(url).not.toContain('version=')
+  })
+
+  it('el backfill crea la versión 1 de cada material con su autor y fecha', async () => {
+    // Antes de la transacción: el DROP de la migración bloquea archivo.
+    const archivoId = await archivoSql(secciones.s1, PROFESOR)
+    const q = bd.createQueryRunner()
+    await q.startTransaction()
+    try {
+      const migracion = new CrearMaterialVersion1792890000000()
+      await migracion.down(q)
+      const [{ id, created_at }] = (await q.query(
+        `INSERT INTO material (universidad_id, curso_id, archivo_id, categoria, titulo, subido_por, created_at)
+         SELECT s.universidad_id, s.curso_id, $2, 'GUIA', 'Antiguo', $3, '2026-03-01T12:00:00Z'
+           FROM seccion s WHERE s.id = $1
+         RETURNING id, created_at`,
+        [secciones.s1, archivoId, usuarios[PROFESOR]],
+      )) as { id: string; created_at: Date }[]
+      await migracion.up(q)
+      const versiones: unknown = await q.query(
+        `SELECT version, archivo_id, subido_por, subido_en, version_objeto
+           FROM material_version WHERE material_id = $1`,
+        [id],
+      )
+      expect(versiones).toEqual([
+        {
+          version: 1,
+          archivo_id: archivoId,
+          subido_por: usuarios[PROFESOR],
+          subido_en: created_at,
+          version_objeto: null,
+        },
+      ])
+    } finally {
+      await q.rollbackTransaction()
+      await q.release()
+    }
+  })
+
+  describe('SQL directo', () => {
+    // Inserta la versión siguiente con el rol de la API.
+    // Inserta una versión con el rol de la API, sin leer el material: así
+    // la política decide aunque el material no sea visible.
+    const insertar = (
+      q: QueryRunner,
+      materialId: string,
+      archivoId: string,
+      por: string,
+      version = 2,
+      universidadId = norte,
+    ) =>
+      q.query(
+        `INSERT INTO material_version
+           (universidad_id, material_id, version, archivo_id, subido_por, version_objeto)
+         VALUES ($5, $1, $4, $2, $3, 'v')`,
+        [materialId, archivoId, por, version, universidadId],
+      )
+
+    it('un co-profesor inserta la versión siguiente', async () => {
+      const id = await materialSql()
+      const archivoId = await archivoSql(secciones.s1, PROFESOR_S1)
+      await comoApp(
+        {
+          universidadId: norte,
+          rol: 'PROFESOR',
+          usuarioId: usuarios[PROFESOR_S1],
+        },
+        async (q) => {
+          await insertar(q, id, archivoId, usuarios[PROFESOR_S1])
+        },
+      )
+    })
+
+    it.each([
+      ['saltándose un número', PROFESOR, 'PROFESOR', 3],
+      ['el ayudante', AYUDANTE, 'AYUDANTE', 2],
+      ['un alumno', ALUMNO, 'ALUMNO', 2],
+      ['el profesor de otro curso', PROFESOR_OTRO_CURSO, 'PROFESOR', 2],
+    ] as const)('%s no inserta: 42501', async (_q, correo, rol, version) => {
+      const id = await materialSql()
+      const archivoId = await archivoSql(secciones.s1, correo)
+      await comoApp(
+        { universidadId: norte, rol, usuarioId: usuarios[correo] },
+        async (q) => {
+          await expect(
+            insertar(q, id, archivoId, usuarios[correo], version),
+          ).rejects.toMatchObject({ code: SIN_PERMISO })
+        },
+      )
+    })
+
+    it('el profesor de otra universidad no ve el material ni inserta', async () => {
+      const id = await materialSql()
+      const archivoId = await archivoSql(secciones.s1, PROFESOR)
+      await comoApp(
+        {
+          universidadId: sur,
+          rol: 'PROFESOR',
+          usuarioId: usuarios[PROFESOR_SUR],
+        },
+        async (q) => {
+          expect(
+            await q.query(
+              'SELECT 1 FROM material_version WHERE material_id = $1',
+              [id],
+            ),
+          ).toEqual([])
+          await expect(
+            insertar(q, id, archivoId, usuarios[PROFESOR_SUR], 2, sur),
+          ).rejects.toMatchObject({ code: SIN_PERMISO })
+        },
+      )
+    })
+
+    it('rechaza un archivo publicado como sílabo: 42501', async () => {
+      const id = await materialSql()
+      const archivoId = await archivoSql(secciones.s1, PROFESOR)
+      await bd.query(
+        `INSERT INTO silabo (universidad_id, curso_id, archivo_id, version, version_objeto, subido_por)
+         SELECT a.universidad_id, s.curso_id, a.id,
+                COALESCE((SELECT max(version) FROM silabo WHERE curso_id = s.curso_id), 0) + 1,
+                'v', a.subido_por
+           FROM archivo a JOIN seccion s ON s.id = a.seccion_id WHERE a.id = $1`,
+        [archivoId],
+      )
+      await comoApp(
+        {
+          universidadId: norte,
+          rol: 'PROFESOR',
+          usuarioId: usuarios[PROFESOR],
+        },
+        async (q) => {
+          await expect(
+            insertar(q, id, archivoId, usuarios[PROFESOR]),
+          ).rejects.toMatchObject({ code: SIN_PERMISO })
+        },
+      )
+    })
+
+    it.each([
+      ['el ayudante', AYUDANTE, 'AYUDANTE'],
+      ['un alumno', ALUMNO, 'ALUMNO'],
+      ['el Director', DIRECTOR, 'DIRECTOR'],
+    ] as const)(
+      '%s lee solo la vigente; el profesor, todas',
+      async (_q, correo, rol) => {
+        const id = await materialSql()
+        const archivoId = await archivoSql(secciones.s1, PROFESOR)
+        await bd.query(
+          `INSERT INTO material_version (universidad_id, material_id, version, archivo_id, subido_por, version_objeto)
+         SELECT universidad_id, id, 2, $2, subido_por, 'v' FROM material WHERE id = $1`,
+          [id, archivoId],
+        )
+        const leer = (q: QueryRunner) =>
+          q.query<{ version: number }[]>(
+            'SELECT version FROM material_version WHERE material_id = $1 ORDER BY version',
+            [id],
+          )
+        await comoApp(
+          { universidadId: norte, rol, usuarioId: await idDe(correo) },
+          async (q) => {
+            expect(await leer(q)).toEqual([{ version: 2 }])
+          },
+        )
+        await comoApp(
+          {
+            universidadId: norte,
+            rol: 'PROFESOR',
+            usuarioId: usuarios[PROFESOR_S2],
+          },
+          async (q) => {
+            expect(await leer(q)).toEqual([{ version: 1 }, { version: 2 }])
+          },
+        )
+      },
+    )
+
+    it.each([
+      [
+        'modifica',
+        'UPDATE material_version SET version = 9 WHERE material_id = $1',
+      ],
+      ['borra', 'DELETE FROM material_version WHERE material_id = $1'],
+    ])('el rol de la API no %s versiones: 42501', async (_q, sql) => {
+      const id = await materialSql()
+      await comoApp(
+        {
+          universidadId: norte,
+          rol: 'PROFESOR',
+          usuarioId: usuarios[PROFESOR],
+        },
+        async (q) => {
+          await expect(q.query(sql, [id])).rejects.toMatchObject({
+            code: SIN_PERMISO,
+          })
+        },
+      )
+    })
+
+    it('lo que un superadmin inserta queda en superadmin_cambio', async () => {
+      const { id: superadminId } = await crearSuperadmin(bd, {
+        correo: 'superadmin.versiones@cursus.test',
+        nombre: 'Superadmin',
+        password: 'contraseña-provisoria',
+      })
+      const id = await materialSql()
+      const archivoId = await archivoSql(secciones.s1, PROFESOR)
+      const q = bd.createQueryRunner()
+      await q.startTransaction()
+      try {
+        await q.query(`SELECT set_config('app.superadmin_id', $1, true)`, [
+          superadminId,
+        ])
+        await q.query(`SELECT set_config('app.motivo', 'Corrección', true)`)
+        await insertar(q, id, archivoId, usuarios[PROFESOR])
+        const cambios: unknown = await q.query(
+          `SELECT superadmin_id, operacion, nuevo->>'version' AS version, motivo
+             FROM superadmin_cambio WHERE tabla = 'material_version'`,
+        )
+        expect(cambios).toEqual([
+          {
+            superadmin_id: superadminId,
+            operacion: 'INSERT',
+            version: '2',
+            motivo: 'Corrección',
+          },
+        ])
+      } finally {
+        await q.rollbackTransaction()
+        await q.release()
+      }
+    })
   })
 })

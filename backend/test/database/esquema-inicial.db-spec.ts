@@ -35,6 +35,7 @@ const TABLAS = [
   'lectura_anuncio',
   'limite_login',
   'material',
+  'material_version',
   'nota',
   'nota_cambio',
   'periodo',
@@ -185,16 +186,30 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // MAT-10 es la última: solo quita la lectura docente de entrega.
+    // MAT-07 es la última: quita el historial de versiones y devuelve el
+    // bloqueo del material solo a quien lo subió.
     await bd.undoLastMigration()
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    const SIN_VERSIONES = TABLAS.filter((tabla) => tabla !== 'material_version')
+    expect(await tablasExistentes()).toEqual(SIN_VERSIONES)
+    const [{ bloqueo }] = await bd.query<{ bloqueo: string }[]>(
+      `SELECT qual AS bloqueo FROM pg_policies
+        WHERE tablename = 'material' AND policyname = 'pol_material_modificacion'`,
+    )
+    expect(bloqueo).toContain('subido_por')
+    const [{ vigente }] = await bd.query<{ vigente: string }[]>(
+      `SELECT count(*) AS vigente FROM pg_proc WHERE proname = 'material_version_vigente'`,
+    )
+    expect(Number(vigente)).toBe(0)
+    // MAT-10: solo quita la lectura docente de entrega.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(SIN_VERSIONES)
     const [{ docente }] = await bd.query<{ docente: string }[]>(
       `SELECT count(*) AS docente FROM pg_policies
         WHERE tablename = 'entrega' AND policyname = 'pol_entrega_lectura_docente'`,
     )
     expect(Number(docente)).toBe(0)
     await bd.undoLastMigration() // MAT-02: quita el historial y el filtro de descarga genérica.
-    const SIN_SILABO = TABLAS.filter((tabla) => tabla !== 'silabo')
+    const SIN_SILABO = SIN_VERSIONES.filter((tabla) => tabla !== 'silabo')
     expect(await tablasExistentes()).toEqual(SIN_SILABO)
     // MAT-04 quita material y su trigger. La restricción
     // uq_archivo_id_universidad es de MAT-09 y queda. Revertir, aplicar y
@@ -208,7 +223,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // MAT-10, reaplicada por runMigrations.
+    await bd.undoLastMigration() // MAT-07 y MAT-10, reaplicadas por runMigrations.
+    await bd.undoLastMigration()
     await bd.undoLastMigration() // MAT-02.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
@@ -312,7 +328,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-10,
+    await bd.undoLastMigration() // runMigrations también reaplicó MAT-07,
+    await bd.undoLastMigration() // MAT-10,
     await bd.undoLastMigration() // MAT-02,
     await bd.undoLastMigration() // MAT-04,
     await bd.undoLastMigration() // GES-26,
@@ -693,6 +710,7 @@ describe('migraciones', () => {
         t !== 'asistencia_cambio' &&
         t !== 'evaluacion_cambio' &&
         t !== 'silabo' &&
+        t !== 'material_version' &&
         t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {
