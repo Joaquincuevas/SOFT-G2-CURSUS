@@ -62,6 +62,7 @@ const MIS_NOTAS_ALUMNO: MisNotasSeccion = {
       recorregida: false,
     },
   ],
+  notaFinal: { tipo: 'PARCIAL', nota: 5, porcentajeEvaluado: 20 },
 }
 
 const SIN_NOTAS: NotasEvaluacion = {

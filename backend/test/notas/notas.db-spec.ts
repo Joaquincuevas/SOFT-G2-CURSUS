@@ -9,6 +9,7 @@ import {
   MENSAJES_NOTA_INVALIDA,
   type MisNotasSeccion,
   type NotasEvaluacion,
+  type NotasFinalesSeccion,
   type Rol,
 } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
@@ -1122,7 +1123,10 @@ describe('GET .../mis-notas (NOT-13)', () => {
     )
     await inscribir(vacia.id, alumnos.base)
 
-    expect(await misNotas(ALUMNO, 200, vacia.id)).toEqual({ evaluaciones: [] })
+    expect(await misNotas(ALUMNO, 200, vacia.id)).toEqual({
+      evaluaciones: [],
+      notaFinal: { tipo: 'PARCIAL', nota: null, porcentajeEvaluado: 0 },
+    })
   })
 
   it.each([
@@ -1163,6 +1167,186 @@ describe('GET .../mis-notas (NOT-13)', () => {
     await request(app.getHttpServer())
       .get(rutaMisNotas(secciones.s1))
       .expect(401)
+  })
+})
+
+describe('nota final (NOT-14)', () => {
+  // Sección propia, con sus evaluaciones: las de s1 se acumulan entre pruebas.
+  let seccion = ''
+  const evaluaciones = { e1: '', e2: '', e3: '', archivada: '' }
+
+  async function crearEvaluacionPonderada(ponderacion: number, dia: number) {
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+       SELECT s.universidad_id, s.id, 'Nota final ' || $3, p.fecha_inicio + $3::int,
+              $2, $4
+         FROM seccion s JOIN curso c ON c.id = s.curso_id
+         JOIN periodo p ON p.id = c.periodo_id
+        WHERE s.id = $1
+       RETURNING id`,
+      [seccion, ponderacion, dia, await idDe(PROFESOR)],
+    )
+    return id
+  }
+
+  const publicar = (evaluacionId: string, alumnoId: string, valor: number) =>
+    insertarDirecto(evaluacionId, {
+      alumno_id: alumnoId,
+      valor,
+      estado: 'PUBLICADA',
+    })
+
+  async function consultar<T>(ruta: string, correo: string, estado: number) {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .get(ruta)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return respuesta.body as T
+  }
+  const rutaFinales = (seccionId = seccion) =>
+    `/api/espacio/secciones/${seccionId}/notas-finales`
+  const rutaMisNotas = () => `/api/espacio/secciones/${seccion}/mis-notas`
+
+  beforeAll(async () => {
+    ;[{ id: seccion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion (universidad_id, curso_id, numero)
+       SELECT universidad_id, curso_id, 98 FROM seccion WHERE id = $1
+       RETURNING id`,
+      [secciones.s1],
+    )
+    await bd.query(
+      `INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id)
+       SELECT universidad_id, $1, $2 FROM seccion WHERE id = $1`,
+      [seccion, await idDe(PROFESOR)],
+    )
+    for (const id of [alumnos.base, alumnos.ana, alumnos.bruno]) {
+      await inscribir(seccion, id)
+    }
+    await asignarAyudante(seccion, AYUDANTE)
+
+    evaluaciones.e1 = await crearEvaluacionPonderada(30, 1)
+    evaluaciones.e2 = await crearEvaluacionPonderada(30, 2)
+    evaluaciones.e3 = await crearEvaluacionPonderada(40, 3)
+    evaluaciones.archivada = await crearEvaluacionPonderada(10, 4)
+
+    // base: todas publicadas → (30×4 + 30×5 + 40×6) / 100 = 5,1.
+    await publicar(evaluaciones.e1, alumnos.base, 4)
+    await publicar(evaluaciones.e2, alumnos.base, 5)
+    await publicar(evaluaciones.e3, alumnos.base, 6)
+    await publicar(evaluaciones.archivada, alumnos.base, 1)
+    // ana: una publicada y una propuesta, que no cuenta.
+    await publicar(evaluaciones.e1, alumnos.ana, 7)
+    await insertarDirecto(evaluaciones.e2, { alumno_id: alumnos.ana, valor: 1 })
+    // bruno: sin notas.
+    await bd.query('UPDATE evaluacion SET archived_at = now() WHERE id = $1', [
+      evaluaciones.archivada,
+    ])
+  })
+
+  it('el profesor ve la nota final o parcial de cada alumno activo, por nombre', async () => {
+    const { alumnos: lista } = await consultar<NotasFinalesSeccion>(
+      rutaFinales(),
+      PROFESOR,
+      200,
+    )
+    const orden = await bd.query<{ id: string; nombre: string }[]>(
+      `SELECT u.id, u.nombre FROM inscripcion i JOIN usuario u ON u.id = i.usuario_id
+        WHERE i.seccion_id = $1 AND i.archived_at IS NULL
+        ORDER BY u.nombre COLLATE "es-CL-x-icu", u.correo`,
+      [seccion],
+    )
+    expect(lista.map(({ id, nombre }) => ({ id, nombre }))).toEqual(orden)
+    const porId = new Map(lista.map((a) => [a.id, a.notaFinal]))
+    expect(porId.get(alumnos.base)).toEqual({
+      tipo: 'FINAL',
+      nota: 5.1,
+      porcentajeEvaluado: 100,
+    })
+    expect(porId.get(alumnos.ana)).toEqual({
+      tipo: 'PARCIAL',
+      nota: 7,
+      porcentajeEvaluado: 30,
+    })
+    expect(porId.get(alumnos.bruno)).toEqual({
+      tipo: 'PARCIAL',
+      nota: null,
+      porcentajeEvaluado: 0,
+    })
+    expect(lista).toHaveLength(3)
+    expect(JSON.stringify(lista)).not.toMatch(/"correo"/)
+  })
+
+  it('el alumno ve en mis-notas la misma nota final que el profesor', async () => {
+    const { alumnos: lista } = await consultar<NotasFinalesSeccion>(
+      rutaFinales(),
+      PROFESOR,
+      200,
+    )
+    const misNotas = await consultar<MisNotasSeccion>(
+      rutaMisNotas(),
+      ALUMNO,
+      200,
+    )
+    expect(misNotas.notaFinal).toEqual(
+      lista.find((a) => a.id === alumnos.base)?.notaFinal,
+    )
+    expect(misNotas.notaFinal).toEqual({
+      tipo: 'FINAL',
+      nota: 5.1,
+      porcentajeEvaluado: 100,
+    })
+  })
+
+  it('una evaluación nueva sin publicar vuelve parcial la nota', async () => {
+    const nueva = await crearEvaluacionPonderada(20, 5)
+    try {
+      const { notaFinal } = await consultar<MisNotasSeccion>(
+        rutaMisNotas(),
+        ALUMNO,
+        200,
+      )
+      // La nueva aún no tiene nota: parcial sobre el 100 % ya evaluado.
+      expect(notaFinal).toEqual({
+        tipo: 'PARCIAL',
+        nota: 5.1,
+        porcentajeEvaluado: 100,
+      })
+    } finally {
+      await bd.query(
+        'UPDATE evaluacion SET archived_at = now() WHERE id = $1',
+        [nueva],
+      )
+    }
+  })
+
+  it.each([
+    ['un ayudante de la sección', AYUDANTE, 403],
+    ['un alumno de la sección', ALUMNO, 403],
+    ['el Administrativo de la facultad', ADMIN_INGENIERIA, 403],
+    ['un profesor de otra universidad', PROFESOR_SUR, 404],
+  ])('%s no consulta notas-finales (%#)', async (_caso, correo, estado) => {
+    await consultar(rutaFinales(), correo, estado)
+  })
+
+  it('un profesor que no es de la sección responde 403', async () => {
+    await bd.query(
+      `UPDATE seccion_profesor SET archived_at = now()
+        WHERE seccion_id = $1 AND archived_at IS NULL`,
+      [seccion],
+    )
+    try {
+      await consultar(rutaFinales(), PROFESOR, 403)
+    } finally {
+      await bd.query(
+        `UPDATE seccion_profesor SET archived_at = NULL WHERE seccion_id = $1`,
+        [seccion],
+      )
+    }
+  })
+
+  it('sin sesión responde 401', async () => {
+    await request(app.getHttpServer()).get(rutaFinales()).expect(401)
   })
 })
 
