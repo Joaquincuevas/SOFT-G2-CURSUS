@@ -10,6 +10,7 @@ Documentación del proyecto:
 - [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
 - [MAT-07: versiones de un material, con historial para el profesor](mat-07-versiones-material.md)
 - [MET-01: indicadores consolidados del Director (aprobación, promedio y asistencia)](met-01-indicadores-consolidados.md)
+- [MET-04: drill-down de universidad a facultad del Director](met-04-drilldown-facultad.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 
