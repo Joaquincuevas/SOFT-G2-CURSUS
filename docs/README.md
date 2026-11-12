@@ -15,6 +15,7 @@ Documentación del proyecto:
 - [MET-01: indicadores consolidados del Director (aprobación, promedio y asistencia)](met-01-indicadores-consolidados.md)
 - [MET-02: comparación de indicadores entre universidades del Director](met-02-comparar-universidades.md)
 - [MET-04: drill-down de universidad a facultad del Director](met-04-drilldown-facultad.md)
+- [MET-05: drill-down de facultad a carrera del Director](met-05-drilldown-carrera.md)
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)

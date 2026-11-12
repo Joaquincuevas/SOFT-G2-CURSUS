@@ -1,16 +1,24 @@
 import type {
   MetricasConsolidadas,
+  MetricasFacultad,
   MetricasUniversidad,
   ResumenUniversidad,
   Rol,
 } from '@cursus/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const RUTA = '/api/metricas/consolidado'
 const UNIVERSIDADES = '/api/metricas/universidades'
 const FACULTADES = `${UNIVERSIDADES}/u-norte/facultades`
+const CARRERAS_RUTA = '/api/metricas/facultades/f-ing/carreras'
 
 const SIN_INDICADORES = {
   aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
@@ -56,6 +64,27 @@ const DETALLE: MetricasUniversidad = {
       ...SIN_INDICADORES,
       alumnos: 0,
       cursos: 0,
+    },
+  ],
+}
+const CARRERAS: MetricasFacultad = {
+  universidad: { id: 'u-norte', nombre: 'Universidad Demo Norte' },
+  facultad: { id: 'f-ing', nombre: 'Ingeniería' },
+  periodo: { anio: 2026, semestre: 2 },
+  carreras: [
+    {
+      id: 'c-ing',
+      nombre: 'Ingeniería Civil',
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    },
+    {
+      id: 'c-vacia',
+      nombre: 'Carrera sin datos',
+      aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+      promedio: { valor: null, alumnos: 0 },
+      asistencia: { valor: null, presentes: 0, registros: 0 },
     },
   ],
 }
@@ -214,6 +243,124 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toHaveLength(3)
     expect(screen.getByRole('combobox', { name: 'Período' })).not.toBeDisabled()
   })
+
+  test('una facultad abre sus carreras y conserva período y breadcrumb', async () => {
+    const pedidas: string[] = []
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte?periodo=2026-1',
+      {
+        [FACULTADES]: () => DETALLE,
+        [CARRERAS_RUTA]: (_init, url) => {
+          pedidas.push(url ?? '')
+          return CARRERAS
+        },
+      },
+    )
+    fireEvent.click(await screen.findByRole('link', { name: 'Ingeniería' }))
+    expect(await screen.findByText('Ingeniería Civil')).toBeInTheDocument()
+    expect(screen.getByText('Carrera sin datos')).toBeInTheDocument()
+    expect(screen.getAllByText('Sin datos suficientes')).toHaveLength(3)
+    expect(pedidas).toContain(`${CARRERAS_RUTA}?periodo=2026-1`)
+    const migas = within(
+      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+    expect(
+      migas.getByRole('link', { name: 'Universidad Demo Norte' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-norte?periodo=2026-1',
+    )
+  })
+
+  // Un enlace directo puede traer la universidad de la URL distinta a la de la
+  // facultad: el breadcrumb vuelve a la universidad que muestra, la de la API.
+  test('el breadcrumb vuelve a la universidad de la facultad y no a la de la URL', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-sur?periodo=2026-1',
+      {
+        '/api/metricas/facultades/f-sur/carreras': () => ({
+          ...CARRERAS,
+          universidad: { id: 'u-sur', nombre: 'Universidad Demo Sur' },
+          facultad: { id: 'f-sur', nombre: 'Facultad de Sur' },
+        }),
+      },
+    )
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    const enlace = await migas.findByRole('link', {
+      name: 'Universidad Demo Sur',
+    })
+    expect(enlace).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
+    )
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+  })
+
+  test('carreras: vacío, error con reintento y facultad inexistente', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      {
+        [CARRERAS_RUTA]: () => ({ ...CARRERAS, carreras: [] }),
+      },
+    )
+    expect(
+      await screen.findByText('Esta facultad no tiene carreras.'),
+    ).toBeInTheDocument()
+
+    cleanup()
+    let intentos = 0
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      {
+        [CARRERAS_RUTA]: () => (intentos++ === 0 ? json({}, 500) : CARRERAS),
+      },
+    )
+    expect(
+      await screen.findByText('No pudimos cargar las carreras.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByText('Ingeniería Civil')).toBeInTheDocument()
+
+    cleanup()
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      { [CARRERAS_RUTA]: () => json({}, 404) },
+    )
+    expect(
+      await screen.findByText('La facultad no existe.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Volver a la universidad' }),
+    ).toHaveAttribute('href', '/indicadores/universidades/u-norte')
+  })
+
+  test.each<Rol>(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
+    '%s no accede a las carreras por URL',
+    async (rol) => {
+      const pedida = vi.fn(() => CARRERAS)
+      await renderConSesion(
+        rol,
+        '/indicadores/universidades/u-norte/facultades/f-ing',
+        { [CARRERAS_RUTA]: pedida },
+      )
+      expect(screen.queryByRole('list', { name: 'Carreras' })).toBeNull()
+      expect(pedida).not.toHaveBeenCalled()
+    },
+  )
 
   // Los tres niveles piden el mismo período: el consolidado, la lista de
   // universidades y las facultades.

@@ -1,5 +1,6 @@
 import type {
   MetricasConsolidadas,
+  MetricasFacultad,
   MetricasUniversidad,
   ReporteFacultad,
   ResumenUniversidad,
@@ -50,6 +51,12 @@ const REPORTE: ReporteFacultad = {
   periodo: { anio: 2026, semestre: 2 },
   carreras: [],
 }
+const CARRERAS_REPORTE: MetricasFacultad = {
+  universidad: { id: UNIVERSIDAD, nombre: 'Norte' },
+  facultad: { id: 'f-ingenieria', nombre: 'Ingeniería' },
+  periodo: { anio: 2026, semestre: 2 },
+  carreras: [],
+}
 const consolidado = vi.fn(() => Promise.resolve(CONSOLIDADO))
 const universidades = vi.fn(() => Promise.resolve([] as ResumenUniversidad[]))
 const facultades = vi.fn((_c: unknown, id: string) =>
@@ -64,6 +71,11 @@ const periodos = vi.fn(() =>
   ]),
 )
 const reporteFacultad = vi.fn(() => Promise.resolve(REPORTE))
+const carrerasMetricas = vi.fn((_c: unknown, id: string) =>
+  id === UNIVERSIDAD
+    ? Promise.resolve(CARRERAS_REPORTE)
+    : Promise.reject(new NotFoundException('La facultad no existe')),
+)
 
 let app: INestApplication<App>
 beforeAll(async () => {
@@ -77,6 +89,7 @@ beforeAll(async () => {
       facultades,
       periodos,
       reporteFacultad,
+      carreras: carrerasMetricas,
     })
     .compile()
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
@@ -242,6 +255,47 @@ describe('reporte de facultad (MET-08)', () => {
         .set('Authorization', sesion(rol))
         .expect(403)
     }
+  })
+})
+
+describe('carreras de una facultad (MET-05)', () => {
+  const ruta = `/api/metricas/facultades/${UNIVERSIDAD}/carreras`
+
+  it('el Director recibe las carreras y conserva el período', async () => {
+    await request(app.getHttpServer())
+      .get(`${ruta}?periodo=2026-1`)
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200, CARRERAS_REPORTE)
+    expect(carrerasMetricas).toHaveBeenLastCalledWith(
+      expect.anything(),
+      UNIVERSIDAD,
+      { anio: 2026, semestre: 1 },
+    )
+  })
+
+  it('responde 401, 403, 404 y 400 según corresponda', async () => {
+    await request(app.getHttpServer()).get(ruta).expect(401)
+    for (const rol of [
+      'ADMINISTRATIVO',
+      'PROFESOR',
+      'AYUDANTE',
+      'ALUMNO',
+    ] as Rol[]) {
+      await request(app.getHttpServer())
+        .get(ruta)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    }
+    await request(app.getHttpServer())
+      .get(
+        '/api/metricas/facultades/00000000-0000-4000-8000-0000000000ff/carreras',
+      )
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(404)
+    await request(app.getHttpServer())
+      .get('/api/metricas/facultades/no-es-uuid/carreras')
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(400)
   })
 })
 

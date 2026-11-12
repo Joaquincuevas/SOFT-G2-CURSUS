@@ -2,6 +2,7 @@ import type {
   MetricasConsolidadas,
   MetricasUniversidad,
   PeriodoDisponible,
+  MetricasFacultad,
   ReporteFacultad,
   ResumenUniversidad,
 } from '@cursus/shared'
@@ -198,6 +199,47 @@ const FACULTADES = `${BASE}${agregados('facultad_id')}${volumen('facultad_id')}
     FROM universidad u
    WHERE u.id = $1::uuid AND u.archived_at IS NULL`
 
+// MET-05, carreras de una facultad vigente (de cualquier universidad: la
+// universidad sale de la facultad). La dimensión carrera sale de la
+// tabla carrera para conservar también las carreras sin datos; los agregados
+// reutilizan las filas de finales y registros de BASE.
+const CARRERAS = `${BASE}
+  , notas_carrera AS (
+    SELECT carrera_id, count(*) AS evaluados,
+           count(*) FILTER (WHERE nota >= 4.0) AS aprobados,
+           round(avg(nota), 2) AS promedio
+      FROM finales
+     WHERE facultad_id = $4::uuid
+     GROUP BY carrera_id
+  ), asist_carrera AS (
+    SELECT carrera_id, count(*) AS registros,
+           count(*) FILTER (WHERE presente) AS presentes
+      FROM registros
+     WHERE facultad_id = $4::uuid
+     GROUP BY carrera_id
+  )
+  SELECT json_build_object('id', u.id, 'nombre', u.nombre) AS universidad,
+         json_build_object('id', f.id, 'nombre', f.nombre) AS facultad,
+         (SELECT json_build_object('anio', p.anio, 'semestre', p.semestre)
+            FROM periodo_activo p WHERE p.universidad_id = u.id) AS periodo,
+         coalesce((SELECT json_agg(json_build_object(
+           'id', ca.id, 'nombre', ca.nombre,
+           'aprobacion', ${aprobacion('n')},
+           'promedio', ${promedio('n')},
+           'asistencia', ${asistencia('a')})
+           ORDER BY ca.nombre COLLATE "es-CL-x-icu", ca.id)
+           FROM carrera ca
+           LEFT JOIN notas_carrera n ON n.carrera_id = ca.id
+           LEFT JOIN asist_carrera a ON a.carrera_id = ca.id
+          WHERE ca.universidad_id = u.id
+            AND ca.facultad_id = f.id
+            AND ca.archived_at IS NULL), '[]'::json) AS carreras
+    FROM facultad f
+    JOIN universidad u ON u.id = f.universidad_id
+   WHERE f.id = $4::uuid
+     AND u.archived_at IS NULL
+     AND f.archived_at IS NULL`
+
 // MET-08: las dimensiones (carreras y cursos) salen de los cursos del período y
 // de la facultad de la sesión, tengan o no secciones: un curso recién creado
 // aparece con sus indicadores en null. Los agregados reutilizan las filas de
@@ -327,6 +369,23 @@ export class MetricasService {
         [universidadId, periodo?.anio ?? null, periodo?.semestre ?? null],
       )
     if (!fila) throw new NotFoundException('La universidad no existe')
+    return fila
+  }
+
+  async carreras(
+    contexto: ContextoUniversidad,
+    facultadId: string,
+    periodo: PeriodoPedido | null,
+  ): Promise<MetricasFacultad> {
+    const [fila] =
+      await this.bd.consultarEnTodasLasUniversidades<MetricasFacultad>(
+        contexto,
+        CARRERAS,
+        // $1 null: el Director ve las facultades de todas las universidades,
+        // no solo la de su sesión; la facultad ($4) fija la universidad.
+        [null, periodo?.anio ?? null, periodo?.semestre ?? null, facultadId],
+      )
+    if (!fila) throw new NotFoundException('La facultad no existe')
     return fila
   }
 
