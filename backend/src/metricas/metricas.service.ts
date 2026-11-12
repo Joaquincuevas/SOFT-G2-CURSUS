@@ -19,7 +19,9 @@ import {
 //   FINAL (todo publicado y ponderaciones = 100). Aprueba con >= 4,0.
 // - Asistencia: mismo denominador que ASI-05 (total_clases_asistencia, que no
 //   sirve al Director porque exige universidad y rol): clases vigentes de la
-//   sección con al menos una marca vigente; sin marca es ausente.
+//   sección con al menos una marca vigente; sin marca es ausente. Como el
+//   resumen de ASI-05, solo cuenta cuentas de alumno vigentes: archivar la
+//   cuenta de un alumno sin retirar su inscripción lo saca del indicador.
 // - Consolidado ponderado por alumno: los numeradores y denominadores se
 //   suman entre universidades antes de dividir.
 const CONSOLIDADO = `
@@ -75,6 +77,8 @@ const CONSOLIDADO = `
     SELECT count(*) AS registros,
            count(*) FILTER (WHERE a.presente) AS presentes
       FROM inscritos ins
+      JOIN usuario u ON u.id = ins.alumno_id AND u.universidad_id = ins.universidad_id
+                    AND u.archived_at IS NULL AND u.rol = 'ALUMNO'
       JOIN clases_registradas c ON c.seccion_id = ins.seccion_id
                                AND c.universidad_id = ins.universidad_id
       LEFT JOIN asistencia a ON a.clase_id = c.id AND a.universidad_id = c.universidad_id
