@@ -50,7 +50,7 @@ const BASE = `
       JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
       JOIN carrera ca ON ca.id = cu.carrera_id AND ca.universidad_id = cu.universidad_id
       JOIN periodo_activo p ON p.id = cu.periodo_id AND p.universidad_id = cu.universidad_id
-     WHERE s.archived_at IS NULL AND cu.archived_at IS NULL
+     WHERE s.archived_at IS NULL
   ), inscritos AS (
     SELECT i.universidad_id, i.seccion_id, i.usuario_id AS alumno_id,
            s.curso_id, s.facultad_id
