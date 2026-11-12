@@ -1,0 +1,63 @@
+/* MET-01: indicadores consolidados del Director. */
+.indicadores {
+  display: grid;
+  gap: 1rem;
+}
+
+.indicadores__periodo {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 24rem;
+  font-size: 0.875rem;
+}
+
+.indicadores__tarjetas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.indicadores__tarjeta article {
+  height: 100%;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.indicadores__titulo {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.indicadores__valor {
+  margin: 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.indicadores__unidad {
+  margin-left: 0.125rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.indicadores__sin-datos {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.indicadores__detalle,
+.indicadores__alcance {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
