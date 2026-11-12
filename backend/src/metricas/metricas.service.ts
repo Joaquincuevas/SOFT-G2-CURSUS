@@ -198,16 +198,24 @@ const FACULTADES = `${BASE}${agregados('facultad_id')}${volumen('facultad_id')}
     FROM universidad u
    WHERE u.id = $1::uuid AND u.archived_at IS NULL`
 
-// MET-08: las dimensiones salen de las secciones de la facultad de la sesión;
-// los agregados reutilizan las filas de finales y registros de BASE.
+// MET-08: las dimensiones (carreras y cursos) salen de los cursos del período y
+// de la facultad de la sesión, tengan o no secciones: un curso recién creado
+// aparece con sus indicadores en null. Los agregados reutilizan las filas de
+// finales y registros de BASE. El promedio de una carrera suma las notas
+// finales con su precisión original y redondea una sola vez al final; no
+// pondera promedios de curso ya redondeados.
 const REPORTE_FACULTAD = `${BASE}
   , cursos_reporte AS (
-    SELECT DISTINCT carrera_id, carrera_nombre, curso_id, curso_codigo, curso_nombre
-      FROM secciones
-     WHERE facultad_id = facultad_actual(usuario_actual())
+    SELECT ca.id AS carrera_id, ca.nombre AS carrera_nombre,
+           cu.id AS curso_id, cu.codigo AS curso_codigo, cu.nombre AS curso_nombre
+      FROM curso cu
+      JOIN carrera ca ON ca.id = cu.carrera_id AND ca.universidad_id = cu.universidad_id
+      JOIN periodo_activo p ON p.id = cu.periodo_id AND p.universidad_id = cu.universidad_id
+     WHERE ca.facultad_id = facultad_actual(usuario_actual())
   ), notas_curso AS (
     SELECT carrera_id, curso_id, count(*) AS evaluados,
            count(*) FILTER (WHERE nota >= 4.0) AS aprobados,
+           sum(nota) AS suma,
            round(avg(nota), 2) AS promedio
       FROM finales
      WHERE facultad_id = facultad_actual(usuario_actual())
@@ -228,7 +236,7 @@ const REPORTE_FACULTAD = `${BASE}
            ) ORDER BY c.curso_codigo, c.curso_id) AS cursos,
            sum(coalesce(n.evaluados, 0)) AS evaluados,
            sum(coalesce(n.aprobados, 0)) AS aprobados,
-           sum(coalesce(n.promedio * n.evaluados, 0)) / NULLIF(sum(n.evaluados), 0) AS promedio,
+           round(sum(coalesce(n.suma, 0)) / NULLIF(sum(n.evaluados), 0), 2) AS promedio,
            sum(coalesce(a.registros, 0)) AS registros,
            sum(coalesce(a.presentes, 0)) AS presentes
       FROM cursos_reporte c
