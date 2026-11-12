@@ -1,6 +1,7 @@
 import type {
   IndicadoresFacultad,
   MetricasConsolidadas,
+  MetricasFacultad,
   MetricasUniversidad,
   PeriodoDisponible,
   ResumenUniversidad,
@@ -241,6 +242,10 @@ export function RutasIndicadores() {
   return (
     <Routes>
       <Route index element={<Indicadores />} />
+      <Route
+        path="universidades/:id/facultades/:facultadId"
+        element={<CarrerasFacultad />}
+      />
       <Route path="universidades/:id" element={<FacultadesUniversidad />} />
       <Route path="*" element={<Navigate to="/indicadores" replace />} />
     </Routes>
@@ -296,7 +301,14 @@ function FacultadesUniversidad() {
           {datos.facultades.map((f) => (
             <li key={f.id} className="indicadores__facultad">
               <article aria-label={f.nombre}>
-                <h3 className="indicadores__subtitulo">{f.nombre}</h3>
+                <h3 className="indicadores__subtitulo">
+                  <Link
+                    className="indicadores__enlace"
+                    to={`/indicadores/universidades/${id}/facultades/${f.id}${sufijo}`}
+                  >
+                    {f.nombre}
+                  </Link>
+                </h3>
                 <ul className="indicadores__tarjetas" aria-label="Indicadores">
                   <Tarjeta
                     titulo="Tasa de aprobación"
@@ -324,6 +336,93 @@ function FacultadesUniversidad() {
                   {plural(f.alumnos, 'alumno')} inscritos en{' '}
                   {plural(f.cursos, 'curso')}.
                 </p>
+              </article>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// MET-05: carreras de una facultad, conservando la ruta y el período.
+function CarrerasFacultad() {
+  const { id, facultadId } = useParams()
+  const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
+  const [datos, recargar, status] = useDatos<MetricasFacultad>(
+    valido
+      ? `/api/metricas/facultades/${facultadId}/carreras${consulta}`
+      : null,
+  )
+  const volverUniversidad = `/indicadores/universidades/${id}${sufijo}`
+  const volverIndicadores = `/indicadores${sufijo}`
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
+
+  return (
+    <section className="indicadores" aria-label="Indicadores por carrera">
+      <nav className="indicadores__migas" aria-label="Ruta de navegación">
+        <ol>
+          <li>
+            <Link to={volverIndicadores}>Indicadores</Link>
+          </li>
+          <li>
+            <Link to={volverUniversidad}>
+              {datos ? datos.universidad.nombre : 'Universidad'}
+            </Link>
+          </li>
+          <li aria-current="page">
+            {datos ? datos.facultad.nombre : 'Facultad'}
+          </li>
+        </ol>
+      </nav>
+      <SelectorPeriodo periodo={periodo} />
+      {datos === undefined ? (
+        <Cargando texto="Cargando carreras…" />
+      ) : datos === null ? (
+        status === 404 ? (
+          <div role="alert">
+            <p>La facultad no existe.</p>
+            <Link className="estado__boton" to={volverUniversidad}>
+              Volver a la universidad
+            </Link>
+          </div>
+        ) : (
+          <ErrorEstado
+            mensaje="No pudimos cargar las carreras."
+            onReintentar={recargar}
+          />
+        )
+      ) : datos.carreras.length === 0 ? (
+        <p className="indicadores__alcance">Esta facultad no tiene carreras.</p>
+      ) : (
+        <ul className="indicadores__lista" aria-label="Carreras">
+          {datos.carreras.map((carrera) => (
+            <li key={carrera.id} className="indicadores__facultad">
+              <article aria-label={carrera.nombre}>
+                <h3 className="indicadores__subtitulo">{carrera.nombre}</h3>
+                <ul className="indicadores__tarjetas" aria-label="Indicadores">
+                  <Tarjeta
+                    titulo="Tasa de aprobación"
+                    valor={carrera.aprobacion.valor}
+                    unidad="%"
+                    decimales={1}
+                    detalle={`${plural(carrera.aprobacion.aprobados, 'aprobado')} de ${plural(carrera.aprobacion.evaluados, 'alumno')} con nota final`}
+                  />
+                  <Tarjeta
+                    titulo="Promedio"
+                    valor={carrera.promedio.valor}
+                    unidad=""
+                    decimales={2}
+                    detalle={`${plural(carrera.promedio.alumnos, 'alumno')} con nota final`}
+                  />
+                  <Tarjeta
+                    titulo="Asistencia"
+                    valor={carrera.asistencia.valor}
+                    unidad="%"
+                    decimales={2}
+                    detalle={`${carrera.asistencia.presentes} presentes de ${plural(carrera.asistencia.registros, 'registro')}`}
+                  />
+                </ul>
               </article>
             </li>
           ))}
