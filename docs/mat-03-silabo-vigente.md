@@ -10,7 +10,7 @@ La API consulta la tabla `silabo` de MAT-02 y elige la versión más reciente vi
 
 1. Con MAT-02 integrado, publicar dos versiones desde el perfil de profesor. Entrar como alumno de la sección y comprobar que la tarjeta destaca y descarga la segunda.
 2. Como integrante de otra sección del mismo curso, comprobar que la versión coincide. Abrir un curso sin sílabo y comprobar el mensaje de estado vacío.
-3. Probar la URL de la API con un alumno ajeno a la sección solicitada y con un Director. MAT-03 debe denegar el acceso. Probar también la ruta de descarga de MAT-02 y la descarga genérica de un archivo de MAT-01 vinculado al sílabo con el Director.
+3. Probar la URL de la API con un alumno ajeno a la sección solicitada y con un Director. MAT-03 debe denegar el acceso. Como Director, comprobar también que MAT-02 y las rutas de descarga de MAT-01 y MAT-06 no entregan el PDF publicado como sílabo.
 
 ```sh
 npm run test --workspace=frontend -- src/pages/VistaSeccion.test.tsx

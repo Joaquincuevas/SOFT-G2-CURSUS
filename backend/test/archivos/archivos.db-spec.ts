@@ -441,6 +441,7 @@ describe('MAT-03: sílabo vigente del curso', () => {
   describe('con versiones vinculadas a archivos de MAT-01', () => {
     let vigente: ArchivoResumen
     let publicada: VersionSilabo
+    let materialAnterior: string
     const archivosPublicados: string[] = []
 
     beforeAll(async () => {
@@ -460,6 +461,18 @@ describe('MAT-03: sílabo vigente del curso', () => {
         })
         vigente = await confirmar(correo, seccion, archivo.id)
         const token = await tokenDe(correo)
+        if (version === 'objeto-v1') {
+          const material = await request(app.getHttpServer())
+            .post(`/api/espacio/secciones/${seccion}/materiales`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+              archivoId: archivo.id,
+              categoria: 'GUIA',
+              titulo: 'Programa',
+            })
+            .expect(201)
+          materialAnterior = (material.body as { id: string }).id
+        }
         const respuesta = await request(app.getHttpServer())
           .post(`/api/espacio/secciones/${seccion}/silabo`)
           .set('Authorization', `Bearer ${token}`)
@@ -474,6 +487,7 @@ describe('MAT-03: sílabo vigente del curso', () => {
       await bd.query('DELETE FROM silabo WHERE archivo_id = ANY($1::uuid[])', [
         archivosPublicados,
       ])
+      await bd.query('DELETE FROM material WHERE id = $1', [materialAnterior])
     })
 
     it('consulta y descarga desde otra sección el PDF publicado por MAT-02', async () => {
@@ -500,6 +514,11 @@ describe('MAT-03: sílabo vigente del curso', () => {
         403,
       )
       await descargar(DIRECTOR, secciones.s2, vigente.id, 404)
+      await consultar(
+        DIRECTOR,
+        `/api/espacio/secciones/${secciones.s1}/materiales/${materialAnterior}/descarga`,
+        404,
+      )
     })
 
     it('rechaza la descarga a quien no pertenece a la sección y a quien pierde su inscripción', async () => {

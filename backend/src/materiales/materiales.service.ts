@@ -44,11 +44,13 @@ const COLUMNAS = `m.id, m.categoria, m.titulo, m.descripcion, m.created_at,
   a.id AS archivo_id, a.nombre AS archivo_nombre, a.tipo AS archivo_tipo,
   a.tamano AS archivo_tamano, a.subido_at AS archivo_subido_at`
 
-// Materiales activos de un curso ($1) con su archivo confirmado y vigente.
+// Los PDF publicados como sílabo se leen por las rutas de sílabo, que
+// requieren pertenencia a la sección y firman la versión publicada.
 const DESDE_MATERIAL = `FROM material m
   JOIN archivo a ON a.id = m.archivo_id AND a.universidad_id = m.universidad_id
  WHERE m.curso_id = $1 AND m.archived_at IS NULL
-   AND a.subido_at IS NOT NULL AND a.archived_at IS NULL`
+   AND a.subido_at IS NOT NULL AND a.archived_at IS NULL
+   AND NOT es_archivo_silabo(a.id)`
 
 const material = (fila: FilaMaterial): Material => ({
   id: fila.id,
@@ -170,7 +172,7 @@ export class MaterialesService {
       const [archivo] = await bd.query<FilaArchivo>(
         `SELECT seccion_id, subido_por, subido_at, archived_at
            FROM archivo
-          WHERE universidad_id = $1 AND id = $2`,
+          WHERE universidad_id = $1 AND id = $2 AND NOT es_archivo_silabo(id)`,
         [contexto.universidadId, datos.archivoId],
       )
       // Un archivo de otra sección, de otro curso o de otra universidad (la
