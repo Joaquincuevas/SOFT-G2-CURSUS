@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [HIS-01 · Cierre de curso y guía de revisión](his-01-cierre-curso.md)
 - [MAT-05 · Materiales del curso agrupados por categoría](mat-05-materiales-por-categoria.md)
 - [MAT-03 · Sílabo vigente en la vista del curso](mat-03-silabo-vigente.md)
 - [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
