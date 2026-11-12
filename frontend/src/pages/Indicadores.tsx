@@ -1,5 +1,6 @@
 import type {
   IndicadoresFacultad,
+  DistribucionNotas,
   MetricasCarrera,
   MetricasConsolidadas,
   MetricasFacultad,
@@ -250,6 +251,10 @@ export function RutasIndicadores() {
       <Route
         path="universidades/:id/facultades/:facultadId/carreras/:carreraId"
         element={<CursosCarrera />}
+      />
+      <Route
+        path="universidades/:id/facultades/:facultadId/carreras/:carreraId/cursos/:cursoId"
+        element={<DistribucionCurso />}
       />
       <Route
         path="universidades/:id/facultades/:facultadId"
@@ -537,6 +542,10 @@ function CursosCarrera() {
       ) : (
         <TablaCursos
           cursos={cursos}
+          universidadId={universidadId}
+          facultadId={facultadId}
+          carreraId={carreraId}
+          sufijo={sufijo}
           orden={ordenValido}
           direccion={direccionValida}
           cambiarOrden={cambiarOrden}
@@ -561,13 +570,150 @@ function comparaCursos(
   return (va - vb) * (direccion === 'desc' ? -1 : 1)
 }
 
+function DistribucionCurso() {
+  const { id, facultadId, carreraId, cursoId } = useParams()
+  const { periodo, valido, sufijo } = usePeriodoDeLaUrl()
+  const [datos, recargar, status] = useDatos<DistribucionNotas>(
+    valido ? `/api/metricas/cursos/${cursoId}/distribucion` : null,
+  )
+  // Los ids de la API mandan sobre los de la URL (un enlace directo puede
+  // combinar una facultad o una carrera que no son las del curso); los de la
+  // URL son el respaldo mientras no carga.
+  const universidadId = datos?.universidad.id ?? id
+  const facultadRutaId = datos?.facultad.id ?? facultadId
+  const carreraRutaId = datos?.carrera.id ?? carreraId
+  const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
+  const carreraRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}/carreras/${carreraRutaId}${sufijo}`
+  const volverIndicadores = `/indicadores${sufijo}`
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  return (
+    <section className="indicadores" aria-label="Distribución de notas">
+      <nav className="indicadores__migas" aria-label="Ruta de navegación">
+        <ol>
+          <li>
+            <Link to={volverIndicadores}>Indicadores</Link>
+          </li>
+          <li>
+            <Link to={`/indicadores/universidades/${universidadId}${sufijo}`}>
+              {datos?.universidad.nombre ?? 'Universidad'}
+            </Link>
+          </li>
+          <li>
+            <Link to={facultadRuta}>
+              {datos?.facultad.nombre ?? 'Facultad'}
+            </Link>
+          </li>
+          <li>
+            <Link to={carreraRuta}>{datos?.carrera.nombre ?? 'Carrera'}</Link>
+          </li>
+          <li aria-current="page">{datos?.curso.codigo ?? 'Curso'}</li>
+        </ol>
+      </nav>
+      {datos === undefined ? (
+        <Cargando texto="Cargando distribución…" />
+      ) : datos === null ? (
+        status === 404 ? (
+          <div role="alert">
+            <p>El curso no existe.</p>
+            <Link className="estado__boton" to={carreraRuta}>
+              Volver a la carrera
+            </Link>
+          </div>
+        ) : (
+          <ErrorEstado
+            mensaje="No pudimos cargar la distribución."
+            onReintentar={recargar}
+          />
+        )
+      ) : datos.totalEvaluados === 0 ? (
+        <p className="indicadores__alcance">
+          Sin notas finales para este curso
+        </p>
+      ) : (
+        <DistribucionNotasVista datos={datos} />
+      )}
+    </section>
+  )
+}
+
+function etiquetaRango(minimo: number, maximo: number) {
+  return `${minimo.toFixed(1).replace('.', ',')}–${maximo.toFixed(1).replace('.', ',')}`
+}
+
+function DistribucionNotasVista({ datos }: { datos: DistribucionNotas }) {
+  const maximo = Math.max(...datos.rangos.map((r) => r.alumnos), 1)
+  const descripcion = datos.rangos
+    .map((r) => `${etiquetaRango(r.minimo, r.maximo)}: ${r.alumnos} alumnos`)
+    .join('; ')
+  return (
+    <>
+      <h2>
+        {datos.curso.codigo}: {datos.curso.nombre}
+      </h2>
+      <p className="indicadores__alcance">
+        {datos.totalEvaluados} alumnos evaluados · aprobación desde{' '}
+        {datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}
+      </p>
+      <div
+        className="indicadores__histograma"
+        role="img"
+        aria-label={`Distribución de notas: ${descripcion}. La aprobación comienza en ${datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}.`}
+      >
+        <div className="indicadores__histograma-barras">
+          {datos.rangos.map((r) => (
+            <div className="indicadores__barra-grupo" key={r.minimo}>
+              <span className="indicadores__barra-valor">{r.alumnos}</span>
+              <div
+                className="indicadores__barra"
+                style={{ height: `${(r.alumnos / maximo) * 100}%` }}
+              />
+              <span>{etiquetaRango(r.minimo, r.maximo)}</span>
+            </div>
+          ))}
+          <div className="indicadores__linea-aprobacion" aria-hidden="true">
+            <span>
+              Aprobación{' '}
+              {datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}
+            </span>
+          </div>
+        </div>
+      </div>
+      <table className="indicadores__tabla">
+        <caption>Tabla equivalente de distribución de notas</caption>
+        <thead>
+          <tr>
+            <th scope="col">Rango</th>
+            <th scope="col">Alumnos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {datos.rangos.map((r) => (
+            <tr key={r.minimo}>
+              <th scope="row">{etiquetaRango(r.minimo, r.maximo)}</th>
+              <td>{r.alumnos}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+}
+
 function TablaCursos({
   cursos,
+  universidadId,
+  facultadId,
+  carreraId,
+  sufijo,
   orden,
   direccion,
   cambiarOrden,
 }: {
   cursos: MetricasCarrera['cursos']
+  universidadId: string | undefined
+  facultadId: string | undefined
+  carreraId: string | undefined
+  sufijo: string
   orden: OrdenCurso | null
   direccion: DireccionOrden
   cambiarOrden: (orden: OrdenCurso) => void
@@ -607,7 +753,12 @@ function TablaCursos({
         {cursos.map((curso) => (
           <tr key={curso.id}>
             <th scope="row">
-              <span>{curso.codigo}</span> {curso.nombre}
+              <Link
+                className="indicadores__enlace"
+                to={`/indicadores/universidades/${universidadId}/facultades/${facultadId}/carreras/${carreraId}/cursos/${curso.id}${sufijo}`}
+              >
+                <span>{curso.codigo}</span> {curso.nombre}
+              </Link>
             </th>
             <td>{valorIndicador(curso.aprobacion.valor, 1, '%')}</td>
             <td>{valorIndicador(curso.promedio.valor, 2)}</td>

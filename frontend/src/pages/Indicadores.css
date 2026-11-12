@@ -110,3 +110,86 @@
   font-size: 0.875rem;
   color: var(--color-text-secondary);
 }
+
+/* MET-07: histograma CSS y tabla equivalente para accesibilidad. */
+.indicadores__histograma {
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.indicadores__histograma-barras {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(3rem, 1fr));
+  align-items: end;
+  gap: 0.5rem;
+  min-height: 14rem;
+  padding: 1.5rem 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.indicadores__barra-grupo {
+  display: grid;
+  grid-template-rows: 1.5rem 1fr auto;
+  align-items: end;
+  gap: 0.25rem;
+  height: 100%;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.indicadores__barra {
+  width: 100%;
+  min-height: 0.125rem;
+  background: var(--color-primary);
+  border-radius: 0.25rem 0.25rem 0 0;
+}
+
+.indicadores__barra-valor {
+  font-weight: 700;
+}
+
+.indicadores__linea-aprobacion {
+  position: absolute;
+  left: calc(50% - 0.25rem);
+  top: 0.5rem;
+  bottom: 1.5rem;
+  border-left: 2px dashed var(--color-danger, #b42318);
+  pointer-events: none;
+}
+
+.indicadores__linea-aprobacion span {
+  position: absolute;
+  top: -0.5rem;
+  left: 0.25rem;
+  width: max-content;
+  color: var(--color-danger, #b42318);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.indicadores__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.indicadores__tabla th,
+.indicadores__tabla td {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.indicadores__tabla button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
