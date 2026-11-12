@@ -1,5 +1,7 @@
 import type {
   MetricasConsolidadas,
+  MetricasUniversidad,
+  ResumenUniversidad,
   NotasFinalesSeccion,
   ResumenAsistenciaSeccion,
 } from '@cursus/shared'
@@ -457,6 +459,188 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
         nota: fila.nota === null ? null : Number(fila.nota),
         porcentajeEvaluado: fila.porcentaje_evaluado,
       }).toEqual(esperado)
+    },
+  )
+})
+
+// MET-04: drill-down con el escenario de MET-01. Norte: Ana (5,4) aprueba y
+// Bruno (3,6) reprueba, 4 presentes de 6 registros. Sur: Elena (4,0) aprueba,
+// 0 presentes de 1 registro. Cada sección es del primer curso de su
+// universidad, así que sus indicadores caen en una sola facultad.
+describe('drill-down de universidad a facultad (MET-04)', () => {
+  const universidadId = (dominio: string) =>
+    bd
+      .query<{ id: string }[]>(
+        'SELECT id FROM universidad WHERE dominio_correo = $1',
+        [dominio],
+      )
+      .then((filas) => filas[0].id)
+  const facultadDe = (seccionId: string) =>
+    bd
+      .query<{ id: string }[]>(
+        `SELECT ca.facultad_id AS id FROM seccion s
+           JOIN curso c ON c.id = s.curso_id
+           JOIN carrera ca ON ca.id = c.carrera_id WHERE s.id = $1`,
+        [seccionId],
+      )
+      .then((filas) => filas[0].id)
+  const facultades = (id: string, consulta = '', estado = 200) =>
+    obtener<MetricasUniversidad>(
+      DIRECTOR,
+      `${RUTA_UNIVERSIDADES}/${id}/facultades${consulta}`,
+      estado,
+    )
+  const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
+
+  it('lista las universidades con sus indicadores', async () => {
+    const lista = await obtener<ResumenUniversidad[]>(
+      DIRECTOR,
+      RUTA_UNIVERSIDADES,
+    )
+    const norte = lista.find((u) => u.nombre === 'Universidad Demo Norte')
+    const sur = lista.find((u) => u.nombre === 'Universidad Demo Sur')
+    expect(norte).toMatchObject({
+      periodo: { anio: 2026, semestre: 2 },
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    })
+    expect(sur).toMatchObject({
+      aprobacion: { valor: 100, aprobados: 1, evaluados: 1 },
+      promedio: { valor: 4, alumnos: 1 },
+      asistencia: { valor: 0, presentes: 0, registros: 1 },
+    })
+    // El consolidado de MET-01 es la suma de los numeradores y denominadores.
+    const m = await consolidado()
+    expect(m.aprobacion.aprobados).toBe(
+      lista.reduce((n, u) => n + u.aprobacion.aprobados, 0),
+    )
+    expect(m.asistencia.registros).toBe(
+      lista.reduce((n, u) => n + u.asistencia.registros, 0),
+    )
+  })
+
+  it('una universidad muestra sus facultades con los tres indicadores', async () => {
+    const norte = await universidadId('norte.cursus.test')
+    const conDatos = await facultadDe(ids.norte)
+    const r = await facultades(norte)
+    expect(r.universidad).toEqual({
+      id: norte,
+      nombre: 'Universidad Demo Norte',
+    })
+    expect(r.periodo).toEqual({ anio: 2026, semestre: 2 })
+    const propia = r.facultades.find((f) => f.id === conDatos)
+    expect(propia).toMatchObject({
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    })
+    // Las demás facultades de Norte no tienen estas notas ni clases: null y no 0.
+    for (const f of r.facultades.filter((f) => f.id !== conDatos)) {
+      expect(f.aprobacion.valor).toBeNull()
+      expect(f.promedio.valor).toBeNull()
+      expect(f.asistencia.valor).toBeNull()
+    }
+    // Las facultades suman lo de la universidad.
+    expect(r.facultades.reduce((n, f) => n + f.aprobacion.evaluados, 0)).toBe(2)
+    const [{ vigentes }] = await bd.query<{ vigentes: string }[]>(
+      `SELECT count(*) AS vigentes FROM facultad
+        WHERE universidad_id = $1 AND archived_at IS NULL`,
+      [norte],
+    )
+    expect(r.facultades).toHaveLength(Number(vigentes))
+  })
+
+  it('las facultades de otra universidad no se mezclan', async () => {
+    const sur = await universidadId('sur.cursus.test')
+    const conDatos = await facultadDe(ids.sur)
+    const r = await facultades(sur)
+    expect(r.universidad.nombre).toBe('Universidad Demo Sur')
+    expect(r.facultades.find((f) => f.id === conDatos)).toMatchObject({
+      aprobacion: { valor: 100, aprobados: 1, evaluados: 1 },
+    })
+    expect(r.facultades.reduce((n, f) => n + f.aprobacion.evaluados, 0)).toBe(1)
+  })
+
+  it('una facultad sin datos aparece con indicadores null y archivada no se lista', async () => {
+    const norte = await universidadId('norte.cursus.test')
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Facultad vacía')
+       RETURNING id`,
+      [norte],
+    )
+    const ver = async () =>
+      (await facultades(norte)).facultades.find((f) => f.id === id)
+    expect(await ver()).toMatchObject({
+      aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+      promedio: { valor: null, alumnos: 0 },
+      asistencia: { valor: null, presentes: 0, registros: 0 },
+      alumnos: 0,
+      cursos: 0,
+    })
+    await bd.query('UPDATE facultad SET archived_at = now() WHERE id = $1', [
+      id,
+    ])
+    expect(await ver()).toBeUndefined()
+  })
+
+  it('el período de la URL filtra: el pedido igual al activo da lo mismo y uno inexistente, null', async () => {
+    const norte = await universidadId('norte.cursus.test')
+    expect(await facultades(norte, '?periodo=2026-2')).toEqual(
+      await facultades(norte),
+    )
+    const vacio = await facultades(norte, '?periodo=2020-1')
+    expect(vacio.periodo).toBeNull()
+    expect(
+      vacio.facultades.every(
+        (f) => f.aprobacion.valor === null && f.asistencia.valor === null,
+      ),
+    ).toBe(true)
+    const lista = await obtener<ResumenUniversidad[]>(
+      DIRECTOR,
+      `${RUTA_UNIVERSIDADES}?periodo=2020-1`,
+    )
+    expect(lista.every((u) => u.periodo === null)).toBe(true)
+  })
+
+  it.each([
+    [
+      'una universidad inexistente',
+      '00000000-0000-4000-8000-0000000000aa',
+      404,
+    ],
+    ['un id que no es UUID', 'no-es-uuid', 400],
+  ])('%s', async (_q, id, estado) => {
+    await obtener(DIRECTOR, `${RUTA_UNIVERSIDADES}/${id}/facultades`, estado)
+  })
+
+  it('una universidad archivada da 404', async () => {
+    const sur = await universidadId('sur.cursus.test')
+    await bd.query('UPDATE universidad SET archived_at = now() WHERE id = $1', [
+      sur,
+    ])
+    try {
+      await facultades(sur, '', 404)
+    } finally {
+      await bd.query(
+        'UPDATE universidad SET archived_at = NULL WHERE id = $1',
+        [sur],
+      )
+    }
+  })
+
+  it('un período con formato inválido da 400', async () => {
+    const norte = await universidadId('norte.cursus.test')
+    await facultades(norte, '?periodo=activo', 400)
+    await obtener(DIRECTOR, `${RUTA_UNIVERSIDADES}?periodo=2026`, 400)
+  })
+
+  it.each([[PROFESOR], [AYUDANTE], [ALUMNO], [ADMIN_INGENIERIA]])(
+    '%s recibe 403 en ambos niveles',
+    async (correo) => {
+      const norte = await universidadId('norte.cursus.test')
+      await obtener(correo, RUTA_UNIVERSIDADES, 403)
+      await obtener(correo, `${RUTA_UNIVERSIDADES}/${norte}/facultades`, 403)
     },
   )
 })

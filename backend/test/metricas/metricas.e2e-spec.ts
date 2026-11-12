@@ -1,8 +1,15 @@
-import type { MetricasConsolidadas, Rol } from '@cursus/shared'
+import type {
+  MetricasConsolidadas,
+  MetricasUniversidad,
+  ResumenUniversidad,
+  Rol,
+} from '@cursus/shared'
+import { NotFoundException } from '@nestjs/common'
 import type { INestApplication } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
+import { vi } from 'vitest'
 import type { App } from 'supertest/types.js'
 import { AppModule } from '../../src/app.module.js'
 import { AuthService } from '../../src/auth/auth.service.js'
@@ -30,13 +37,31 @@ const CONSOLIDADO: MetricasConsolidadas = {
   cursos: 3,
 }
 
+const UNIVERSIDAD = '00000000-0000-4000-8000-0000000000a1'
+const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
+const META: MetricasUniversidad = {
+  universidad: { id: UNIVERSIDAD, nombre: 'Norte' },
+  periodo: { anio: 2026, semestre: 2 },
+  facultades: [],
+}
+const universidades = vi.fn(() => Promise.resolve([] as ResumenUniversidad[]))
+const facultades = vi.fn((_c: unknown, id: string) =>
+  id === UNIVERSIDAD
+    ? Promise.resolve(META)
+    : Promise.reject(new NotFoundException('La universidad no existe')),
+)
+
 let app: INestApplication<App>
 beforeAll(async () => {
   const modulo = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(AuthService)
     .useValue({ sesionActiva: () => Promise.resolve(true) })
     .overrideProvider(MetricasService)
-    .useValue({ consolidado: () => Promise.resolve(CONSOLIDADO) })
+    .useValue({
+      consolidado: () => Promise.resolve(CONSOLIDADO),
+      universidades,
+      facultades,
+    })
     .compile()
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
   configurarApp(app, { secretoOrigen: '' })
@@ -80,4 +105,75 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
         .expect(404)
     },
   )
+})
+
+describe('drill-down de universidad a facultad (MET-04)', () => {
+  const facultadesDe = (id: string, consulta = '') =>
+    `${RUTA_UNIVERSIDADES}/${id}/facultades${consulta}`
+
+  it('el Director recibe las universidades y las facultades: 200', async () => {
+    await request(app.getHttpServer())
+      .get(RUTA_UNIVERSIDADES)
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200, [])
+    await request(app.getHttpServer())
+      .get(facultadesDe(UNIVERSIDAD))
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200, META)
+  })
+
+  it('pasa el período de la URL al servicio', async () => {
+    await request(app.getHttpServer())
+      .get(facultadesDe(UNIVERSIDAD, '?periodo=2026-1'))
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200)
+    expect(facultades).toHaveBeenLastCalledWith(
+      expect.anything(),
+      UNIVERSIDAD,
+      { anio: 2026, semestre: 1 },
+    )
+  })
+
+  it('una universidad inexistente responde 404', async () => {
+    await request(app.getHttpServer())
+      .get(facultadesDe('00000000-0000-4000-8000-0000000000ff'))
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(404)
+  })
+
+  it.each(['no-es-uuid'])('el id %s responde 400', async (id) => {
+    await request(app.getHttpServer())
+      .get(facultadesDe(id))
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(400)
+  })
+
+  it.each(['activo', '2026', '2026-x'])(
+    'el período %s responde 400',
+    async (periodo) => {
+      await request(app.getHttpServer())
+        .get(facultadesDe(UNIVERSIDAD, `?periodo=${periodo}`))
+        .set('Authorization', sesion('DIRECTOR'))
+        .expect(400)
+    },
+  )
+
+  it('sin sesión, 401', async () => {
+    await request(app.getHttpServer()).get(RUTA_UNIVERSIDADES).expect(401)
+  })
+
+  it.each<Rol>([
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+    'SUPERADMIN',
+  ])('%s recibe 403 en ambos niveles', async (rol) => {
+    for (const ruta of [RUTA_UNIVERSIDADES, facultadesDe(UNIVERSIDAD)]) {
+      await request(app.getHttpServer())
+        .get(ruta)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    }
+  })
 })
