@@ -21,6 +21,6 @@ La dimensión de cursos sale de `curso` y los indicadores de las filas de notas 
 
 ## Interfaz y pruebas
 
-Cada carrera de MET-05 enlaza a la tabla de cursos. Los encabezados son botones accesibles y exponen `aria-sort`; el campo `orden` y su `direccion` quedan en la URL junto con `periodo`. La pantalla muestra estados de carga, vacío, error con reintento y carrera inexistente. Solo el Director puede acceder.
+Cada carrera de MET-05 enlaza a la tabla de cursos. Los encabezados son botones accesibles y exponen `aria-sort`; el campo `orden` y su `direccion` quedan en la URL junto con `periodo`. Cambiar el período conserva `orden` y `direccion`, para comparar semestres sin volver a ordenar; el breadcrumb usa la universidad y la facultad que devuelve la API, con las de la URL como respaldo mientras carga. La pantalla muestra estados de carga, vacío, error con reintento y carrera inexistente. Solo el Director puede acceder.
 
 Las pruebas de base cubren indicadores, aislamiento por carrera, cursos sin datos, períodos y cursos archivados; las e2e cubren permisos, sesión, 404, UUID inválido y período; las frontend cubren navegación, breadcrumb, ordenamiento, estados y roles.
