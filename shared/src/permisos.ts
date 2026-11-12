@@ -39,6 +39,8 @@ export type SujetoTabla =
   | 'MaterialVersion'
   // MET-01: indicadores consolidados del Directorio.
   | 'Metricas'
+  // MET-08: reporte académico de la facultad del Administrativo.
+  | 'ReporteMetricasFacultad'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -111,6 +113,8 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
         ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Inscripcion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
+      if (usuario.rol === 'ADMINISTRATIVO')
+        can('read', 'ReporteMetricasFacultad')
       // GES-23: desde su vista global crea y edita universidades y
       // facultades (archivar es un update).
       if (usuario.rol === 'SUPERADMIN') {

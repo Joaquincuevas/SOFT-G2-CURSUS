@@ -20,6 +20,7 @@ describe('navegación por rol', () => {
       'ADMINISTRATIVO',
       [
         ['Dashboard', '/'],
+        ['Reporte académico', '/reporte-facultad'],
         ['Mis Cursos', '/cursos'],
         ['Carreras', '/carreras'],
         ['Períodos', '/periodos'],

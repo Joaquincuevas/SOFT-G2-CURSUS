@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  ReporteFacultad,
   ResumenUniversidad,
   NotasFinalesSeccion,
   ResumenAsistenciaSeccion,
@@ -513,6 +514,119 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     )
   const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
 
+  it('el administrativo ve carreras y cursos solo de su facultad', async () => {
+    const reporte = await obtener<ReporteFacultad>(
+      ADMIN_INGENIERIA,
+      '/api/metricas/facultad',
+    )
+    expect(reporte.facultad.nombre).toBe('Facultad de Ingeniería')
+    expect(reporte.carreras.length).toBeGreaterThan(0)
+    const [{ cursoId }] = await bd.query<{ cursoId: string }[]>(
+      `SELECT curso_id AS "cursoId" FROM seccion WHERE id = $1`,
+      [ids.norte],
+    )
+    const curso = reporte.carreras
+      .flatMap((carrera) => carrera.cursos)
+      .find((curso) => curso.id === cursoId)
+    expect(curso).toMatchObject({
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    })
+    // Los cursos sin notas ni clases traen null, no 0, en los tres indicadores.
+    const cursos = reporte.carreras.flatMap((carrera) => carrera.cursos)
+    const sinDatos = cursos.filter((c) => c.id !== cursoId)
+    expect(sinDatos.length).toBeGreaterThan(0)
+    for (const c of sinDatos) {
+      expect(c.aprobacion.valor).toBeNull()
+      expect(c.promedio.valor).toBeNull()
+      expect(c.asistencia.valor).toBeNull()
+    }
+    // Nada de otra universidad: el curso con datos de Sur no aparece.
+    const [{ cursoSur }] = await bd.query<{ cursoSur: string }[]>(
+      `SELECT curso_id AS "cursoSur" FROM seccion WHERE id = $1`,
+      [ids.sur],
+    )
+    expect(cursos.map((c) => c.id)).not.toContain(cursoSur)
+    const [{ facultadId }] = await bd.query<{ facultadId: string }[]>(
+      `SELECT facultad_id AS "facultadId" FROM usuario WHERE correo = $1`,
+      [ADMIN_INGENIERIA],
+    )
+    const permitidos = await bd.query<{ id: string }[]>(
+      `SELECT c.id FROM curso c
+         JOIN carrera ca ON ca.id = c.carrera_id AND ca.universidad_id = c.universidad_id
+        WHERE ca.facultad_id = $1`,
+      [facultadId],
+    )
+    expect(
+      reporte.carreras
+        .flatMap((carrera) => carrera.cursos)
+        .every((curso) =>
+          permitidos.some((permitido) => permitido.id === curso.id),
+        ),
+    ).toBe(true)
+
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      cursoId,
+    ])
+    try {
+      const archivado = await obtener<ReporteFacultad>(
+        ADMIN_INGENIERIA,
+        '/api/metricas/facultad',
+      )
+      expect(archivado.carreras.flatMap((carrera) => carrera.cursos)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: cursoId })]),
+      )
+    } finally {
+      await bd.query('UPDATE curso SET archived_at = NULL WHERE id = $1', [
+        cursoId,
+      ])
+    }
+  })
+
+  // Cada administrativo ve solo su facultad: la de otra facultad de la misma
+  // universidad y la de otra universidad no comparten cursos ni datos.
+  it('cada administrativo recibe el reporte de su propia facultad', async () => {
+    const [{ cursoNorte }] = await bd.query<{ cursoNorte: string }[]>(
+      `SELECT curso_id AS "cursoNorte" FROM seccion WHERE id = $1`,
+      [ids.norte],
+    )
+    const [{ cursoSur }] = await bd.query<{ cursoSur: string }[]>(
+      `SELECT curso_id AS "cursoSur" FROM seccion WHERE id = $1`,
+      [ids.sur],
+    )
+    const cursosDe = (r: ReporteFacultad) =>
+      r.carreras.flatMap((carrera) => carrera.cursos)
+    const ingenieria = await obtener<ReporteFacultad>(
+      ADMIN_INGENIERIA,
+      '/api/metricas/facultad',
+    )
+    const economia = await obtener<ReporteFacultad>(
+      'administrativo.economia@norte.cursus.test',
+      '/api/metricas/facultad',
+    )
+    const sur = await obtener<ReporteFacultad>(
+      'administrativo@sur.cursus.test',
+      '/api/metricas/facultad',
+    )
+    expect(ingenieria.facultad.nombre).toBe('Facultad de Ingeniería')
+    expect(economia.facultad.nombre).toBe('Facultad de Economía y Negocios')
+    expect(sur.facultad.id).not.toBe(ingenieria.facultad.id)
+    // Los cursos con datos están solo en su facultad.
+    expect(cursosDe(ingenieria).map((c) => c.id)).toContain(cursoNorte)
+    expect(cursosDe(economia).map((c) => c.id)).not.toContain(cursoNorte)
+    expect(cursosDe(sur).map((c) => c.id)).toContain(cursoSur)
+    expect(cursosDe(ingenieria).map((c) => c.id)).not.toContain(cursoSur)
+    // Ningún curso se repite entre las facultades de la misma universidad.
+    const deIngenieria = new Set(cursosDe(ingenieria).map((c) => c.id))
+    expect(cursosDe(economia).some((c) => deIngenieria.has(c.id))).toBe(false)
+    expect(cursosDe(sur).find((c) => c.id === cursoSur)?.aprobacion).toEqual({
+      valor: 100,
+      aprobados: 1,
+      evaluados: 1,
+    })
+  })
+
   it('lista períodos únicos de todas las universidades, del más reciente al antiguo', async () => {
     const lista = await obtener<
       { anio: number; semestre: number; activo: boolean }[]
@@ -811,4 +925,145 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await obtener(correo, `${RUTA_UNIVERSIDADES}/${norte}/facultades`, 403)
     },
   )
+})
+
+// MET-08: el listado sale de los cursos del período y la facultad, no de sus
+// secciones, y el promedio de la carrera se redondea una sola vez. Usa la
+// facultad de Economía, que el escenario de MET-01 no toca, y limpia lo que
+// crea.
+describe('reporte de facultad: cursos sin secciones y promedio de la carrera (MET-08)', () => {
+  const ADMIN_ECONOMIA = 'administrativo.economia@norte.cursus.test'
+  const creados = {
+    carreras: [] as string[],
+    cursos: [] as string[],
+    secciones: [] as string[],
+    alumnos: [] as string[],
+  }
+  let economia = ''
+  let periodoId = ''
+
+  const crearCarrera = async (nombre: string) => {
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+       SELECT universidad_id, id, $2 FROM facultad WHERE id = $1 RETURNING id`,
+      [economia, nombre],
+    )
+    creados.carreras.push(id)
+    return id
+  }
+  const crearCurso = async (carreraId: string, codigo: string) => {
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       SELECT universidad_id, id, $2, $3, 'Curso ' || $3 FROM carrera WHERE id = $1
+       RETURNING id`,
+      [carreraId, periodoId, codigo],
+    )
+    creados.cursos.push(id)
+    return id
+  }
+  // Curso con una sección, una evaluación de 100 % y un alumno por nota.
+  async function cursoConNotas(
+    carreraId: string,
+    codigo: string,
+    notas: number[],
+  ) {
+    const cursoId = await crearCurso(carreraId, codigo)
+    const [{ id: seccion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion (universidad_id, curso_id, numero, profesor_id)
+       SELECT universidad_id, id, 1, $2 FROM curso WHERE id = $1 RETURNING id`,
+      [cursoId, await idDe(PROFESOR)],
+    )
+    creados.secciones.push(seccion)
+    const evaluacion = await crearEvaluacion(seccion, 'Final', 100)
+    for (const [i, nota] of notas.entries()) {
+      const alumno = await inscribir(seccion, `Alumno ${codigo} ${i}`)
+      creados.alumnos.push(alumno)
+      await ponerNota(evaluacion, alumno, nota)
+    }
+    return cursoId
+  }
+  const reporte = () =>
+    obtener<ReporteFacultad>(ADMIN_ECONOMIA, '/api/metricas/facultad')
+
+  beforeAll(async () => {
+    ;[{ id: economia }] = await bd.query<{ id: string }[]>(
+      `SELECT f.id FROM facultad f JOIN universidad u ON u.id = f.universidad_id
+        WHERE f.nombre = 'Facultad de Economía y Negocios'
+          AND u.dominio_correo = 'norte.cursus.test'`,
+    )
+    ;[{ id: periodoId }] = await bd.query<{ id: string }[]>(
+      `SELECT p.id FROM periodo p JOIN universidad u ON u.id = p.universidad_id
+        WHERE p.activo AND u.dominio_correo = 'norte.cursus.test'`,
+    )
+  })
+
+  afterAll(async () => {
+    // En orden de dependencias, solo lo creado aquí.
+    const q = (sql: string, ids: string[]) => bd.query(sql, [ids])
+    await q('DELETE FROM nota WHERE alumno_id = ANY($1)', creados.alumnos)
+    await q(
+      'DELETE FROM evaluacion WHERE seccion_id = ANY($1)',
+      creados.secciones,
+    )
+    await q(
+      'DELETE FROM inscripcion WHERE seccion_id = ANY($1)',
+      creados.secciones,
+    )
+    await q(
+      'DELETE FROM seccion_profesor WHERE seccion_id = ANY($1)',
+      creados.secciones,
+    )
+    await q('DELETE FROM seccion WHERE id = ANY($1)', creados.secciones)
+    await q('DELETE FROM usuario WHERE id = ANY($1)', creados.alumnos)
+    await q('DELETE FROM curso WHERE id = ANY($1)', creados.cursos)
+    await q('DELETE FROM carrera WHERE id = ANY($1)', creados.carreras)
+  })
+
+  it('un curso sin secciones aparece con indicadores null, y su carrera también', async () => {
+    const carreraId = await crearCarrera('Carrera sin secciones')
+    const cursoId = await crearCurso(carreraId, 'SIN101')
+    const carrera = (await reporte()).carreras.find((c) => c.id === carreraId)
+    expect(carrera).toMatchObject({
+      nombre: 'Carrera sin secciones',
+      aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+      promedio: { valor: null, alumnos: 0 },
+      asistencia: { valor: null, presentes: 0, registros: 0 },
+    })
+    expect(carrera?.cursos).toEqual([
+      {
+        id: cursoId,
+        codigo: 'SIN101',
+        nombre: 'Curso SIN101',
+        aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+        promedio: { valor: null, alumnos: 0 },
+        asistencia: { valor: null, presentes: 0, registros: 0 },
+      },
+    ])
+    // Sigue siendo solo de su facultad: el administrativo de Ingeniería no lo ve.
+    const deIngenieria = await obtener<ReporteFacultad>(
+      ADMIN_INGENIERIA,
+      '/api/metricas/facultad',
+    )
+    expect(deIngenieria.carreras.map((c) => c.id)).not.toContain(carreraId)
+  })
+
+  // Un curso con notas finales 4,0, 4,0 y 4,1 promedia 4,03 y otro con 4,0
+  // promedia 4,0. El promedio de las cuatro notas es 4,025, que redondea a
+  // 4,03; ponderar los promedios ya redondeados daría 4,02.
+  it('el promedio de la carrera suma las notas y redondea una sola vez', async () => {
+    const carreraId = await crearCarrera('Carrera de promedios')
+    const a = await cursoConNotas(carreraId, 'PRM101', [4.0, 4.0, 4.1])
+    const b = await cursoConNotas(carreraId, 'PRM102', [4.0])
+    const carrera = (await reporte()).carreras.find((c) => c.id === carreraId)
+    expect(carrera?.promedio).toEqual({ valor: 4.03, alumnos: 4 })
+    expect(carrera?.aprobacion).toEqual({
+      valor: 100,
+      aprobados: 4,
+      evaluados: 4,
+    })
+    const cursos = Object.fromEntries(
+      (carrera?.cursos ?? []).map((c) => [c.id, c.promedio.valor]),
+    )
+    expect(cursos).toEqual({ [a]: 4.03, [b]: 4 })
+  })
 })

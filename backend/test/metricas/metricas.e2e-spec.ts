@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  ReporteFacultad,
   ResumenUniversidad,
   Rol,
 } from '@cursus/shared'
@@ -44,6 +45,11 @@ const META: MetricasUniversidad = {
   periodo: { anio: 2026, semestre: 2 },
   facultades: [],
 }
+const REPORTE: ReporteFacultad = {
+  facultad: { id: 'f-ingenieria', nombre: 'Ingeniería' },
+  periodo: { anio: 2026, semestre: 2 },
+  carreras: [],
+}
 const consolidado = vi.fn(() => Promise.resolve(CONSOLIDADO))
 const universidades = vi.fn(() => Promise.resolve([] as ResumenUniversidad[]))
 const facultades = vi.fn((_c: unknown, id: string) =>
@@ -57,6 +63,7 @@ const periodos = vi.fn(() =>
     { anio: 2026, semestre: 1, activo: false },
   ]),
 )
+const reporteFacultad = vi.fn(() => Promise.resolve(REPORTE))
 
 let app: INestApplication<App>
 beforeAll(async () => {
@@ -69,6 +76,7 @@ beforeAll(async () => {
       universidades,
       facultades,
       periodos,
+      reporteFacultad,
     })
     .compile()
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
@@ -198,6 +206,39 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     for (const ruta of [RUTA_UNIVERSIDADES, facultadesDe(UNIVERSIDAD)]) {
       await request(app.getHttpServer())
         .get(ruta)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    }
+  })
+})
+
+describe('reporte de facultad (MET-08)', () => {
+  it('el Administrativo recibe el reporte y solo acepta el período válido', async () => {
+    await request(app.getHttpServer())
+      .get('/api/metricas/facultad?periodo=2026-1')
+      .set('Authorization', sesion('ADMINISTRATIVO'))
+      .expect(200, REPORTE)
+    expect(reporteFacultad).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.any(String),
+      {
+        anio: 2026,
+        semestre: 1,
+      },
+    )
+    for (const periodo of ['2026-0', '2026-99']) {
+      await request(app.getHttpServer())
+        .get(`/api/metricas/facultad?periodo=${periodo}`)
+        .set('Authorization', sesion('ADMINISTRATIVO'))
+        .expect(400)
+    }
+  })
+
+  it('requiere sesión y el permiso específico del Administrativo', async () => {
+    await request(app.getHttpServer()).get('/api/metricas/facultad').expect(401)
+    for (const rol of ['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as Rol[]) {
+      await request(app.getHttpServer())
+        .get('/api/metricas/facultad')
         .set('Authorization', sesion(rol))
         .expect(403)
     }

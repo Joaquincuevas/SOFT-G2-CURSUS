@@ -83,3 +83,29 @@ export interface MetricasUniversidad {
   periodo: PeriodoMetrica | null
   facultades: IndicadoresFacultad[]
 }
+
+// MET-08: reporte del Administrativo sobre su facultad, agrupado por carrera
+// y curso. Los tres indicadores son null cuando no tienen denominador.
+export interface ReporteCurso extends Pick<
+  IndicadoresFacultad,
+  'aprobacion' | 'promedio' | 'asistencia'
+> {
+  id: string
+  codigo: string
+  nombre: string
+}
+
+export interface ReporteCarrera extends Pick<
+  IndicadoresFacultad,
+  'aprobacion' | 'promedio' | 'asistencia'
+> {
+  id: string
+  nombre: string
+  cursos: ReporteCurso[]
+}
+
+export interface ReporteFacultad {
+  facultad: { id: string; nombre: string }
+  periodo: PeriodoMetrica | null
+  carreras: ReporteCarrera[]
+}
