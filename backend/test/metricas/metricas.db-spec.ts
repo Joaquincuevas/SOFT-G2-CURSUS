@@ -400,6 +400,27 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
     }
   })
 
+  it('incluye en los indicadores un curso archivado de un período cerrado', async () => {
+    const [{ curso_id: cursoId }] = await bd.query<{ curso_id: string }[]>(
+      'SELECT curso_id FROM seccion WHERE id = $1',
+      [ids.norte],
+    )
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      cursoId,
+    ])
+    try {
+      expect(await consolidado()).toMatchObject({
+        aprobacion: { aprobados: 2, evaluados: 3 },
+        promedio: { valor: 4.33, alumnos: 3 },
+        asistencia: { presentes: 4, registros: 7 },
+      })
+    } finally {
+      await bd.query('UPDATE curso SET archived_at = NULL WHERE id = $1', [
+        cursoId,
+      ])
+    }
+  })
+
   it.each([
     [PROFESOR, 'PROFESOR'],
     [AYUDANTE, 'AYUDANTE'],
@@ -491,6 +512,15 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       estado,
     )
   const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
+
+  it('lista períodos únicos de todas las universidades, del más reciente al antiguo', async () => {
+    const lista = await obtener<
+      { anio: number; semestre: number; activo: boolean }[]
+    >(DIRECTOR, '/api/metricas/periodos')
+    expect(lista).toEqual([
+      { anio: 2026, semestre: 2, activo: true },
+    ])
+  })
 
   it('lista las universidades con sus indicadores', async () => {
     const lista = await obtener<ResumenUniversidad[]>(

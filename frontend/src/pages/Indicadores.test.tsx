@@ -102,12 +102,10 @@ describe('Indicadores del Director (MET-01)', () => {
     expect(
       screen.getByText('12 alumnos inscritos en 4 cursos del período activo.'),
     ).toBeInTheDocument()
-    // MET-03 agrega el filtro: el selector existe, pero no se puede usar.
+    // MET-03: el período activo viene seleccionado y el selector es funcional.
     const periodo = screen.getByRole('combobox', { name: 'Período' })
-    expect(periodo).toBeDisabled()
-    expect(periodo).toHaveTextContent(
-      '2026-2 (Universidad Demo Norte, Universidad Demo Sur)',
-    )
+    expect(periodo).not.toBeDisabled()
+    expect(periodo).toHaveValue('2026-2')
   })
 
   test('un indicador sin denominador dice "Sin datos suficientes" en vez de 0', async () => {
@@ -139,8 +137,8 @@ describe('Indicadores del Director (MET-01)', () => {
         '83,33',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveTextContent(
-      '2026-2 (Universidad Demo Norte)',
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-2',
     )
   })
 
@@ -208,7 +206,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         facultades.getByRole('article', { name: 'Ciencias' }),
       ).getAllByText('Sin datos suficientes'),
     ).toHaveLength(3)
-    expect(screen.getByRole('combobox', { name: 'Período' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Período' })).not.toBeDisabled()
   })
 
   // Los tres niveles piden el mismo período: el consolidado, la lista de
@@ -282,6 +280,30 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       'href',
       '/indicadores?periodo=2026-1',
     )
+  })
+
+  test('cambiar el período actualiza los tres niveles y la URL', async () => {
+    const { pedidas, registrar } = registrador()
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: registrar(RUTA, METRICAS),
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+      [FACULTADES]: registrar(FACULTADES, DETALLE),
+    })
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Período' }), {
+      target: { value: '2026-1' },
+    })
+    await waitFor(() => {
+      expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
+      expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
+    })
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
+    )
+    await screen.findByRole('list', { name: 'Facultades' })
+    expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
+    expect(
+      screen.getByRole('combobox', { name: 'Período' }),
+    ).toHaveValue('2026-1')
   })
 
   test('sin período en la URL, los tres niveles piden el activo', async () => {
