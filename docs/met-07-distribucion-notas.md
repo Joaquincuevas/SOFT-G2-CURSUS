@@ -20,6 +20,6 @@ La distribución usa las mismas notas `FINAL` que `BASE` y que los indicadores d
 
 El curso fija su propio período: el endpoint no acepta `?periodo=` y responde 400 si se envía. La respuesta contiene universidad, facultad, carrera, curso, `totalEvaluados`, `notaMinimaAprobacion` y seis rangos. Sin notas finales, todos los conteos son cero. El breadcrumb `Indicadores › Universidad › Facultad › Carrera › Curso` conserva el período de navegación.
 
-El histograma tiene nombre accesible y una tabla equivalente para lectores de pantalla y para no depender del color. La pantalla incluye estados de carga, vacío, error con reintento y curso inexistente.
+El histograma usa clases propias (`indicadores__histograma-*`) para no compartir estilos con la comparación de MET-02, y sus seis columnas se encogen y rotulan en dos líneas, así que cabe desde 320 px sin desbordarse; la línea de aprobación queda entre la tercera y la cuarta columna. El histograma tiene nombre accesible y una tabla equivalente para lectores de pantalla y para no depender del color. La pantalla incluye estados de carga, vacío, error con reintento y curso inexistente.
 
 No hay migración. Las pruebas cubren bordes, suma de rangos, curso sin notas, archivado, permisos, errores HTTP y la presentación accesible.
