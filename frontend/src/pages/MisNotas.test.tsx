@@ -184,4 +184,19 @@ describe('NOT-14: el alumno ve su nota final', () => {
       /^Sin notas publicadas$/,
     )
   })
+
+  test('con un backend que aún no envía notaFinal, la tabla sigue disponible', async () => {
+    const { panel } = await abrirNotas('ALUMNO', {
+      [MIS_NOTAS]: () => ({ evaluaciones: NOTAS.evaluaciones }),
+    })
+
+    expect(
+      await panel.findByRole('table', { name: 'Mis notas por evaluación' }),
+    ).toBeInTheDocument()
+    expect(panel.getByText('Control 1')).toBeInTheDocument()
+    expect(panel.queryByLabelText('Nota del curso')).not.toBeInTheDocument()
+    expect(
+      panel.queryByText('No pudimos cargar tus notas.'),
+    ).not.toBeInTheDocument()
+  })
 })

@@ -9,8 +9,13 @@ import { useDatos } from './useDatos'
 // evaluación con su fecha, ponderación y su nota si ya está publicada. Las
 // notas propuestas (en borrador, en revisión o devueltas) no se muestran.
 // NOT-14: arriba, su nota final o parcial, calculada en el backend.
+// Si el frontend se despliega antes que el backend, mis-notas aún no trae
+// notaFinal: se omite el resumen y la tabla sigue disponible.
+type RespuestaMisNotas = Omit<MisNotasSeccion, 'notaFinal'> &
+  Partial<Pick<MisNotasSeccion, 'notaFinal'>>
+
 export function MisNotas({ seccionId }: { seccionId: string }) {
-  const [datos, recargar] = useDatos<MisNotasSeccion>(
+  const [datos, recargar] = useDatos<RespuestaMisNotas>(
     `/api/espacio/secciones/${seccionId}/mis-notas`,
   )
 
@@ -28,13 +33,15 @@ export function MisNotas({ seccionId }: { seccionId: string }) {
         <p className="dashboard__texto">Aún no hay evaluaciones</p>
       ) : (
         <>
-          <p
-            className="notas__final"
-            aria-label="Nota del curso"
-            data-tipo={datos.notaFinal.tipo}
-          >
-            {textoNotaFinal(datos.notaFinal)}
-          </p>
+          {datos.notaFinal && (
+            <p
+              className="notas__final"
+              aria-label="Nota del curso"
+              data-tipo={datos.notaFinal.tipo}
+            >
+              {textoNotaFinal(datos.notaFinal)}
+            </p>
+          )}
           <table className="notas__tabla" aria-label="Mis notas por evaluación">
             <thead>
               <tr>

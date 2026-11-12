@@ -27,7 +27,7 @@ No cuentan las notas propuestas (borrador, en revisión, devueltas), las notas a
 ## Comportamiento
 
 - **Alumno**, en **Mis cursos** → un curso → pestaña **Notas**: sobre la tabla de **Mis notas** aparece "Nota final 5,1", "Nota parcial 5,0 (60 % evaluado)" o "Sin notas publicadas". Sin evaluaciones, sigue diciendo "Aún no hay evaluaciones".
-- **Profesor**, en la misma pestaña: bajo la lista de evaluaciones aparece **Notas finales**, una tabla con cada alumno activo por nombre y el mismo texto. Se vuelve a pedir cada vez que el detalle de una evaluación lee o cambia sus notas (al abrirlo, aprobar, devolver o recorregir), sin borrar la tabla mientras llega.
+- **Profesor**, en la misma pestaña: bajo la lista de evaluaciones aparece **Notas finales**, una tabla con cada alumno activo por nombre y el mismo texto. Se vuelve a pedir, sin borrar la tabla mientras llega, cuando el profesor crea o edita una evaluación y cada vez que el detalle de una evaluación lee o cambia sus notas (al abrirlo, aprobar, devolver o recorregir).
 - El ayudante, el Administrativo y el Director no ven la tabla.
 
 ## Decisiones
@@ -35,6 +35,7 @@ No cuentan las notas propuestas (borrador, en revisión, devueltas), las notas a
 - **Se calcula al vuelo, no se guarda.** No hay migración, tabla ni botón para "publicar la nota final". La validación de NOT-02 (`PonderacionesService.conNotaFinalValidada`) sigue sin uso: queda para la tarjeta que agregue ese cierre. Mientras las ponderaciones no sumen 100, la nota se muestra como parcial, así que nunca aparece una "nota final" con ponderaciones inválidas.
 - **Solo el profesor de la sección ve las notas finales de todos.** El ayudante lee propuestas por evaluación, pero el consolidado del curso es del profesor. Si el Director lo necesita, se agrega en otra tarjeta.
 - **Sin evaluaciones el alumno no ve la línea de nota**, solo "Aún no hay evaluaciones"; el endpoint igual responde `notaFinal` con `nota: null`.
+- **Despliegue en cualquier orden:** si el frontend llega antes que el backend, `mis-notas` aún no trae `notaFinal`; la pantalla omite el resumen y sigue mostrando la tabla por evaluación.
 - **Para las próximas tarjetas:** HIS-05 (notas de períodos anteriores) y EXP-01 (exportar a CSV) deben usar `calcularNotaFinal` en vez de recalcular.
 
 ## API
@@ -102,8 +103,8 @@ npm run test:db --workspace=backend
   - una evaluación nueva sin nota vuelve parcial la nota;
   - el ayudante, el alumno, el Administrativo y un profesor que dejó la sección reciben 403; un profesor de otra universidad, 404; sin sesión, 401.
 - `backend/test/notas/notas.e2e-spec.ts`: 401 sin sesión, 403 por CASL para el alumno y el Administrativo y sin rutas de escritura en `notas-finales`.
-- `frontend/src/pages/MisNotas.test.tsx`: nota parcial con el porcentaje, nota final con un decimal y "Sin notas publicadas".
-- `frontend/src/pages/NotasFinales.test.tsx`: la tabla del profesor, el estado vacío, el error con reintento; se vuelve a pedir al leer las notas de una evaluación sin mostrar la carga; el ayudante y el alumno no la ven ni la piden.
+- `frontend/src/pages/MisNotas.test.tsx`: nota parcial con el porcentaje, nota final con un decimal y "Sin notas publicadas"; con un backend que aún no envía `notaFinal`, la tabla sigue disponible.
+- `frontend/src/pages/NotasFinales.test.tsx`: la tabla del profesor, el estado vacío, el error con reintento; al crear una evaluación sin notas pasa de FINAL a PARCIAL; se vuelve a pedir al leer las notas de una evaluación sin mostrar la carga; el ayudante y el alumno no la ven ni la piden.
 
 ## Revisión en local
 

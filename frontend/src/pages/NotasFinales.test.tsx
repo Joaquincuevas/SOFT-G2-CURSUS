@@ -98,6 +98,79 @@ describe('NOT-14: el profesor ve la nota final de cada alumno', () => {
     expect(await region.findByText('Ana Ávila')).toBeInTheDocument()
   })
 
+  test('al crear una evaluación sin notas, la nota final pasa a parcial', async () => {
+    const control = {
+      id: 'e1',
+      nombre: 'Control 1',
+      fecha: '2026-09-01',
+      ponderacion: 100,
+    }
+    let creada = false
+    const { panel } = await abrirNotas('PROFESOR', {
+      [EVALUACIONES]: (init) => {
+        if (init?.method === 'POST') {
+          creada = true
+          return json(
+            {
+              id: 'e2',
+              nombre: 'Examen',
+              fecha: '2026-12-01',
+              ponderacion: 20,
+            },
+            201,
+          )
+        }
+        return creada
+          ? {
+              evaluaciones: [
+                control,
+                {
+                  id: 'e2',
+                  nombre: 'Examen',
+                  fecha: '2026-12-01',
+                  ponderacion: 20,
+                },
+              ],
+              sumaPonderaciones: 120,
+            }
+          : { evaluaciones: [control], sumaPonderaciones: 100 }
+      },
+      // El backend ya cuenta la evaluación nueva, sin nota publicada.
+      [NOTAS_FINALES]: () => ({
+        alumnos: [
+          {
+            id: 'a1',
+            nombre: 'Ana Ávila',
+            notaFinal: creada
+              ? { tipo: 'PARCIAL', nota: 5.1, porcentajeEvaluado: 100 }
+              : { tipo: 'FINAL', nota: 5.1, porcentajeEvaluado: 100 },
+          },
+        ],
+      }),
+    })
+
+    const tabla = await panel.findByRole('table', {
+      name: 'Nota final de cada alumno',
+    })
+    expect(await within(tabla).findByText('Nota final 5,1')).toBeInTheDocument()
+
+    fireEvent.change(panel.getByLabelText('Nombre'), {
+      target: { value: 'Examen' },
+    })
+    fireEvent.change(panel.getByLabelText('Fecha'), {
+      target: { value: '2026-12-01' },
+    })
+    fireEvent.change(panel.getByLabelText('Ponderación (%)'), {
+      target: { value: '20' },
+    })
+    fireEvent.click(panel.getByRole('button', { name: 'Crear evaluación' }))
+
+    expect(
+      await within(tabla).findByText('Nota parcial 5,1 (100 % evaluado)'),
+    ).toBeInTheDocument()
+    expect(within(tabla).queryByText('Nota final 5,1')).not.toBeInTheDocument()
+  })
+
   test('vuelve a pedir las notas finales al leer las notas de una evaluación, sin borrar la tabla', async () => {
     const notasFinales = vi.fn(() => FINALES)
     let liberar = () => {}

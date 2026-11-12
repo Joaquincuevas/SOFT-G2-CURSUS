@@ -38,8 +38,13 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   // NOT-14: vuelve a pedir las notas finales cada vez que el detalle de una
-  // evaluación lee o cambia sus notas (aprobar, devolver, recorregir).
+  // evaluación lee o cambia sus notas (aprobar, devolver, recorregir) y
+  // cuando el profesor crea o edita una evaluación, que cambia el cálculo.
   const [versionNotas, setVersionNotas] = useState(0)
+  const recargarConNotasFinales = () => {
+    recargar()
+    setVersionNotas((n) => n + 1)
+  }
   const [elegida, setElegida] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<Evaluacion | null>(null)
   const [historial, setHistorial] = useState<string | null>(null)
@@ -56,7 +61,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
     <section className="notas" aria-label="Evaluaciones">
       <h3 className="vista-seccion__subtitulo">Evaluaciones</h3>
       {editaEvaluaciones && (
-        <FormularioEvaluacion ruta={ruta} alGuardar={recargar} />
+        <FormularioEvaluacion ruta={ruta} alGuardar={recargarConNotasFinales} />
       )}
       {aviso && (
         <p
@@ -209,7 +214,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
           alGuardar={() => {
             setEdicion(null)
             setAvisoEdicion(true)
-            recargar()
+            recargarConNotasFinales()
           }}
         />
       )}
