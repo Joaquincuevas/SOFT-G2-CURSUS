@@ -92,6 +92,10 @@ export type RutaSimulada = (init?: RequestInit, url?: string) => unknown
 const LISTAS_VACIAS: Record<string, RutaSimulada> = {
   '/api/carreras': () => [],
   '/api/periodos': () => [],
+  '/api/metricas/periodos': () => [
+    { anio: 2026, semestre: 2, activo: true },
+    { anio: 2026, semestre: 1, activo: false },
+  ],
   '/api/cursos': () => [],
   '/api/dashboard/mis-secciones': () => [],
   '/api/dashboard/secciones-ayudante': () => [],

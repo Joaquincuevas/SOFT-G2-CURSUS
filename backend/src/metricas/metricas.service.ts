@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  PeriodoDisponible,
   ResumenUniversidad,
 } from '@cursus/shared'
 import { Injectable, NotFoundException } from '@nestjs/common'
@@ -49,7 +50,7 @@ const BASE = `
       JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
       JOIN carrera ca ON ca.id = cu.carrera_id AND ca.universidad_id = cu.universidad_id
       JOIN periodo_activo p ON p.id = cu.periodo_id AND p.universidad_id = cu.universidad_id
-     WHERE s.archived_at IS NULL AND cu.archived_at IS NULL
+     WHERE s.archived_at IS NULL
   ), inscritos AS (
     SELECT i.universidad_id, i.seccion_id, i.usuario_id AS alumno_id,
            s.curso_id, s.facultad_id
@@ -198,6 +199,18 @@ export interface PeriodoPedido {
 @Injectable()
 export class MetricasService {
   constructor(private readonly bd: BaseDeDatos) {}
+
+  periodos(contexto: ContextoUniversidad): Promise<PeriodoDisponible[]> {
+    return this.bd.consultarEnTodasLasUniversidades<PeriodoDisponible>(
+      contexto,
+      `SELECT p.anio, p.semestre, bool_or(p.activo) AS activo
+         FROM periodo p
+         JOIN universidad u ON u.id = p.universidad_id
+        WHERE u.archived_at IS NULL
+        GROUP BY p.anio, p.semestre
+        ORDER BY p.anio DESC, p.semestre DESC`,
+    )
+  }
 
   // MET-04: con periodo, el de cada universidad que lo tenga; sin él, el
   // activo. Los tres niveles usan el mismo período.

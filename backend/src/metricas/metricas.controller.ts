@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  PeriodoDisponible,
   ResumenUniversidad,
 } from '@cursus/shared'
 import {
@@ -24,7 +25,11 @@ function periodoDe(valor: string | undefined): PeriodoPedido | null {
   if (!partes) {
     throw new BadRequestException('periodo debe tener la forma AAAA-S')
   }
-  return { anio: Number(partes[1]), semestre: Number(partes[2]) }
+  const semestre = Number(partes[2])
+  if (semestre !== 1 && semestre !== 2) {
+    throw new BadRequestException('semestre debe ser 1 o 2')
+  }
+  return { anio: Number(partes[1]), semestre }
 }
 
 // MET-01 y MET-04: indicadores del Directorio. Solo el Director tiene read de
@@ -32,6 +37,14 @@ function periodoDe(valor: string | undefined): PeriodoPedido | null {
 @Controller('metricas')
 export class MetricasController {
   constructor(private readonly metricas: MetricasService) {}
+
+  @Puede('read', 'Metricas')
+  @Get('periodos')
+  periodos(
+    @UniversidadActual() contexto: ContextoUniversidad,
+  ): Promise<PeriodoDisponible[]> {
+    return this.metricas.periodos(contexto)
+  }
 
   @Puede('read', 'Metricas')
   @Get('consolidado')
