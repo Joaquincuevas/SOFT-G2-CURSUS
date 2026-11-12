@@ -1,4 +1,18 @@
-import type { MetricasConsolidadas } from '@cursus/shared'
+import type {
+  IndicadoresFacultad,
+  MetricasConsolidadas,
+  MetricasUniversidad,
+  PeriodoMetrica,
+  ResumenUniversidad,
+} from '@cursus/shared'
+import {
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useParams,
+  useSearchParams,
+} from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import './Indicadores.css'
@@ -14,6 +28,7 @@ export function Indicadores() {
   const [metricas, recargar] = useDatos<MetricasConsolidadas>(
     '/api/metricas/consolidado',
   )
+  const { consulta, sufijo } = usePeriodoDeLaUrl()
 
   return (
     <section className="indicadores" aria-label="Indicadores consolidados">
@@ -66,9 +81,192 @@ export function Indicadores() {
           </p>
         </>
       )}
+      <ListaUniversidades consulta={consulta} sufijo={sufijo} />
     </section>
   )
 }
+
+// MET-04: el período se conserva en la URL (?periodo=AAAA-S) al bajar y subir
+// de nivel. Sin él, es el período activo. MET-03 agrega el selector que lo
+// escribe.
+function usePeriodoDeLaUrl() {
+  const [params] = useSearchParams()
+  const periodo = params.get('periodo')
+  const consulta = periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''
+  return { periodo, consulta, sufijo: consulta }
+}
+
+// Primer nivel del drill-down: cada universidad con sus indicadores; al hacer
+// clic se abren sus facultades.
+function ListaUniversidades({
+  consulta,
+  sufijo,
+}: {
+  consulta: string
+  sufijo: string
+}) {
+  const [universidades, recargar] = useDatos<ResumenUniversidad[]>(
+    `/api/metricas/universidades${consulta}`,
+  )
+  return (
+    <section className="indicadores__nivel" aria-label="Universidades">
+      <h3 className="indicadores__subtitulo">Universidades</h3>
+      {universidades === undefined ? (
+        <Cargando texto="Cargando universidades…" />
+      ) : universidades === null ? (
+        <ErrorEstado
+          mensaje="No pudimos cargar las universidades."
+          onReintentar={recargar}
+        />
+      ) : universidades.length === 0 ? (
+        <p className="indicadores__alcance">No hay universidades.</p>
+      ) : (
+        <ul className="indicadores__lista">
+          {universidades.map((u) => (
+            <li key={u.id} className="indicadores__fila">
+              <Link
+                className="indicadores__enlace"
+                to={`/indicadores/universidades/${u.id}${sufijo}`}
+              >
+                {u.nombre}
+              </Link>
+              <ResumenEnLinea indicadores={u} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function ResumenEnLinea({
+  indicadores: i,
+}: {
+  indicadores: Pick<
+    IndicadoresFacultad,
+    'aprobacion' | 'promedio' | 'asistencia'
+  >
+}) {
+  const valor = (v: number | null, d: number, unidad = '') =>
+    v === null
+      ? SIN_DATOS
+      : `${v.toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d })}${unidad}`
+  return (
+    <p className="indicadores__resumen">
+      Aprobación: {valor(i.aprobacion.valor, 1, ' %')} · Promedio:{' '}
+      {valor(i.promedio.valor, 2)} · Asistencia:{' '}
+      {valor(i.asistencia.valor, 2, ' %')}
+    </p>
+  )
+}
+
+// Subrutas de /indicadores: el consolidado y, debajo, una universidad con sus
+// facultades (MET-04).
+export function RutasIndicadores() {
+  return (
+    <Routes>
+      <Route index element={<Indicadores />} />
+      <Route path="universidades/:id" element={<FacultadesUniversidad />} />
+      <Route path="*" element={<Navigate to="/indicadores" replace />} />
+    </Routes>
+  )
+}
+
+// MET-04: facultades de una universidad con los tres indicadores, y un
+// breadcrumb para volver al consolidado sin perder el período.
+function FacultadesUniversidad() {
+  const { id } = useParams()
+  const { consulta, sufijo } = usePeriodoDeLaUrl()
+  const [datos, recargar, status] = useDatos<MetricasUniversidad>(
+    `/api/metricas/universidades/${id}/facultades${consulta}`,
+  )
+  const volver = `/indicadores${sufijo}`
+
+  return (
+    <section className="indicadores" aria-label="Indicadores por facultad">
+      <nav className="indicadores__migas" aria-label="Ruta de navegación">
+        <ol>
+          <li>
+            <Link to={volver}>Indicadores</Link>
+          </li>
+          <li aria-current="page">
+            {datos ? datos.universidad.nombre : 'Universidad'}
+          </li>
+        </ol>
+      </nav>
+      {/* MET-03 agrega el filtro: hoy muestra el período de la URL. */}
+      <label className="indicadores__periodo">
+        Período
+        <select disabled aria-label="Período" value="actual">
+          <option value="actual">
+            {datos ? etiquetaPeriodo(datos.periodo) : 'Período activo'}
+          </option>
+        </select>
+      </label>
+      {datos === undefined ? (
+        <Cargando texto="Cargando facultades…" />
+      ) : datos === null ? (
+        status === 404 || status === 400 ? (
+          <div role="alert">
+            <p>La universidad no existe.</p>
+            <Link className="estado__boton" to={volver}>
+              Volver a Indicadores
+            </Link>
+          </div>
+        ) : (
+          <ErrorEstado
+            mensaje="No pudimos cargar las facultades."
+            onReintentar={recargar}
+          />
+        )
+      ) : datos.facultades.length === 0 ? (
+        <p className="indicadores__alcance">
+          Esta universidad no tiene facultades.
+        </p>
+      ) : (
+        <ul className="indicadores__lista" aria-label="Facultades">
+          {datos.facultades.map((f) => (
+            <li key={f.id} className="indicadores__facultad">
+              <article aria-label={f.nombre}>
+                <h3 className="indicadores__subtitulo">{f.nombre}</h3>
+                <ul className="indicadores__tarjetas" aria-label="Indicadores">
+                  <Tarjeta
+                    titulo="Tasa de aprobación"
+                    valor={f.aprobacion.valor}
+                    unidad="%"
+                    decimales={1}
+                    detalle={`${f.aprobacion.aprobados} de ${plural(f.aprobacion.evaluados, 'alumno')} con nota final`}
+                  />
+                  <Tarjeta
+                    titulo="Promedio"
+                    valor={f.promedio.valor}
+                    unidad=""
+                    decimales={2}
+                    detalle={`${plural(f.promedio.alumnos, 'alumno')} con nota final`}
+                  />
+                  <Tarjeta
+                    titulo="Asistencia"
+                    valor={f.asistencia.valor}
+                    unidad="%"
+                    decimales={2}
+                    detalle={`${f.asistencia.presentes} presentes de ${plural(f.asistencia.registros, 'registro')}`}
+                  />
+                </ul>
+                <p className="indicadores__alcance">
+                  {plural(f.alumnos, 'alumno')} inscritos en{' '}
+                  {plural(f.cursos, 'curso')}.
+                </p>
+              </article>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+const etiquetaPeriodo = (p: PeriodoMetrica | null) =>
+  p ? `${p.anio}-${p.semestre}` : 'Sin período en esta universidad'
 
 function Tarjeta({
   titulo,
