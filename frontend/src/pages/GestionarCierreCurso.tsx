@@ -6,6 +6,7 @@ import type {
 import { avisoPonderaciones } from '@cursus/shared'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
+import { ArchivarCurso } from './ArchivarCurso'
 
 export function GestionarCierreCurso({ curso }: { curso: CursoDetalle }) {
   const { fetchConSesion } = useAuth()
@@ -46,16 +47,19 @@ export function GestionarCierreCurso({ curso }: { curso: CursoDetalle }) {
   const registrado = cierre ?? curso.cierre
   if (registrado) {
     return (
-      <p className="cursos__exito" role="status">
-        Curso cerrado el{' '}
-        <time dateTime={registrado.fecha}>
-          {new Date(registrado.fecha).toLocaleString('es-CL', {
-            dateStyle: 'long',
-            timeStyle: 'short',
-          })}
-        </time>
-        .
-      </p>
+      <>
+        <p className="cursos__exito" role="status">
+          Curso cerrado el{' '}
+          <time dateTime={registrado.fecha}>
+            {new Date(registrado.fecha).toLocaleString('es-CL', {
+              dateStyle: 'long',
+              timeStyle: 'short',
+            })}
+          </time>
+          .
+        </p>
+        <ArchivarCurso curso={curso} />
+      </>
     )
   }
 

@@ -89,7 +89,34 @@ describe('detalle de un curso', () => {
       'Curso cerrado el',
     )
     expect(screen.queryByRole('button', { name: 'Cerrar curso' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Archivar curso' })).toBeVisible()
     expect(cerrar).toHaveBeenCalledTimes(2)
+  })
+
+  test('archiva un curso cerrado después de confirmar y vuelve al listado', async () => {
+    const archivar = vi.fn<RutaSimulada>(
+      () => new Response(null, { status: 204 }),
+    )
+    await renderConSesion('ADMINISTRATIVO', '/cursos/curso-1', {
+      ...ruta(() => ({
+        ...CURSO,
+        cierre: { fecha: '2026-12-15T18:00:00Z', responsableId: 'admin' },
+      })),
+      '/api/cursos/curso-1/archivar': archivar,
+      '/api/cursos': () => [],
+    })
+    const iniciar = await screen.findByRole('button', {
+      name: 'Archivar curso',
+    })
+    fireEvent.click(iniciar)
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(archivar).not.toHaveBeenCalled()
+    fireEvent.click(iniciar)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar archivo' }))
+    expect(await screen.findByText('Curso ICC101 archivado.')).toBeVisible()
+    expect(archivar).toHaveBeenCalledTimes(1)
+    expect(archivar.mock.calls[0][0]?.method).toBe('PATCH')
+    expect(screen.queryByText(/Introducción a la Programación/)).toBeNull()
   })
 
   test('muestra los datos del curso y sus secciones', async () => {
@@ -107,6 +134,7 @@ describe('detalle de un curso', () => {
     expect(
       screen.getByText('Ingeniería Civil en Informática · Período 2026-2'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archivar curso' })).toBeNull()
     const tabla = screen.getByRole('table', { name: 'Secciones' })
     expect(
       within(tabla)
@@ -148,7 +176,11 @@ describe('detalle de un curso', () => {
     await renderConSesion(
       'DIRECTOR',
       '/cursos/curso-1',
-      ruta(() => ({ ...CURSO, universidadNombre: 'Universidad Demo Sur' })),
+      ruta(() => ({
+        ...CURSO,
+        universidadNombre: 'Universidad Demo Sur',
+        cierre: { fecha: '2026-12-15T18:00:00Z', responsableId: 'admin' },
+      })),
     )
 
     expect(
@@ -159,6 +191,7 @@ describe('detalle de un curso', () => {
     expect(screen.queryByRole('link', { name: 'Editar curso' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Crear sección' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cerrar curso' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Archivar curso' })).toBeNull()
     // Sin la columna Acciones (GES-12, GES-13 y GES-15).
     expect(screen.queryByRole('columnheader', { name: 'Acciones' })).toBeNull()
     expect(screen.queryByRole('button', { name: /profesor/ })).toBeNull()

@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [HIS-03 · Archivo de un curso cerrado](his-03-archivar-curso.md)
 - [HIS-02 · Registro académico de solo lectura en cursos cerrados](his-02-registro-curso-cerrado.md)
 - [HIS-01 · Cierre de curso y guía de revisión](his-01-cierre-curso.md)
 - [MAT-05 · Materiales del curso agrupados por categoría](mat-05-materiales-por-categoria.md)

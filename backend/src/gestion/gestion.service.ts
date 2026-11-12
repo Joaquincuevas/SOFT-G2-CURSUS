@@ -339,6 +339,41 @@ export class GestionService {
     })
   }
 
+  async archivarCurso(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<void> {
+    await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      const [curso] = await bd.query<{ archived_at: Date | null }>(
+        `SELECT c.archived_at FROM curso c
+           JOIN carrera ca ON ca.id = c.carrera_id AND ca.universidad_id = c.universidad_id
+          WHERE c.universidad_id = $1 AND c.id = $2
+            AND ca.facultad_id = ${facultadDe('$3')}
+          FOR UPDATE OF c`,
+        [contexto.universidadId, cursoId, usuarioId],
+      )
+      if (!curso) throw new NotFoundException('El curso no existe')
+      if (curso.archived_at) return
+
+      // Una consulta nueva ve el cierre si se confirmó mientras se esperaba
+      // el bloqueo sobre la fila del curso.
+      const [{ archivado }] = await bd.query<{ archivado: boolean }>(
+        `WITH archivo AS (
+           UPDATE curso SET archived_at = clock_timestamp()
+            WHERE universidad_id = $1 AND id = $2 AND public.curso_cerrado(id)
+           RETURNING id
+         )
+         SELECT EXISTS (SELECT 1 FROM archivo) AS archivado`,
+        [contexto.universidadId, cursoId],
+      )
+      if (!archivado) {
+        throw new ConflictException('Solo se pueden archivar cursos cerrados')
+      }
+    })
+  }
+
   // GES-09. Agrega la siguiente sección del curso, con el número correlativo.
   // El curso debe ser de la facultad del usuario y no estar archivado (si no,
   // 404). El FOR UPDATE sobre el curso serializa las creaciones simultáneas,
