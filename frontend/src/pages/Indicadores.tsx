@@ -25,10 +25,12 @@ const SIN_DATOS = 'Sin datos suficientes'
 // read Metricas en navigation.ts). Un indicador con valor null no tiene
 // denominador: se dice, en vez de mostrar 0.
 export function Indicadores() {
+  const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
+  // Con un período inválido no se pide nada a la API.
   const [metricas, recargar] = useDatos<MetricasConsolidadas>(
-    '/api/metricas/consolidado',
+    valido ? `/api/metricas/consolidado${consulta}` : null,
   )
-  const { consulta, sufijo } = usePeriodoDeLaUrl()
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
 
   return (
     <section className="indicadores" aria-label="Indicadores consolidados">
@@ -77,7 +79,8 @@ export function Indicadores() {
           </ul>
           <p className="indicadores__alcance">
             {plural(metricas.alumnos, 'alumno')} inscritos en{' '}
-            {plural(metricas.cursos, 'curso')} del período activo.
+            {plural(metricas.cursos, 'curso')} del período {periodo ?? 'activo'}
+            .
           </p>
         </>
       )}
@@ -86,14 +89,36 @@ export function Indicadores() {
   )
 }
 
-// MET-04: el período se conserva en la URL (?periodo=AAAA-S) al bajar y subir
-// de nivel. Sin él, es el período activo. MET-03 agrega el selector que lo
-// escribe.
+// MET-04: el período se conserva en la URL (?periodo=AAAA-S) y los tres
+// niveles (consolidado, universidades y facultades) piden el mismo. Sin él, es
+// el período activo. MET-03 agrega el selector que lo escribe. Un valor que no
+// tiene la forma AAAA-S no se envía: se avisa (valido = false).
+const FORMATO_PERIODO = /^\d{4}-\d{1,2}$/
+
 function usePeriodoDeLaUrl() {
   const [params] = useSearchParams()
   const periodo = params.get('periodo')
   const consulta = periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''
-  return { periodo, consulta, sufijo: consulta }
+  const valido = periodo === null || FORMATO_PERIODO.test(periodo)
+  return { periodo, valido, consulta, sufijo: consulta }
+}
+
+// El 400 del período no es "la universidad no existe": se dice qué falló y se
+// ofrece volver al período activo.
+function PeriodoInvalido({ periodo }: { periodo: string | null }) {
+  return (
+    <section className="indicadores" aria-label="Período inválido">
+      <div role="alert">
+        <p>
+          El período «{periodo}» no es válido. Usa el formato año-semestre, por
+          ejemplo 2026-1.
+        </p>
+        <Link className="estado__boton" to="/indicadores">
+          Ver el período activo
+        </Link>
+      </div>
+    </section>
+  )
 }
 
 // Primer nivel del drill-down: cada universidad con sus indicadores; al hacer
@@ -176,11 +201,12 @@ export function RutasIndicadores() {
 // breadcrumb para volver al consolidado sin perder el período.
 function FacultadesUniversidad() {
   const { id } = useParams()
-  const { consulta, sufijo } = usePeriodoDeLaUrl()
+  const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
   const [datos, recargar, status] = useDatos<MetricasUniversidad>(
-    `/api/metricas/universidades/${id}/facultades${consulta}`,
+    valido ? `/api/metricas/universidades/${id}/facultades${consulta}` : null,
   )
   const volver = `/indicadores${sufijo}`
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
 
   return (
     <section className="indicadores" aria-label="Indicadores por facultad">

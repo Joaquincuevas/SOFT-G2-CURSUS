@@ -211,12 +211,29 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(screen.getByRole('combobox', { name: 'Período' })).toBeDisabled()
   })
 
-  test('el breadcrumb vuelve al consolidado', async () => {
-    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
-      [RUTA]: () => METRICAS,
-      [UNIVERSIDADES]: () => LISTA,
-      [FACULTADES]: () => DETALLE,
-    })
+  // Los tres niveles piden el mismo período: el consolidado, la lista de
+  // universidades y las facultades.
+  const registrador = () => {
+    const pedidas: string[] = []
+    const registrar =
+      (ruta: string, cuerpo: unknown) => (_: unknown, url?: string) => {
+        pedidas.push(url ?? ruta)
+        return cuerpo
+      }
+    return { pedidas, registrar }
+  }
+
+  test('el breadcrumb vuelve al consolidado con el mismo período', async () => {
+    const { pedidas, registrar } = registrador()
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte?periodo=2026-1',
+      {
+        [RUTA]: registrar(RUTA, METRICAS),
+        [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+        [FACULTADES]: registrar(FACULTADES, DETALLE),
+      },
+    )
     const migas = within(
       await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
     )
@@ -226,24 +243,27 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         'page',
       ),
     )
+    // En el detalle todavía no se pidió el consolidado.
+    expect(pedidas).not.toContain(`${RUTA}?periodo=2026-1`)
     fireEvent.click(migas.getByRole('link', { name: 'Indicadores' }))
     expect(
       await screen.findByRole('list', { name: 'Indicadores' }),
     ).toBeInTheDocument()
+    // Al volver, el consolidado y la lista piden 2026-1 y ninguno pide el
+    // período activo (sin parámetro).
+    expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
+    expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
+    expect(pedidas).not.toContain(RUTA)
+    expect(pedidas).not.toContain(UNIVERSIDADES)
     expect(
-      screen.getByRole('region', { name: 'Universidades' }),
+      screen.getByText('12 alumnos inscritos en 4 cursos del período 2026-1.'),
     ).toBeInTheDocument()
   })
 
-  test('el período de la URL se pide al bajar y se conserva al volver', async () => {
-    const pedidas: string[] = []
-    const registrar =
-      (ruta: string, cuerpo: unknown) => (_: unknown, url?: string) => {
-        pedidas.push(url ?? ruta)
-        return cuerpo
-      }
+  test('el período de la URL se pide en los tres niveles y se conserva al bajar', async () => {
+    const { pedidas, registrar } = registrador()
     await renderConSesion('DIRECTOR', '/indicadores?periodo=2026-1', {
-      [RUTA]: () => METRICAS,
+      [RUTA]: registrar(RUTA, METRICAS),
       [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
       [FACULTADES]: registrar(FACULTADES, DETALLE),
     })
@@ -254,6 +274,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
     )
     await screen.findByRole('list', { name: 'Facultades' })
+    expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
     expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
     expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
     // El enlace de vuelta conserva el período.
@@ -261,6 +282,40 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       'href',
       '/indicadores?periodo=2026-1',
     )
+  })
+
+  test('sin período en la URL, los tres niveles piden el activo', async () => {
+    const { pedidas, registrar } = registrador()
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: registrar(RUTA, METRICAS),
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+    })
+    await screen.findByRole('list', { name: 'Indicadores' })
+    expect(pedidas).toContain(RUTA)
+    expect(pedidas).toContain(UNIVERSIDADES)
+    expect(pedidas.some((u) => u.includes('periodo='))).toBe(false)
+  })
+
+  // El 400 del período no es "la universidad no existe": se dice qué falló y
+  // no se pide nada a la API.
+  test.each([
+    ['/indicadores?periodo=activo', 'consolidado'],
+    ['/indicadores/universidades/u-norte?periodo=activo', 'facultades'],
+  ])('un período inválido (%s) tiene su propio mensaje', async (ruta) => {
+    const pedida = vi.fn(() => DETALLE)
+    await renderConSesion('DIRECTOR', ruta, {
+      [RUTA]: pedida,
+      [UNIVERSIDADES]: pedida,
+      [FACULTADES]: pedida,
+    })
+    expect(
+      await screen.findByText(/El período «activo» no es válido/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('La universidad no existe.')).toBeNull()
+    expect(
+      screen.getByRole('link', { name: 'Ver el período activo' }),
+    ).toHaveAttribute('href', '/indicadores')
+    expect(pedida).not.toHaveBeenCalled()
   })
 
   test('una universidad sin facultades lo dice', async () => {
