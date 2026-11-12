@@ -1,6 +1,6 @@
 # MAT-04: el profesor sube un material con su categoría
 
-Tarjeta: [MAT-04 Profesor sube un material con su categoría](https://trello.com/c/OmlcRtrZ). Depende de MAT-01 (archivos en S3) y de GES-25 (varios profesores por sección). El listado y la descarga para el resto de los integrantes son MAT-05 y MAT-06.
+Tarjeta: [MAT-04 Profesor sube un material con su categoría](https://trello.com/c/OmlcRtrZ). Depende de MAT-01 (archivos en S3) y de GES-25 (varios profesores por sección). El listado y la descarga para el resto de los integrantes están en [MAT-06](mat-06-descargar-material.md); el listado completo (filtros, orden por categoría) queda para MAT-05.
 
 **Como** profesor, **quiero** subir un material con su categoría, **para** que mis alumnos y el próximo profesor del curso lo tengan.
 
@@ -23,7 +23,7 @@ El material **no guarda bytes**: referencia un archivo de MAT-01 ya confirmado e
 
 No se duplica la subida: MAT-04 no firma ni toca S3, solo exige que el archivo de MAT-01 esté confirmado.
 
-| Quién en la sección                     | Sube y lista materiales             |
+| Quién en la sección                     | Sube materiales                     |
 | --------------------------------------- | ----------------------------------- |
 | Profesor (cualquiera de los vigentes)   | Sí                                  |
 | Ayudante                                | 403                                 |
@@ -31,6 +31,8 @@ No se duplica la subida: MAT-04 no firma ni toca S3, solo exige que el archivo d
 | Administrativo de la facultad del curso | 403                                 |
 | Director                                | 403                                 |
 | Quien no es integrante de la sección    | 403 (404 si es de otra universidad) |
+
+Quién lista y descarga está en [MAT-06](mat-06-descargar-material.md).
 
 ### Herencia: qué significa "lo hereda el próximo profesor"
 
@@ -47,9 +49,9 @@ Rutas del espacio de la sección (ESP-06: `@IntegranteDeSeccion()`), con `@Puede
   - 400 si el archivo **no existe** o no es de esta sección (de otra sección o curso, de otra universidad, o subido por otra persona), está archivado o **no está confirmado**.
   - 403 si no es el profesor de la sección, o si dejó la sección durante la petición.
   - 409 si el archivo ya es un material (también si dos peticiones lo registran a la vez: gana una).
-- `GET /api/espacio/secciones/:id/materiales`: lo mínimo para que el profesor vea lo que subió. Devuelve `Material[]` con los materiales activos del **curso** (no solo los de su sección), del más reciente al más antiguo. El listado para los demás integrantes es de MAT-05.
+- `GET /api/espacio/secciones/:id/materiales`: lo mínimo para que el profesor vea lo que subió. Devuelve `Material[]` con los materiales activos del **curso** (no solo los de su sección), del más reciente al más antiguo. Desde MAT-06 lo usan también el ayudante, el alumno y el Director.
 
-Permisos (CASL, `Material`): el profesor tiene `create` y `read`; nadie más recibe nada. Nadie tiene `delete`.
+Permisos (CASL, `Material`): el profesor tiene `create` y `read`; desde MAT-06, el ayudante, el alumno y el Director tienen `read`. Nadie tiene `delete`.
 
 ## Datos
 
@@ -75,9 +77,9 @@ La FK compuesta a `archivo` usa `uq_archivo_id_universidad`, que crea `CrearEntr
 
 ## Pantalla
 
-La pestaña **Material** (`PestanaMaterial`) de la vista de la sección solo está habilitada para el profesor (`SOLO_PROFESOR` en `VistaSeccion.tsx`; MAT-05 y MAT-06 la abrirán al resto). Muestra:
+La pestaña **Material** (`PestanaMaterial`) de la vista de la sección. Desde MAT-06 la abren también el ayudante y el alumno, que ven la lista y el botón **Descargar**, pero no el formulario. Muestra:
 
-- el formulario **Subir material**: **Archivo** (solo los tipos de MAT-01, hasta 20 MB), **Categoría**, **Título** y **Descripción (opcional)**;
+- solo al profesor, el formulario **Subir material**: **Archivo** (solo los tipos de MAT-01, hasta 20 MB), **Categoría**, **Título** y **Descripción (opcional)**;
 - los **materiales del curso**, con título, categoría, descripción y archivo con su tamaño. Sin materiales, "Aún no hay materiales del curso".
 
 Al enviar, valida en el navegador lo que el backend también valida (archivo, tipo, tamaño, categoría y título) y avisa sin pedir nada. Después corre el flujo y muestra cada paso (`role="status"`): "Preparando la subida…", "Subiendo archivo… 40 %" con una barra de progreso, "Confirmando el archivo…" y "Registrando el material…". Al terminar, "Material subido", el formulario queda vacío y la lista se actualiza.
@@ -89,7 +91,6 @@ Al enviar, valida en el navegador lo que el backend también valida (archivo, ti
 - **Herencia entre períodos (para HIS).** Hoy el material es del curso de un período. Para que el curso del semestre siguiente herede los materiales hace falta un identificador de curso estable entre períodos (por ejemplo, el código dentro de la carrera) o copiar los materiales al abrir el período; lo define HIS (historial). Hasta entonces, el próximo profesor **del mismo período** los hereda, pero uno de otro período no.
 - **MAT-02 (sílabo) debería seguir el mismo patrón sobre archivo.** Hoy MAT-02 tiene su propia carga (`CrearSilabo`). Conviene que su tabla referencie un archivo confirmado de MAT-01 (`archivo_id` único con FK compuesta, trigger de validación y subida en cuatro pasos), en vez de guardar el contenido por separado.
 - **Quién gestiona un material ajeno.** La política de `UPDATE` exige `subido_por = usuario_actual()` (como `archivo`): hoy solo quien lo registró lo modifica o archiva, y si dejó la sección, nadie. Ver y registrar sí es de todos los profesores del curso. Cuando exista la edición o el archivado de materiales, la política debe dejar que cualquier profesor vigente del curso lo gestione y mantener `subido_por` inmutable (ya lo asegura el trigger).
-- **Descarga y listado para el resto.** MAT-01 hace que un alumno descargue los archivos del equipo docente **de su sección**; un material subido por el profesor de otra sección no estaría cubierto. MAT-05 y MAT-06 deben resolverlo (por ejemplo, descargar por material y no por archivo).
 - **Archivos sin material.** Si falla el registro y el profesor abandona, queda un archivo confirmado sin material. Se suma a las filas y objetos huérfanos de MAT-01 (ver su guía).
 - **Matriz de permisos de `Archivo`.** `permisos.spec.ts` no incluye el sujeto `Archivo` de MAT-01; esta tarjeta solo agrega `Material`.
 
@@ -120,4 +121,4 @@ npx prettier --check .
 3. Entra como `profesor@norte.cursus.test`, abre una sección de ICC101 y la pestaña **Material**.
 4. Sube un archivo permitido con categoría y título: ves el progreso, "Material subido" y el material en la lista.
 5. Sin archivo, con un tipo no permitido o con más de 20 MB, el formulario avisa sin subir nada.
-6. Entra como el alumno o el ayudante de esa sección: la pestaña **Material** está deshabilitada.
+6. Entra como el alumno o el ayudante de esa sección: la pestaña **Material** muestra la lista sin el formulario (MAT-06).

@@ -1,4 +1,9 @@
-import type { Material, Rol, SubidaArchivo } from '@cursus/shared'
+import type {
+  DescargaArchivo,
+  Material,
+  Rol,
+  SubidaArchivo,
+} from '@cursus/shared'
 import {
   type INestApplication,
   ServiceUnavailableException,
@@ -71,10 +76,11 @@ class AlmacenamientoFalso {
     })
   }
 
-  firmarDescarga(clave: string) {
+  // El nombre va en la URL para revisar que se descarga con el original.
+  firmarDescarga(clave: string, nombre: string) {
     this.conectado()
     return Promise.resolve({
-      url: `https://s3.test/${clave}`,
+      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}`,
       expiraEn: new Date(Date.now() + 300_000),
     })
   }
@@ -743,18 +749,196 @@ describe('GET /api/espacio/secciones/:id/materiales (MAT-04)', () => {
     ).not.toContain(creado.id)
   })
 
+  // MAT-06: el resto de los integrantes y el Director también listan.
   it.each([
-    ['el ayudante', AYUDANTE],
-    ['un alumno inscrito', ALUMNO],
+    ['el ayudante', AYUDANTE, 's1'],
+    ['un alumno inscrito', ALUMNO, 's1'],
+    ['el alumno de otra sección del curso', ALUMNO_S2, 's2'],
+    ['el Director', DIRECTOR, 's1'],
+  ] as const)('%s ve los materiales del curso', async (_q, correo, seccion) => {
+    const creado = await registrar(
+      PROFESOR,
+      secciones.s1,
+      {
+        archivoId: await subir(PROFESOR, secciones.s1),
+        categoria: 'PRESENTACION',
+        titulo: 'Lo ve el resto',
+      },
+      201,
+    )
+    const lista = await listar(correo, secciones[seccion])
+    expect(lista.find((m) => m.id === creado.id)).toEqual(creado)
+  })
+
+  it.each([
     ['el Administrativo', ADMIN_INGENIERIA],
-    ['el Director', DIRECTOR],
     ['un profesor de otro curso', PROFESOR_OTRO_CURSO],
-  ])(
-    '%s recibe 403 (el listado para ellos es de MAT-05)',
-    async (_q, correo) => {
-      await listar(correo, secciones.s1, 403)
+    ['un alumno que no es de la sección', ALUMNO_FUERA],
+  ])('%s recibe 403', async (_q, correo) => {
+    await listar(correo, secciones.s1, 403)
+  })
+
+  it('no incluye un material cuyo archivo se archivó', async () => {
+    const archivoId = await subir(PROFESOR, secciones.s1)
+    const creado = await registrar(
+      PROFESOR,
+      secciones.s1,
+      { archivoId, categoria: 'GUIA', titulo: 'Archivo archivado' },
+      201,
+    )
+    await bd.query('UPDATE archivo SET archived_at = now() WHERE id = $1', [
+      archivoId,
+    ])
+    expect(
+      (await listar(PROFESOR, secciones.s1)).map((m) => m.id),
+    ).not.toContain(creado.id)
+  })
+})
+
+describe('GET /api/espacio/secciones/:id/materiales/:materialId/descarga (MAT-06)', () => {
+  async function descargar(
+    correo: string,
+    seccionId: string,
+    materialId: string,
+    estado: number,
+  ) {
+    const token = await tokenDe(correo)
+    const respuesta = await request(app.getHttpServer())
+      .get(
+        `/api/espacio/secciones/${seccionId}/materiales/${materialId}/descarga`,
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .expect(estado)
+    return respuesta.body as DescargaArchivo
+  }
+
+  // Material de ICC101 subido por el profesor en la sección 1.
+  async function materialDeS1(nombre = 'apunte.pdf') {
+    const archivoId = await subir(PROFESOR, secciones.s1, nombre)
+    const creado = await registrar(
+      PROFESOR,
+      secciones.s1,
+      { archivoId, categoria: 'GUIA', titulo: 'Para descargar' },
+      201,
+    )
+    const [{ clave }] = await bd.query<{ clave: string }[]>(
+      'SELECT clave FROM archivo WHERE id = $1',
+      [archivoId],
+    )
+    return { id: creado.id, archivoId, clave }
+  }
+
+  it.each([
+    ['el profesor que lo subió', PROFESOR, 's1'],
+    ['el segundo profesor de la sección', PROFESOR_S1, 's1'],
+    ['el ayudante', AYUDANTE, 's1'],
+    ['un alumno inscrito', ALUMNO, 's1'],
+    ['el profesor de otra sección del curso', PROFESOR_S2, 's2'],
+    ['el alumno de otra sección del curso', ALUMNO_S2, 's2'],
+    ['el Director', DIRECTOR, 's1'],
+  ] as const)(
+    '%s recibe la URL firmada con el nombre original',
+    async (_q, correo, seccion) => {
+      const material = await materialDeS1('Guía 1 de Cálculo.pdf')
+      const { url, expiraEn } = await descargar(
+        correo,
+        secciones[seccion],
+        material.id,
+        200,
+      )
+      expect(url).toBe(
+        `https://s3.test/${material.clave}?nombre=${encodeURIComponent('Guía 1 de Cálculo.pdf')}`,
+      )
+      const minutos = (Date.parse(expiraEn) - Date.now()) / 60_000
+      expect(minutos).toBeGreaterThan(4)
+      expect(minutos).toBeLessThanOrEqual(5)
     },
   )
+
+  describe('403: quien no pertenece a la sección, aunque tenga el id', () => {
+    it.each([
+      ['el Administrativo', ADMIN_INGENIERIA],
+      ['un alumno que no es de la sección', ALUMNO_FUERA],
+      ['un profesor de otro curso', PROFESOR_OTRO_CURSO],
+      ['el alumno de otra sección, pidiendo por la sección 1', ALUMNO_S2],
+    ])('%s', async (_q, correo) => {
+      const { id } = await materialDeS1()
+      await descargar(correo, secciones.s1, id, 403)
+    })
+
+    it('el alumno que deja la sección deja de descargar', async () => {
+      const { id } = await materialDeS1()
+      await descargar(ALUMNO, secciones.s1, id, 200)
+      const alumno = await idDe(ALUMNO)
+      await bd.query(
+        `UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+          WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL`,
+        [secciones.s1, alumno, await idDe(ADMIN_INGENIERIA)],
+      )
+      try {
+        await descargar(ALUMNO, secciones.s1, id, 403)
+      } finally {
+        await bd.query(
+          `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+           SELECT universidad_id, id, $2 FROM seccion WHERE id = $1`,
+          [secciones.s1, alumno],
+        )
+      }
+    })
+  })
+
+  describe('404', () => {
+    it('un material de otro curso, pedido desde una sección propia', async () => {
+      const { id } = await materialDeS1()
+      await descargar(PROFESOR_OTRO_CURSO, secciones.otroCurso, id, 404)
+    })
+
+    it('un profesor de otra universidad: la sección no existe para él', async () => {
+      const { id } = await materialDeS1()
+      await descargar(PROFESOR_SUR, secciones.s1, id, 404)
+    })
+
+    it('un material archivado', async () => {
+      const { id } = await materialDeS1()
+      await bd.query('UPDATE material SET archived_at = now() WHERE id = $1', [
+        id,
+      ])
+      await descargar(ALUMNO, secciones.s1, id, 404)
+    })
+
+    it('un material cuyo archivo se archivó', async () => {
+      const { id, archivoId } = await materialDeS1()
+      await bd.query('UPDATE archivo SET archived_at = now() WHERE id = $1', [
+        archivoId,
+      ])
+      await descargar(ALUMNO, secciones.s1, id, 404)
+    })
+
+    it('un material que no existe, o el id de su archivo', async () => {
+      const { archivoId } = await materialDeS1()
+      await descargar(
+        ALUMNO,
+        secciones.s1,
+        '00000000-0000-4000-8000-000000000099',
+        404,
+      )
+      await descargar(ALUMNO, secciones.s1, archivoId, 404)
+    })
+  })
+
+  it('400 si el id del material no es un UUID', async () => {
+    await descargar(ALUMNO, secciones.s1, 'no-es-uuid', 400)
+  })
+
+  it('503 sin almacenamiento', async () => {
+    const { id } = await materialDeS1()
+    almacenamiento.disponible = false
+    try {
+      await descargar(ALUMNO, secciones.s1, id, 503)
+    } finally {
+      almacenamiento.disponible = true
+    }
+  })
 })
 
 // Material de prueba para las políticas: del curso ICC101, subido por PROFESOR
@@ -1208,8 +1392,10 @@ describe('RLS y restricciones de material (SQL directo)', () => {
 
   describe('UPDATE', () => {
     let materialId: string
+    let otroCursoId: string
     beforeAll(async () => {
       materialId = await materialSql('Para modificar')
+      otroCursoId = await cursoDe(secciones.otroCurso)
     })
 
     const modificar = (q: QueryRunner, cambio: string) =>
@@ -1238,7 +1424,7 @@ describe('RLS y restricciones de material (SQL directo)', () => {
     })
 
     it.each([
-      ['el curso', () => `curso_id = '${cursoIcc101.replace(/.$/, '0')}'`],
+      ['el curso', () => `curso_id = '${otroCursoId}'`],
       ['el archivo', () => `archivo_id = gen_random_uuid()`],
       ['quien lo subió', () => `subido_por = '${usuarios[PROFESOR_S1]}'`],
     ])('no cambia %s: 23514', async (_que, cambio) => {

@@ -1,5 +1,6 @@
 import type {
   CategoriaMaterial,
+  DescargaArchivo,
   Material,
   SeccionEspacio,
 } from '@cursus/shared'
@@ -8,7 +9,9 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common'
+import { AlmacenamientoService } from '../archivos/almacenamiento.service.js'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
@@ -41,6 +44,14 @@ const COLUMNAS = `m.id, m.categoria, m.titulo, m.descripcion, m.created_at,
   a.id AS archivo_id, a.nombre AS archivo_nombre, a.tipo AS archivo_tipo,
   a.tamano AS archivo_tamano, a.subido_at AS archivo_subido_at`
 
+// Los PDF publicados como sílabo se leen por las rutas de sílabo, que
+// requieren pertenencia a la sección y firman la versión publicada.
+const DESDE_MATERIAL = `FROM material m
+  JOIN archivo a ON a.id = m.archivo_id AND a.universidad_id = m.universidad_id
+ WHERE m.curso_id = $1 AND m.archived_at IS NULL
+   AND a.subido_at IS NOT NULL AND a.archived_at IS NULL
+   AND NOT es_archivo_silabo(a.id)`
+
 const material = (fila: FilaMaterial): Material => ({
   id: fila.id,
   categoria: fila.categoria,
@@ -67,36 +78,82 @@ interface FilaArchivo {
 // IntegranteSeccionGuard ya verificó. El material es del curso: lo ve y lo
 // gestiona cualquier profesor vigente de cualquier sección (GES-25), lo
 // decide la RLS de `material`. El contenido es un archivo de MAT-01: aquí no
-// pasan bytes. El controlador decide quién registra y quién lista.
+// pasan bytes. El controlador decide quién registra, quién lista y quién
+// descarga.
 @Injectable()
 export class MaterialesService {
-  constructor(private readonly bd: BaseDeDatos) {}
+  constructor(
+    private readonly bd: BaseDeDatos,
+    private readonly almacenamiento: AlmacenamientoService,
+  ) {}
 
   // Los materiales activos del curso de la sección, del más reciente al más
-  // antiguo. La RLS de lectura exige usuario_actual(): sin fijarlo no hay
-  // filas.
+  // antiguo (MAT-04, y MAT-06 para el resto de los integrantes).
   async listar(
     contexto: ContextoUniversidad,
     usuarioId: string,
     seccion: SeccionEspacio,
   ): Promise<Material[]> {
-    const filas = await this.bd.enTransaccionEnUniversidad(
+    const filas = await this.leerDelCurso<FilaMaterial>(
       contexto,
-      async (bd) => {
-        await fijarUsuario(bd, usuarioId)
-        return bd.query<FilaMaterial>(
-          `SELECT ${COLUMNAS}
-             FROM material m
-             JOIN archivo a ON a.id = m.archivo_id
-                           AND a.universidad_id = m.universidad_id
-            WHERE m.universidad_id = $1 AND m.curso_id = $2
-              AND m.archived_at IS NULL
-            ORDER BY m.created_at DESC, m.id`,
-          [contexto.universidadId, seccion.curso.id],
-        )
-      },
+      usuarioId,
+      seccion,
+      `SELECT ${COLUMNAS} ${DESDE_MATERIAL}
+        ORDER BY m.created_at DESC, m.id`,
     )
     return filas.map(material)
+  }
+
+  // MAT-06: URL firmada para descargar el archivo original de un material del
+  // curso de la sección. Se busca por material y no por archivo, porque el
+  // archivo es de la sección donde se subió y el material es de todo el
+  // curso. 404 si el material no existe, es de otro curso o está archivado.
+  async descarga(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    materialId: string,
+  ): Promise<DescargaArchivo> {
+    const [archivo] = await this.leerDelCurso<{
+      clave: string
+      nombre: string
+    }>(
+      contexto,
+      usuarioId,
+      seccion,
+      `SELECT a.clave, a.nombre ${DESDE_MATERIAL} AND m.id = $2`,
+      [materialId],
+    )
+    if (!archivo) {
+      throw new NotFoundException('El material no existe')
+    }
+    const { url, expiraEn } = await this.almacenamiento.firmarDescarga(
+      archivo.clave,
+      archivo.nombre,
+    )
+    return { url, expiraEn: expiraEn.toISOString() }
+  }
+
+  // Lee del curso de la sección, que IntegranteSeccionGuard ya verificó ($1).
+  // El Director lee en cualquier universidad, en una transacción READ ONLY,
+  // como en la descarga de MAT-01. El resto, en su universidad y con su
+  // usuario fijado: la RLS de `material` solo muestra los cursos donde es
+  // integrante, y sin usuario fijado no hay filas.
+  private leerDelCurso<T>(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    seccion: SeccionEspacio,
+    sql: string,
+    parametros: unknown[] = [],
+  ): Promise<T[]> {
+    const todos = [seccion.curso.id, ...parametros]
+    if (contexto.rol === 'DIRECTOR') {
+      return this.bd.consultarEnTodasLasUniversidades<T>(contexto, sql, todos)
+    }
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      return bd.query<T>(sql, todos)
+    })
   }
 
   // Registra un archivo ya confirmado de la sección como material del curso.
@@ -115,7 +172,7 @@ export class MaterialesService {
       const [archivo] = await bd.query<FilaArchivo>(
         `SELECT seccion_id, subido_por, subido_at, archived_at
            FROM archivo
-          WHERE universidad_id = $1 AND id = $2`,
+          WHERE universidad_id = $1 AND id = $2 AND NOT es_archivo_silabo(id)`,
         [contexto.universidadId, datos.archivoId],
       )
       // Un archivo de otra sección, de otro curso o de otra universidad (la

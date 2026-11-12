@@ -43,6 +43,7 @@ const TABLAS = [
   'seccion',
   'seccion_profesor',
   'sesion_auth',
+  'silabo',
   'superadmin_cambio',
   'universidad',
   'usuario',
@@ -192,12 +193,14 @@ describe('migraciones', () => {
         WHERE tablename = 'entrega' AND policyname = 'pol_entrega_lectura_docente'`,
     )
     expect(Number(docente)).toBe(0)
-
-    // MAT-04 sigue: quita material y su trigger. La restricción
+    await bd.undoLastMigration() // MAT-02: quita el historial y el filtro de descarga genérica.
+    const SIN_SILABO = TABLAS.filter((tabla) => tabla !== 'silabo')
+    expect(await tablasExistentes()).toEqual(SIN_SILABO)
+    // MAT-04 quita material y su trigger. La restricción
     // uq_archivo_id_universidad es de MAT-09 y queda. Revertir, aplicar y
     // revertir de nuevo deja lo mismo.
     await bd.undoLastMigration()
-    const SIN_MATERIAL = TABLAS.filter((tabla) => tabla !== 'material')
+    const SIN_MATERIAL = SIN_SILABO.filter((tabla) => tabla !== 'material')
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
     const [restosMaterial] = await bd.query<{ restos: string }[]>(
       `SELECT count(*) AS restos FROM pg_proc WHERE proname = 'validar_material'`,
@@ -206,6 +209,7 @@ describe('migraciones', () => {
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
     await bd.undoLastMigration() // MAT-10, reaplicada por runMigrations.
+    await bd.undoLastMigration() // MAT-02.
     await bd.undoLastMigration()
     expect(await tablasExistentes()).toEqual(SIN_MATERIAL)
 
@@ -309,6 +313,7 @@ describe('migraciones', () => {
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
     await bd.undoLastMigration() // runMigrations también reaplicó MAT-10,
+    await bd.undoLastMigration() // MAT-02,
     await bd.undoLastMigration() // MAT-04,
     await bd.undoLastMigration() // GES-26,
     await bd.undoLastMigration() // MAT-09,
@@ -687,6 +692,7 @@ describe('migraciones', () => {
         t !== 'anuncio_cambio' &&
         t !== 'asistencia_cambio' &&
         t !== 'evaluacion_cambio' &&
+        t !== 'silabo' &&
         t !== 'lectura_anuncio' &&
         t !== 'superadmin_cambio',
     )) {

@@ -124,15 +124,29 @@ export class AlmacenamientoService {
       new GetObjectCommand({
         Bucket: bucket,
         Key: clave,
+        ...(version && { VersionId: version }),
         ResponseContentDisposition: disposicionDescarga(nombre),
-        ...(version && {
-          VersionId: version,
-          ResponseCacheControl: 'no-store',
-        }),
+        ...(version && { ResponseCacheControl: 'no-store' }),
       }),
       { expiresIn: SEGUNDOS_DESCARGA },
     )
     return { url, expiraEn: new Date(Date.now() + SEGUNDOS_DESCARGA * 1000) }
+  }
+
+  async tieneCabeceraPdf(clave: string, version: string): Promise<boolean> {
+    const { cliente, bucket } = this.conectado()
+    const objeto = await cliente.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: clave,
+        VersionId: version,
+        Range: 'bytes=0-4',
+      }),
+    )
+    const bytes = await objeto.Body?.transformToByteArray()
+    return (
+      bytes !== undefined && Buffer.from(bytes).equals(Buffer.from('%PDF-'))
+    )
   }
 
   // Tamaño y tipo del objeto ya subido, o null si todavía no está en S3.

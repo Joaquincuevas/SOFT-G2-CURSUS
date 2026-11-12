@@ -152,3 +152,35 @@
 .material__archivo {
   color: var(--color-text-secondary);
 }
+
+/* MAT-06: nombre del archivo y botón de descarga. */
+.material__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.material__pie .material__archivo {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.material__descargar {
+  height: var(--control-size);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  font: var(--font-button);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.material__descargar:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}

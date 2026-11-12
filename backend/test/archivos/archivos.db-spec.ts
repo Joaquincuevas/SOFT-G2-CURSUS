@@ -1,7 +1,9 @@
 import type {
   ArchivoResumen,
   DescargaArchivo,
+  SilaboVigente,
   SubidaArchivo,
+  VersionSilabo,
 } from '@cursus/shared'
 import {
   type INestApplication,
@@ -34,6 +36,8 @@ const ALUMNO = 'alumno@norte.cursus.test'
 const ADMIN_INGENIERIA = 'administrativo.ingenieria@norte.cursus.test'
 const DIRECTOR = 'director@norte.cursus.test'
 
+const PROFESOR_SUR = 'profesor@sur.cursus.test'
+
 // S3 en memoria: firma sin red y guarda lo que "subió" el navegador. El
 // formato real de las firmas lo prueba almacenamiento.service.spec.ts.
 class AlmacenamientoFalso {
@@ -59,10 +63,10 @@ class AlmacenamientoFalso {
     })
   }
 
-  firmarDescarga(clave: string, nombre: string) {
+  firmarDescarga(clave: string, nombre: string, version?: string) {
     this.conectado()
     return Promise.resolve({
-      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}`,
+      url: `https://s3.test/${clave}?nombre=${encodeURIComponent(nombre)}${version ? `&versionId=${version}` : ''}`,
       expiraEn: new Date(Date.now() + 300_000),
     })
   }
@@ -70,6 +74,10 @@ class AlmacenamientoFalso {
   objetoSubido(clave: string) {
     this.conectado()
     return Promise.resolve(this.objetos.get(clave) ?? null)
+  }
+
+  tieneCabeceraPdf(_clave: string, version: string) {
+    return Promise.resolve(version !== 'no-es-pdf')
   }
 }
 
@@ -408,6 +416,145 @@ describe('MAT-01: pedir la subida de un archivo', () => {
 })
 
 const BODY = { nombre: 'guia.pdf', tamano: 100 }
+
+describe('MAT-03: sílabo vigente del curso', () => {
+  const ruta = (seccionId: string) =>
+    `/api/espacio/secciones/${seccionId}/silabo-vigente`
+
+  async function consultar(correo: string, camino: string, status: number) {
+    const token = await tokenDe(correo)
+    const peticion = request(app.getHttpServer())
+      .get(camino)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(status)
+    return status === 200
+      ? peticion.expect('Cache-Control', 'no-store')
+      : peticion
+  }
+
+  it('muestra el vacío mientras MAT-02 no haya publicado una versión', async () => {
+    const respuesta = await consultar(ALUMNO, ruta(secciones.s1), 200)
+    expect(respuesta.body).toEqual({ silabo: null })
+    await consultar(ALUMNO, `${ruta(secciones.s1)}/descarga`, 404)
+  })
+
+  describe('con versiones vinculadas a archivos de MAT-01', () => {
+    let vigente: ArchivoResumen
+    let publicada: VersionSilabo
+    let materialAnterior: string
+    const archivosPublicados: string[] = []
+
+    beforeAll(async () => {
+      for (const [correo, seccion, nombre, version] of [
+        [PROFESOR, secciones.s1, 'Sílabo v1.pdf', 'objeto-v1'],
+        [demo.profesor2, secciones.s2, 'Sílabo v2.pdf', 'objeto-v2'],
+      ]) {
+        const { archivo } = await pedirSubida(correo, seccion, {
+          nombre,
+          tamano: 100,
+        })
+        archivosPublicados.push(archivo.id)
+        almacenamiento.objetos.set(await claveDe(archivo.id), {
+          tamano: 100,
+          tipo: 'application/pdf',
+          version,
+        })
+        vigente = await confirmar(correo, seccion, archivo.id)
+        const token = await tokenDe(correo)
+        if (version === 'objeto-v1') {
+          const material = await request(app.getHttpServer())
+            .post(`/api/espacio/secciones/${seccion}/materiales`)
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+              archivoId: archivo.id,
+              categoria: 'GUIA',
+              titulo: 'Programa',
+            })
+            .expect(201)
+          materialAnterior = (material.body as { id: string }).id
+        }
+        const respuesta = await request(app.getHttpServer())
+          .post(`/api/espacio/secciones/${seccion}/silabo`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ archivoId: archivo.id })
+          .expect(201)
+        publicada = respuesta.body as VersionSilabo
+      }
+    })
+
+    afterAll(async () => {
+      // Los tests de MAT-02 también usan este curso y parten sin publicaciones.
+      await bd.query('DELETE FROM silabo WHERE archivo_id = ANY($1::uuid[])', [
+        archivosPublicados,
+      ])
+      await bd.query('DELETE FROM material WHERE id = $1', [materialAnterior])
+    })
+
+    it('consulta y descarga desde otra sección el PDF publicado por MAT-02', async () => {
+      const respuesta = await consultar(ALUMNO, ruta(secciones.s1), 200)
+      expect(publicada.version).toBe(2)
+      expect(respuesta.body as SilaboVigente).toEqual({
+        silabo: { version: publicada.version, subidoEn: publicada.subidoEn },
+      })
+      const clave = await claveDe(vigente.id)
+      almacenamiento.objetos.set(clave, {
+        tamano: 100,
+        tipo: 'application/pdf',
+        version: 'objeto-subido-despues',
+      })
+      const pdf = await consultar(ALUMNO, `${ruta(secciones.s1)}/descarga`, 200)
+      expect((pdf.body as DescargaArchivo).url).toBe(
+        `https://s3.test/${clave}?nombre=${encodeURIComponent(vigente.nombre)}&versionId=objeto-v2`,
+      )
+      await consultar(AYUDANTE, `${ruta(secciones.s1)}/descarga`, 200)
+      await consultar(demo.profesor2, `${ruta(secciones.s2)}/descarga`, 200)
+      await consultar(
+        DIRECTOR,
+        `/api/espacio/secciones/${secciones.s2}/silabo/2`,
+        403,
+      )
+      await descargar(DIRECTOR, secciones.s2, vigente.id, 404)
+      await consultar(
+        DIRECTOR,
+        `/api/espacio/secciones/${secciones.s1}/materiales/${materialAnterior}/descarga`,
+        404,
+      )
+    })
+
+    it('rechaza la descarga a quien no pertenece a la sección y a quien pierde su inscripción', async () => {
+      const descarga = `${ruta(secciones.s1)}/descarga`
+      await request(app.getHttpServer()).get(descarga).expect(401)
+      for (const correo of [
+        demo.alumnoFuera,
+        demo.profesor2,
+        ADMIN_INGENIERIA,
+        DIRECTOR,
+      ]) {
+        await consultar(correo, descarga, 403)
+      }
+      await consultar(PROFESOR_SUR, descarga, 404)
+      await consultar(ALUMNO, `${ruta(secciones.s2)}/descarga`, 403)
+
+      await consultar(demo.alumno2, ruta(secciones.s1), 200)
+      const [{ id }] = await bd.query<{ id: string }[]>(
+        `WITH retiro AS (
+           UPDATE inscripcion SET archived_at = now(), archivada_por = $3
+            WHERE seccion_id = $1 AND usuario_id = $2 AND archived_at IS NULL
+            RETURNING id
+         ) SELECT id FROM retiro`,
+        [secciones.s1, await idDe(demo.alumno2), await idDe(ADMIN_INGENIERIA)],
+      )
+      try {
+        await consultar(demo.alumno2, descarga, 403)
+      } finally {
+        await bd.query(
+          'UPDATE inscripcion SET archived_at = NULL, archivada_por = NULL WHERE id = $1',
+          [id],
+        )
+      }
+    })
+  })
+})
 
 describe('MAT-01: confirmar la subida', () => {
   it('responde 409 si el archivo todavía no llega a S3', async () => {
@@ -800,5 +947,146 @@ describe('MAT-01: RLS y restricciones de archivo', () => {
     await expect(bd.query(INSERTAR, valores)).rejects.toMatchObject({
       code: '23514',
     })
+  })
+})
+
+describe('MAT-02: publicar versiones del sílabo', () => {
+  const ruta = (seccion: string) => `/api/espacio/secciones/${seccion}/silabo`
+  async function publicar(
+    correo: string,
+    seccion: string,
+    archivoId: string,
+    estado: number,
+  ) {
+    const token = await tokenDe(correo)
+    return request(app.getHttpServer())
+      .post(ruta(seccion))
+      .set('Authorization', `Bearer ${token}`)
+      .send({ archivoId })
+      .expect(estado)
+  }
+  async function preparar(correo: string, seccion: string, version: string) {
+    const { archivo } = await pedirSubida(correo, seccion, {
+      nombre: 'Programa.pdf',
+      tamano: 100,
+    })
+    almacenamiento.objetos.set(await claveDe(archivo.id), {
+      tamano: 100,
+      tipo: 'application/pdf',
+      version,
+    })
+    await confirmar(correo, seccion, archivo.id)
+    return archivo.id
+  }
+
+  it('publica desde dos secciones, conserva el responsable y fija la versión descargada', async () => {
+    const primero = await preparar(PROFESOR, secciones.s1, 's3-primero')
+    const segundo = await preparar(demo.profesor2, secciones.s2, 's3-segundo')
+    const inicial = await publicar(PROFESOR, secciones.s1, primero, 201)
+    expect((inicial.body as VersionSilabo).version).toBe(1)
+    const nueva = await publicar(demo.profesor2, secciones.s2, segundo, 201)
+    expect((nueva.body as VersionSilabo).version).toBe(2)
+    const reintento = await publicar(demo.profesor2, secciones.s2, segundo, 201)
+    expect(reintento.body).toEqual(nueva.body)
+
+    const token = await tokenDe(ALUMNO)
+    const listado = await request(app.getHttpServer())
+      .get(ruta(secciones.s1))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+    const actores = await bd.query<{ nombre: string }[]>(
+      'SELECT nombre FROM usuario WHERE correo=$1',
+      [demo.profesor2],
+    )
+    expect((listado.body as VersionSilabo[]).map((v) => v.version)).toEqual([
+      2, 1,
+    ])
+    expect((listado.body as VersionSilabo[])[0].responsable).toBe(
+      actores[0].nombre,
+    )
+    const clave = await claveDe(segundo)
+    almacenamiento.objetos.set(clave, {
+      tamano: 100,
+      tipo: 'application/pdf',
+      version: 'otra-version',
+    })
+    const pdf = await request(app.getHttpServer())
+      .get(`${ruta(secciones.s1)}/2`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect('Cache-Control', 'no-store')
+    expect((pdf.body as DescargaArchivo).url).toContain('versionId=s3-segundo')
+    const director = await tokenDe(DIRECTOR)
+    await request(app.getHttpServer())
+      .get(`${ruta(secciones.s2)}/2`)
+      .set('Authorization', `Bearer ${director}`)
+      .expect(403)
+    await descargar(DIRECTOR, secciones.s2, segundo, 404)
+  })
+
+  it('permite publicar al co-profesor y rechaza un archivo con MIME PDF y cabecera inválida', async () => {
+    const profesor = await idDe(demo.profesor2)
+    const [{ id }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion_profesor (universidad_id, seccion_id, usuario_id)
+       SELECT universidad_id, id, $2 FROM seccion WHERE id = $1 RETURNING id`,
+      [secciones.s1, profesor],
+    )
+    try {
+      const invalido = await preparar(demo.profesor2, secciones.s1, 'no-es-pdf')
+      await publicar(demo.profesor2, secciones.s1, invalido, 400)
+      const archivo = await preparar(
+        demo.profesor2,
+        secciones.s1,
+        'co-profesor',
+      )
+      await publicar(demo.profesor2, secciones.s1, archivo, 201)
+      await publicar(ALUMNO, secciones.s1, archivo, 403)
+    } finally {
+      await bd.query(
+        'UPDATE seccion_profesor SET archived_at=now() WHERE id=$1',
+        [id],
+      )
+    }
+  })
+
+  it('RLS impide registrar un PDF a nombre ajeno o de una sección sin asignación vigente', async () => {
+    const archivo = await preparar(PROFESOR, secciones.s1, 'rls')
+    const [{ universidad_id, curso_id }] = await bd.query<
+      { universidad_id: string; curso_id: string }[]
+    >('SELECT universidad_id, curso_id FROM seccion WHERE id=$1', [
+      secciones.s1,
+    ])
+    const profesor = await idDe(PROFESOR)
+    const ajeno = await idDe(demo.profesor2)
+    const [{ otroCurso }] = await bd.query<{ otroCurso: string }[]>(
+      'SELECT id AS "otroCurso" FROM curso WHERE universidad_id=$1 AND id<>$2 LIMIT 1',
+      [universidad_id, curso_id],
+    )
+    for (const caso of [
+      { actor: profesor, responsable: ajeno, curso: curso_id },
+      { actor: profesor, responsable: profesor, curso: otroCurso },
+      { actor: ajeno, responsable: ajeno, curso: curso_id },
+    ]) {
+      const q = bd.createQueryRunner()
+      await q.startTransaction()
+      try {
+        await q.query('SET LOCAL ROLE cursus_app')
+        await q.query(
+          `SELECT set_config('app.universidad_id', $1, true),
+          set_config('app.rol', 'PROFESOR', true), set_config('app.usuario_id', $2, true)`,
+          [universidad_id, caso.actor],
+        )
+        await expect(
+          q.query(
+            `INSERT INTO silabo (universidad_id, curso_id, archivo_id, version, version_objeto, subido_por)
+           VALUES ($1,$2,$3,99,'rls',$4)`,
+            [universidad_id, caso.curso, archivo, caso.responsable],
+          ),
+        ).rejects.toMatchObject({ driverError: { code: SIN_PERMISO } })
+      } finally {
+        await q.rollbackTransaction()
+        await q.release()
+      }
+    }
   })
 })

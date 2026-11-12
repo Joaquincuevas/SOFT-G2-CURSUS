@@ -41,10 +41,13 @@ afterAll(async () => {
   await app?.close()
 })
 
-describe('materiales de una sección (MAT-04)', () => {
-  it('GET y POST responden 401 sin sesión', async () => {
+const DESCARGA = `${RUTA}/00000000-0000-4000-8000-000000000030/descarga`
+
+describe('materiales de una sección (MAT-04 y MAT-06)', () => {
+  it('GET, POST y la descarga responden 401 sin sesión', async () => {
     await request(app.getHttpServer()).get(RUTA).expect(401)
     await request(app.getHttpServer()).post(RUTA).send(VALIDA).expect(401)
+    await request(app.getHttpServer()).get(DESCARGA).expect(401)
   })
 
   it('responde 400 si el id de la sección no es un UUID', async () => {
@@ -56,14 +59,10 @@ describe('materiales de una sección (MAT-04)', () => {
   })
 
   // Sin permiso CASL: 403 antes de revisar la sección. Solo el profesor tiene
-  // create y read de Material.
+  // create de Material.
   it.each<Rol>(['ADMINISTRATIVO', 'AYUDANTE', 'ALUMNO', 'DIRECTOR'])(
-    '%s no tiene permiso CASL para listar ni registrar: 403',
+    '%s no tiene permiso CASL para registrar: 403',
     async (rol) => {
-      await request(app.getHttpServer())
-        .get(RUTA)
-        .set('Authorization', sesion(rol))
-        .expect(403)
       await request(app.getHttpServer())
         .post(RUTA)
         .set('Authorization', sesion(rol))
@@ -71,6 +70,17 @@ describe('materiales de una sección (MAT-04)', () => {
         .expect(403)
     },
   )
+
+  // MAT-06: el Administrativo no tiene read de Material, así que no lista ni
+  // descarga, aunque entre a la sección.
+  it('el Administrativo no tiene permiso CASL para listar ni descargar: 403', async () => {
+    for (const ruta of [RUTA, DESCARGA]) {
+      await request(app.getHttpServer())
+        .get(ruta)
+        .set('Authorization', sesion('ADMINISTRATIVO'))
+        .expect(403)
+    }
+  })
 
   it('no hay ruta DELETE ni PATCH', async () => {
     for (const metodo of ['delete', 'patch'] as const) {
