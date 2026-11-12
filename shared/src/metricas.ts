@@ -42,3 +42,39 @@ export interface MetricasConsolidadas {
   alumnos: number
   cursos: number
 }
+
+// MET-04: drill-down del Director. Los mismos tres indicadores y alcance de
+// MET-01, por universidad y por facultad.
+export interface PeriodoMetrica {
+  anio: number
+  semestre: number
+}
+
+interface IndicadoresDeGrupo {
+  aprobacion: IndicadorAprobacion
+  promedio: IndicadorPromedio
+  asistencia: IndicadorAsistencia
+  alumnos: number
+  cursos: number
+}
+
+// GET /api/metricas/universidades?periodo=AAAA-S. periodo es null si la
+// universidad no tiene el período pedido (o ninguno activo).
+export interface ResumenUniversidad extends IndicadoresDeGrupo {
+  id: string
+  nombre: string
+  periodo: PeriodoMetrica | null
+}
+
+export interface IndicadoresFacultad extends IndicadoresDeGrupo {
+  id: string
+  nombre: string
+}
+
+// GET /api/metricas/universidades/:id/facultades?periodo=AAAA-S. Trae todas
+// las facultades vigentes, también las que no tienen datos.
+export interface MetricasUniversidad {
+  universidad: { id: string; nombre: string }
+  periodo: PeriodoMetrica | null
+  facultades: IndicadoresFacultad[]
+}
