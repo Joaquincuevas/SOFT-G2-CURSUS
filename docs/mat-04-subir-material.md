@@ -32,7 +32,7 @@ No se duplica la subida: MAT-04 no firma ni toca S3, solo exige que el archivo d
 | Director                                | 403                                 |
 | Quien no es integrante de la sección    | 403 (404 si es de otra universidad) |
 
-Quién lista y descarga está en [MAT-06](mat-06-descargar-material.md).
+Quién lista y descarga está en [MAT-06](mat-06-descargar-material.md). Desde [MAT-07](mat-07-versiones-material.md), registrar un material crea también su versión 1 en `material_version`, con el `VersionId` del objeto en S3 (503 si el bucket no tiene versionado), y cualquier profesor del curso puede subir versiones nuevas.
 
 ### Herencia: qué significa "lo hereda el próximo profesor"
 

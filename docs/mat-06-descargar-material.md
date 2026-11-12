@@ -16,6 +16,8 @@ Tarjeta: F4 · MAT-06 (https://trello.com/c/5taoVZet). Referencia: RN-08. Depend
 
 ## Comportamiento
 
+**Se descarga la versión vigente, fijada.** Desde [MAT-07](mat-07-versiones-material.md), el listado muestra el archivo de la versión vigente del material y la descarga firma su `version_objeto` (el `VersionId` de S3 guardado al subirla), con `no-store`. Solo la versión 1 de los materiales anteriores a MAT-07 no lo tiene y se firma sin `VersionId`.
+
 **Se descarga por material, no por archivo.** La descarga de MAT-01 (`.../archivos/:archivoId/descarga`) exige que el archivo sea de esa sección, pero el material es de todo el curso (MAT-04). Así, el alumno de la sección 2 descarga lo que subió el profesor de la sección 1.
 
 | Quién en la sección                     | Lista y descarga                    |
