@@ -60,6 +60,13 @@
   color: var(--color-success);
 }
 
+/* NOT-14: nota final o parcial del alumno, sobre su tabla. */
+.notas__final {
+  margin: 0;
+  font: var(--font-body);
+  font-weight: 600;
+}
+
 .notas__listado {
   min-width: 0;
   overflow-x: auto;

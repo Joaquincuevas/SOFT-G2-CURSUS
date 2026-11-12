@@ -15,6 +15,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { HistorialDeNota } from './HistorialDeNota'
 import { MisNotas } from './MisNotas'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
+import { NotasFinales } from './NotasFinales'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
 import './PestanaNotas.css'
@@ -26,6 +27,7 @@ import type { PropsPestana } from './VistaSeccion'
 // ven la lista. NOT-02 advierte cuánto falta o sobra para 100 %.
 // NOT-05: el ayudante abre cada evaluación para ingresar las notas; el
 // profesor las revisa en NOT-10. NOT-13: el alumno ve sus notas publicadas.
+// NOT-14: el profesor ve, al final, la nota final de cada alumno.
 export function PestanaNotas({ seccionId, rol }: PropsPestana) {
   if (rol === 'ALUMNO')
     return <MisNotas key={seccionId} seccionId={seccionId} />
@@ -35,6 +37,9 @@ export function PestanaNotas({ seccionId, rol }: PropsPestana) {
 function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
+  // NOT-14: vuelve a pedir las notas finales cada vez que el detalle de una
+  // evaluación lee o cambia sus notas (aprobar, devolver, recorregir).
+  const [versionNotas, setVersionNotas] = useState(0)
   const [elegida, setElegida] = useState<string | null>(null)
   const [edicion, setEdicion] = useState<Evaluacion | null>(null)
   const [historial, setHistorial] = useState<string | null>(null)
@@ -223,6 +228,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
           seccionId={seccionId}
           evaluacionId={elegida}
           alActualizar={(notas) => {
+            setVersionNotas((n) => n + 1)
             if (!datos) return
             fijar({
               ...datos,
@@ -243,6 +249,9 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
             })
           }}
         />
+      )}
+      {rol === 'PROFESOR' && (
+        <NotasFinales seccionId={seccionId} version={versionNotas} />
       )}
     </section>
   )
