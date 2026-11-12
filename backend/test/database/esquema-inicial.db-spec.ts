@@ -186,8 +186,15 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // MAT-07 es la última: quita el historial de versiones y devuelve el
-    // bloqueo del material solo a quien lo subió.
+    // MET-01 es la última: solo quita la función nota_final.
+    await bd.undoLastMigration()
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    const [{ notaFinal }] = await bd.query<{ notaFinal: string }[]>(
+      `SELECT count(*) AS "notaFinal" FROM pg_proc WHERE proname = 'nota_final'`,
+    )
+    expect(Number(notaFinal)).toBe(0)
+    // MAT-07: quita el historial de versiones y devuelve el bloqueo del
+    // material solo a quien lo subió.
     await bd.undoLastMigration()
     const SIN_VERSIONES = TABLAS.filter((tabla) => tabla !== 'material_version')
     expect(await tablasExistentes()).toEqual(SIN_VERSIONES)
@@ -223,7 +230,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // MAT-07 y MAT-10, reaplicadas por runMigrations.
+    await bd.undoLastMigration() // MET-01, MAT-07 y MAT-10, reaplicadas por runMigrations.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration() // MAT-02.
     await bd.undoLastMigration()
@@ -328,7 +336,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-07,
+    await bd.undoLastMigration() // runMigrations también reaplicó MET-01,
+    await bd.undoLastMigration() // MAT-07,
     await bd.undoLastMigration() // MAT-10,
     await bd.undoLastMigration() // MAT-02,
     await bd.undoLastMigration() // MAT-04,
