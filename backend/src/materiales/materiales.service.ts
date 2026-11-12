@@ -419,6 +419,10 @@ export class MaterialesService {
           throw new ConflictException('El archivo ya es un material')
         }
         const objeto = await this.verificarObjeto(archivo)
+        // tg_material_version_inicial crea la versión 1 con este VersionId.
+        await bd.query(`SELECT set_config('app.version_objeto', $1, true)`, [
+          objeto,
+        ])
 
         const [{ id }] = await bd.query<{ id: string }>(
           `INSERT INTO material
@@ -434,12 +438,6 @@ export class MaterialesService {
             datos.descripcion ?? null,
             usuarioId,
           ],
-        )
-        await bd.query(
-          `INSERT INTO material_version
-             (universidad_id, material_id, version, archivo_id, subido_por, version_objeto)
-           VALUES ($1, $2, 1, $3, $4, $5)`,
-          [contexto.universidadId, id, datos.archivoId, usuarioId, objeto],
         )
         const [creado] = await bd.query<FilaMaterial>(
           `SELECT ${COLUMNAS} ${DESDE_MATERIAL} AND m.id = $2`,

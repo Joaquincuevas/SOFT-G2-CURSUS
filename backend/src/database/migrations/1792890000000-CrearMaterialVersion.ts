@@ -73,6 +73,47 @@ export class CrearMaterialVersion1792890000000 implements MigrationInterface {
       GRANT EXECUTE ON FUNCTION public.material_version_vigente(uuid) TO cursus_app;
     `)
 
+    // La descarga genérica de MAT-01 aplica la misma regla que las rutas de
+    // materiales: el archivo de una versión anterior solo lo descarga el
+    // profesor. Como es_archivo_silabo, ve la tabla aunque la RLS se la oculte
+    // al lector.
+    await q.query(`
+      CREATE FUNCTION public.es_version_anterior_material(archivo uuid) RETURNS boolean
+      LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+        SELECT EXISTS (
+          SELECT 1 FROM public.material_version mv
+           WHERE mv.archivo_id = archivo
+             AND mv.version < (SELECT max(version) FROM public.material_version
+                                WHERE material_id = mv.material_id))
+      $$;
+      REVOKE ALL ON FUNCTION public.es_version_anterior_material(uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.es_version_anterior_material(uuid) TO cursus_app;
+    `)
+
+    // Despliegue: la migración corre antes de que ECS cambie de backend, y el
+    // anterior registra materiales sin versión. Todo material nuevo recibe aquí
+    // su versión 1, como dueño (el backend anterior no fija la versión de S3,
+    // que la política de INSERT exige). El backend nuevo pasa el VersionId en
+    // app.version_objeto, local a su transacción; sin él queda NULL, como en
+    // el backfill, y se descarga sin VersionId. Va en la misma transacción que
+    // el backfill: ningún material queda entre ambos.
+    await q.query(`
+      CREATE FUNCTION public.crear_version_inicial_material() RETURNS trigger
+      LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+      BEGIN
+        INSERT INTO public.material_version
+          (universidad_id, material_id, version, archivo_id, subido_por, version_objeto, subido_en)
+        VALUES (NEW.universidad_id, NEW.id, 1, NEW.archivo_id, NEW.subido_por,
+                NULLIF(current_setting('app.version_objeto', true), ''), NEW.created_at);
+        RETURN NULL;
+      END
+      $$;
+      REVOKE ALL ON FUNCTION public.crear_version_inicial_material() FROM PUBLIC;
+      CREATE TRIGGER tg_material_version_inicial
+        AFTER INSERT ON material
+        FOR EACH ROW EXECUTE FUNCTION public.crear_version_inicial_material();
+    `)
+
     // Lee quien ve el material (su RLS: integrantes del curso y Director),
     // pero solo el profesor del curso ve las versiones anteriores.
     const profesorDelCurso = `EXISTS (
@@ -140,6 +181,9 @@ export class CrearMaterialVersion1792890000000 implements MigrationInterface {
         WITH CHECK (${ESCRIBE_MATERIAL});
     `)
     // Las versiones 2 en adelante se pierden; sus archivos y objetos quedan.
+    await q.query('DROP TRIGGER tg_material_version_inicial ON material')
+    await q.query('DROP FUNCTION public.crear_version_inicial_material()')
+    await q.query('DROP FUNCTION public.es_version_anterior_material(uuid)')
     await q.query('DROP TABLE material_version')
     await q.query('DROP FUNCTION public.material_version_vigente(uuid)')
     await q.query(
