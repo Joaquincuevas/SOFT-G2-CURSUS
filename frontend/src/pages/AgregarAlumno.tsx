@@ -17,11 +17,13 @@ const FALTA_NOMBRE = 'Ingresa el nombre del alumno'
 export function AgregarAlumnoDialogo({
   seccionId,
   numero,
+  correoInicial = '',
   onAgregado,
   onCerrar,
 }: {
   seccionId: string
   numero: number
+  correoInicial?: string
   onAgregado: (resultado: AlumnoAgregado) => void
   onCerrar: () => void
 }) {
@@ -39,6 +41,7 @@ export function AgregarAlumnoDialogo({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (enviando) return
     const formulario = new FormData(event.currentTarget)
     const datos: AgregarAlumno = { correo: String(formulario.get('correo')) }
     if (pedirNombre) datos.nombre = String(formulario.get('nombre'))
@@ -85,6 +88,9 @@ export function AgregarAlumnoDialogo({
       ref={dialogo}
       className="cursos__dialogo"
       aria-labelledby="agregar-alumno-titulo"
+      onCancel={(event) => {
+        if (enviando) event.preventDefault()
+      }}
       onClose={onCerrar}
     >
       <h3 id="agregar-alumno-titulo" className="cursos__titulo-dialogo">
@@ -105,6 +111,8 @@ export function AgregarAlumnoDialogo({
             <input
               className="cursos__input"
               name="correo"
+              defaultValue={correoInicial}
+              disabled={enviando}
               type="email"
               required
               autoComplete="off"
@@ -116,6 +124,7 @@ export function AgregarAlumnoDialogo({
               <input
                 className="cursos__input"
                 name="nombre"
+                disabled={enviando}
                 required
                 maxLength={LARGO_NOMBRE_USUARIO}
                 autoComplete="off"
@@ -131,6 +140,7 @@ export function AgregarAlumnoDialogo({
             <button
               className="cursos__boton cursos__boton--secundario"
               type="button"
+              disabled={enviando}
               onClick={onCerrar}
             >
               Cancelar

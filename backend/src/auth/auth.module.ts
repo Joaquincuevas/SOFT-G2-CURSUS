@@ -31,5 +31,7 @@ import { LimiteLogin } from './limite-login.service.js'
     // Corre después del JWT: cada ruta debe declarar quién puede usarla.
     { provide: APP_GUARD, useClass: PermisosGuard },
   ],
+  // El panel del superadmin guarda su elección en la sesión (MT-04).
+  exports: [AuthService],
 })
 export class AuthModule {}

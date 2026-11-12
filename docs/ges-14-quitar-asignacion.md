@@ -1,5 +1,7 @@
 # GES-14: quitar al profesor o a un ayudante de una sección
 
+> GES-26 reúne ahora estas acciones en la [vista Integrantes](ges-26-integrantes-seccion.md). Los endpoints y las reglas de esta tarjeta se mantienen.
+
 Historia: **F2 · [GES-14] Administrativo quita a un profesor o ayudante de una sección**. Referencia: RN-05. Dependencias: GES-12 (#55) y GES-13 (#50), ya integradas en `develop`.
 
 ## Comportamiento

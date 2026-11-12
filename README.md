@@ -52,11 +52,11 @@ git switch develop
 npm install
 # 3. Crea tu archivo de variables de entorno
 cp .env.example .env
-# 4. Levanta PostgreSQL (vuelve cuando la base está lista)
+# 4. Levanta PostgreSQL y el S3 local (vuelve cuando los dos están listos)
 docker compose up -d --wait
 ```
 
-Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto que definas en `POSTGRES_PORT`). Luego levanta las apps:
+Con eso la base de datos queda disponible en `localhost:5432` (o en el puerto que definas en `POSTGRES_PORT`) y el S3 local de los archivos en `localhost:4566` (ver "Archivos local (S3)"). Luego levanta las apps:
 
 ```bash
 npm run dev:front    # frontend en http://localhost:5173
@@ -78,6 +78,15 @@ docker compose down -v                                     # detiene y borra los
 - En la consola SQL, `-U cursus -d cursus` son los valores de `.env.example`. Si cambiaste `POSTGRES_USER` o `POSTGRES_DB` en tu `.env`, usa los tuyos.
 - Si el puerto 5432 ya está ocupado, cambia `POSTGRES_PORT` en `.env` y vuelve a ejecutar `docker compose up -d --wait`.
 - Usuario, contraseña y nombre de la base solo se aplican al crear el volumen. Si los cambias en `.env` después, ejecuta `docker compose down -v` y levanta de nuevo.
+
+### Archivos local (S3)
+
+Los archivos de los cursos (MAT-01) se guardan en un bucket S3. En local, `docker compose` levanta [LocalStack](https://github.com/localstack/localstack) 4.9.2, un S3 de prueba, y crea el bucket `cursus-archivos` al arrancar ([infra/localstack/crear-bucket.sh](infra/localstack/crear-bucket.sh)). Las variables `S3_*` de `.env.example` apuntan a él, con llaves de prueba que no son credenciales reales.
+
+- LocalStack **no guarda nada entre reinicios**: al reiniciar el contenedor, el bucket se crea vacío y los archivos subidos antes dejan de existir (las filas de `archivo` quedan).
+- La versión está fija porque las más nuevas de LocalStack piden una cuenta. MinIO ya no publica imágenes.
+- LocalStack no aplica permisos: una URL sin firma también descarga. En AWS el bucket es privado y solo responde a URLs firmadas.
+- Sin `S3_BUCKET`, la API arranca igual, pero subir y descargar archivos responde 503.
 
 ### Migraciones
 
@@ -108,6 +117,7 @@ npm run seed --workspace=backend
 - La contraseña de todos los usuarios es el valor de `SEED_PASSWORD` en tu `.env` (`cursus_demo` en `.env.example`). Se guarda hasheada con argon2id.
 - Los dominios usan `.test`, un TLD reservado, así que ningún correo es real.
 - El período 2026-2 queda activo solo si la universidad no tiene ya otro período activo.
+- Norte usa azul y Sur verde como colores iniciales. El superadmin puede cambiarlos con contraste suficiente; repetir el seed conserva las personalizaciones. Ver [UI-04](docs/ui-04-tema-universidad.md).
 
 | Universidad            | Facultades y carreras                                                                                                                                                      | Período |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -125,6 +135,12 @@ npm run seed --workspace=backend
 El Director no tiene facultad asociada. En Norte, cada administrativo pertenece a su facultad, para probar el aislamiento entre facultades; profesor, ayudante y alumno pertenecen a Ingeniería. En Sur, todos pertenecen a Ciencias de la Salud.
 
 Además, para que las listas de la demo de gestión parezcan las de un curso real, cada facultad tiene **3 profesores, 4 ayudantes y 25 alumnos de demo** con nombres realistas y correos `nombre.apellido@<dominio>` (por ejemplo, `camila.rojas@norte.cursus.test`). Usan la misma contraseña que el resto y se generan siempre iguales (`usuariosDeDemo` en `backend/src/database/seed.ts`), así que el seed no los duplica. Los tests usan los usuarios de la tabla, no los de demo.
+
+El seed no crea superadmins. Para probar el rol en local, crea uno con el mismo comando de producción (ver "Superadmin" en "Entornos en AWS"); la contraseña es provisoria y se cambia en el primer ingreso:
+
+```bash
+SUPERADMIN_CORREO=superadmin@cursus.test SUPERADMIN_NOMBRE="Superadmin" SUPERADMIN_PASSWORD=<contraseña-provisoria> npm run superadmin --workspace=backend
+```
 
 El mismo comando completa **Ingeniería de Norte con 3 carreras, 15 cursos y 30 secciones** en su período activo (GES-20). Cada sección incluye dos bloques con sala, profesor, dos ayudantes y alumnos de demo. Los horarios no se superponen. Repetirlo conserva las asignaciones y los retiros posteriores; una sala o código demo ocupado por otros datos hace fallar la carga completa sin cambios parciales. Ver [datos, criterios y guía de revisión](docs/ges-20-seed-facultad.md).
 
@@ -158,6 +174,7 @@ Los dos están **apagados por defecto** para cuidar los créditos: quien necesit
 
 - **Frontend:** Vercel reenvía las llamadas a `/api/*` hacia la API de su entorno (`develop` en Preview y `main` en Production) y les agrega un header secreto. La API rechaza con 403 las peticiones que no lo traen, así que se usa a través de Vercel; solo `/api/health` responde sin el header.
 - **Backend:** contenedor Docker ([infra/docker/backend.Dockerfile](infra/docker/backend.Dockerfile)) en ECS Fargate, expuesto con API Gateway (HTTP API) sin balanceador.
+- **Archivos:** bucket S3 privado `cursus-<entorno>-archivos-<cuenta>` (MAT-01), cifrado, con versionado y solo HTTPS. Nada es público: el navegador sube y descarga directo con URLs firmadas que genera el backend, que entra con el rol de la tarea (`cursus-<entorno>-ecs-tarea`, solo `GetObject` y `PutObject`). El bucket se conserva aunque se borre el stack. Ver [docs/mat-01-bucket-archivos.md](docs/mat-01-bucket-archivos.md).
 - **Base de datos:** RDS PostgreSQL 17 (`cursus_staging` o `cursus_production`), privada y cifrada. Las dos dejan un snapshot si se borran o se reemplazan y guardan respaldos de 1 día (el máximo del plan gratuito de AWS; con el plan de pago, producción debería guardar 7). La de producción además está protegida contra borrado y conserva sus respaldos si se borra la instancia.
 - **Infraestructura:** la misma plantilla de CloudFormation ([infra/aws/cursus.yml](infra/aws/cursus.yml)) con el parámetro `Entorno`. Los stacks (`cursus-staging` y `cursus-production`) nunca se borran.
 
@@ -203,12 +220,12 @@ bash infra/aws/status.sh staging   # imprime "encendido" o "apagado"
 
 Ningún secreto está en el repositorio. Cada entorno tiene los suyos (`<entorno>` es `staging` o `production`).
 
-| Dónde                                      | Qué                                                                                                                                                                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS) y `cursus-<entorno>/origin-secret` (header secreto). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
-| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                         |
-| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                          |
-| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                             |
+| Dónde                                      | Qué                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS Secrets Manager                        | `cursus-<entorno>/base-de-datos` (usuario y contraseña de RDS), `cursus-<entorno>/origin-secret` (header secreto) y `cursus-<entorno>/superadmin-password` (contraseña provisoria del superadmin). Solo en staging, `cursus-staging/seed-password` (contraseña de los usuarios del seed). Los genera AWS. |
+| GitHub, environment `<entorno>` (secretos) | `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`: llaves del usuario `cursus-<entorno>-github`, que solo puede desplegar (ver abajo).                                                                                                                                                                        |
+| GitHub, environment `<entorno>` (variable) | `AWS_REGION` (opcional; por defecto `us-east-2`).                                                                                                                                                                                                                                                         |
+| Vercel                                     | `API_URL` (salida `ApiUrl` del stack, sin `/` al final) y `ORIGIN_SECRET` (secreto `cursus-<entorno>/origin-secret`): en Preview, rama `develop`, para staging; en Production para production.                                                                                                            |
 
 El environment `staging` de GitHub solo acepta la rama `develop`, y `Production` solo `main`. `Production` es el mismo environment que crea la integración de Vercel: GitHub no distingue mayúsculas, y el workflow lo usa con el nombre `production`. Cada environment puede tener la variable `FRONTEND_URL` (la URL de Vercel de su entorno) para la verificación del frontend.
 
@@ -254,9 +271,29 @@ bash infra/aws/seed.sh staging
 - La contraseña llega a la tarea como `SEED_PASSWORD`, así que también queda como variable en el servicio de staging (el backend no la usa). Es inevitable: la tarea del seed usa la misma definición que el servicio.
 - Si se rota `cursus-staging/seed-password`, hay que volver a correr `seed.sh staging` para que los usuarios tomen la contraseña nueva.
 
+### Superadmin
+
+El superadmin administra la plataforma: elige una universidad y una facultad, y trabaja en ella como su Administrativo (ver el [ADR 0002](docs/adr/0002-superadmin-con-acceso-a-todas-las-universidades.md)). Es quien crea las universidades y sus primeros usuarios, así que producción no necesita datos cargados por el equipo.
+
+Solo se crea con este comando, que corre una persona desde CloudShell, con el entorno encendido:
+
+```bash
+bash infra/aws/superadmin.sh production <correo> "<nombre>"
+```
+
+- El correo no puede ser del dominio de una universidad (el login no lo distinguiría de un usuario de esa universidad) ni estar registrado. Si falla, no cambia nada.
+- La contraseña provisoria es el secreto `cursus-<entorno>/superadmin-password`. Nunca pasa por la línea de comandos ni por los logs. Para obtenerla y entregarla por privado:
+
+  ```bash
+  aws secretsmanager get-secret-value --secret-id cursus-production/superadmin-password --query SecretString --output text
+  ```
+
+- En su primer ingreso, el superadmin debe cambiarla (PER-03).
+- Requiere la plantilla actualizada (`stack.sh <entorno>`): la tarea recibe el secreto como `SUPERADMIN_PASSWORD`. Como con el seed, también queda como variable en el servicio, que no la usa.
+
 ### Límites conocidos
 
-- API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Las subidas grandes y las descargas de archivos deben ir directo a S3 con enlaces firmados.
+- API Gateway corta cada petición a los **30 segundos** y acepta hasta **10 MB**. Por eso los archivos (hasta 20 MB) van directo entre el navegador y S3 con URLs firmadas (MAT-01), sin pasar por la API.
 
 ## Convención de idioma
 

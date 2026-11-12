@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useAuth } from '../auth/auth'
+import { TemaUniversidad } from '../theme/TemaUniversidad'
 import { pedirUsuario, SessionContext, type SessionUser } from './session'
 
 // Arma la sesión real cada vez que empieza una (login o restauración): pide
@@ -55,6 +56,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                   ? { ...anterior, user: { ...anterior.user, nombre } }
                   : anterior,
               ),
+            reemplazarUsuario: (user: SessionUser) =>
+              setCargada((anterior) =>
+                anterior?.token === token ? { ...anterior, user } : anterior,
+              ),
             marcarPasswordCambiada: () =>
               setCargada((anterior) =>
                 anterior?.token === token
@@ -69,5 +74,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [cargada, token],
   )
 
-  return <SessionContext value={value}>{children}</SessionContext>
+  return (
+    <SessionContext value={value}>
+      <TemaUniversidad usuario={value?.user ?? null} />
+      {children}
+    </SessionContext>
+  )
 }

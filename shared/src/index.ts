@@ -1,13 +1,14 @@
 // Punto de entrada de @cursus/shared: exporta aquí los tipos y DTOs compartidos.
 
-// Roles de usuario. Deben coincidir con el enum rol_usuario de la migración
-// EsquemaInicial del backend.
+// Roles de usuario. Deben coincidir con el enum rol_usuario de la base
+// (migraciones EsquemaInicial y AgregarRolSuperadmin del backend).
 export const ROLES = [
   'DIRECTOR',
   'ADMINISTRATIVO',
   'PROFESOR',
   'AYUDANTE',
   'ALUMNO',
+  'SUPERADMIN',
 ] as const
 
 export type Rol = (typeof ROLES)[number]
@@ -18,9 +19,14 @@ export interface UsuarioSesion {
   nombre: string
   correo: string
   rol: Rol
-  universidadId: string
+  // MT-04: el superadmin no tiene universidad propia. Es la que eligió para
+  // trabajar, o null mientras no elija una (ver ContextoSuperadmin).
+  universidadId: string | null
   // "Directorio" para el Director, que ve todas las universidades.
   universidadNombre: string
+  // UI-04: color institucional. null en las vistas globales del Director y
+  // del superadmin, que conservan el tema de CURSUS.
+  universidadColor: string | null
   facultadNombre: string | null
   // PER-03: true mientras tenga la contraseña provisoria; solo puede cambiarla.
   debeCambiarPassword: boolean
@@ -29,7 +35,9 @@ export interface UsuarioSesion {
 }
 
 export * from './permisos.js'
+export * from './archivos.js'
 export * from './cursos.js'
+export * from './integrantes.js'
 export * from './periodos.js'
 export * from './perfil.js'
 export * from './horarios.js'
@@ -38,6 +46,12 @@ export * from './espacio.js'
 export * from './dashboard.js'
 export * from './seccion-resumen.js'
 export * from './dashboard-ayudante.js'
+export * from './asistencia.js'
+export * from './anuncios.js'
+export * from './notas.js'
+export * from './materiales.js'
+export * from './superadmin.js'
+export * from './colores.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

@@ -10,20 +10,29 @@ import { HorariosService } from './horarios.service.js'
 import { AsignacionesController } from './asignaciones.controller.js'
 import { AsignacionesService } from './asignaciones.service.js'
 
+import { ProfesoresController } from './profesores.controller.js'
+import { ProfesoresService } from './profesores.service.js'
+import { IntegrantesController } from './integrantes.controller.js'
+import { IntegrantesService } from './integrantes.service.js'
+
 @Module({
   controllers: [
+    IntegrantesController,
     GestionController,
     AyudantesController,
     HorariosController,
     AsignacionesController,
+    ProfesoresController,
   ],
   providers: [
+    IntegrantesService,
     GestionService,
     EdicionCursoService,
     CargaAlumnosService,
     AyudantesService,
     HorariosService,
     AsignacionesService,
+    ProfesoresService,
   ],
 })
 export class GestionModule {}

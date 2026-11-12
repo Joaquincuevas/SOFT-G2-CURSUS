@@ -19,15 +19,39 @@ const SUJETOS: SujetoTabla[] = [
   'Curso',
   'Seccion',
   'Inscripcion',
+  'Clase',
+  'Asistencia',
+  'Evaluacion',
+  'Anuncio',
+  'Actividad',
+  'Entrega',
+  'Nota',
+  'RevisionNotas',
+  'Material',
+  'MaterialVersion',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
+  'PanelSuperadmin',
   'GestionAcademica',
   'MisCursos',
 ]
 // Nada se elimina, solo se archiva: nadie tiene delete.
 const SIN_DELETE: AccionConcreta[] = ['create', 'read', 'update']
 const LECTURA: AccionConcreta[] = ['read']
+
+// MT-04 (ADR 0002): dentro de la facultad que eligió, el superadmin trabaja
+// con los permisos del Administrativo.
+const ADMINISTRATIVO: Partial<Record<SujetoTabla, AccionConcreta[]>> = {
+  Universidad: LECTURA,
+  Facultad: LECTURA,
+  Carrera: SIN_DELETE,
+  Periodo: SIN_DELETE,
+  Usuario: SIN_DELETE,
+  Curso: SIN_DELETE,
+  Seccion: SIN_DELETE,
+  Inscripcion: SIN_DELETE,
+}
 
 // Matriz rol × permiso esperada. Lo que no aparece está denegado.
 const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
@@ -42,15 +66,12 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Seccion: LECTURA,
     Inscripcion: LECTURA,
   },
-  ADMINISTRATIVO: {
-    Universidad: LECTURA,
-    Facultad: LECTURA,
-    Carrera: SIN_DELETE,
-    Periodo: SIN_DELETE,
-    Usuario: SIN_DELETE,
-    Curso: SIN_DELETE,
-    Seccion: SIN_DELETE,
-    Inscripcion: SIN_DELETE,
+  ADMINISTRATIVO: { ...ADMINISTRATIVO },
+  // GES-23: además crea y edita universidades y facultades.
+  SUPERADMIN: {
+    ...ADMINISTRATIVO,
+    Universidad: SIN_DELETE,
+    Facultad: SIN_DELETE,
   },
   PROFESOR: {
     Universidad: LECTURA,
@@ -78,6 +99,104 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
   },
 }
 
+// ASI-01 (RN-13): clases de una sección. Registra el profesor; leen el
+// ayudante y el Director. El alumno ve su asistencia en ASI-06 y el
+// Administrativo no recibe nada.
+const CLASE: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: LECTURA,
+  ALUMNO: [],
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Clase = CLASE[rol]
+// ASI-02 (RN-13): asistencia de una clase. La registra el profesor; la leen
+// el ayudante y el Director. El alumno ve la suya en ASI-06.
+for (const rol of ROLES) MATRIZ[rol].Asistencia = CLASE[rol]
+MATRIZ.PROFESOR.Asistencia = ['create', 'read', 'update']
+
+// NOT-01 (RN-10): evaluaciones de una sección. Crea el profesor; leen el
+// ayudante, el alumno y el Director. El Administrativo no recibe nada.
+const EVALUACION: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read', 'update'],
+  AYUDANTE: LECTURA,
+  ALUMNO: LECTURA,
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Evaluacion = EVALUACION[rol]
+
+// ANU-01 (RN-09): anuncios de un curso. Publica el profesor; leen el
+// ayudante, el alumno y el Director. El Administrativo no recibe nada.
+const ANUNCIO: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read', 'update'],
+  AYUDANTE: LECTURA,
+  ALUMNO: LECTURA,
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Anuncio = ANUNCIO[rol]
+
+// MAT-08 (RN-08): actividades de entrega de una sección. Crea el profesor;
+// leen el ayudante, el alumno y el Director. El Administrativo no recibe nada.
+const ACTIVIDAD: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: LECTURA,
+  ALUMNO: LECTURA,
+}
+for (const rol of ROLES) MATRIZ[rol].Actividad = ACTIVIDAD[rol]
+
+// MAT-04 y MAT-06: materiales de un curso. Los sube el profesor; los leen y
+// descargan los integrantes de la sección y el Director. El Administrativo no
+// recibe nada.
+const MATERIAL: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: ['read'],
+  ADMINISTRATIVO: [],
+  PROFESOR: ['create', 'read'],
+  AYUDANTE: ['read'],
+  ALUMNO: ['read'],
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]
+
+// MAT-09: lectura y entrega propias. MAT-10: el equipo docente las lee y
+// descarga.
+MATRIZ.ALUMNO.Entrega = ['create', 'read']
+MATRIZ.PROFESOR.Entrega = ['read']
+MATRIZ.AYUDANTE.Entrega = ['read']
+
+// MAT-07: solo el profesor sube versiones y lee las anteriores.
+MATRIZ.PROFESOR.MaterialVersion = ['create', 'read']
+
+// NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante; leen el
+// profesor y el Director. El alumno (NOT-13) y el Administrativo no reciben
+// nada.
+const NOTA: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['read', 'update'],
+  AYUDANTE: ['read', 'update'],
+  ALUMNO: [],
+}
+for (const rol of ROLES) MATRIZ[rol].Nota = NOTA[rol]
+
+// NOT-11: la revisión de las notas la aprueba el profesor; la leen los
+// mismos que las notas.
+const REVISION_NOTAS: Record<Rol, AccionConcreta[]> = {
+  DIRECTOR: LECTURA,
+  ADMINISTRATIVO: [],
+  PROFESOR: ['read', 'update'],
+  AYUDANTE: LECTURA,
+  ALUMNO: [],
+  SUPERADMIN: [],
+}
+for (const rol of ROLES) MATRIZ[rol].RevisionNotas = REVISION_NOTAS[rol]
+
 // Secciones del menú que ve cada rol (solo con read).
 const MENU: Record<Rol, SujetoSeccion[]> = {
   DIRECTOR: ['PanelDirectorio', 'GestionAcademica'],
@@ -85,6 +204,7 @@ const MENU: Record<Rol, SujetoSeccion[]> = {
   PROFESOR: ['MisCursos'],
   AYUDANTE: ['MisCursos'],
   ALUMNO: ['MisCursos'],
+  SUPERADMIN: ['PanelSuperadmin', 'GestionAcademica'],
 }
 
 describe('definirAbilityPara', () => {

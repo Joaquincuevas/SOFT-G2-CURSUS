@@ -4,6 +4,8 @@ import type {
   AyudanteResumen,
   ProfesorCambiado,
   ProfesorOpcion,
+  ProfesorQuitado,
+  ProfesorResumen,
 } from '@cursus/shared'
 import {
   ConflictException,
@@ -13,7 +15,34 @@ import {
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarMotivo,
 } from '../database/base-de-datos.service.js'
+import { PROFESORES_ASIGNADOS } from './profesores.service.js'
+
+type Consulta = Pick<BaseDeDatos, 'query'>
+
+// GES-25: archiva la asignación vigente del profesor en la sección y
+// devuelve si había una. En un CTE porque TypeORM devuelve [filas,
+// afectadas] para un UPDATE suelto. tg_seccion_profesor_sincronizar deja
+// profesor_id en el siguiente profesor vigente, o NULL.
+async function archivarProfesor(
+  bd: Consulta,
+  universidad: string,
+  seccionId: string,
+  profesorId: string,
+): Promise<boolean> {
+  const archivadas = await bd.query<{ usuario_id: string }>(
+    `WITH archivada AS (
+       UPDATE seccion_profesor SET archived_at = now()
+        WHERE universidad_id = $1 AND seccion_id = $2 AND usuario_id = $3
+          AND archived_at IS NULL
+       RETURNING usuario_id
+     )
+     SELECT usuario_id FROM archivada`,
+    [universidad, seccionId, profesorId],
+  )
+  return archivadas.length > 0
+}
 
 // Sección vigente (ella y su curso sin archivar) de un curso de la facultad
 // del usuario de la sesión ($1 = universidad, $2 = sección, $3 = usuario), con
@@ -25,8 +54,7 @@ const SECCION_EDITABLE = `
     JOIN carrera ca ON ca.id = c.carrera_id
    WHERE s.universidad_id = $1 AND s.id = $2
      AND s.archived_at IS NULL AND c.archived_at IS NULL
-     AND ca.facultad_id = (SELECT facultad_id FROM usuario
-                            WHERE universidad_id = $1 AND id = $3)
+     AND ca.facultad_id = facultad_actual($3)
    FOR UPDATE OF s, c`
 
 // Registra el cambio en el historial y devuelve la entrada con los nombres.
@@ -40,10 +68,12 @@ const REGISTRAR_QUITADA = `
     RETURNING anterior_id, responsable_id, motivo, fecha
   )
   SELECT q.id AS quitado_id, q.nombre AS quitado_nombre,
-         r.id AS por_id, r.nombre AS por_nombre, registro.motivo, registro.fecha
+         registro.responsable_id AS por_id,
+         COALESCE(r.nombre, 'Superadmin') AS por_nombre, registro.motivo, registro.fecha
     FROM registro
     JOIN usuario q ON q.id = registro.anterior_id
-    JOIN usuario r ON r.id = registro.responsable_id`
+    -- RLS no deja ver al superadmin, que no tiene universidad (MT-04).
+    LEFT JOIN usuario r ON r.id = registro.responsable_id`
 
 interface FilaRegistro {
   quitado_id: string
@@ -69,10 +99,11 @@ const aQuitada = (fila: FilaRegistro): AsignacionQuitada => ({
 export class AsignacionesService {
   constructor(private readonly bd: BaseDeDatos) {}
 
-  // profesorId es el profesor que se confirmó quitar. Se compara con el actual
-  // después de bloquear la sección: si otra petición lo cambió o lo quitó
-  // mientras tanto, responde 409 con quien está a cargo ahora, sin quitar a
-  // nadie ni registrar una baja.
+  // PATCH /secciones/:id/profesor/quitar (GES-14), que se mantiene desde
+  // GES-25: quita al profesor que se confirmó quitar (profesorId), aunque la
+  // sección tenga otros. Si ya no está asignado (otra petición lo quitó o lo
+  // cambió mientras tanto), responde 409 con el primer profesor vigente,
+  // sin quitar a nadie ni registrar una baja.
   async quitarProfesor(
     contexto: ContextoUniversidad,
     responsableId: string,
@@ -81,13 +112,15 @@ export class AsignacionesService {
     motivo: string,
   ): Promise<AsignacionQuitada> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Si lo quita un superadmin, el motivo va también a su auditoría.
+      await fijarMotivo(bd, motivo)
       const universidad = contexto.universidadId
       const [seccion] = await bd.query<{ profesor_id: string | null }>(
         SECCION_EDITABLE,
         [universidad, seccionId, responsableId],
       )
       if (!seccion) throw new NotFoundException('La sección no existe')
-      if (seccion.profesor_id !== profesorId) {
+      if (!(await archivarProfesor(bd, universidad, seccionId, profesorId))) {
         const [profesor] = seccion.profesor_id
           ? await bd.query<ProfesorOpcion>(
               'SELECT id, nombre FROM usuario WHERE universidad_id = $1 AND id = $2',
@@ -102,20 +135,54 @@ export class AsignacionesService {
           profesor: profesor ?? null,
         } satisfies ProfesorCambiado)
       }
-      await bd.query(
-        `UPDATE seccion SET profesor_id = NULL
-          WHERE universidad_id = $1 AND id = $2`,
-        [universidad, seccionId],
-      )
       const [fila] = await bd.query<FilaRegistro>(REGISTRAR_QUITADA, [
         universidad,
         seccionId,
         'PROFESOR',
-        seccion.profesor_id,
+        profesorId,
         responsableId,
         motivo,
       ])
       return aQuitada(fila)
+    })
+  }
+
+  // GES-25: quita a uno de los profesores de la sección, con motivo, sin
+  // tocar a los demás. 404 si no está asignado, como un ayudante (GES-14).
+  async quitarUnProfesor(
+    contexto: ContextoUniversidad,
+    responsableId: string,
+    seccionId: string,
+    profesorId: string,
+    motivo: string,
+  ): Promise<ProfesorQuitado> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarMotivo(bd, motivo)
+      const universidad = contexto.universidadId
+      const [seccion] = await bd.query(SECCION_EDITABLE, [
+        universidad,
+        seccionId,
+        responsableId,
+      ])
+      if (!seccion) throw new NotFoundException('La sección no existe')
+      if (!(await archivarProfesor(bd, universidad, seccionId, profesorId))) {
+        throw new NotFoundException(
+          'El profesor no está asignado a esta sección',
+        )
+      }
+      const [fila] = await bd.query<FilaRegistro>(REGISTRAR_QUITADA, [
+        universidad,
+        seccionId,
+        'PROFESOR',
+        profesorId,
+        responsableId,
+        motivo,
+      ])
+      const profesores = await bd.query<ProfesorResumen>(PROFESORES_ASIGNADOS, [
+        universidad,
+        seccionId,
+      ])
+      return { ...aQuitada(fila), profesores }
     })
   }
 
@@ -127,6 +194,8 @@ export class AsignacionesService {
     motivo: string,
   ): Promise<AyudanteQuitado> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      // Si lo quita un superadmin, el motivo va también a su auditoría.
+      await fijarMotivo(bd, motivo)
       const universidad = contexto.universidadId
       const [seccion] = await bd.query(SECCION_EDITABLE, [
         universidad,

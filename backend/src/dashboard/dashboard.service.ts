@@ -1,14 +1,21 @@
 import type {
+  PendienteRevision,
   SeccionAlumno,
   SeccionAyudante,
   SeccionDashboard,
 } from '@cursus/shared'
-import { Injectable } from '@nestjs/common'
+import { ForbiddenException, Injectable } from '@nestjs/common'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
+import { NOMBRES_PROFESORES } from '../espacio/profesores.sql.js'
 import { BLOQUES_HORARIO } from '../gestion/horarios.sql.js'
+import { anuncioPendiente, anunciosVisibles } from '../anuncios/anuncios.sql.js'
+import {
+  EN_REVISION_DE_SECCION,
+  SECCIONES_DEL_PROFESOR,
+} from './pendientes.sql.js'
 
 interface FilaSeccion {
   id: string
@@ -18,6 +25,7 @@ interface FilaSeccion {
   curso_nombre: string
   horario: SeccionDashboard['horario']
   alumnos: number
+  pendientes_revision: number
 }
 
 interface FilaSeccionAyudante {
@@ -27,6 +35,7 @@ interface FilaSeccionAyudante {
   codigo: string
   curso_nombre: string
   profesor_id: string | null
+  profesores: string[]
   profesor_nombre: string | null
 }
 
@@ -46,7 +55,11 @@ export class DashboardService {
               json_build_object('id', c.id, 'codigo', c.codigo, 'nombre', c.nombre) AS curso,
               ${BLOQUES_HORARIO} AS horario,
               CASE WHEN pr.id IS NULL THEN NULL
-                ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor
+                ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor,
+              ${NOMBRES_PROFESORES()} AS profesores,
+              (SELECT count(*)::int FROM anuncio a
+                WHERE ${anunciosVisibles('c.id', 's.id')}
+                  AND ${anuncioPendiente('$2')}) AS "anunciosNuevos"
        FROM inscripcion i
        JOIN seccion s ON s.id = i.seccion_id AND s.universidad_id = i.universidad_id
        JOIN curso c ON c.id = s.curso_id AND c.universidad_id = s.universidad_id
@@ -73,16 +86,14 @@ export class DashboardService {
     }
     const filas = await this.bd.consultarEnUniversidad<FilaSeccion>(
       contexto,
-      `SELECT s.id, s.numero, c.id AS curso_id, c.codigo,
-              c.nombre AS curso_nombre, ${BLOQUES_HORARIO} AS horario,
+      `WITH s AS (${SECCIONES_DEL_PROFESOR})
+       SELECT s.id, s.numero, s.curso_id, s.codigo, s.curso_nombre,
+              ${BLOQUES_HORARIO} AS horario,
               (SELECT count(*)::int FROM inscripcion i
-                WHERE i.seccion_id = s.id AND i.archived_at IS NULL) AS alumnos
-         FROM seccion s
-         JOIN curso c ON c.id = s.curso_id
-         JOIN periodo p ON p.id = c.periodo_id
-        WHERE s.universidad_id = $1 AND s.profesor_id = $2 AND p.activo
-          AND s.archived_at IS NULL AND c.archived_at IS NULL
-        ORDER BY c.codigo, s.numero`,
+                WHERE i.seccion_id = s.id AND i.archived_at IS NULL) AS alumnos,
+              (SELECT count(*)::int ${EN_REVISION_DE_SECCION}) AS pendientes_revision
+         FROM s
+        ORDER BY s.codigo, s.numero`,
       [usuarioId],
     )
     return filas.map((fila) => ({
@@ -95,6 +106,59 @@ export class DashboardService {
       },
       horario: fila.horario,
       alumnos: fila.alumnos,
+      pendientesRevision: fila.pendientes_revision,
+    }))
+  }
+
+  // NOT-10: evaluaciones en revisión de las secciones del profesor ($2), con
+  // el último envío (el ayudante y la fecha salen de nota_cambio, que no se
+  // reescribe: tras una devolución y un reenvío vale el último ENVIO), de la
+  // más antigua a la más nueva. Mismo filtro que el contador de misSecciones.
+  // Solo el profesor: el Director no tiene secciones a cargo.
+  async pendientesRevision(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+  ): Promise<PendienteRevision[]> {
+    if (contexto.rol !== 'PROFESOR') {
+      throw new ForbiddenException(
+        'Solo el profesor ve las evaluaciones pendientes de revisión',
+      )
+    }
+    const filas = await this.bd.consultarEnUniversidad<
+      Omit<PendienteRevision, 'enviadaEl'> & { enviadaEl: Date | null }
+    >(
+      contexto,
+      `WITH s AS (${SECCIONES_DEL_PROFESOR})
+       SELECT json_build_object('id', e.id, 'nombre', e.nombre,
+                'fecha', to_char(e.fecha, 'YYYY-MM-DD')) AS evaluacion,
+              json_build_object('id', s.id, 'numero', s.numero) AS seccion,
+              json_build_object('id', s.curso_id, 'codigo', s.codigo,
+                'nombre', s.curso_nombre) AS curso,
+              CASE WHEN u.id IS NULL THEN NULL
+                ELSE json_build_object('id', u.id, 'nombre', u.nombre) END AS ayudante,
+              envio.fecha AS "enviadaEl",
+              (SELECT count(*)::int FROM inscripcion i
+                WHERE i.seccion_id = s.id AND i.archived_at IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM nota n
+                                   WHERE n.evaluacion_id = e.id
+                                     AND n.alumno_id = i.usuario_id
+                                     AND n.archived_at IS NULL)) AS "sinNota"
+         FROM s
+        CROSS JOIN LATERAL (SELECT e.id, e.nombre, e.fecha ${EN_REVISION_DE_SECCION}) e
+         -- alumno_id IS NULL: usa ix_nota_cambio_evaluacion_alumno_fecha.
+         LEFT JOIN LATERAL (SELECT nc.responsable_id, nc.fecha
+                              FROM nota_cambio nc
+                             WHERE nc.evaluacion_id = e.id AND nc.alumno_id IS NULL
+                               AND nc.tipo = 'ENVIO'
+                             ORDER BY nc.fecha DESC, nc.id DESC
+                             LIMIT 1) envio ON true
+         LEFT JOIN usuario u ON u.id = envio.responsable_id
+        ORDER BY envio.fecha NULLS FIRST, s.codigo, s.numero, e.nombre, e.id`,
+      [usuarioId],
+    )
+    return filas.map((fila) => ({
+      ...fila,
+      enviadaEl: fila.enviadaEl?.toISOString() ?? null,
     }))
   }
 
@@ -112,7 +176,8 @@ export class DashboardService {
       contexto,
       `SELECT s.id, s.numero, c.id AS curso_id, c.codigo,
               c.nombre AS curso_nombre, pr.id AS profesor_id,
-              pr.nombre AS profesor_nombre
+              pr.nombre AS profesor_nombre,
+              ${NOMBRES_PROFESORES()} AS profesores
          FROM ayudante_seccion a
          JOIN seccion s ON s.id = a.seccion_id
          JOIN curso c ON c.id = s.curso_id
@@ -136,6 +201,7 @@ export class DashboardService {
         fila.profesor_id && fila.profesor_nombre
           ? { id: fila.profesor_id, nombre: fila.profesor_nombre }
           : null,
+      profesores: fila.profesores,
     }))
   }
 }

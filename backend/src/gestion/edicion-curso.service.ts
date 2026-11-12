@@ -15,11 +15,8 @@ const CAMPOS = `c.id, c.codigo, c.nombre, c.carrera_id AS "carreraId", c.periodo
   ca.nombre AS "carreraNombre", json_build_object('id', p.id, 'anio', p.anio, 'semestre', p.semestre) AS periodo`
 const DESDE = `FROM curso c JOIN carrera ca ON ca.id = c.carrera_id
   JOIN periodo p ON p.id = c.periodo_id`
-const facultadDe = (
-  parametro: string,
-) => `(SELECT u.facultad_id FROM usuario u JOIN facultad f ON f.id = u.facultad_id
-  WHERE u.id = ${parametro} AND u.universidad_id = $1 AND u.rol = 'ADMINISTRATIVO'
-    AND u.archived_at IS NULL AND f.universidad_id = $1 AND f.archived_at IS NULL)`
+// Facultad del usuario de la sesión (o la que eligió el superadmin: MT-04).
+const facultadDe = (parametro: string) => `facultad_actual(${parametro})`
 const VISIBLE = `c.universidad_id = $1 AND c.id = $2 AND c.archived_at IS NULL
   AND ca.archived_at IS NULL AND ca.facultad_id = ${facultadDe('$3')}`
 
@@ -49,9 +46,13 @@ export class EdicionCursoService {
     // Se vuelve a aplicar el ámbito en la sentencia que lee el historial.
     return this.bd.consultarEnUniversidad<CambioCurso>(
       contexto,
-      `SELECT h.id, h.fecha, json_build_object('id', u.id, 'nombre', u.nombre) AS responsable,
+      // LEFT JOIN: RLS no deja ver al superadmin, que no tiene universidad
+      // (MT-04); su cambio aparece igual, con su rol como nombre.
+      `SELECT h.id, h.fecha,
+              json_build_object('id', h.responsable_id,
+                                'nombre', COALESCE(u.nombre, 'Superadmin')) AS responsable,
               h.anterior, h.nuevo
-       FROM curso_cambio h JOIN usuario u ON u.id = h.responsable_id
+       FROM curso_cambio h LEFT JOIN usuario u ON u.id = h.responsable_id
        JOIN curso c ON c.id = h.curso_id JOIN carrera ca ON ca.id = c.carrera_id
        WHERE h.universidad_id = $1 AND ${VISIBLE} ORDER BY h.fecha DESC, h.id DESC`,
       [id, usuario],

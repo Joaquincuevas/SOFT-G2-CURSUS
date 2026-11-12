@@ -21,8 +21,7 @@ import { PermitidaConProvisoria } from './credencial-provisoria.decorator.js'
 import type { RequestConUsuario } from './jwt-auth.guard.js'
 import { SoloSesion } from './permisos.decorator.js'
 import { Public } from './publico.decorator.js'
-import { UniversidadActual } from './universidad-actual.decorator.js'
-import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
+import { contextoDeLaSesion } from './universidad-actual.decorator.js'
 import { LimiteLogin } from './limite-login.service.js'
 import { ipLogin } from './ip-login.js'
 
@@ -184,16 +183,21 @@ export class AuthController {
   }
 
   // Usuario de la sesión. 401 si el usuario del token ya no existe en la
-  // universidad del token.
+  // universidad del token. El superadmin responde aunque todavía no elija una
+  // facultad (MT-04): así el frontend sabe que debe elegirla.
   @SoloSesion()
   @PermitidaConProvisoria()
   @Get('yo')
-  async yo(
-    @Req() req: RequestConUsuario,
-    @UniversidadActual() contexto: ContextoUniversidad,
-  ): Promise<UsuarioSesion> {
-    const usuario =
-      req.usuario && (await this.auth.obtenerUsuario(req.usuario.sub, contexto))
+  async yo(@Req() req: RequestConUsuario): Promise<UsuarioSesion> {
+    const sub = req.usuario?.sub
+    const usuario = !sub
+      ? null
+      : req.usuario?.rol === 'SUPERADMIN'
+        ? await this.auth.obtenerSuperadmin(
+            sub,
+            req.eleccion ? contextoDeLaSesion(req) : null,
+          )
+        : await this.auth.obtenerUsuario(sub, contextoDeLaSesion(req))
     if (!usuario) {
       throw new UnauthorizedException()
     }

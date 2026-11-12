@@ -24,6 +24,7 @@ const SECCIONES: SeccionDashboard[] = [
       { dia: 3, inicio: '10:00', termino: '11:30', sala: 'Sala B-202' },
     ],
     alumnos: 32,
+    pendientesRevision: 0,
   },
   {
     id: 'seccion-icc201-2',
@@ -35,6 +36,7 @@ const SECCIONES: SeccionDashboard[] = [
     },
     horario: [],
     alumnos: 1,
+    pendientesRevision: 0,
   },
 ]
 
@@ -50,6 +52,7 @@ const resumen = (
     rol: 'PROFESOR',
     horario: seccion.horario,
     profesor: { id: 'profesor-1', nombre: 'Profesor Norte' },
+    profesores: ['Profesor Norte'],
     ayudantes: [],
   }),
 })
@@ -204,6 +207,7 @@ const SECCIONES_AYUDANTE: SeccionAyudante[] = [
       nombre: 'Introducción a la Programación',
     },
     profesor: { id: 'profesor-1', nombre: 'Camila Rojas' },
+    profesores: ['Camila Rojas'],
   },
   {
     id: 'seccion-icc201-2',
@@ -214,6 +218,7 @@ const SECCIONES_AYUDANTE: SeccionAyudante[] = [
       nombre: 'Estructuras de Datos',
     },
     profesor: null,
+    profesores: [],
   },
 ]
 

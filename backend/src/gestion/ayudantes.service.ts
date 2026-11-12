@@ -16,8 +16,7 @@ const SECCION_VISIBLE = `
     JOIN carrera ca ON ca.id = c.carrera_id
    WHERE s.universidad_id = $1 AND s.id = $2
      AND s.archived_at IS NULL AND c.archived_at IS NULL
-     AND ca.facultad_id = (SELECT facultad_id FROM usuario
-                          WHERE universidad_id = $1 AND id = $3)`
+     AND ca.facultad_id = facultad_actual($3)`
 
 @Injectable()
 export class AyudantesService {

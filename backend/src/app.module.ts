@@ -10,6 +10,12 @@ import { CarrerasModule } from './carreras/carreras.module.js'
 import { PerfilModule } from './perfil/perfil.module.js'
 import { EspacioModule } from './espacio/espacio.module.js'
 import { DashboardModule } from './dashboard/dashboard.module.js'
+import { AsistenciaModule } from './asistencia/asistencia.module.js'
+import { NotasModule } from './notas/notas.module.js'
+import { AnunciosModule } from './anuncios/anuncios.module.js'
+import { MaterialesModule } from './materiales/materiales.module.js'
+import { SuperadminModule } from './superadmin/superadmin.module.js'
+import { ArchivosModule } from './archivos/archivos.module.js'
 
 @Module({
   imports: [
@@ -22,6 +28,12 @@ import { DashboardModule } from './dashboard/dashboard.module.js'
     PerfilModule,
     EspacioModule,
     DashboardModule,
+    AsistenciaModule,
+    NotasModule,
+    AnunciosModule,
+    MaterialesModule,
+    SuperadminModule,
+    ArchivosModule,
   ],
   controllers: [AppController],
   providers: [AppService],

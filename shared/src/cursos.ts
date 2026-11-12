@@ -63,10 +63,13 @@ export interface SeccionDetalle {
   id: string
   numero: number
   horario: string | null
-  // Nombre del profesor a cargo (GES-12), o null si no tiene.
+  // GES-25: nombre e id del primer profesor vigente, o null. Deprecados: usa
+  // profesores. Se retiran con seccion.profesor_id
+  // (docs/ges-25-varios-profesores.md).
   profesor: string | null
-  // Su id, para que quitarlo (GES-14) apunte a la persona que se ve.
   profesorId: string | null
+  // GES-25: todos los profesores vigentes, por nombre.
+  profesores: string[]
   ayudantes: string[]
   alumnos: number
 }
@@ -197,6 +200,19 @@ export interface AsignacionQuitada {
 // Al quitar un ayudante, también llegan los que siguen asignados.
 export interface AyudanteQuitado extends AsignacionQuitada {
   ayudantes: AyudanteResumen[]
+}
+
+// GES-25: profesores de una sección, con la forma de los ayudantes. GET
+// /api/secciones/:id/profesores da las opciones (todos los profesores de la
+// universidad, con los asignados marcados); POST agrega uno (cuerpo
+// AsignarProfesor) y devuelve los asignados.
+export type ProfesorResumen = AyudanteResumen
+export type ProfesorAsignable = AyudanteOpcion
+
+// Al quitar un profesor (PATCH /api/secciones/:id/profesores/:usuarioId/
+// quitar), también llegan los que siguen asignados.
+export interface ProfesorQuitado extends AsignacionQuitada {
+  profesores: ProfesorResumen[]
 }
 
 // Roles de las cuentas que crea el administrativo en /docentes (GES-21).

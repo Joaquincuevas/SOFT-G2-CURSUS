@@ -6,7 +6,7 @@ import { useAuth } from '../auth/auth'
 // no respondió. `recargar` vuelve a pedir: tras un error (Reintentar) muestra
 // la carga; con datos, los mantiene hasta que llegan los nuevos, para no
 // desmontar la página (por ejemplo, un diálogo abierto). Con `ruta` null no
-// pide nada.
+// pide nada. `fijar` reemplaza los datos por unos que ya trajo otra petición.
 export function useDatos<T>(ruta: string | null) {
   const { fetchConSesion } = useAuth()
   const [resultado, setResultado] = useState<{
@@ -35,5 +35,6 @@ export function useDatos<T>(ruta: string | null) {
     setResultado((actual) => (actual.datos ? actual : { datos: undefined }))
     setIntento((n) => n + 1)
   }
-  return [resultado.datos, recargar, resultado.status] as const
+  const fijar = (datos: T) => setResultado({ datos })
+  return [resultado.datos, recargar, resultado.status, fijar] as const
 }

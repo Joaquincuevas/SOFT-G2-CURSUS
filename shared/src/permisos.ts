@@ -26,18 +26,53 @@ export type SujetoTabla =
   | 'Curso'
   | 'Seccion'
   | 'Inscripcion'
+  | 'Clase'
+  | 'Asistencia'
+  | 'Anuncio'
+  | 'Evaluacion'
+  | 'Actividad'
+  | 'Entrega'
+  | 'Nota'
+  | 'RevisionNotas'
+  | 'Archivo'
+  | 'Material'
+  | 'MaterialVersion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
 // tablas (por ejemplo, el Director y el Administrativo leen las mismas
 // tablas, pero ven secciones distintas). Solo se usan con 'read', y así el
 // menú no cambia cuando se agregan permisos sobre tablas.
-export type SujetoSeccion = 'PanelDirectorio' | 'GestionAcademica' | 'MisCursos'
+export type SujetoSeccion =
+  'PanelDirectorio' | 'PanelSuperadmin' | 'GestionAcademica' | 'MisCursos'
 
 // 'all' es el comodín de CASL.
 export type Sujeto = SujetoTabla | SujetoSeccion | 'all'
 
 export type AppAbility = MongoAbility<[Accion, Sujeto]>
+
+const LEEN_CLASES: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
+const LEEN_ANUNCIOS: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
+const SUBEN_ARCHIVOS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'ALUMNO']
+const LEEN_EVALUACIONES: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
+// NOT-05: el alumno ve sus notas publicadas en NOT-13.
+const LEEN_NOTAS: readonly Rol[] = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
+const LEEN_ACTIVIDADES: readonly Rol[] = [
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+  'DIRECTOR',
+]
 
 // Recibe el usuario y no solo el rol para que MT-01 pueda agregar condiciones
 // por universidad_id sin cambiar la firma.
@@ -60,13 +95,24 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
       break
+    // MT-04 (ADR 0002): el superadmin trabaja en la facultad que eligió con
+    // los mismos permisos del Administrativo, y además elige universidad y
+    // facultad en su panel. La API resuelve en cuál trabaja (ver
+    // contextoDeLaSesion); sin elegir una, las rutas de gestión le responden 403.
     case 'ADMINISTRATIVO':
+    case 'SUPERADMIN':
       can('read', ['Universidad', 'Facultad'])
       can(
         ['create', 'read', 'update'],
         ['Carrera', 'Periodo', 'Curso', 'Seccion', 'Inscripcion', 'Usuario'],
       )
       can('read', 'GestionAcademica')
+      // GES-23: desde su vista global crea y edita universidades y
+      // facultades (archivar es un update).
+      if (usuario.rol === 'SUPERADMIN') {
+        can('read', 'PanelSuperadmin')
+        can(['create', 'update'], ['Universidad', 'Facultad'])
+      }
       break
     case 'PROFESOR':
     case 'AYUDANTE':
@@ -80,6 +126,85 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       break
     // Un rol desconocido no recibe ningún permiso.
   }
+
+  // ASI-01 (RN-13): clases de una sección. Las registra el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante y el Director, este en solo lectura. El alumno ve su propia
+  // asistencia en ASI-06. Nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Clase')
+  if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Clase')
+
+  // ASI-02 (RN-13): asistencia de una clase. La registra el profesor (el
+  // controlador exige además que sea el de esa sección) y la leen los mismos
+  // que las clases. El alumno ve la suya en ASI-06. Corregirla es ASI-04.
+  if (usuario.rol === 'PROFESOR') can('create', 'Asistencia')
+  if (usuario.rol === 'PROFESOR') can('update', 'Asistencia')
+  if (LEEN_CLASES.includes(usuario.rol)) can('read', 'Asistencia')
+
+  // ANU-01 (RN-09): anuncios de un curso. Los publica el profesor (el
+  // controlador exige además que sea el profesor de la sección desde la que
+  // publica) y los leen el ayudante, el alumno y el Director, este en solo
+  // lectura. El Administrativo no recibe nada. Nadie los borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Anuncio')
+  if (usuario.rol === 'PROFESOR') can('update', 'Anuncio')
+  if (LEEN_ANUNCIOS.includes(usuario.rol)) can('read', 'Anuncio')
+
+  // NOT-01 (RN-10): evaluaciones de una sección. Las crea el profesor (el
+  // controlador exige además que sea el profesor de esa sección) y las leen
+  // el ayudante, el alumno y el Director, este en solo lectura. Editar es
+  // NOT-03; nadie las borra.
+  if (usuario.rol === 'PROFESOR') can(['create', 'update'], 'Evaluacion')
+  if (LEEN_EVALUACIONES.includes(usuario.rol)) can('read', 'Evaluacion')
+
+  // MAT-08 (RN-08): actividades de entrega de una sección. Las crea el
+  // profesor (el controlador exige además que sea el profesor de esa sección)
+  // y las leen el ayudante, el alumno y el Director, este en solo lectura.
+  // El Administrativo no recibe nada. Nadie las borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Actividad')
+  if (LEEN_ACTIVIDADES.includes(usuario.rol)) can('read', 'Actividad')
+
+  // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante como
+  // propuesta (el controlador exige además que sea ayudante de esa sección) y
+  // las leen el profesor y el Director, este en solo lectura. El alumno y el
+  // Administrativo no reciben nada. Nadie las borra.
+  // NOT-15: el profesor solo modifica publicadas mediante recorrección; el
+  // PUT de propuestas y el envío siguen exigiendo AYUDANTE en el controlador.
+  if (usuario.rol === 'AYUDANTE' || usuario.rol === 'PROFESOR')
+    can('update', 'Nota')
+  if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'Nota')
+
+  // NOT-11 y NOT-12: revisión de las notas de una evaluación
+  // (revision_notas). La aprueba o la devuelve el profesor (el controlador
+  // exige además que sea el de esa sección); la leen los mismos que las
+  // notas. El envío del ayudante (NOT-08) va con update de Nota, porque es
+  // parte de ingresarlas.
+  if (usuario.rol === 'PROFESOR') can('update', 'RevisionNotas')
+  if (LEEN_NOTAS.includes(usuario.rol)) can('read', 'RevisionNotas')
+  // MAT-01: archivos de una sección (sílabo, materiales y entregas). Los
+  // suben el profesor, el ayudante y el alumno de la sección, y los descargan
+  // ellos y el Director, este en solo lectura. El controlador exige además
+  // ser integrante (ESP-06) y que el alumno solo descargue lo suyo o lo del
+  // equipo docente. El Administrativo no recibe nada. Nadie los borra.
+  if (SUBEN_ARCHIVOS.includes(usuario.rol)) can(['create', 'read'], 'Archivo')
+  if (usuario.rol === 'DIRECTOR') can('read', 'Archivo')
+
+  // MAT-04 y MAT-06: materiales de un curso. Los sube el profesor (el
+  // controlador exige además que sea el profesor de esa sección). Los listan y
+  // descargan los integrantes de la sección y el Director, este en solo
+  // lectura. El Administrativo no recibe nada. Nadie los borra.
+  if (usuario.rol === 'PROFESOR') can('create', 'Material')
+  if (SUBEN_ARCHIVOS.includes(usuario.rol) || usuario.rol === 'DIRECTOR')
+    can('read', 'Material')
+  // MAT-07: solo el profesor sube versiones nuevas y lee las anteriores (el
+  // resto lee la vigente con 'read Material'; la RLS lo exige también).
+  if (usuario.rol === 'PROFESOR') can(['create', 'read'], 'MaterialVersion')
+
+  // MAT-09: el alumno consulta y confirma su entrega. MAT-10: el profesor y
+  // el ayudante leen y descargan las de su sección (el servicio y la RLS
+  // exigen además que lo sean de esa sección).
+  if (usuario.rol === 'ALUMNO') can(['create', 'read'], 'Entrega')
+  if (usuario.rol === 'PROFESOR' || usuario.rol === 'AYUDANTE')
+    can('read', 'Entrega')
 
   return build()
 }

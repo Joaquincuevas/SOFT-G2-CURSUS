@@ -1,5 +1,7 @@
 # GES-13: asignar ayudantes a una sección
 
+> GES-26 reúne ahora estas acciones en la [vista Integrantes](ges-26-integrantes-seccion.md). Los endpoints y las reglas de esta tarjeta se mantienen.
+
 Tarjeta: [F2 · GES-13 Administrativo asigna ayudantes a una sección](https://trello.com/c/xkMy15dq/100-f2-ges-13-administrativo-asigna-ayudantes-a-una-secci%C3%B3n). Referencia: RN-05. Dependencia: GES-09, ya integrada en `develop`.
 
 ## Comportamiento

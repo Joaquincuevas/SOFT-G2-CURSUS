@@ -11,11 +11,12 @@ import {
   type ContextoUniversidad,
 } from '../database/base-de-datos.service.js'
 
-// El ámbito se vuelve a leer de usuario en cada sentencia: no se acepta un
-// facultad_id del cliente ni se guarda en el JWT una asignación que pueda caducar.
-const FACULTAD_ACTUAL = `JOIN facultad f ON f.id = u.facultad_id AND f.universidad_id = u.universidad_id
-  WHERE u.universidad_id = $1 AND u.id = $2 AND u.rol = 'ADMINISTRATIVO'
-    AND u.archived_at IS NULL AND f.archived_at IS NULL`
+// El ámbito se vuelve a leer en cada sentencia con facultad_actual($2): no se
+// acepta un facultad_id del cliente ni se guarda en el JWT una asignación que
+// pueda caducar. Es NULL si el usuario ($2) no es un Administrativo vigente de
+// una facultad vigente (o el superadmin, de la que eligió: MT-04).
+const AMBITO = `ambito AS (
+  SELECT facultad_actual($2) AS facultad_id WHERE facultad_actual($2) IS NOT NULL)`
 
 @Injectable()
 export class CarrerasService {
@@ -32,7 +33,7 @@ export class CarrerasService {
     this.exigirAdministrativo(contexto)
     return this.bd.consultarEnUniversidad<Carrera>(
       contexto,
-      `WITH ambito AS (SELECT u.facultad_id FROM usuario u ${FACULTAD_ACTUAL})
+      `WITH ${AMBITO}
        SELECT c.id, c.nombre FROM carrera c JOIN ambito a ON a.facultad_id = c.facultad_id
        WHERE c.universidad_id = $1 AND c.archived_at IS NULL
        ORDER BY lower(c.nombre), c.id`,
@@ -51,13 +52,14 @@ export class CarrerasService {
       const [carrera] = await this.bd.consultarEnUniversidad<Carrera>(
         contexto,
         id
-          ? `WITH ambito AS (SELECT u.facultad_id FROM usuario u ${FACULTAD_ACTUAL}), editada AS (
+          ? `WITH ${AMBITO}, editada AS (
              UPDATE carrera c SET nombre = $3 FROM ambito a
              WHERE c.universidad_id = $1 AND c.facultad_id = a.facultad_id
                AND c.id = $4 AND c.archived_at IS NULL RETURNING c.id, c.nombre)
              SELECT id, nombre FROM editada`
-          : `INSERT INTO carrera (universidad_id, facultad_id, nombre)
-             SELECT $1, u.facultad_id, $3 FROM usuario u ${FACULTAD_ACTUAL}
+          : `WITH ${AMBITO}
+             INSERT INTO carrera (universidad_id, facultad_id, nombre)
+             SELECT $1, a.facultad_id, $3 FROM ambito a
              RETURNING id, nombre`,
         id ? [usuarioId, nombre, id] : [usuarioId, nombre],
       )

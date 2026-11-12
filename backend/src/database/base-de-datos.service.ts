@@ -20,6 +20,11 @@ export const ROL_APP = 'cursus_app'
 export interface ContextoUniversidad {
   universidadId: string
   rol: Rol
+  // MT-04 (ADR 0002): presente cuando la sesión es de un superadmin que
+  // trabaja en una facultad. rol es entonces 'ADMINISTRATIVO': la API y las
+  // políticas lo tratan como el Administrativo de esa facultad, y la base
+  // audita sus cambios (superadmin_cambio).
+  superadmin?: { id: string; facultadId: string }
 }
 
 // Conexión compartida para las consultas de la API. Se abre en la primera
@@ -81,6 +86,8 @@ export class BaseDeDatos implements OnModuleDestroy {
   }
 
   // Varias consultas con el mismo contexto RLS y commit/rollback conjunto.
+  // Con un superadmin, fija además app.superadmin_id y app.facultad_id, que
+  // usan facultad_actual() y la auditoría (ver ContextoUniversidad).
   async enTransaccionEnUniversidad<T>(
     contexto: ContextoUniversidad,
     tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
@@ -92,8 +99,15 @@ export class BaseDeDatos implements OnModuleDestroy {
       await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
       await bd.query(
         `SELECT set_config('app.universidad_id', $1, true),
-                set_config('app.rol', $2, true)`,
-        [contexto.universidadId, contexto.rol],
+                set_config('app.rol', $2, true),
+                set_config('app.superadmin_id', $3, true),
+                set_config('app.facultad_id', $4, true)`,
+        [
+          contexto.universidadId,
+          contexto.rol,
+          contexto.superadmin?.id ?? '',
+          contexto.superadmin?.facultadId ?? '',
+        ],
       )
       return tarea(bd)
     })
@@ -120,6 +134,77 @@ export class BaseDeDatos implements OnModuleDestroy {
     })
   }
 
+  // MT-04 (ADR 0002). Lectura de las universidades y facultades de todas,
+  // para que el superadmin elija dónde trabajar. Como la del Director, no
+  // exige $1, responde 403 a cualquier otro rol y corre en una transacción
+  // READ ONLY. Solo las políticas de lectura de universidad y facultad
+  // reconocen al superadmin (ElegirFacultadSuperadmin): en las demás tablas
+  // no ve filas.
+  async consultarComoSuperadmin<T>(
+    rol: Rol | undefined,
+    sql: string,
+    parametros: unknown[] = [],
+  ): Promise<T[]> {
+    if (rol !== 'SUPERADMIN') {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccion(async (bd) => {
+      // Debe ir antes que cualquier otra consulta de la transacción.
+      await bd.query('SET TRANSACTION READ ONLY')
+      await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await bd.query(`SELECT set_config('app.rol', $1, true)`, [rol])
+      return bd.query<T>(sql, parametros)
+    })
+  }
+
+  // GES-23. Escritura del superadmin en su vista global (sin universidad de
+  // sesión): crear y editar universidades y facultades. Fija app.rol
+  // SUPERADMIN y app.superadmin_id, que exigen las políticas de escritura de
+  // esas tablas (GestionarUniversidades) y usa la auditoría. En las demás
+  // tablas no ve ni escribe filas: no tiene universidad. Responde 403 a
+  // cualquier otro rol.
+  async escribirComoSuperadmin<T>(
+    superadmin: { id: string; rol: Rol | undefined },
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    if (superadmin.rol !== 'SUPERADMIN' || !superadmin.id) {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccion(async (bd) => {
+      await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await bd.query(
+        `SELECT set_config('app.rol', $1, true),
+                set_config('app.superadmin_id', $2, true)`,
+        [superadmin.rol, superadmin.id],
+      )
+      return tarea(bd)
+    })
+  }
+
+  // GES-24. Transacción del superadmin sobre los usuarios de una universidad,
+  // desde su vista global. A diferencia de escribirComoSuperadmin, fija esa
+  // universidad, porque la RLS de usuario la exige. Como al trabajar en una
+  // facultad (MT-04), va con el rol ADMINISTRATIVO y su id, así que la base
+  // audita los cambios, pero sin facultad elegida. Responde 403 a cualquier
+  // otro rol.
+  async enUniversidadComoSuperadmin<T>(
+    superadmin: { id: string; rol: Rol | undefined },
+    universidadId: string,
+    tarea: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T>,
+  ): Promise<T> {
+    if (superadmin.rol !== 'SUPERADMIN' || !superadmin.id) {
+      throw new ForbiddenException()
+    }
+    return this.enTransaccionEnUniversidad(
+      {
+        universidadId,
+        rol: 'ADMINISTRATIVO',
+        superadmin: { id: superadmin.id, facultadId: '' },
+      },
+      tarea,
+    )
+  }
+
   // Un recurso de la universidad de la sesión. Responde 404 si no existe o es
   // de otra universidad: desde fuera no se distinguen.
   async obtenerEnUniversidad<T>(
@@ -144,4 +229,27 @@ export class BaseDeDatos implements OnModuleDestroy {
       await bd.destroy()
     }
   }
+}
+
+// MT-04. Motivo de la acción en curso, para la auditoría del superadmin
+// (superadmin_cambio.motivo). Se llama dentro de enTransaccionEnUniversidad
+// o escribirComoSuperadmin, antes de escribir, y dura solo esa transacción.
+// Con otros roles no tiene efecto: el trigger de auditoría corre solo con un
+// superadmin.
+export async function fijarMotivo(
+  bd: Pick<BaseDeDatos, 'query'>,
+  motivo: string,
+): Promise<void> {
+  await bd.query(`SELECT set_config('app.motivo', $1, true)`, [motivo])
+}
+
+// NOT-11. Usuario de la sesión para las políticas que lo exigen
+// (usuario_actual(), por ejemplo la aprobación de notas del profesor de la
+// sección). Se llama dentro de enTransaccionEnUniversidad, antes de escribir,
+// y dura solo esa transacción.
+export async function fijarUsuario(
+  bd: Pick<BaseDeDatos, 'query'>,
+  usuarioId: string,
+): Promise<void> {
+  await bd.query(`SELECT set_config('app.usuario_id', $1, true)`, [usuarioId])
 }

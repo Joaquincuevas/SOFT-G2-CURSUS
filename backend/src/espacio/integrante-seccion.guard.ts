@@ -6,11 +6,11 @@ import {
   createParamDecorator,
   type ExecutionContext,
   Injectable,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common'
 import { isUUID } from 'class-validator'
 import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
+import { contextoDeLaSesion } from '../auth/universidad-actual.decorator.js'
 import { AccesoSeccionService } from './acceso-seccion.service.js'
 
 type RequestConSeccion = RequestConUsuario & { seccion?: SeccionEspacio }
@@ -24,18 +24,17 @@ export class IntegranteSeccionGuard implements CanActivate {
 
   async canActivate(contexto: ExecutionContext): Promise<boolean> {
     const req = contexto.switchToHttp().getRequest<RequestConSeccion>()
-    const { usuario } = req
-    if (!usuario?.sub || !usuario.universidad_id || !usuario.rol) {
-      throw new UnauthorizedException()
-    }
+    // El mismo contexto de @UniversidadActual(): el superadmin entra como el
+    // Administrativo de la facultad que eligió (MT-04).
+    const contextoSesion = contextoDeLaSesion(req)
     // Los pipes (ParseUUIDPipe) corren después de los guards.
     const seccionId = req.params.id
     if (typeof seccionId !== 'string' || !isUUID(seccionId)) {
       throw new BadRequestException('El id de la sección no es válido')
     }
     req.seccion = await this.acceso.verificar(
-      { universidadId: usuario.universidad_id, rol: usuario.rol },
-      usuario.sub,
+      contextoSesion,
+      req.usuario?.sub as string,
       seccionId,
     )
     return true

@@ -217,7 +217,10 @@ describe('GET /api/auth/yo con la universidad del token', () => {
     const correo = `alumno@${norte.dominio}`
     const real = jwt.decode<PayloadJwt>(await tokenDe(correo))
 
-    const token = await tokenConUniversidad(correo, real.universidad_id)
+    const token = await tokenConUniversidad(
+      correo,
+      real.universidad_id as string,
+    )
     await pedir('/api/auth/yo', token).expect(200)
   })
 

@@ -23,6 +23,39 @@ import { ArchivarInscripcionConResponsable1792500000000 } from './migrations/179
 import { CrearHorarioSeccion1792510000000 } from './migrations/1792510000000-CrearHorarioSeccion.js'
 import { CrearAsignacionCambio1792520000000 } from './migrations/1792520000000-CrearAsignacionCambio.js'
 import { AgregarCredencialProvisoria1792530000000 } from './migrations/1792530000000-AgregarCredencialProvisoria.js'
+import { CrearClase1792550000000 } from './migrations/1792550000000-CrearClase.js'
+import { CrearEvaluacion1792540000000 } from './migrations/1792540000000-CrearEvaluacion.js'
+import { CrearAnuncio1792560000000 } from './migrations/1792560000000-CrearAnuncio.js'
+import { CrearNotaCambio1792570000000 } from './migrations/1792570000000-CrearNotaCambio.js'
+import { CrearAsistencia1792580000000 } from './migrations/1792580000000-CrearAsistencia.js'
+import { DirigirAnuncioSeccion1792600000000 } from './migrations/1792600000000-DirigirAnuncioSeccion.js'
+import { CrearActividad1792610000000 } from './migrations/1792610000000-CrearActividad.js'
+import { CrearLecturaAnuncio1792620000000 } from './migrations/1792620000000-CrearLecturaAnuncio.js'
+import { AgregarRolSuperadmin1792650000000 } from './migrations/1792650000000-AgregarRolSuperadmin.js'
+import { PermitirUsuarioSuperadmin1792651000000 } from './migrations/1792651000000-PermitirUsuarioSuperadmin.js'
+import { ElegirFacultadSuperadmin1792652000000 } from './migrations/1792652000000-ElegirFacultadSuperadmin.js'
+import { CrearSuperadminCambio1792653000000 } from './migrations/1792653000000-CrearSuperadminCambio.js'
+import { CrearNota1792660000000 } from './migrations/1792660000000-CrearNota.js'
+import { CrearHistorialAnuncio1792670000000 } from './migrations/1792670000000-CrearHistorialAnuncio.js'
+import { GestionarUniversidades1792680000000 } from './migrations/1792680000000-GestionarUniversidades.js'
+import { CrearAsistenciaCambio1792690000000 } from './migrations/1792690000000-CrearAsistenciaCambio.js'
+import { CrearRevisionNotas1792700000000 } from './migrations/1792700000000-CrearRevisionNotas.js'
+import { EnviarNotasRevision1792710000000 } from './migrations/1792710000000-EnviarNotasRevision.js'
+import { ContarClasesAsistencia1792720000000 } from './migrations/1792720000000-ContarClasesAsistencia.js'
+import { AprobarNotas1792730000000 } from './migrations/1792730000000-AprobarNotas.js'
+import { DevolverNotas1792740000000 } from './migrations/1792740000000-DevolverNotas.js'
+import { InicializarColoresUniversidad1792750000000 } from './migrations/1792750000000-InicializarColoresUniversidad.js'
+import { CrearArchivo1792770000000 } from './migrations/1792770000000-CrearArchivo.js'
+import { VariosProfesoresSeccion1792790000000 } from './migrations/1792790000000-VariosProfesoresSeccion.js'
+import { CrearEvaluacionCambio1792800000000 } from './migrations/1792800000000-CrearEvaluacionCambio.js'
+import { LeerNotasAlumno1792810000000 } from './migrations/1792810000000-LeerNotasAlumno.js'
+import { RecorregirNota1792820000000 } from './migrations/1792820000000-RecorregirNota.js'
+import { CrearEntrega1792840000000 } from './migrations/1792840000000-CrearEntrega.js'
+import { MotivoRetiroAlumno1792850000000 } from './migrations/1792850000000-MotivoRetiroAlumno.js'
+import { CrearMaterial1792860000000 } from './migrations/1792860000000-CrearMaterial.js'
+import { CrearSilabo1792870000000 } from './migrations/1792870000000-CrearSilabo.js'
+import { LeerEntregasDocentes1792880000000 } from './migrations/1792880000000-LeerEntregasDocentes.js'
+import { CrearMaterialVersion1792890000000 } from './migrations/1792890000000-CrearMaterialVersion.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -67,6 +100,39 @@ export function opcionesDataSource(
       CrearHorarioSeccion1792510000000,
       CrearAsignacionCambio1792520000000,
       AgregarCredencialProvisoria1792530000000,
+      CrearEvaluacion1792540000000,
+      CrearClase1792550000000,
+      CrearAnuncio1792560000000,
+      CrearNotaCambio1792570000000,
+      CrearAsistencia1792580000000,
+      DirigirAnuncioSeccion1792600000000,
+      CrearActividad1792610000000,
+      CrearLecturaAnuncio1792620000000,
+      AgregarRolSuperadmin1792650000000,
+      PermitirUsuarioSuperadmin1792651000000,
+      ElegirFacultadSuperadmin1792652000000,
+      CrearSuperadminCambio1792653000000,
+      CrearNota1792660000000,
+      CrearHistorialAnuncio1792670000000,
+      GestionarUniversidades1792680000000,
+      CrearAsistenciaCambio1792690000000,
+      CrearRevisionNotas1792700000000,
+      EnviarNotasRevision1792710000000,
+      ContarClasesAsistencia1792720000000,
+      AprobarNotas1792730000000,
+      DevolverNotas1792740000000,
+      InicializarColoresUniversidad1792750000000,
+      CrearArchivo1792770000000,
+      VariosProfesoresSeccion1792790000000,
+      CrearEvaluacionCambio1792800000000,
+      LeerNotasAlumno1792810000000,
+      RecorregirNota1792820000000,
+      CrearEntrega1792840000000,
+      MotivoRetiroAlumno1792850000000,
+      CrearMaterial1792860000000,
+      CrearSilabo1792870000000,
+      LeerEntregasDocentes1792880000000,
+      CrearMaterialVersion1792890000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
 import { Carreras } from './pages/Carreras'
 import { Perfil } from './pages/Perfil'
+import { RutasSuperadmin } from './pages/AdministrarUniversidad'
 import type { SessionUser } from './session/session'
 
 // Única fuente de la navegación: el Sidebar, las rutas, su guard y el
@@ -54,6 +55,18 @@ export const NAV_ITEMS: readonly NavItem[] = [
         ? 'Visión del Directorio'
         : `Bienvenido/a, ${user.nombre}`,
     subtitle: universidadYSemestre,
+  },
+  {
+    // GES-23: el superadmin administra una universidad y sus facultades. Se
+    // llega desde su Dashboard.
+    to: '/superadmin',
+    label: 'Administrar universidad',
+    icon: 'grid',
+    enMenu: false,
+    permiso: { accion: 'read', sujeto: 'PanelSuperadmin' },
+    page: RutasSuperadmin,
+    title: () => 'Administrar universidad',
+    subtitle: () => 'Universidades y facultades de CURSUS',
   },
   {
     to: '/universidades',

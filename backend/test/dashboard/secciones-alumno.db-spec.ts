@@ -121,6 +121,7 @@ describe('ESP-03: cursos del alumno del período activo', () => {
     const datos = await listar()
     expect(datos.map((s) => s.id)).toEqual([secciones[0].id, secciones[3].id])
     expect(datos[0]).toEqual({
+      anunciosNuevos: 0,
       id: secciones[0].id,
       numero: 1,
       curso: {
@@ -133,6 +134,7 @@ describe('ESP-03: cursos del alumno del período activo', () => {
         { dia: 3, inicio: '10:00', termino: '11:00', sala: 'Sala B' },
       ],
       profesor: { id: profesor, nombre: 'Profesor Norte' },
+      profesores: ['Profesor Norte'],
     })
     expect(datos[1]).toMatchObject({ numero: 2, horario: [], profesor: null })
     expect(JSON.stringify(datos)).not.toContain('@')

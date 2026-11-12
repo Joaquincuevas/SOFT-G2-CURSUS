@@ -6,10 +6,13 @@ import { useSession } from '../session/session'
 import './Dashboard.css'
 import {
   RUTA_MIS_SECCIONES,
+  RUTA_PAGINA_PENDIENTES,
   rutaSeccion,
   textoAlumnos,
   textoBloque,
+  textoPendientes,
 } from './misSecciones'
+import { PanelSuperadmin } from './PanelSuperadmin'
 import { SeccionesAyudante } from './SeccionesAyudante'
 import { SeccionesAlumno } from './SeccionesAlumno'
 import { useDatos } from './useDatos'
@@ -17,6 +20,7 @@ import { useDatos } from './useDatos'
 // Dashboard de cada rol. El título del Figma ("Visión del Directorio" o
 // "Bienvenido/a, <nombre>") lo muestra el Header. El profesor (ESP-01) y el
 // ayudante (ESP-02) y el alumno (ESP-03) ven sus secciones del período activo.
+// El superadmin (MT-04) ve las universidades y elige dónde trabajar.
 export function Dashboard() {
   const { user } = useSession()
   return (
@@ -24,6 +28,7 @@ export function Dashboard() {
       {user.rol === 'PROFESOR' && <SeccionesProfesor />}
       {user.rol === 'AYUDANTE' && <SeccionesAyudante />}
       {user.rol === 'ALUMNO' && <SeccionesAlumno key={user.id} />}
+      {user.rol === 'SUPERADMIN' && <PanelSuperadmin />}
     </section>
   )
 }
@@ -42,9 +47,23 @@ function SeccionesProfesor() {
       />
     )
   }
+  // NOT-10: el total sale de la misma consulta que las tarjetas.
+  const pendientes = secciones.reduce((n, s) => n + s.pendientesRevision, 0)
   return (
     <>
       <h2 className="dashboard__titulo">Mis secciones del período</h2>
+      {secciones.length > 0 && (
+        <p className="dashboard__texto">
+          {pendientes === 0 ? (
+            'No tienes evaluaciones pendientes de revisión.'
+          ) : (
+            <>
+              {textoPendientes(pendientes)}.{' '}
+              <Link to={RUTA_PAGINA_PENDIENTES}>Ver pendientes</Link>
+            </>
+          )}
+        </p>
+      )}
       {secciones.length === 0 ? (
         <p className="dashboard__texto">
           No tienes secciones a tu cargo en el período activo.
@@ -63,7 +82,7 @@ function SeccionesProfesor() {
 }
 
 function TarjetaSeccion({ seccion }: { seccion: SeccionDashboard }) {
-  const { curso, numero, horario, alumnos } = seccion
+  const { curso, numero, horario, alumnos, pendientesRevision } = seccion
   return (
     <Link className="dashboard__tarjeta" to={rutaSeccion(seccion.id)}>
       <span className="dashboard__codigo">{curso.codigo}</span>
@@ -81,6 +100,11 @@ function TarjetaSeccion({ seccion }: { seccion: SeccionDashboard }) {
         </ul>
       )}
       <p className="dashboard__alumnos">{textoAlumnos(alumnos)}</p>
+      {pendientesRevision > 0 && (
+        <p className="dashboard__alumnos">
+          {textoPendientes(pendientesRevision)}
+        </p>
+      )}
     </Link>
   )
 }

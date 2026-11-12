@@ -3,10 +3,13 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
+  fijarMotivo,
   ROL_APP,
 } from './base-de-datos.service.js'
 
 const UNIVERSIDAD = '00000000-0000-0000-0000-000000000001'
+const SUPERADMIN = '00000000-0000-0000-0000-000000000002'
+const FACULTAD = '00000000-0000-0000-0000-000000000003'
 const contexto = (rol: Rol = 'PROFESOR'): ContextoUniversidad => ({
   universidadId: UNIVERSIDAD,
   rol,
@@ -46,11 +49,31 @@ describe('BaseDeDatos.consultarEnUniversidad', () => {
 
     expect(consultas.mock.calls).toEqual([
       [`SET LOCAL ROLE ${ROL_APP}`],
-      [expect.stringContaining('set_config'), [UNIVERSIDAD, 'ALUMNO']],
+      // Sin superadmin, app.superadmin_id y app.facultad_id quedan vacíos.
+      [expect.stringContaining('set_config'), [UNIVERSIDAD, 'ALUMNO', '', '']],
       [sql, [UNIVERSIDAD, 'facultad']],
     ])
     // Nada pasa por la conexión sin transacción.
     expect(query).not.toHaveBeenCalled()
+  })
+
+  it('con un superadmin fija también su id y la facultad que eligió (MT-04)', async () => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await bd.consultarEnUniversidad(
+      {
+        universidadId: UNIVERSIDAD,
+        rol: 'ADMINISTRATIVO',
+        superadmin: { id: SUPERADMIN, facultadId: FACULTAD },
+      },
+      sql,
+      ['facultad'],
+    )
+
+    expect(consultas.mock.calls[1]).toEqual([
+      expect.stringContaining("set_config('app.superadmin_id', $3, true)"),
+      [UNIVERSIDAD, 'ADMINISTRATIVO', SUPERADMIN, FACULTAD],
+    ])
   })
 
   it.each([
@@ -97,17 +120,151 @@ describe('BaseDeDatos.consultarEnTodasLasUniversidades', () => {
     expect(query).not.toHaveBeenCalled()
   })
 
-  it.each(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as const)(
-    'responde 403 al rol %s',
+  it.each([
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+    'SUPERADMIN',
+  ] as const)('responde 403 al rol %s', async (rol) => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await expect(
+      bd.consultarEnTodasLasUniversidades(contexto(rol), sql),
+    ).rejects.toThrow(ForbiddenException)
+    expect(consultas).not.toHaveBeenCalled()
+  })
+})
+
+describe('BaseDeDatos.consultarComoSuperadmin (MT-04)', () => {
+  const sql = 'SELECT * FROM universidad'
+
+  it('corre en una transacción de solo lectura con el rol de superadmin', async () => {
+    const { bd, consultas, query } = crearBaseDeDatos([{ id: 'universidad' }])
+
+    await expect(
+      bd.consultarComoSuperadmin('SUPERADMIN', sql),
+    ).resolves.toEqual([{ id: 'universidad' }])
+
+    expect(consultas.mock.calls).toEqual([
+      ['SET TRANSACTION READ ONLY'],
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [expect.stringContaining("set_config('app.rol'"), ['SUPERADMIN']],
+      [sql, []],
+    ])
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+    undefined,
+  ] as const)('responde 403 al rol %s', async (rol) => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await expect(bd.consultarComoSuperadmin(rol, sql)).rejects.toThrow(
+      ForbiddenException,
+    )
+    expect(consultas).not.toHaveBeenCalled()
+  })
+})
+
+describe('BaseDeDatos.escribirComoSuperadmin (GES-23)', () => {
+  it('fija el rol de la API, el rol de superadmin y su id antes de escribir', async () => {
+    const { bd, consultas, query } = crearBaseDeDatos()
+
+    await bd.escribirComoSuperadmin(
+      { id: SUPERADMIN, rol: 'SUPERADMIN' },
+      (tx) => tx.query('UPDATE universidad SET nombre = $1', ['Norte']),
+    )
+
+    expect(consultas.mock.calls).toEqual([
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [
+        expect.stringContaining("set_config('app.superadmin_id', $2, true)"),
+        ['SUPERADMIN', SUPERADMIN],
+      ],
+      ['UPDATE universidad SET nombre = $1', ['Norte']],
+    ])
+    // Escribe: no es de solo lectura, y no fija universidad.
+    expect(consultas.mock.calls.flat()).not.toContain(
+      'SET TRANSACTION READ ONLY',
+    )
+    expect(query).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+    undefined,
+  ] as const)('responde 403 al rol %s', async (rol) => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await expect(
+      bd.escribirComoSuperadmin({ id: SUPERADMIN, rol }, (tx) =>
+        tx.query('SELECT 1'),
+      ),
+    ).rejects.toThrow(ForbiddenException)
+    expect(consultas).not.toHaveBeenCalled()
+  })
+})
+
+describe('BaseDeDatos.enUniversidadComoSuperadmin (GES-24)', () => {
+  const UNIVERSIDAD = '00000000-0000-0000-0000-00000000000a'
+
+  it('fija la universidad, el rol ADMINISTRATIVO y su id, sin facultad', async () => {
+    const { bd, consultas } = crearBaseDeDatos()
+
+    await bd.enUniversidadComoSuperadmin(
+      { id: SUPERADMIN, rol: 'SUPERADMIN' },
+      UNIVERSIDAD,
+      (tx) => tx.query('SELECT 1'),
+    )
+
+    expect(consultas.mock.calls).toEqual([
+      [`SET LOCAL ROLE ${ROL_APP}`],
+      [
+        expect.stringContaining("set_config('app.superadmin_id', $3, true)"),
+        [UNIVERSIDAD, 'ADMINISTRATIVO', SUPERADMIN, ''],
+      ],
+      ['SELECT 1'],
+    ])
+  })
+
+  it.each(['DIRECTOR', 'ADMINISTRATIVO', 'PROFESOR', undefined] as const)(
+    'responde 403 con el rol %s, sin consultar',
     async (rol) => {
       const { bd, consultas } = crearBaseDeDatos()
 
       await expect(
-        bd.consultarEnTodasLasUniversidades(contexto(rol), sql),
+        bd.enUniversidadComoSuperadmin(
+          { id: SUPERADMIN, rol },
+          UNIVERSIDAD,
+          (tx) => tx.query('SELECT 1'),
+        ),
       ).rejects.toThrow(ForbiddenException)
       expect(consultas).not.toHaveBeenCalled()
     },
   )
+})
+
+describe('fijarMotivo (MT-04)', () => {
+  it('fija app.motivo solo para la transacción', async () => {
+    const consultas = vi.fn(() => Promise.resolve([]))
+
+    await fijarMotivo({ query: consultas }, 'Error')
+
+    expect(consultas).toHaveBeenCalledWith(
+      `SELECT set_config('app.motivo', $1, true)`,
+      ['Error'],
+    )
+  })
 })
 
 describe('BaseDeDatos.obtenerEnUniversidad', () => {

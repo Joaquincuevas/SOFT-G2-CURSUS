@@ -51,6 +51,14 @@ Parameters:
     Type: String
     Default: cron(0 3 * * ? *)
     Description: Apagado automático diario (hora de Chile).
+  OrigenesFrontend:
+    Type: CommaDelimitedList
+    Default: ''
+    Description: >-
+      Orígenes del frontend que suben y descargan archivos del bucket (CORS),
+      separados por coma; cada uno admite un comodín *. Vacío: production usa
+      https://cursus-g2.vercel.app, y staging https://cursus-staging.vercel.app y
+      los previews de Vercel del proyecto.
 
 Conditions:
   EsStaging: !Equals [!Ref Entorno, staging]
@@ -59,6 +67,7 @@ Conditions:
   UsarOidc: !Equals [!Ref AccesoGitHub, oidc]
   CrearOidc:
     !And [!Condition UsarOidc, !Equals [!Ref CrearProveedorOidc, 'true']]
+  OrigenesPorDefecto: !Equals [!Join ['', !Ref OrigenesFrontend], '']
 
 Resources:
   # --- Imágenes ---------------------------------------------------------------
@@ -130,6 +139,89 @@ Resources:
       GenerateSecretString:
         PasswordLength: 24
         ExcludePunctuation: true
+
+  # Contraseña provisoria del superadmin (MT-04), que crea infra/aws/superadmin.sh.
+  # El superadmin la cambia en su primer ingreso. Se consulta en Secrets Manager
+  # y se entrega por privado.
+  SecretoSuperadmin:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'cursus-${Entorno}/superadmin-password'
+      Description: Contraseña provisoria del superadmin.
+      GenerateSecretString:
+        PasswordLength: 24
+        ExcludePunctuation: true
+
+  # --- Archivos de los cursos (MAT-01) --------------------------------------------
+
+  # Bucket privado: nada es público y todo se sube y descarga con URLs firmadas
+  # que genera el backend, solo para integrantes de la sección. El nombre lleva
+  # la cuenta porque los nombres de bucket son globales. Retain: nada se
+  # elimina, ni siquiera al borrar el stack. El versionado conserva un objeto
+  # si se sobrescribe.
+  BucketArchivos:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'cursus-${Entorno}-archivos-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # Sin ACLs: el bucket es dueño de todos sus objetos.
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: limpiar-subidas-incompletas
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      # El navegador sube con un POST firmado y descarga con GET. CORS no
+      # protege el bucket (eso lo hace la firma): solo deja que el frontend lea
+      # la respuesta.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [GET, HEAD, POST]
+            AllowedOrigins: !If
+              - OrigenesPorDefecto
+              - !If
+                - EsStaging
+                - - https://cursus-staging.vercel.app
+                  - https://cursus-*-joaquins-projects-a1ae46bc.vercel.app
+                - ['https://cursus-g2.vercel.app']
+              - !Ref OrigenesFrontend
+            AllowedHeaders: ['*']
+            MaxAge: 3600
+
+  # Solo HTTPS, también con una URL firmada.
+  PoliticaBucketArchivos:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketArchivos
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SoloHttps
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt BucketArchivos.Arn
+              - !Sub '${BucketArchivos.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
 
   # --- Red ----------------------------------------------------------------------
 
@@ -267,10 +359,38 @@ Resources:
                   - !Ref SecretoBaseDeDatos
                   - !Ref SecretoOrigen
                   - !Ref SecretoJwt
+                  - !Ref SecretoSuperadmin
                   - !If [EsStaging, !Ref SecretoSeed, !Ref AWS::NoValue]
 
+  # Rol con el que corre el backend (distinto de RolEjecucion, que solo
+  # descarga la imagen y lee los secretos). MAT-01: firma URLs del bucket de
+  # archivos y revisa que una subida llegó. Sin ListBucket ni DeleteObject:
+  # no lista el bucket y nada se elimina.
+  RolTarea:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'cursus-${Entorno}-ecs-tarea'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: archivos-de-cursos
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub '${BucketArchivos.Arn}/*'
+
   # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
-  # registra revisiones nuevas de la misma familia con otras imágenes.
+  # registra revisiones nuevas de la misma familia con otras imágenes
+  # (deploy.sh copia la definición vigente, con su rol y sus variables).
   DefinicionTarea:
     Type: AWS::ECS::TaskDefinition
     Condition: HayImagen
@@ -284,6 +404,7 @@ Resources:
         OperatingSystemFamily: LINUX
         CpuArchitecture: !Ref Arquitectura
       ExecutionRoleArn: !GetAtt RolEjecucion.Arn
+      TaskRoleArn: !GetAtt RolTarea.Arn
       ContainerDefinitions:
         - Name: backend
           Image: !Sub '${Repositorio.RepositoryUri}:${ImageTag}'
@@ -300,6 +421,9 @@ Resources:
             - { Name: POSTGRES_PORT, Value: !GetAtt BaseDeDatos.Endpoint.Port }
             - { Name: POSTGRES_DB, Value: !Sub 'cursus_${Entorno}' }
             - { Name: POSTGRES_SSL, Value: 'true' }
+            # MAT-01. Las credenciales de S3 vienen de RolTarea.
+            - { Name: S3_BUCKET, Value: !Ref BucketArchivos }
+            - { Name: S3_REGION, Value: !Ref AWS::Region }
           Secrets:
             - Name: POSTGRES_USER
               ValueFrom: !Sub '${SecretoBaseDeDatos}:username::'
@@ -309,6 +433,9 @@ Resources:
               ValueFrom: !Ref SecretoOrigen
             - Name: JWT_SECRET
               ValueFrom: !Ref SecretoJwt
+            # La usa la tarea que crea el superadmin (infra/aws/superadmin.sh).
+            - Name: SUPERADMIN_PASSWORD
+              ValueFrom: !Ref SecretoSuperadmin
             # Solo staging: la usa la tarea del seed (infra/aws/seed.sh).
             - !If
               - EsStaging
@@ -509,9 +636,14 @@ Resources:
           - Effect: Allow
             Action: ecs:DescribeTasks
             Resource: !Sub 'arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${Cluster}/*'
+          # register-task-definition pasa los dos roles de la definición: el de
+          # ejecución y, desde MAT-01, el de la tarea (RolTarea, con el que el
+          # backend firma S3). Sin el segundo, el deploy falla con AccessDenied.
           - Effect: Allow
             Action: iam:PassRole
-            Resource: !GetAtt RolEjecucion.Arn
+            Resource:
+              - !GetAtt RolEjecucion.Arn
+              - !GetAtt RolTarea.Arn
             Condition:
               StringEquals:
                 iam:PassedToService: ecs-tasks.amazonaws.com
@@ -585,6 +717,9 @@ Outputs:
     Value: !Ref GrupoTareas
   GrupoLogs:
     Value: !Ref Logs
+  BucketArchivos:
+    Description: Bucket privado de los archivos de los cursos (MAT-01).
+    Value: !Ref BucketArchivos
   SecretoOrigenArn:
     Value: !Ref SecretoOrigen
   SecretoSeedArn:

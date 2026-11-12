@@ -37,6 +37,13 @@ const USUARIOS: Record<
     universidadNombre: 'Universidad Demo Norte',
     facultadNombre: 'Facultad de Ingeniería',
   },
+  // MT-04: ya eligió Ingeniería de Norte. superadminSinElegir() lo deja sin
+  // elección, como queda después del login.
+  SUPERADMIN: {
+    nombre: 'Superadmin',
+    universidadNombre: 'Universidad Demo Norte',
+    facultadNombre: 'Facultad de Ingeniería',
+  },
 }
 
 export function usuarioDePrueba(rol: Rol): UsuarioSesion {
@@ -46,13 +53,28 @@ export function usuarioDePrueba(rol: Rol): UsuarioSesion {
     correo:
       rol === 'ADMINISTRATIVO'
         ? 'administrativo.ingenieria@norte.cursus.test'
-        : `${rol.toLowerCase()}@norte.cursus.test`,
+        : rol === 'SUPERADMIN'
+          ? 'superadmin@cursus.test'
+          : `${rol.toLowerCase()}@norte.cursus.test`,
     rol,
     universidadId: 'universidad-norte',
+    universidadColor: rol === 'DIRECTOR' ? null : '#1b4f72',
     debeCambiarPassword: false,
     // PERIODO del seed: año 2026, semestre 2.
     periodoActivo: { id: 'periodo-2026-2', anio: 2026, semestre: 2 },
     ...USUARIOS[rol],
+  }
+}
+
+// MT-04: el superadmin recién llegado, sin universidad ni facultad elegidas.
+export function superadminSinElegir(): UsuarioSesion {
+  return {
+    ...usuarioDePrueba('SUPERADMIN'),
+    universidadId: null,
+    universidadColor: null,
+    universidadNombre: 'CURSUS',
+    facultadNombre: null,
+    periodoActivo: null,
   }
 }
 
@@ -80,10 +102,90 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
 // alumnos de una sección para su profesor (ESP-05): vacía salvo que el test
 // la simule.
 const RUTAS_VACIAS_CON_ID: [RegExp, RutaSimulada][] = [
+  [/^\/api\/espacio\/secciones\/[^/]+\/silabo$/, () => []],
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/silabo-vigente$/,
+    () => ({ silabo: null }),
+  ],
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/asistencia\/resumen$/,
+    () => ({ clasesRegistradas: 0, alumnos: [] }),
+  ],
+  [/^\/api\/espacio\/secciones\/[^/]+\/mi-asistencia$/, () => []],
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/mi-asistencia\/resumen$/,
+    () => ({
+      clases: [],
+      registradas: 0,
+      asistidas: 0,
+      sinMarca: 0,
+      porcentaje: null,
+    }),
+  ],
+  // Entregas de una actividad para el equipo docente (MAT-10).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/entregas$/,
+    () => [],
+  ],
+  // Notas propias del alumno (NOT-13).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/mis-notas$/,
+    () => ({
+      evaluaciones: [],
+      notaFinal: { tipo: 'PARCIAL', nota: null, porcentajeEvaluado: 0 },
+    }),
+  ],
+  // Notas finales de la sección para su profesor (NOT-14).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/notas-finales$/,
+    () => ({ alumnos: [] }),
+  ],
   [
     /^\/api\/espacio\/secciones\/[^/]+\/alumnos$/,
     () => ({ total: 0, alumnos: [] }),
   ],
+  // Clases de la sección (ASI-01).
+  [/^\/api\/espacio\/secciones\/[^/]+\/clases$/, () => []],
+  // Asistencia de una clase (ASI-02): sin registrar y sin alumnos.
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/clases\/[^/]+\/asistencia$/,
+    () => ({
+      clase: {
+        id: 'clase',
+        fecha: '2026-09-14',
+        inicio: '08:30',
+        termino: '10:00',
+        sala: 'Sala',
+      },
+      registrada: null,
+      alumnos: [],
+    }),
+  ],
+  // Evaluaciones de la sección (NOT-01).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones$/,
+    () => ({ evaluaciones: [], sumaPonderaciones: 0 }),
+  ],
+  // Notas de una evaluación (NOT-05).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/evaluaciones\/[^/]+\/notas$/,
+    () => ({
+      evaluacion: { id: 'e', nombre: '', fecha: '', ponderacion: 0 },
+      alumnos: [],
+    }),
+  ],
+  // Anuncios del curso de la sección (ANU-01).
+  [/^\/api\/espacio\/secciones\/[^/]+\/anuncios$/, () => []],
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/anuncios\/lecturas$/,
+    () => new Response(null, { status: 204 }),
+  ],
+  // Actividades de entrega de la sección (MAT-08).
+  [
+    /^\/api\/espacio\/secciones\/[^/]+\/actividades\/[^/]+\/mi-entrega$/,
+    () => ({ entrega: null, cerrada: false }),
+  ],
+  [/^\/api\/espacio\/secciones\/[^/]+\/actividades$/, () => []],
 ]
 
 // Simula el backend: /api/auth/login entrega un token, /api/auth/refresh

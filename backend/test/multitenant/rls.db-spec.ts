@@ -182,10 +182,13 @@ describe('RLS por universidad', () => {
       })
     })
 
+    // En carrera y no en facultad: universidad y facultad solo las escribe el
+    // superadmin (GES-23, test/gestion/universidades).
     it('permite crear un registro en su universidad', async () => {
       await comoApp(administrativo(), async (q) => {
         await q.query(
-          `INSERT INTO facultad (universidad_id, nombre) VALUES ($1, 'Nueva')`,
+          `INSERT INTO carrera (universidad_id, facultad_id, nombre)
+           SELECT $1, id, 'Nueva' FROM facultad WHERE universidad_id = $1 LIMIT 1`,
           [universidades[NORTE]],
         )
       })
@@ -327,7 +330,9 @@ describe('contrato del schema', () => {
       { tabla: string; rls: boolean; comandos: string[] }[]
     >(
       `SELECT c.relname AS tabla, c.relrowsecurity AS rls,
-              ARRAY(SELECT p.cmd FROM pg_policies p
+              -- Sin repetir: una tabla puede tener varias políticas para un
+              -- comando (NOT-11: el UPDATE del ayudante y el del profesor).
+              ARRAY(SELECT DISTINCT p.cmd FROM pg_policies p
                      WHERE p.schemaname = 'public' AND p.tablename = c.relname
                        AND $1 = ANY (p.roles)
                      ORDER BY p.cmd) AS comandos
@@ -347,17 +352,187 @@ describe('contrato del schema', () => {
         ...TABLAS.map(([tabla]) => tabla),
         'curso_cambio',
         'asignacion_cambio',
+        // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-01).
+        'clase',
+        // Sin filas en el seed: su RLS la prueba test/anuncios (ANU-01).
+        'anuncio',
+        // Auditoría sin filas en el seed: su RLS la prueba test/anuncios (ANU-05).
+        'anuncio_cambio',
+        'lectura_anuncio',
+        // Sin filas en el seed: su RLS la prueba test/notas (NOT-01).
+        'evaluacion',
+        // Auditoría de solo adición: test/notas/evaluaciones (NOT-03).
+        'evaluacion_cambio',
+        // Auditoría sin filas en el seed: test/notas/auditoria (NOT-04).
+        'nota_cambio',
+        // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-02).
+        'asistencia',
+        // Auditoría sin filas en el seed: test/asistencia (ASI-04).
+        'asistencia_cambio',
+        // Sin filas en el seed: su RLS la prueba test/materiales (MAT-08).
+        'actividad',
+        // MAT-09: versiones de solo adición; prueba test/materiales/entregas.
+        'entrega',
+        // Sin filas en el seed: su RLS la prueba test/notas (NOT-05).
+        'nota',
+        // Sin filas en el seed: su RLS la prueba test/notas (NOT-07).
+        'revision_notas',
+        // GES-25: su RLS la prueba test/gestion/profesores-seccion.
+        'seccion_profesor',
+        // Auditoría del superadmin: test/multitenant/superadmin-rls (MT-04).
+        'superadmin_cambio',
+        // Sin filas en el seed: su RLS la prueba test/archivos (MAT-01).
+        'archivo',
+        // Sin filas en el seed: su RLS la prueba test/materiales (MAT-04).
+        'material',
+        'silabo',
+        // MAT-07: versiones de solo adición; prueba test/materiales/versiones.
+        'material_version',
       ].sort(),
     )
     for (const tabla of tablas) {
       expect(tabla).toMatchObject({
         rls: true,
-        // Las auditorías son de solo adición: no conceden UPDATE a la API.
-        comandos: ['curso_cambio', 'asignacion_cambio'].includes(tabla.tabla)
-          ? ['INSERT', 'SELECT']
-          : ['INSERT', 'SELECT', 'UPDATE'],
+        // Las auditorías y las lecturas son de solo adición: no conceden
+        // UPDATE a la API. La del superadmin la escribe un trigger, así que la
+        // API solo la lee.
+        comandos:
+          tabla.tabla === 'evaluacion_cambio'
+            ? []
+            : tabla.tabla === 'superadmin_cambio'
+              ? ['SELECT']
+              : [
+                    'curso_cambio',
+                    'asignacion_cambio',
+                    'nota_cambio',
+                    'anuncio_cambio',
+                    'asistencia_cambio',
+                    'lectura_anuncio',
+                    'entrega',
+                    'silabo',
+                    'material_version',
+                  ].includes(tabla.tabla)
+                ? ['INSERT', 'SELECT']
+                : ['INSERT', 'SELECT', 'UPDATE'],
       })
     }
+  })
+
+  // MT-04 (ADR 0002): todo lo que el superadmin crea o modifica queda en
+  // superadmin_cambio. Si una migración nueva agrega una tabla con
+  // universidad_id y no le pone el trigger, este test falla. lectura_anuncio
+  // (ANU-04) no va: solo la escribe el alumno (su RLS de INSERT exige el rol
+  // ALUMNO), así que el superadmin nunca la modifica.
+  it('toda tabla con universidad_id, salvo las auditorías, audita al superadmin', async () => {
+    const sinTrigger = await bd.query<{ tabla: string }[]>(
+      `SELECT c.relname AS tabla
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
+          AND c.relname NOT IN ('curso_cambio', 'asignacion_cambio',
+                                'nota_cambio', 'anuncio_cambio', 'asistencia_cambio', 'superadmin_cambio', 'evaluacion_cambio',
+                                'lectura_anuncio')
+          AND (c.relname = 'universidad' OR EXISTS (
+            SELECT FROM information_schema.columns col
+             WHERE col.table_schema = 'public' AND col.table_name = c.relname
+               AND col.column_name = 'universidad_id'))
+          AND NOT EXISTS (
+            SELECT FROM pg_trigger t
+             WHERE t.tgrelid = c.oid
+               AND t.tgname = 'tg_' || c.relname || '_auditar_superadmin')
+        ORDER BY c.relname`,
+    )
+    expect(sinTrigger).toEqual([])
+  })
+
+  // Estas políticas requieren que la API fije la identidad de sesión:
+  // NOT-11 y NOT-12 para aprobar y devolver notas, MAT-01 para escribir
+  // archivos propios, MAT-04 para registrar materiales, MAT-07 para sus
+  // versiones, MAT-10 para que el
+  // equipo docente lea las entregas de su sección, NOT-03 para editar
+  // evaluaciones y NOT-13 para que el alumno lea sus notas publicadas.
+  it('enumera las políticas que requieren fijar el usuario de sesión', async () => {
+    const politicas = await bd.query<
+      { tabla: string; politica: string; comando: string }[]
+    >(
+      `SELECT tablename AS tabla, policyname AS politica, cmd AS comando
+         FROM pg_policies
+        WHERE schemaname = 'public'
+          AND (coalesce(qual, '') || coalesce(with_check, '')) LIKE '%usuario_actual()%'
+        ORDER BY tablename, policyname`,
+    )
+    expect(politicas).toEqual([
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'archivo',
+        politica: 'pol_archivo_modificacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'entrega',
+        politica: 'pol_entrega_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'entrega',
+        politica: 'pol_entrega_lectura',
+        comando: 'SELECT',
+      },
+      {
+        tabla: 'entrega',
+        politica: 'pol_entrega_lectura_docente',
+        comando: 'SELECT',
+      },
+      {
+        tabla: 'evaluacion',
+        politica: 'pol_evaluacion_modificacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'material',
+        politica: 'pol_material_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'material',
+        politica: 'pol_material_lectura',
+        comando: 'SELECT',
+      },
+      {
+        tabla: 'material',
+        politica: 'pol_material_modificacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'material_version',
+        politica: 'pol_material_version_insercion',
+        comando: 'INSERT',
+      },
+      {
+        tabla: 'material_version',
+        politica: 'pol_material_version_lectura',
+        comando: 'SELECT',
+      },
+      { tabla: 'nota', politica: 'pol_nota_lectura_alumno', comando: 'SELECT' },
+      { tabla: 'nota', politica: 'pol_nota_publicacion', comando: 'UPDATE' },
+      { tabla: 'nota', politica: 'pol_nota_recorreccion', comando: 'UPDATE' },
+      {
+        tabla: 'revision_notas',
+        politica: 'pol_revision_notas_aprobacion',
+        comando: 'UPDATE',
+      },
+      {
+        tabla: 'revision_notas',
+        politica: 'pol_revision_notas_devolucion',
+        comando: 'UPDATE',
+      },
+      { tabla: 'silabo', politica: 'pol_silabo_insercion', comando: 'INSERT' },
+      { tabla: 'silabo', politica: 'pol_silabo_lectura', comando: 'SELECT' },
+    ])
   })
 
   it('el rol de la API no tiene DELETE sobre ninguna tabla', async () => {

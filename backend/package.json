@@ -22,9 +22,14 @@
     "migration:show": "npm run typeorm -- migration:show",
     "migration:run:prod": "node ../node_modules/typeorm/cli.js -d dist/database/data-source.js migration:run",
     "seed": "tsx src/database/ejecutar-seed.ts",
-    "seed:prod": "node dist/database/ejecutar-seed.js"
+    "seed:prod": "node dist/database/ejecutar-seed.js",
+    "superadmin": "tsx src/database/ejecutar-crear-superadmin.ts",
+    "superadmin:prod": "node dist/database/ejecutar-crear-superadmin.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1157.0",
+    "@aws-sdk/s3-presigned-post": "^3.1157.0",
+    "@aws-sdk/s3-request-presigner": "^3.1157.0",
     "@cursus/shared": "^0.1.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
