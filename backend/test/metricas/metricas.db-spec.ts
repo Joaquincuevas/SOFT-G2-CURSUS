@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  ReporteFacultad,
   ResumenUniversidad,
   NotasFinalesSeccion,
   ResumenAsistenciaSeccion,
@@ -491,6 +492,119 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       estado,
     )
   const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
+
+  it('el administrativo ve carreras y cursos solo de su facultad', async () => {
+    const reporte = await obtener<ReporteFacultad>(
+      ADMIN_INGENIERIA,
+      '/api/metricas/facultad',
+    )
+    expect(reporte.facultad.nombre).toBe('Facultad de Ingeniería')
+    expect(reporte.carreras.length).toBeGreaterThan(0)
+    const [{ cursoId }] = await bd.query<{ cursoId: string }[]>(
+      `SELECT curso_id AS "cursoId" FROM seccion WHERE id = $1`,
+      [ids.norte],
+    )
+    const curso = reporte.carreras
+      .flatMap((carrera) => carrera.cursos)
+      .find((curso) => curso.id === cursoId)
+    expect(curso).toMatchObject({
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    })
+    // Los cursos sin notas ni clases traen null, no 0, en los tres indicadores.
+    const cursos = reporte.carreras.flatMap((carrera) => carrera.cursos)
+    const sinDatos = cursos.filter((c) => c.id !== cursoId)
+    expect(sinDatos.length).toBeGreaterThan(0)
+    for (const c of sinDatos) {
+      expect(c.aprobacion.valor).toBeNull()
+      expect(c.promedio.valor).toBeNull()
+      expect(c.asistencia.valor).toBeNull()
+    }
+    // Nada de otra universidad: el curso con datos de Sur no aparece.
+    const [{ cursoSur }] = await bd.query<{ cursoSur: string }[]>(
+      `SELECT curso_id AS "cursoSur" FROM seccion WHERE id = $1`,
+      [ids.sur],
+    )
+    expect(cursos.map((c) => c.id)).not.toContain(cursoSur)
+    const [{ facultadId }] = await bd.query<{ facultadId: string }[]>(
+      `SELECT facultad_id AS "facultadId" FROM usuario WHERE correo = $1`,
+      [ADMIN_INGENIERIA],
+    )
+    const permitidos = await bd.query<{ id: string }[]>(
+      `SELECT c.id FROM curso c
+         JOIN carrera ca ON ca.id = c.carrera_id AND ca.universidad_id = c.universidad_id
+        WHERE ca.facultad_id = $1`,
+      [facultadId],
+    )
+    expect(
+      reporte.carreras
+        .flatMap((carrera) => carrera.cursos)
+        .every((curso) =>
+          permitidos.some((permitido) => permitido.id === curso.id),
+        ),
+    ).toBe(true)
+
+    await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+      cursoId,
+    ])
+    try {
+      const archivado = await obtener<ReporteFacultad>(
+        ADMIN_INGENIERIA,
+        '/api/metricas/facultad',
+      )
+      expect(archivado.carreras.flatMap((carrera) => carrera.cursos)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: cursoId })]),
+      )
+    } finally {
+      await bd.query('UPDATE curso SET archived_at = NULL WHERE id = $1', [
+        cursoId,
+      ])
+    }
+  })
+
+  // Cada administrativo ve solo su facultad: la de otra facultad de la misma
+  // universidad y la de otra universidad no comparten cursos ni datos.
+  it('cada administrativo recibe el reporte de su propia facultad', async () => {
+    const [{ cursoNorte }] = await bd.query<{ cursoNorte: string }[]>(
+      `SELECT curso_id AS "cursoNorte" FROM seccion WHERE id = $1`,
+      [ids.norte],
+    )
+    const [{ cursoSur }] = await bd.query<{ cursoSur: string }[]>(
+      `SELECT curso_id AS "cursoSur" FROM seccion WHERE id = $1`,
+      [ids.sur],
+    )
+    const cursosDe = (r: ReporteFacultad) =>
+      r.carreras.flatMap((carrera) => carrera.cursos)
+    const ingenieria = await obtener<ReporteFacultad>(
+      ADMIN_INGENIERIA,
+      '/api/metricas/facultad',
+    )
+    const economia = await obtener<ReporteFacultad>(
+      'administrativo.economia@norte.cursus.test',
+      '/api/metricas/facultad',
+    )
+    const sur = await obtener<ReporteFacultad>(
+      'administrativo@sur.cursus.test',
+      '/api/metricas/facultad',
+    )
+    expect(ingenieria.facultad.nombre).toBe('Facultad de Ingeniería')
+    expect(economia.facultad.nombre).toBe('Facultad de Economía y Negocios')
+    expect(sur.facultad.id).not.toBe(ingenieria.facultad.id)
+    // Los cursos con datos están solo en su facultad.
+    expect(cursosDe(ingenieria).map((c) => c.id)).toContain(cursoNorte)
+    expect(cursosDe(economia).map((c) => c.id)).not.toContain(cursoNorte)
+    expect(cursosDe(sur).map((c) => c.id)).toContain(cursoSur)
+    expect(cursosDe(ingenieria).map((c) => c.id)).not.toContain(cursoSur)
+    // Ningún curso se repite entre las facultades de la misma universidad.
+    const deIngenieria = new Set(cursosDe(ingenieria).map((c) => c.id))
+    expect(cursosDe(economia).some((c) => deIngenieria.has(c.id))).toBe(false)
+    expect(cursosDe(sur).find((c) => c.id === cursoSur)?.aprobacion).toEqual({
+      valor: 100,
+      aprobados: 1,
+      evaluados: 1,
+    })
+  })
 
   it('lista las universidades con sus indicadores', async () => {
     const lista = await obtener<ResumenUniversidad[]>(
