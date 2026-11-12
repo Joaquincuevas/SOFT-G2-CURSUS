@@ -1,9 +1,64 @@
-import type { MetricasConsolidadas, Rol } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import type {
+  MetricasConsolidadas,
+  MetricasUniversidad,
+  ResumenUniversidad,
+  Rol,
+} from '@cursus/shared'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const RUTA = '/api/metricas/consolidado'
+const UNIVERSIDADES = '/api/metricas/universidades'
+const FACULTADES = `${UNIVERSIDADES}/u-norte/facultades`
+
+const SIN_INDICADORES = {
+  aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+  promedio: { valor: null, alumnos: 0 },
+  asistencia: { valor: null, presentes: 0, registros: 0 },
+}
+const LISTA: ResumenUniversidad[] = [
+  {
+    id: 'u-norte',
+    nombre: 'Universidad Demo Norte',
+    periodo: { anio: 2026, semestre: 2 },
+    aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+    promedio: { valor: 4.5, alumnos: 2 },
+    asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    alumnos: 40,
+    cursos: 8,
+  },
+  {
+    id: 'u-sur',
+    nombre: 'Universidad Demo Sur',
+    periodo: { anio: 2026, semestre: 2 },
+    ...SIN_INDICADORES,
+    alumnos: 0,
+    cursos: 0,
+  },
+]
+const DETALLE: MetricasUniversidad = {
+  universidad: { id: 'u-norte', nombre: 'Universidad Demo Norte' },
+  periodo: { anio: 2026, semestre: 2 },
+  facultades: [
+    {
+      id: 'f-ing',
+      nombre: 'Ingeniería',
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+      alumnos: 30,
+      cursos: 5,
+    },
+    {
+      id: 'f-cs',
+      nombre: 'Ciencias',
+      ...SIN_INDICADORES,
+      alumnos: 0,
+      cursos: 0,
+    },
+  ],
+}
 
 const METRICAS: MetricasConsolidadas = {
   periodos: [
@@ -21,6 +76,7 @@ describe('Indicadores del Director (MET-01)', () => {
   test('muestra las tres tarjetas con valor, unidad y n', async () => {
     await renderConSesion('DIRECTOR', '/indicadores', {
       [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
     })
     const tarjetas = within(
       await screen.findByRole('list', { name: 'Indicadores' }),
@@ -56,6 +112,7 @@ describe('Indicadores del Director (MET-01)', () => {
 
   test('un indicador sin denominador dice "Sin datos suficientes" en vez de 0', async () => {
     await renderConSesion('DIRECTOR', '/indicadores', {
+      [UNIVERSIDADES]: () => LISTA,
       [RUTA]: () => ({
         ...METRICAS,
         periodos: [METRICAS.periodos[0]],
@@ -90,6 +147,7 @@ describe('Indicadores del Director (MET-01)', () => {
   test('si la API falla, avisa y permite reintentar', async () => {
     let intentos = 0
     await renderConSesion('DIRECTOR', '/indicadores', {
+      [UNIVERSIDADES]: () => LISTA,
       [RUTA]: () => (intentos++ === 0 ? json({}, 500) : METRICAS),
     })
     expect(
@@ -107,6 +165,153 @@ describe('Indicadores del Director (MET-01)', () => {
     async (rol) => {
       await renderConSesion(rol, '/')
       expect(screen.queryByRole('link', { name: 'Indicadores' })).toBeNull()
+    },
+  )
+})
+
+describe('drill-down de universidad a facultad (MET-04)', () => {
+  test('la lista de universidades lleva a sus facultades con los tres indicadores', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+      [FACULTADES]: () => DETALLE,
+    })
+    const lista = within(
+      await screen.findByRole('region', { name: 'Universidades' }),
+    )
+    expect(
+      lista.getByText(
+        /Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %/,
+      ),
+    ).toBeInTheDocument()
+    // Sur no tiene datos: se dice, no se muestra 0.
+    expect(
+      lista.getAllByText(/Aprobación: Sin datos suficientes/),
+    ).toHaveLength(1)
+    fireEvent.click(lista.getByRole('link', { name: 'Universidad Demo Norte' }))
+
+    const facultades = within(
+      await screen.findByRole('list', { name: 'Facultades' }),
+    )
+    const ingenieria = within(
+      facultades.getByRole('article', { name: 'Ingeniería' }),
+    )
+    expect(ingenieria.getByText('50,0')).toBeInTheDocument()
+    expect(ingenieria.getByText('4,50')).toBeInTheDocument()
+    expect(ingenieria.getByText('66,67')).toBeInTheDocument()
+    expect(
+      ingenieria.getByText('30 alumnos inscritos en 5 cursos.'),
+    ).toBeInTheDocument()
+    // Una facultad sin datos dice "Sin datos suficientes" en las tres tarjetas.
+    expect(
+      within(
+        facultades.getByRole('article', { name: 'Ciencias' }),
+      ).getAllByText('Sin datos suficientes'),
+    ).toHaveLength(3)
+    expect(screen.getByRole('combobox', { name: 'Período' })).toBeDisabled()
+  })
+
+  test('el breadcrumb vuelve al consolidado', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+      [FACULTADES]: () => DETALLE,
+    })
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    await waitFor(() =>
+      expect(migas.getByText('Universidad Demo Norte')).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    )
+    fireEvent.click(migas.getByRole('link', { name: 'Indicadores' }))
+    expect(
+      await screen.findByRole('list', { name: 'Indicadores' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Universidades' }),
+    ).toBeInTheDocument()
+  })
+
+  test('el período de la URL se pide al bajar y se conserva al volver', async () => {
+    const pedidas: string[] = []
+    const registrar =
+      (ruta: string, cuerpo: unknown) => (_: unknown, url?: string) => {
+        pedidas.push(url ?? ruta)
+        return cuerpo
+      }
+    await renderConSesion('DIRECTOR', '/indicadores?periodo=2026-1', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: registrar(UNIVERSIDADES, LISTA),
+      [FACULTADES]: registrar(FACULTADES, DETALLE),
+    })
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
+    )
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    await screen.findByRole('list', { name: 'Facultades' })
+    expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
+    expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
+    // El enlace de vuelta conserva el período.
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+  })
+
+  test('una universidad sin facultades lo dice', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [FACULTADES]: () => ({ ...DETALLE, facultades: [] }),
+    })
+    expect(
+      await screen.findByText('Esta universidad no tiene facultades.'),
+    ).toBeInTheDocument()
+  })
+
+  test('si la API falla, avisa y permite reintentar', async () => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [FACULTADES]: () => (intentos++ === 0 ? json({}, 500) : DETALLE),
+    })
+    expect(
+      await screen.findByText('No pudimos cargar las facultades.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('list', { name: 'Facultades' }),
+    ).toBeInTheDocument()
+  })
+
+  test('una universidad inexistente (404) ofrece volver', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [FACULTADES]: () => json({ message: 'La universidad no existe' }, 404),
+    })
+    expect(
+      await screen.findByText('La universidad no existe.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Volver a Indicadores' }),
+    ).toHaveAttribute('href', '/indicadores')
+  })
+
+  // Solo el Director: otro rol que escribe la URL no llega a la vista ni la
+  // pide a la API.
+  test.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO'])(
+    '%s no accede a las facultades por la URL',
+    async (rol) => {
+      const pedida = vi.fn(() => DETALLE)
+      await renderConSesion(rol, '/indicadores/universidades/u-norte', {
+        [FACULTADES]: pedida,
+      })
+      expect(
+        screen.queryByRole('navigation', { name: 'Ruta de navegación' }),
+      ).toBeNull()
+      expect(screen.queryByRole('list', { name: 'Facultades' })).toBeNull()
+      expect(pedida).not.toHaveBeenCalled()
     },
   )
 })
