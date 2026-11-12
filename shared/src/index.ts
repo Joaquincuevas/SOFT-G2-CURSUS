@@ -52,6 +52,7 @@ export * from './notas.js'
 export * from './materiales.js'
 export * from './superadmin.js'
 export * from './colores.js'
+export * from './metricas.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {

@@ -16,6 +16,7 @@ import { AnunciosModule } from './anuncios/anuncios.module.js'
 import { MaterialesModule } from './materiales/materiales.module.js'
 import { SuperadminModule } from './superadmin/superadmin.module.js'
 import { ArchivosModule } from './archivos/archivos.module.js'
+import { MetricasModule } from './metricas/metricas.module.js'
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ArchivosModule } from './archivos/archivos.module.js'
     NotasModule,
     AnunciosModule,
     MaterialesModule,
+    MetricasModule,
     SuperadminModule,
     ArchivosModule,
   ],

@@ -29,6 +29,7 @@ const SUJETOS: SujetoTabla[] = [
   'RevisionNotas',
   'Material',
   'MaterialVersion',
+  'Metricas',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -65,6 +66,8 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Curso: LECTURA,
     Seccion: LECTURA,
     Inscripcion: LECTURA,
+    // MET-01: indicadores consolidados.
+    Metricas: LECTURA,
   },
   ADMINISTRATIVO: { ...ADMINISTRATIVO },
   // GES-23: además crea y edita universidades y facultades.
