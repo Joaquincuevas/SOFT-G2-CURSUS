@@ -1069,3 +1069,196 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('comparación entre universidades (MET-02)', () => {
+  const COMPARAR = '/indicadores/comparar'
+
+  const celdas = (nombre: string) =>
+    within(screen.getByRole('row', { name: new RegExp(nombre) }))
+      .getAllByRole('cell')
+      .map((c) => c.textContent)
+
+  const relleno = (nombre: string) =>
+    within(screen.getByRole('list', { name: /por universidad$/ }))
+      .getByText(nombre)
+      .closest('li')
+      ?.querySelector('.indicadores__barra-relleno')
+
+  test('muestra los tres indicadores de cada universidad lado a lado en una tabla', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('table', {
+      name: 'Indicadores por universidad',
+    })
+    expect(
+      within(tabla)
+        .getAllByRole('columnheader')
+        .map((c) => c.textContent),
+    ).toEqual([
+      'Universidad',
+      'Período',
+      'Tasa de aprobación',
+      'Promedio',
+      'Asistencia',
+      'Alumnos',
+    ])
+    expect(celdas('Universidad Demo Norte')).toEqual([
+      '2026-2',
+      '50,0 %',
+      '4,50',
+      '66,67 %',
+      '40',
+    ])
+    // Sur no tiene datos: se dice, no se muestra 0.
+    expect(celdas('Universidad Demo Sur')).toEqual([
+      '2026-2',
+      'Sin datos suficientes',
+      'Sin datos suficientes',
+      'Sin datos suficientes',
+      '0',
+    ])
+  })
+
+  test('una universidad sin el período pedido lo indica en la tabla', async () => {
+    await renderConSesion('DIRECTOR', `${COMPARAR}?periodo=2026-1`, {
+      [UNIVERSIDADES]: () => [LISTA[0], { ...LISTA[1], periodo: null }],
+    })
+    await screen.findByRole('table', { name: 'Indicadores por universidad' })
+    expect(celdas('Universidad Demo Sur')[0]).toBe('Sin período')
+  })
+
+  test('el gráfico muestra la tasa de aprobación y se puede elegir otro indicador', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const selector = await screen.findByRole('combobox', {
+      name: 'Indicador a graficar',
+    })
+    expect(selector).toHaveValue('aprobacion')
+    const barras = within(
+      screen.getByRole('list', { name: 'Tasa de aprobación por universidad' }),
+    )
+    expect(barras.getByText('50,0 %')).toBeInTheDocument()
+    expect(relleno('Universidad Demo Norte')).toHaveStyle({ width: '50.00%' })
+    // Sin datos: no hay barra, se dice.
+    expect(relleno('Universidad Demo Sur')).toBeNull()
+    expect(barras.getByText('Sin datos suficientes')).toBeInTheDocument()
+
+    fireEvent.change(selector, { target: { value: 'promedio' } })
+    const promedio = within(
+      screen.getByRole('list', { name: 'Promedio por universidad' }),
+    )
+    expect(promedio.getByText('4,50')).toBeInTheDocument()
+    // El promedio se dibuja sobre la escala 1,0 a 7,0: 4,5 es 3,5 / 6.
+    expect(relleno('Universidad Demo Norte')).toHaveStyle({ width: '58.33%' })
+
+    fireEvent.change(selector, { target: { value: 'asistencia' } })
+    expect(
+      within(
+        screen.getByRole('list', { name: 'Asistencia por universidad' }),
+      ).getByText('66,67 %'),
+    ).toBeInTheDocument()
+    expect(relleno('Universidad Demo Norte')).toHaveStyle({ width: '66.67%' })
+  })
+
+  test('se llega desde el consolidado conservando el período, y el breadcrumb vuelve', async () => {
+    const pedidas: string[] = []
+    await renderConSesion('DIRECTOR', '/indicadores?periodo=2026-1', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: (_, url) => {
+        pedidas.push(url ?? UNIVERSIDADES)
+        return LISTA
+      },
+    })
+    const enlace = await screen.findByRole('link', {
+      name: 'Comparar universidades',
+    })
+    expect(enlace).toHaveAttribute('href', `${COMPARAR}?periodo=2026-1`)
+    fireEvent.click(enlace)
+    await screen.findByRole('table', { name: 'Indicadores por universidad' })
+    expect(pedidas.every((u) => u === `${UNIVERSIDADES}?periodo=2026-1`)).toBe(
+      true,
+    )
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-1',
+    )
+    const migas = within(
+      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+  })
+
+  test('cambiar el período vuelve a pedir la comparación', async () => {
+    const pedidas: string[] = []
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: (_, url) => {
+        pedidas.push(url ?? UNIVERSIDADES)
+        return LISTA
+      },
+    })
+    await screen.findByRole('table', { name: 'Indicadores por universidad' })
+    expect(pedidas).toContain(UNIVERSIDADES)
+    expect(pedidas.some((u) => u.includes('periodo='))).toBe(false)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Período' }), {
+      target: { value: '2026-1' },
+    })
+    await waitFor(() =>
+      expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`),
+    )
+  })
+
+  test('un período inválido en la URL lo avisa y no pide nada', async () => {
+    const pedida = vi.fn(() => LISTA)
+    await renderConSesion('DIRECTOR', `${COMPARAR}?periodo=activo`, {
+      [UNIVERSIDADES]: pedida,
+    })
+    expect(
+      await screen.findByText(/El período «activo» no es válido/),
+    ).toBeInTheDocument()
+    expect(pedida).not.toHaveBeenCalled()
+  })
+
+  test('si la API falla, avisa y permite reintentar', async () => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => (intentos++ === 0 ? json({}, 500) : LISTA),
+    })
+    expect(
+      await screen.findByText('No pudimos cargar las universidades.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('table', { name: 'Indicadores por universidad' }),
+    ).toBeInTheDocument()
+  })
+
+  test('sin universidades lo dice', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => [],
+    })
+    expect(await screen.findByText('No hay universidades.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+  })
+
+  // Solo el Director: otro rol que escribe la URL no llega a la comparación
+  // ni la pide a la API.
+  test.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO'])(
+    '%s no accede a la comparación por la URL',
+    async (rol) => {
+      const pedida = vi.fn(() => LISTA)
+      await renderConSesion(rol, COMPARAR, { [UNIVERSIDADES]: pedida })
+      expect(
+        screen.queryByRole('region', {
+          name: 'Comparación entre universidades',
+        }),
+      ).toBeNull()
+      expect(screen.queryByRole('table')).toBeNull()
+      expect(pedida).not.toHaveBeenCalled()
+    },
+  )
+})
