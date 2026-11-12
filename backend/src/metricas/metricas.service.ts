@@ -199,14 +199,17 @@ export interface PeriodoPedido {
 export class MetricasService {
   constructor(private readonly bd: BaseDeDatos) {}
 
+  // MET-04: con periodo, el de cada universidad que lo tenga; sin él, el
+  // activo. Los tres niveles usan el mismo período.
   async consolidado(
     contexto: ContextoUniversidad,
+    periodo: PeriodoPedido | null = null,
   ): Promise<MetricasConsolidadas> {
     const [fila] =
       await this.bd.consultarEnTodasLasUniversidades<MetricasConsolidadas>(
         contexto,
         CONSOLIDADO,
-        [null, null, null],
+        [null, periodo?.anio ?? null, periodo?.semestre ?? null],
       )
     return fila
   }

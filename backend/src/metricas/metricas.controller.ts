@@ -37,8 +37,9 @@ export class MetricasController {
   @Get('consolidado')
   consolidado(
     @UniversidadActual() contexto: ContextoUniversidad,
+    @Query('periodo') periodo?: string,
   ): Promise<MetricasConsolidadas> {
-    return this.metricas.consolidado(contexto)
+    return this.metricas.consolidado(contexto, periodoDe(periodo))
   }
 
   // MET-04: primer nivel del drill-down.

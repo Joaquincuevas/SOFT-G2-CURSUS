@@ -603,6 +603,24 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(lista.every((u) => u.periodo === null)).toBe(true)
   })
 
+  it('el consolidado usa el mismo período que los otros niveles', async () => {
+    // El pedido igual al activo da lo mismo; uno sin datos ni período, vacío.
+    expect(
+      await obtener<MetricasConsolidadas>(DIRECTOR, `${RUTA}?periodo=2026-2`),
+    ).toEqual(await consolidado())
+    expect(
+      await obtener<MetricasConsolidadas>(DIRECTOR, `${RUTA}?periodo=2020-1`),
+    ).toEqual({
+      periodos: [],
+      aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+      promedio: { valor: null, alumnos: 0 },
+      asistencia: { valor: null, presentes: 0, registros: 0 },
+      alumnos: 0,
+      cursos: 0,
+    })
+    await obtener(DIRECTOR, `${RUTA}?periodo=activo`, 400)
+  })
+
   it.each([
     [
       'una universidad inexistente',

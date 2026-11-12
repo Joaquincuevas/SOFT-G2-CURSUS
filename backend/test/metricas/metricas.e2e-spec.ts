@@ -44,6 +44,7 @@ const META: MetricasUniversidad = {
   periodo: { anio: 2026, semestre: 2 },
   facultades: [],
 }
+const consolidado = vi.fn(() => Promise.resolve(CONSOLIDADO))
 const universidades = vi.fn(() => Promise.resolve([] as ResumenUniversidad[]))
 const facultades = vi.fn((_c: unknown, id: string) =>
   id === UNIVERSIDAD
@@ -58,7 +59,7 @@ beforeAll(async () => {
     .useValue({ sesionActiva: () => Promise.resolve(true) })
     .overrideProvider(MetricasService)
     .useValue({
-      consolidado: () => Promise.resolve(CONSOLIDADO),
+      consolidado,
       universidades,
       facultades,
     })
@@ -176,4 +177,35 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         .expect(403)
     }
   })
+})
+
+describe('consolidado con período (MET-04)', () => {
+  it('pasa el período de la URL al servicio, igual que los otros niveles', async () => {
+    await request(app.getHttpServer())
+      .get(`${RUTA}?periodo=2026-1`)
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200, CONSOLIDADO)
+    expect(consolidado).toHaveBeenLastCalledWith(expect.anything(), {
+      anio: 2026,
+      semestre: 1,
+    })
+  })
+
+  it('sin período pide el activo', async () => {
+    await request(app.getHttpServer())
+      .get(RUTA)
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200)
+    expect(consolidado).toHaveBeenLastCalledWith(expect.anything(), null)
+  })
+
+  it.each(['activo', '2026', '2026-x'])(
+    'el período %s responde 400',
+    async (periodo) => {
+      await request(app.getHttpServer())
+        .get(`${RUTA}?periodo=${periodo}`)
+        .set('Authorization', sesion('DIRECTOR'))
+        .expect(400)
+    },
+  )
 })
