@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)
 - [HIS-05 · Historial de notas del alumno](his-05-historial-notas-alumno.md)
 - [HIS-04 · Consulta de cursos archivados por período](his-04-consultar-cursos-archivados.md)
 - [HIS-03 · Archivo de un curso cerrado](his-03-archivar-curso.md)

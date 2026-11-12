@@ -100,6 +100,7 @@ export interface CuentaUniversidad {
   nombre: string
   correo: string
   rol: RolCuenta
+  egresado?: boolean
   facultad: FacultadElegible | null
 }
 

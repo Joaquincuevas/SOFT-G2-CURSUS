@@ -1,7 +1,8 @@
 import { useContext } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router'
+import { matchPath, Navigate, Outlet, useLocation } from 'react-router'
 import { Cargando } from '../components/Cargando'
 import { SessionContext } from '../session/session'
+import { RUTA_HISTORIAL } from '../pages/HistorialAlumno'
 import { RUTA_CAMBIO_OBLIGATORIO, useAuth } from './auth'
 
 // Ruta de layout: sin sesión redirige a /login y recuerda a dónde se quería ir.
@@ -26,6 +27,14 @@ export function RequireAuth() {
   const provisoria = sesion.user.debeCambiarPassword
   if (provisoria !== (pathname === RUTA_CAMBIO_OBLIGATORIO)) {
     return <Navigate to={provisoria ? RUTA_CAMBIO_OBLIGATORIO : '/'} replace />
+  }
+  if (
+    sesion.user.egresado &&
+    !provisoria &&
+    !matchPath(RUTA_HISTORIAL, pathname) &&
+    !matchPath(`${RUTA_HISTORIAL}/:seccionId`, pathname)
+  ) {
+    return <Navigate to={RUTA_HISTORIAL} replace />
   }
   return <Outlet />
 }

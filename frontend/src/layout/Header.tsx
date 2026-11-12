@@ -19,6 +19,19 @@ function iniciales(nombre: string) {
 export function Header() {
   const { user } = useSession()
   const item = navItemFor(useLocation().pathname)
+  const identidad = (
+    <>
+      <span className="header__avatar" aria-hidden="true">
+        {iniciales(user.nombre)}
+      </span>
+      <div>
+        <p className="header__name">{user.nombre}</p>
+        <p className="header__role">
+          {user.egresado ? 'Egresado' : ROL_LABEL[user.rol]}
+        </p>
+      </div>
+    </>
+  )
 
   return (
     <header className="header">
@@ -29,19 +42,17 @@ export function Header() {
         </h1>
         <p className="header__subtitle">{item?.subtitle(user)}</p>
       </div>
-      <Link
-        to="/perfil"
-        className="header__user"
-        aria-label={`Mi perfil: ${user.nombre}, ${ROL_LABEL[user.rol]}`}
-      >
-        <span className="header__avatar" aria-hidden="true">
-          {iniciales(user.nombre)}
-        </span>
-        <div>
-          <p className="header__name">{user.nombre}</p>
-          <p className="header__role">{ROL_LABEL[user.rol]}</p>
-        </div>
-      </Link>
+      {user.egresado ? (
+        <div className="header__user">{identidad}</div>
+      ) : (
+        <Link
+          to="/perfil"
+          className="header__user"
+          aria-label={`Mi perfil: ${user.nombre}, ${ROL_LABEL[user.rol]}`}
+        >
+          {identidad}
+        </Link>
+      )}
     </header>
   )
 }
