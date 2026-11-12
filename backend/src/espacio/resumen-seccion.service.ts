@@ -9,10 +9,13 @@ import { NOMBRES_PROFESORES } from './profesores.sql.js'
 
 type FilaResumen = Pick<
   SeccionResumen,
-  'horario' | 'profesor' | 'profesores' | 'ayudantes'
+  'horario' | 'profesor' | 'profesores' | 'ayudantes' | 'cursoCerrado'
 >
 
 const COLUMNAS = `
+  (public.curso_cerrado(s.curso_id) OR EXISTS (
+    SELECT 1 FROM cierre_curso cc WHERE cc.id = s.curso_id AND cc.universidad_id = s.universidad_id
+  )) AS "cursoCerrado",
   ${BLOQUES_HORARIO} AS horario,
   CASE WHEN pr.id IS NULL THEN NULL
        ELSE json_build_object('id', pr.id, 'nombre', pr.nombre) END AS profesor,
@@ -48,6 +51,7 @@ export class ResumenSeccionService {
             `SELECT ${COLUMNAS} WHERE s.universidad_id = $1 AND s.id = $2`,
             [seccion.id],
           )
-    return { ...seccion, ...fila }
+    const { cursoCerrado, ...resumen } = fila
+    return { ...seccion, ...resumen, ...(cursoCerrado && { cursoCerrado }) }
   }
 }

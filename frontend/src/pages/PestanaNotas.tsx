@@ -28,13 +28,19 @@ import type { PropsPestana } from './VistaSeccion'
 // NOT-05: el ayudante abre cada evaluación para ingresar las notas; el
 // profesor las revisa en NOT-10. NOT-13: el alumno ve sus notas publicadas.
 // NOT-14: el profesor ve, al final, la nota final de cada alumno.
-export function PestanaNotas({ seccionId, rol }: PropsPestana) {
+export function PestanaNotas({ seccionId, rol, cursoCerrado }: PropsPestana) {
   if (rol === 'ALUMNO')
     return <MisNotas key={seccionId} seccionId={seccionId} />
-  return <EvaluacionesDeSeccion seccionId={seccionId} rol={rol} />
+  return (
+    <EvaluacionesDeSeccion
+      seccionId={seccionId}
+      rol={rol}
+      cursoCerrado={cursoCerrado}
+    />
+  )
 }
 
-function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
+function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones`
   const [datos, recargar, , fijar] = useDatos<EvaluacionesSeccion>(ruta)
   // NOT-14: vuelve a pedir las notas finales cada vez que el detalle de una
@@ -51,7 +57,8 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
   const [avisoEdicion, setAvisoEdicion] = useState(false)
   const ingresaNotas = rol === 'AYUDANTE'
   const consultaNotas = ingresaNotas || rol === 'PROFESOR'
-  const editaEvaluaciones = rol === 'PROFESOR'
+  const editaEvaluaciones = rol === 'PROFESOR' && !cursoCerrado
+  const veHistorial = rol === 'PROFESOR'
   const aviso =
     rol === 'PROFESOR' && datos
       ? avisoPonderaciones(datos.sumaPonderaciones)
@@ -90,7 +97,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                 <th scope="col">Fecha</th>
                 <th scope="col">Ponderación</th>
                 {ingresaNotas && <th scope="col">Estado del envío</th>}
-                {editaEvaluaciones && <th scope="col">Acciones</th>}
+                {veHistorial && <th scope="col">Acciones</th>}
                 {consultaNotas && <th scope="col">Notas</th>}
               </tr>
             </thead>
@@ -100,24 +107,25 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                   <td>{evaluacion.nombre}</td>
                   <td>{evaluacion.fecha}</td>
                   <td>{evaluacion.ponderacion} %</td>
-                  {editaEvaluaciones && (
+                  {veHistorial && (
                     <td>
-                      {evaluacion.tieneNotas ? (
-                        <span>{EVALUACION_CON_NOTAS}</span>
-                      ) : (
-                        <button
-                          className="notas__enlace"
-                          type="button"
-                          aria-label={`Editar ${evaluacion.nombre}`}
-                          disabled={edicion !== null}
-                          onClick={() => {
-                            setAvisoEdicion(false)
-                            setEdicion(evaluacion)
-                          }}
-                        >
-                          Editar
-                        </button>
-                      )}
+                      {editaEvaluaciones &&
+                        (evaluacion.tieneNotas ? (
+                          <span>{EVALUACION_CON_NOTAS}</span>
+                        ) : (
+                          <button
+                            className="notas__enlace"
+                            type="button"
+                            aria-label={`Editar ${evaluacion.nombre}`}
+                            disabled={edicion !== null}
+                            onClick={() => {
+                              setAvisoEdicion(false)
+                              setEdicion(evaluacion)
+                            }}
+                          >
+                            Editar
+                          </button>
+                        ))}
                       <div>
                         <button
                           className="notas__enlace"
@@ -171,7 +179,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                       >
                         {elegida === evaluacion.id
                           ? 'Ocultar'
-                          : rol === 'PROFESOR'
+                          : rol === 'PROFESOR' || cursoCerrado
                             ? 'Ver notas'
                             : evaluacion.envio?.estado === 'EN_REVISION' ||
                                 evaluacion.envio?.estado === 'APROBADA'
@@ -191,7 +199,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
                   Suma de ponderaciones
                 </th>
                 <td>{datos.sumaPonderaciones} %</td>
-                {editaEvaluaciones && <td />}
+                {veHistorial && <td />}
                 {ingresaNotas && (
                   <>
                     <td />
@@ -218,7 +226,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
           }}
         />
       )}
-      {editaEvaluaciones && historial && (
+      {veHistorial && historial && (
         <HistorialDeNota key={historial} ruta={`${ruta}/${historial}/notas`} />
       )}
       {avisoEdicion && (
@@ -232,6 +240,7 @@ function EvaluacionesDeSeccion({ seccionId, rol }: PropsPestana) {
           key={elegida}
           seccionId={seccionId}
           evaluacionId={elegida}
+          cursoCerrado={cursoCerrado}
           alActualizar={(notas) => {
             setVersionNotas((n) => n + 1)
             if (!datos) return

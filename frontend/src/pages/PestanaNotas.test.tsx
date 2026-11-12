@@ -51,6 +51,35 @@ async function abrirNotas(
 }
 
 describe('pestaña Notas (NOT-01)', () => {
+  test('HIS-02: un curso cerrado conserva las notas y el historial en solo lectura', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, cursoCerrado: true }),
+      [EVALUACIONES]: () => LISTA,
+      [`${EVALUACIONES}/e1/notas`]: () => ({
+        cursoCerrado: true,
+        estado: 'APROBADA',
+        evaluacion: LISTA.evaluaciones[0],
+        alumnos: [{ id: 'a1', nombre: 'Ana', nota: 5.5, estado: 'PUBLICADA' }],
+      }),
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    expect(screen.getByText(/Curso cerrado/)).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', {
+        name: 'Historial de notas de Control 1',
+      }),
+    ).toBeVisible()
+    expect(screen.queryByRole('form', { name: 'Nueva evaluación' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Editar Control 1' }),
+    ).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Notas de Control 1' }))
+    expect(
+      await screen.findByRole('table', { name: 'Notas publicadas' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Recorregir nota/ })).toBeNull()
+  })
+
   test('el profesor ve el formulario y la lista con la suma de ponderaciones', async () => {
     const { panel } = await abrirNotas('PROFESOR')
 
