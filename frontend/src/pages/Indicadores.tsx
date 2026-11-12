@@ -107,11 +107,15 @@ function SelectorPeriodo({ periodo }: { periodo: string | null }) {
   const [periodosDisponibles, recargar] = useDatos<PeriodoDisponible[]>(
     '/api/metricas/periodos',
   )
-  const [, fijarParams] = useSearchParams()
+  const [params, fijarParams] = useSearchParams()
   const valor = periodo ?? ''
+  // Solo cambia el período: el resto de la URL (por ejemplo, el orden de la
+  // tabla de cursos) se conserva para comparar semestres.
   const cambiar = (valorNuevo: string) => {
-    if (valorNuevo) fijarParams({ periodo: valorNuevo })
-    else fijarParams({})
+    const siguiente = new URLSearchParams(params)
+    if (valorNuevo) siguiente.set('periodo', valorNuevo)
+    else siguiente.delete('periodo')
+    fijarParams(siguiente)
   }
 
   if (periodosDisponibles === null) {
@@ -470,7 +474,10 @@ function CursosCarrera() {
   // traer otra); mientras no cargue, vale la de la URL.
   const universidadId = datos?.universidad.id ?? id
   const universidadRuta = `/indicadores/universidades/${universidadId}${sufijo}`
-  const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadId}${sufijo}`
+  // También la facultad de la API manda sobre la de la URL; el id de la URL es
+  // el respaldo mientras no carga.
+  const facultadRutaId = datos?.facultad.id ?? facultadId
+  const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
   const cambiarOrden = (nuevo: OrdenCurso) => {
     const siguiente = new URLSearchParams(params)
