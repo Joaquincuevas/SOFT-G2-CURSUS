@@ -2,6 +2,7 @@ import {
   CATEGORIAS_MATERIAL,
   type CategoriaMaterial,
   type CrearMaterial,
+  type SubirVersionMaterial,
   LARGO_DESCRIPCION_MATERIAL,
   LARGO_TITULO_MATERIAL,
 } from '@cursus/shared'
@@ -53,4 +54,10 @@ export class CrearMaterialDto implements CrearMaterial {
     message: 'descripcion no puede tener caracteres de control',
   })
   descripcion?: string
+}
+
+// Body de POST …/materiales/:materialId/versiones (MAT-07).
+export class SubirVersionMaterialDto implements SubirVersionMaterial {
+  @IsUUID()
+  archivoId!: string
 }

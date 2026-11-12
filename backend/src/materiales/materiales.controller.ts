@@ -3,6 +3,7 @@ import type {
   Material,
   Rol,
   SeccionEspacio,
+  VersionMaterial,
 } from '@cursus/shared'
 import {
   Body,
@@ -11,6 +12,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
   Req,
@@ -23,16 +25,21 @@ import {
   IntegranteDeSeccion,
   SeccionActual,
 } from '../espacio/integrante-seccion.guard.js'
-import { CrearMaterialDto } from './crear-material.dto.js'
+import {
+  CrearMaterialDto,
+  SubirVersionMaterialDto,
+} from './crear-material.dto.js'
 import { MaterialesService } from './materiales.service.js'
 
-function exigirProfesor(seccion: SeccionEspacio) {
-  if (seccion.rol !== 'PROFESOR') {
-    throw new ForbiddenException(
-      'Solo el profesor de la sección registra materiales',
-    )
-  }
+function exigirProfesor(
+  seccion: SeccionEspacio,
+  mensaje = 'Solo el profesor de la sección registra materiales',
+) {
+  if (seccion.rol !== 'PROFESOR') throw new ForbiddenException(mensaje)
 }
+
+const SOLO_PROFESOR_VERSIONES =
+  'Solo un profesor del curso gestiona las versiones del material'
 
 // MAT-06: listan y descargan los integrantes de la sección y el Director, este
 // en solo lectura (como los archivos de MAT-01). El Administrativo de la
@@ -104,6 +111,69 @@ export class MaterialesController {
       req.usuario?.sub as string,
       seccion,
       datos,
+    )
+  }
+
+  // MAT-07: cualquier profesor vigente del curso (lo exige la RLS) sube una
+  // versión nueva. Reintentar con el mismo archivo devuelve la misma versión.
+  @Puede('create', 'MaterialVersion')
+  @IntegranteDeSeccion()
+  @Post(':materialId/versiones')
+  @HttpCode(201)
+  subirVersion(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+    @Body() datos: SubirVersionMaterialDto,
+  ): Promise<VersionMaterial> {
+    exigirProfesor(seccion, SOLO_PROFESOR_VERSIONES)
+    return this.materiales.subirVersion(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      materialId,
+      datos.archivoId,
+    )
+  }
+
+  // MAT-07: historial, solo para el profesor. El resto ve la vigente en el
+  // listado.
+  @Puede('read', 'MaterialVersion')
+  @IntegranteDeSeccion()
+  @Get(':materialId/versiones')
+  versiones(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+  ): Promise<VersionMaterial[]> {
+    exigirProfesor(seccion, SOLO_PROFESOR_VERSIONES)
+    return this.materiales.versiones(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      materialId,
+    )
+  }
+
+  @Puede('read', 'MaterialVersion')
+  @IntegranteDeSeccion()
+  @Get(':materialId/versiones/:version/descarga')
+  descargaVersion(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+    @Param('version', ParseIntPipe) version: number,
+  ): Promise<DescargaArchivo> {
+    exigirProfesor(seccion, SOLO_PROFESOR_VERSIONES)
+    return this.materiales.descargaVersion(
+      contexto,
+      req.usuario?.sub as string,
+      seccion,
+      materialId,
+      version,
     )
   }
 }

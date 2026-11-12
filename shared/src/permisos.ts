@@ -36,6 +36,7 @@ export type SujetoTabla =
   | 'RevisionNotas'
   | 'Archivo'
   | 'Material'
+  | 'MaterialVersion'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -194,6 +195,9 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
   if (usuario.rol === 'PROFESOR') can('create', 'Material')
   if (SUBEN_ARCHIVOS.includes(usuario.rol) || usuario.rol === 'DIRECTOR')
     can('read', 'Material')
+  // MAT-07: solo el profesor sube versiones nuevas y lee las anteriores (el
+  // resto lee la vigente con 'read Material'; la RLS lo exige también).
+  if (usuario.rol === 'PROFESOR') can(['create', 'read'], 'MaterialVersion')
 
   // MAT-09: el alumno consulta y confirma su entrega. MAT-10: el profesor y
   // el ayudante leen y descargan las de su sección (el servicio y la RLS

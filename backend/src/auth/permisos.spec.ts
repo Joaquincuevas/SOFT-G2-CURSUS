@@ -28,6 +28,7 @@ const SUJETOS: SujetoTabla[] = [
   'Nota',
   'RevisionNotas',
   'Material',
+  'MaterialVersion',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -168,6 +169,9 @@ for (const rol of ROLES) MATRIZ[rol].Material = MATERIAL[rol]
 MATRIZ.ALUMNO.Entrega = ['create', 'read']
 MATRIZ.PROFESOR.Entrega = ['read']
 MATRIZ.AYUDANTE.Entrega = ['read']
+
+// MAT-07: solo el profesor sube versiones y lee las anteriores.
+MATRIZ.PROFESOR.MaterialVersion = ['create', 'read']
 
 // NOT-05 (RN-10): notas de una evaluación. Las ingresa el ayudante; leen el
 // profesor y el Director. El alumno (NOT-13) y el Administrativo no reciben
