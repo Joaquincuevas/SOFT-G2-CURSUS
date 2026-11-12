@@ -1,5 +1,6 @@
 import type {
   Material,
+  VersionMaterial,
   Rol,
   SeccionResumen,
   SubidaArchivo,
@@ -126,6 +127,8 @@ const EXISTENTE: Material = {
     subidoEn: '2026-09-01T12:00:00.000Z',
   },
   creadoEn: '2026-09-01T12:00:00.000Z',
+  version: 1,
+  versionEn: '2026-09-01T12:00:00.000Z',
 }
 
 const SUBIDA: SubidaArchivo = {
@@ -975,4 +978,161 @@ describe('pestaña Material (MAT-04)', () => {
       )
     })
   })
+})
+
+// MAT-07: versiones de un material. Solo el profesor sube una nueva y ve el
+// historial; el resto ve la vigente en el listado.
+describe('versiones de un material (MAT-07)', () => {
+  const VERSIONES = `${MATERIALES}/material-0/versiones`
+  const V1: VersionMaterial = {
+    version: 1,
+    archivo: EXISTENTE.archivo,
+    subidoEn: '2026-09-01T12:00:00.000Z',
+    responsable: 'Camila Rojas',
+  }
+  const V2: VersionMaterial = {
+    version: 2,
+    archivo: { ...SUBIDA.archivo, subidoEn: '2026-11-10T12:00:00.000Z' },
+    subidoEn: '2026-11-10T12:00:00.000Z',
+    responsable: 'Diego Soto',
+  }
+
+  async function abrir(
+    rol: Rol,
+    rutas: Record<string, (init?: RequestInit) => unknown>,
+  ) {
+    await renderConSesion(rol, VISTA, {
+      [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
+      [`${BASE}/silabo`]: () => [],
+      ...rutas,
+    })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+    return within(await screen.findByRole('article', { name: 'Solemne 2025' }))
+  }
+
+  function elegir(material: ReturnType<typeof within>) {
+    const pdf = new File(['%PDF-'], 'guia.pdf', { type: 'application/pdf' })
+    fireEvent.change(material.getByLabelText('Nueva versión'), {
+      target: { files: [pdf] },
+    })
+    fireEvent.click(
+      material.getByRole('button', { name: 'Subir nueva versión' }),
+    )
+  }
+
+  test('el profesor sube una versión nueva y el listado muestra la vigente', async () => {
+    const registrar = vi.fn((init?: RequestInit) => {
+      expect(init?.body).toBe(JSON.stringify({ archivoId: 'archivo-1' }))
+      return json(V2, 201)
+    })
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () =>
+        registrar.mock.calls.length
+          ? [{ ...EXISTENTE, version: 2, versionEn: V2.subidoEn }]
+          : [EXISTENTE],
+      [ARCHIVOS]: () => json(SUBIDA, 201),
+      [CONFIRMAR]: () => SUBIDA.archivo,
+      [VERSIONES]: (init) => (init?.method === 'POST' ? registrar(init) : [V1]),
+    })
+    expect(material.getByText(/Versión 1, del 01-09-2026/)).toBeInTheDocument()
+
+    elegir(material)
+    await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
+    expect(
+      material.getByRole('button', { name: 'Subir nueva versión' }),
+    ).toBeDisabled()
+    XhrFalso.enviadas[0].terminar(204)
+
+    expect(await material.findByText('Versión 2 subida')).toBeInTheDocument()
+    expect(registrar).toHaveBeenCalledTimes(1)
+    expect(
+      await material.findByText(/Versión 2, del 10-11-2026/),
+    ).toBeInTheDocument()
+    expect(
+      material.getByRole('button', { name: 'Subir nueva versión' }),
+    ).toBeEnabled()
+  })
+
+  test('el historial muestra fecha y responsable, y descarga una versión anterior', async () => {
+    const descarga = vi.fn(() => ({
+      url: 'https://s3.test/v1',
+      expiraEn: '2026-11-10T12:05:00.000Z',
+    }))
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined)
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [{ ...EXISTENTE, version: 2 }],
+      [VERSIONES]: () => [V2, V1],
+      [`${VERSIONES}/1/descarga`]: descarga,
+    })
+    fireEvent.click(material.getByText('Historial de versiones'))
+    const historial = await material.findByRole('list', { name: 'Versiones' })
+    expect(historial).toHaveTextContent('Versión 2 · 10-11-2026')
+    expect(historial).toHaveTextContent('Diego Soto')
+    expect(historial).toHaveTextContent('Versión 1 · 01-09-2026')
+    expect(historial).toHaveTextContent('Camila Rojas')
+
+    fireEvent.click(
+      within(historial).getByRole('button', { name: 'Descargar versión 1' }),
+    )
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1))
+    expect(descarga).toHaveBeenCalledTimes(1)
+    expect(
+      within(historial).getByRole('button', { name: 'Descargar versión 1' }),
+    ).toBeEnabled()
+    click.mockRestore()
+  })
+
+  test('si la subida a S3 falla a mitad del flujo, avisa, no registra y desbloquea', async () => {
+    const registrar = vi.fn(() => json(V2, 201))
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [EXISTENTE],
+      [ARCHIVOS]: () => json(SUBIDA, 201),
+      [CONFIRMAR]: () => SUBIDA.archivo,
+      [VERSIONES]: (init) => (init?.method === 'POST' ? registrar() : [V1]),
+    })
+    elegir(material)
+    await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
+    XhrFalso.enviadas[0].fallar()
+
+    expect(await material.findByRole('alert')).toHaveTextContent(
+      'No pudimos subir el archivo',
+    )
+    expect(registrar).not.toHaveBeenCalled()
+    expect(
+      material.getByRole('button', { name: 'Subir nueva versión' }),
+    ).toBeEnabled()
+  })
+
+  test('si el registro responde 409, lo explica y desbloquea', async () => {
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [EXISTENTE],
+      [ARCHIVOS]: () => json(SUBIDA, 201),
+      [CONFIRMAR]: () => SUBIDA.archivo,
+      [VERSIONES]: (init) =>
+        init?.method === 'POST' ? json({ message: 'x' }, 409) : [V1],
+    })
+    elegir(material)
+    await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
+    XhrFalso.enviadas[0].terminar(204)
+    expect(await material.findByRole('alert')).toHaveTextContent(
+      'Ese archivo ya está registrado como material.',
+    )
+    expect(
+      material.getByRole('button', { name: 'Subir nueva versión' }),
+    ).toBeEnabled()
+  })
+
+  test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
+    '%s ve la versión vigente, sin subir ni ver el historial',
+    async (rol) => {
+      const material = await abrir(rol, {
+        [MATERIALES]: () => [{ ...EXISTENTE, version: 3 }],
+      })
+      expect(material.getByText(/Versión 3, del/)).toBeInTheDocument()
+      expect(material.queryByLabelText('Nueva versión')).toBeNull()
+      expect(material.queryByText('Historial de versiones')).toBeNull()
+    },
+  )
 })
