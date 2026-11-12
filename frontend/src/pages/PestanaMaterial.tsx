@@ -5,6 +5,7 @@ import {
   LARGO_TITULO_MATERIAL,
   TAMANO_MAXIMO_ARCHIVO,
   TIPOS_ARCHIVO,
+  ZONA_HORARIA_UNIVERSIDAD,
   tipoDeArchivo,
   type ArchivoResumen,
   type CategoriaMaterial,
@@ -13,7 +14,6 @@ import {
   type Material,
   type SubidaArchivo,
   type VersionMaterial,
-  ZONA_HORARIA_UNIVERSIDAD,
 } from '@cursus/shared'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
@@ -27,6 +27,13 @@ import type { PropsPestana } from './VistaSeccion'
 
 const EXTENSIONES = Object.keys(TIPOS_ARCHIVO)
 const ACEPTADAS = EXTENSIONES.map((extension) => `.${extension}`).join(',')
+const fechaMaterial = new Intl.DateTimeFormat('es-CL', {
+  dateStyle: 'medium',
+  timeZone: ZONA_HORARIA_UNIVERSIDAD,
+})
+
+const fechaSubida = (material: Material) =>
+  material.archivo.subidoEn ?? material.creadoEn
 
 // Pasos del flujo de subida (MAT-01 y MAT-04), para mostrarlos mientras
 // corren.
@@ -127,6 +134,9 @@ export function PestanaMaterial({
   const [materiales, recargar] = useDatos<Material[]>(`${ruta}/materiales`)
   const [descargando, setDescargando] = useState<string | null>(null)
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
+  const ordenados = materiales?.toSorted(
+    (a, b) => Date.parse(fechaSubida(b)) - Date.parse(fechaSubida(a)),
+  )
 
   // MAT-06: la API revisa que sea integrante y firma una URL de S3 que vence a
   // los 5 minutos. Se abre de inmediato y no se guarda: S3 entrega el archivo
@@ -179,52 +189,79 @@ export function PestanaMaterial({
       ) : materiales.length === 0 ? (
         <p className="dashboard__texto">Aún no hay materiales del curso</p>
       ) : (
-        <ul className="material__lista" aria-label="Materiales">
-          {materiales.map((material) => (
-            <li key={material.id} className="material__item">
-              <article aria-label={material.titulo}>
-                <div className="material__encabezado">
-                  <h4 className="material__titulo">{material.titulo}</h4>
-                  <span className="material__categoria">
-                    {CATEGORIA_MATERIAL_LABEL[material.categoria]}
-                  </span>
-                </div>
-                {material.descripcion && (
-                  <p className="material__descripcion">
-                    {material.descripcion}
-                  </p>
-                )}
-                <div className="material__pie">
-                  <p className="material__archivo">
-                    {material.archivo.nombre} ·{' '}
-                    {tamanoLegible(material.archivo.tamano)}
-                    <br />
-                    {/* MAT-07: la fecha de la vigente y la del material. */}
-                    Versión {material.version}, del{' '}
-                    {fechaHora(material.versionEn)} · Publicado el{' '}
-                    {fechaHora(material.creadoEn)}
-                  </p>
-                  <button
-                    type="button"
-                    className="material__descargar"
-                    aria-label={`Descargar ${material.titulo}`}
-                    disabled={descargando === material.id}
-                    onClick={() => void descargar(material)}
-                  >
-                    {descargando === material.id ? 'Descargando…' : 'Descargar'}
-                  </button>
-                </div>
-                {rol === 'PROFESOR' && (
-                  <VersionesMaterial
-                    ruta={ruta}
-                    material={material}
-                    alSubir={recargar}
-                  />
-                )}
-              </article>
-            </li>
-          ))}
-        </ul>
+        <div className="material__grupos">
+          {CATEGORIAS_MATERIAL.map((categoria) => {
+            const grupo =
+              ordenados?.filter(
+                (material) => material.categoria === categoria,
+              ) ?? []
+            if (grupo.length === 0) return null
+            const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
+            return (
+              <section key={categoria} className="material__grupo">
+                <h4 className="vista-seccion__subtitulo">{etiqueta}</h4>
+                <ul className="material__lista" aria-label={etiqueta}>
+                  {grupo.map((material) => (
+                    <li key={material.id} className="material__item">
+                      <article aria-label={material.titulo}>
+                        <h5 className="material__titulo">{material.titulo}</h5>
+                        {material.descripcion && (
+                          <p className="material__descripcion">
+                            {material.descripcion}
+                          </p>
+                        )}
+                        <div className="material__pie">
+                          <p className="material__archivo">
+                            {material.archivo.nombre} ·{' '}
+                            {tamanoLegible(material.archivo.tamano)}
+                            {' · '}
+                            {tipoDeArchivo(material.archivo.nombre)
+                              ? material.archivo.nombre
+                                  .slice(
+                                    material.archivo.nombre.lastIndexOf('.') +
+                                      1,
+                                  )
+                                  .toUpperCase()
+                              : material.archivo.tipo}
+                            {' · '}
+                            <time dateTime={fechaSubida(material)}>
+                              {fechaMaterial.format(
+                                new Date(fechaSubida(material)),
+                              )}
+                            </time>
+                            <br />
+                            {/* MAT-07: la fecha de la vigente y la del material. */}
+                            Versión {material.version}, del{' '}
+                            {fechaHora(material.versionEn)} · Publicado el{' '}
+                            {fechaHora(material.creadoEn)}
+                          </p>
+                          <button
+                            type="button"
+                            className="material__descargar"
+                            aria-label={`Descargar ${material.titulo}`}
+                            disabled={descargando === material.id}
+                            onClick={() => void descargar(material)}
+                          >
+                            {descargando === material.id
+                              ? 'Descargando…'
+                              : 'Descargar'}
+                          </button>
+                        </div>
+                        {rol === 'PROFESOR' && (
+                          <VersionesMaterial
+                            ruta={ruta}
+                            material={material}
+                            alSubir={recargar}
+                          />
+                        )}
+                      </article>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
       )}
     </section>
   )

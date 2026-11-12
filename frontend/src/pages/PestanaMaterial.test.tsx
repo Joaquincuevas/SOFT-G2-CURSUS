@@ -325,11 +325,57 @@ describe('pestaña Material (MAT-04)', () => {
   test('muestra los materiales del curso, o que no hay', async () => {
     await abrirMaterial({ materiales: [EXISTENTE] })
 
-    const lista = await panel().findByRole('list', { name: 'Materiales' })
+    const lista = await panel().findByRole('list', { name: 'Prueba anterior' })
     const item = within(lista).getByRole('article', { name: 'Solemne 2025' })
-    expect(item).toHaveTextContent('Prueba anterior')
     expect(item).toHaveTextContent('Con pauta.')
     expect(item).toHaveTextContent('solemne.pdf · 2 KB')
+  })
+
+  test('el alumno ve categorías con archivos y cada grupo ordenado por fecha de subida', async () => {
+    const anterior: Material = {
+      ...EXISTENTE,
+      id: 'guia-anterior',
+      categoria: 'GUIA',
+      titulo: 'Guía anterior',
+      creadoEn: '2026-11-10T15:00:00Z',
+      archivo: { ...EXISTENTE.archivo, subidoEn: '2026-11-02T15:00:00Z' },
+    }
+    const reciente: Material = {
+      ...anterior,
+      id: 'guia-reciente',
+      titulo: 'Guía reciente',
+      creadoEn: '2026-11-09T15:00:00Z',
+      archivo: {
+        ...anterior.archivo,
+        nombre: 'datos.XLSX',
+        tipo: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        subidoEn: '2026-11-10T01:00:00Z',
+      },
+    }
+    await abrirMaterial({
+      rol: 'ALUMNO',
+      materiales: [anterior, EXISTENTE, reciente],
+    })
+    const guias = within(await panel().findByRole('list', { name: 'Guía' }))
+    expect(
+      guias.getAllByRole('heading').map((titulo) => titulo.textContent),
+    ).toEqual(['Guía reciente', 'Guía anterior'])
+    const ficha = guias.getByRole('article', { name: 'Guía reciente' })
+    expect(ficha).toHaveTextContent('XLSX')
+    expect(ficha.querySelector('time')).toHaveAttribute(
+      'datetime',
+      reciente.archivo.subidoEn,
+    )
+    expect(ficha.querySelector('time')).toHaveTextContent('09-11-2026')
+    expect(
+      panel().getByRole('list', { name: 'Prueba anterior' }),
+    ).toBeInTheDocument()
+    expect(
+      panel().queryByRole('heading', { name: 'Presentación' }),
+    ).not.toBeInTheDocument()
+    expect(
+      panel().queryByRole('heading', { name: 'Código' }),
+    ).not.toBeInTheDocument()
   })
 
   test('sin materiales lo indica', async () => {
@@ -513,9 +559,11 @@ describe('pestaña Material (MAT-04)', () => {
       ).toBeEnabled()
       expect(panel().getByLabelText('Título')).toHaveValue('')
       expect(panel().getByLabelText('Categoría')).toHaveValue('')
-      expect(
-        llamadas.filter((l) => l === `GET ${MATERIALES}`).length,
-      ).toBeGreaterThan(1)
+      await waitFor(() => {
+        expect(
+          llamadas.filter((l) => l === `GET ${MATERIALES}`).length,
+        ).toBeGreaterThan(1)
+      })
     })
 
     test('sin descripción no la envía', async () => {
