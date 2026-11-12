@@ -1,4 +1,9 @@
-import type { CierreCurso, CursoDetalle, CursoListado } from '@cursus/shared'
+import type {
+  CierreCurso,
+  CursoArchivadoListado,
+  CursoDetalle,
+  CursoListado,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -517,8 +522,8 @@ describe('HIS-02 · registro académico de un curso cerrado', () => {
   })
 })
 
-describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
-  it('archiva únicamente un curso cerrado de la facultad y conserva su registro', async () => {
+describe('archivo de cursos (HIS-03 y HIS-04)', () => {
+  it('archiva únicamente un curso cerrado y conserva su registro para la consulta histórica', async () => {
     const [registro] = await bd.query<
       {
         curso: string
@@ -528,17 +533,22 @@ describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
       }[]
     >(
       `
-      WITH nuevo AS (
+      WITH antiguo AS (
+        INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
+        SELECT universidad_id, 2014, 2, '2014-08-01', '2014-12-31', false
+          FROM curso WHERE codigo = 'ICC101' RETURNING id, universidad_id
+      ), nuevo AS (
         INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
-        SELECT universidad_id, carrera_id, periodo_id, 'HIS03', 'Curso para archivar'
-          FROM curso WHERE codigo = 'ICC101'
+        SELECT c.universidad_id, c.carrera_id, p.id, 'HIS04', 'Curso histórico'
+          FROM curso c JOIN antiguo p ON p.universidad_id = c.universidad_id
+         WHERE c.codigo = 'ICC101'
         RETURNING id, universidad_id, periodo_id
       ), seccion_nueva AS (
         INSERT INTO seccion (universidad_id, curso_id, numero)
         SELECT universidad_id, id, 1 FROM nuevo RETURNING id, universidad_id
       ), evaluacion_nueva AS (
         INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
-        SELECT s.universidad_id, s.id, 'Control', '2026-11-02', 100, p.id
+        SELECT s.universidad_id, s.id, 'Control', '2014-11-03', 100, p.id
           FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
          WHERE p.correo = $1 RETURNING id, universidad_id
       ), inscripcion_nueva AS (
@@ -554,7 +564,7 @@ describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
          WHERE a.correo = $2 AND y.correo = $3
       ), clase_nueva AS (
         INSERT INTO clase (universidad_id, seccion_id, fecha, inicio, termino, sala, creada_por)
-        SELECT s.universidad_id, s.id, '2026-11-02', '09:00', '10:00', 'A1', p.id
+        SELECT s.universidad_id, s.id, '2014-11-03', '09:00', '10:00', 'A1', p.id
           FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
          WHERE p.correo = $1 RETURNING id, universidad_id, creada_por
       ), marca AS (
@@ -572,7 +582,19 @@ describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
     const { curso, universidad, admin, periodo } = registro
     const api = request(app.getHttpServer())
     const ruta = `/api/cursos/${curso}`
+    const historico = '/api/cursos-archivados'
     const token = await tokenDe(ADMIN_INGENIERIA)
+    const consultarArchivo = async (
+      correo: string,
+      url: string,
+      estado: number,
+    ) => {
+      const acceso = await tokenDe(correo)
+      return api
+        .get(url)
+        .set('Authorization', `Bearer ${acceso}`)
+        .expect(estado)
+    }
     const archivar = async (correo: string, estado: number) => {
       const acceso = await tokenDe(correo)
       return api
@@ -607,6 +629,7 @@ describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
       conRolApp('UPDATE curso SET archived_at = now() WHERE id = $1'),
     ).rejects.toThrow('Solo se pueden archivar cursos cerrados')
     expect(await listado()).toContain(curso)
+    await consultarArchivo(ADMIN_INGENIERIA, `${historico}/${curso}`, 404)
 
     await cerrar(ADMIN_INGENIERIA, curso, 200)
     const datosAcademicos = () =>
@@ -643,5 +666,46 @@ describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
     expect(await listado()).not.toContain(curso)
     await detalle(ADMIN_INGENIERIA, curso, 404)
     expect(await datosAcademicos()).toEqual(datos)
+
+    await bd.query(
+      `UPDATE curso SET archived_at = now() WHERE codigo IN ('ICO201', 'ENF201')`,
+    )
+    const lista = await consultarArchivo(ADMIN_INGENIERIA, historico, 200)
+    expect(
+      (lista.body as CursoArchivadoListado[]).map((c) => c.codigo),
+    ).toEqual(['HIS04'])
+    expect(lista.body).toMatchObject([
+      { id: curso, periodo: { id: periodo, anio: 2014, semestre: 2 } },
+    ])
+    const detalleHistorico = await consultarArchivo(
+      ADMIN_INGENIERIA,
+      `${historico}/${curso}`,
+      200,
+    )
+    expect(detalleHistorico.body).toMatchObject({
+      id: curso,
+      periodo: { anio: 2014, semestre: 2 },
+      secciones: [
+        {
+          numero: 1,
+          evaluaciones: [
+            {
+              nombre: 'Control',
+              notas: [{ alumno: 'Alumno Norte', valor: 5 }],
+            },
+          ],
+          clases: [
+            {
+              fecha: '2014-11-03',
+              marcas: [{ alumno: 'Alumno Norte', presente: true }],
+            },
+          ],
+        },
+      ],
+    })
+    await consultarArchivo(ADMIN_ECONOMIA, `${historico}/${curso}`, 404)
+    await consultarArchivo(ADMIN_SUR, `${historico}/${curso}`, 404)
+    await consultarArchivo(DIRECTOR, historico, 403)
+    await consultarArchivo(PROFESOR, `${historico}/${curso}`, 403)
   })
 })

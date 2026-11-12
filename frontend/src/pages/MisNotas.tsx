@@ -32,45 +32,51 @@ export function MisNotas({ seccionId }: { seccionId: string }) {
       ) : datos.evaluaciones.length === 0 ? (
         <p className="dashboard__texto">Aún no hay evaluaciones</p>
       ) : (
-        <>
-          {datos.notaFinal && (
-            <p
-              className="notas__final"
-              aria-label="Nota del curso"
-              data-tipo={datos.notaFinal.tipo}
-            >
-              {textoNotaFinal(datos.notaFinal)}
-            </p>
-          )}
-          <table className="notas__tabla" aria-label="Mis notas por evaluación">
-            <thead>
-              <tr>
-                <th scope="col">Evaluación</th>
-                <th scope="col">Fecha</th>
-                <th scope="col">Ponderación</th>
-                <th scope="col">Nota</th>
-              </tr>
-            </thead>
-            <tbody>
-              {datos.evaluaciones.map((evaluacion) => (
-                <tr key={evaluacion.evaluacionId}>
-                  <td>{evaluacion.nombre}</td>
-                  <td>{evaluacion.fecha}</td>
-                  <td>{evaluacion.ponderacion} %</td>
-                  <td>
-                    {evaluacion.nota === null
-                      ? 'Sin publicar'
-                      : FORMATO_NOTA.format(evaluacion.nota)}
-                    {evaluacion.nota !== null && evaluacion.recorregida && (
-                      <span className="notas__recorregida">Recorregida</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+        <RegistroMisNotas datos={datos} />
       )}
     </section>
+  )
+}
+
+export function RegistroMisNotas({ datos }: { datos: RespuestaMisNotas }) {
+  return (
+    <>
+      {datos.notaFinal && (
+        <p
+          className="notas__final"
+          aria-label="Nota del curso"
+          data-tipo={datos.notaFinal.tipo}
+        >
+          {textoNotaFinal(datos.notaFinal)}
+        </p>
+      )}
+      <table className="notas__tabla" aria-label="Mis notas por evaluación">
+        <thead>
+          <tr>
+            <th scope="col">Evaluación</th>
+            <th scope="col">Fecha</th>
+            <th scope="col">Ponderación</th>
+            <th scope="col">Nota</th>
+          </tr>
+        </thead>
+        <tbody>
+          {datos.evaluaciones.map((evaluacion) => (
+            <tr key={evaluacion.evaluacionId}>
+              <td>{evaluacion.nombre}</td>
+              <td>{evaluacion.fecha}</td>
+              <td>{evaluacion.ponderacion} %</td>
+              <td>
+                {evaluacion.nota === null
+                  ? 'Sin publicar'
+                  : FORMATO_NOTA.format(evaluacion.nota)}
+                {evaluacion.nota !== null && evaluacion.recorregida && (
+                  <span className="notas__recorregida">Recorregida</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   )
 }

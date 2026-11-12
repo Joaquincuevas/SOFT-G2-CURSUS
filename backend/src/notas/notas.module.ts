@@ -10,6 +10,8 @@ import { NotasFinalesController } from './notas-finales.controller.js'
 import { NotasFinalesService } from './notas-finales.service.js'
 import { NotasService } from './notas.service.js'
 import { PonderacionesService } from './ponderaciones.service.js'
+import { HistorialAlumnoController } from './historial-alumno.controller.js'
+import { HistorialAlumnoService } from './historial-alumno.service.js'
 
 // Notas (F4). Importa EspacioModule por IntegranteSeccionGuard. Exporta la
 // auditoría (NOT-04) para que las tarjetas de notas la usen en su
@@ -20,12 +22,14 @@ import { PonderacionesService } from './ponderaciones.service.js'
     EvaluacionesController,
     NotasController,
     MisNotasController,
+    HistorialAlumnoController,
     NotasFinalesController,
   ],
   providers: [
     EvaluacionesService,
     AuditoriaNotasService,
     MisNotasService,
+    HistorialAlumnoService,
     NotasFinalesService,
     NotasService,
     PonderacionesService,

@@ -1,3 +1,5 @@
+import type { PeriodoResumen } from './cursos.js'
+
 // NOT-01 (RN-10): evaluaciones de una sección
 // (/api/espacio/secciones/:id/evaluaciones). Cada evaluación es de una
 // sección, no del curso: el profesor y el acceso son por sección.
@@ -285,4 +287,21 @@ export interface NotaFinalAlumno {
 
 export interface NotasFinalesSeccion {
   alumnos: NotaFinalAlumno[]
+}
+
+export interface CursoHistorialAlumno {
+  seccionId: string
+  seccion: number
+  curso: { id: string; codigo: string; nombre: string }
+  notaFinal: NotaFinal
+}
+
+export interface PeriodoHistorialAlumno {
+  periodo: PeriodoResumen
+  cursos: CursoHistorialAlumno[]
+}
+
+export interface DetalleHistorialAlumno
+  extends CursoHistorialAlumno, MisNotasSeccion {
+  periodo: PeriodoResumen
 }

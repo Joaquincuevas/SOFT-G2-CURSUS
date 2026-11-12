@@ -14,9 +14,11 @@ import { ProfesoresController } from './profesores.controller.js'
 import { ProfesoresService } from './profesores.service.js'
 import { IntegrantesController } from './integrantes.controller.js'
 import { IntegrantesService } from './integrantes.service.js'
+import { CursosArchivadosController } from './cursos-archivados.controller.js'
 
 @Module({
   controllers: [
+    CursosArchivadosController,
     IntegrantesController,
     GestionController,
     AyudantesController,

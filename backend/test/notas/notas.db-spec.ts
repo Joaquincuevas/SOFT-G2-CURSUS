@@ -10,6 +10,7 @@ import {
   type MisNotasSeccion,
   type NotasEvaluacion,
   type NotasFinalesSeccion,
+  type PeriodoHistorialAlumno,
   type Rol,
 } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
@@ -1347,6 +1348,137 @@ describe('nota final (NOT-14)', () => {
 
   it('sin sesión responde 401', async () => {
     await request(app.getHttpServer()).get(rutaFinales()).expect(401)
+  })
+})
+
+describe('historial de notas del alumno (HIS-05)', () => {
+  it('agrupa cursos cerrados por período y devuelve solo notas propias publicadas', async () => {
+    const api = request(app.getHttpServer())
+    const tokenAdmin = await tokenDe(ADMIN_INGENIERIA)
+    const profesor = await idDe(PROFESOR)
+    const base = '/api/mis-cursos/historial'
+
+    async function preparar(
+      anio: number,
+      codigo: string,
+      estado:
+        'cerrado' | 'archivado' | 'abierto' | 'solo-propuesta' | 'parcial',
+    ) {
+      const [{ curso, seccion }] = await bd.query<
+        { curso: string; seccion: string }[]
+      >(
+        `
+        WITH periodo_historico AS (
+          INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino)
+          VALUES ($1, $2::smallint, 2, make_date($2, 8, 1), make_date($2, 12, 31))
+          ON CONFLICT (universidad_id, anio, semestre) DO UPDATE SET anio = EXCLUDED.anio
+          RETURNING id
+        ), nuevo AS (
+          INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+          SELECT $1, c.carrera_id, p.id, $3, 'Curso ' || $3
+            FROM curso c CROSS JOIN periodo_historico p WHERE c.codigo = 'ICC101'
+          RETURNING id
+        )
+        INSERT INTO seccion (universidad_id, curso_id, numero)
+        SELECT $1, id, 1 FROM nuevo RETURNING curso_id AS curso, id AS seccion
+      `,
+        [ids.norte, anio, codigo],
+      )
+      const evaluaciones = await bd.query<{ id: string; nombre: string }[]>(
+        `
+        INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+        VALUES ($1, $2, 'Control', make_date($3, 9, 1), 40, $4),
+               ($1, $2, 'Examen', make_date($3, 11, 1), 60, $4)
+        RETURNING id, nombre
+      `,
+        [ids.norte, seccion, anio, profesor],
+      )
+      for (const { id, nombre } of evaluaciones) {
+        await insertarDirecto(id, {
+          estado:
+            estado === 'solo-propuesta' ||
+            (estado === 'parcial' && nombre === 'Examen')
+              ? 'PROPUESTA'
+              : 'PUBLICADA',
+          valor: nombre === 'Control' ? 5 : 6,
+        })
+        await insertarDirecto(id, {
+          alumno_id: alumnos.ana,
+          estado: 'PUBLICADA',
+          valor: 7,
+        })
+      }
+      if (estado !== 'solo-propuesta' && estado !== 'parcial') {
+        await inscribir(seccion, alumnos.base)
+      }
+      if (estado !== 'abierto') {
+        await api
+          .post(`/api/cursos/${curso}/cierre`)
+          .set('Authorization', `Bearer ${tokenAdmin}`)
+          .expect(200)
+      }
+      if (estado === 'archivado') {
+        await api
+          .patch(`/api/cursos/${curso}/archivar`)
+          .set('Authorization', `Bearer ${tokenAdmin}`)
+          .expect(204)
+      }
+      return seccion
+    }
+
+    const antiguo = await preparar(2014, 'HIS05A', 'archivado')
+    const reciente = await preparar(2018, 'HIS05B', 'cerrado')
+    const mismoPeriodo = await preparar(2018, 'HIS05C', 'cerrado')
+    const abierto = await preparar(2014, 'HIS05D', 'abierto')
+    const propuesta = await preparar(2018, 'HIS05E', 'solo-propuesta')
+    const futuro = await preparar(2099, 'HIS05F', 'cerrado')
+    const parcial = await preparar(2018, 'HIS05G', 'parcial')
+    async function consultar(correo: string, ruta: string, estado: number) {
+      const token = await tokenDe(correo)
+      return api
+        .get(ruta)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(estado)
+    }
+
+    const lista = await consultar(ALUMNO, base, 200)
+    const grupos = lista.body as PeriodoHistorialAlumno[]
+    expect(
+      grupos.map(({ periodo, cursos }) => [
+        periodo.anio,
+        cursos.map((c) => c.seccionId),
+      ]),
+    ).toEqual([
+      [2018, [reciente, mismoPeriodo, parcial]],
+      [2014, [antiguo]],
+    ])
+    expect(grupos[1].cursos[0].notaFinal).toEqual({
+      tipo: 'FINAL',
+      nota: 5.6,
+      porcentajeEvaluado: 100,
+    })
+    const detalle = await consultar(ALUMNO, `${base}/${antiguo}`, 200)
+    expect(detalle.body).toMatchObject({
+      notaFinal: { tipo: 'FINAL', nota: 5.6 },
+      evaluaciones: [
+        { nombre: 'Control', nota: 5 },
+        { nombre: 'Examen', nota: 6 },
+      ],
+    })
+    const detalleParcial = await consultar(ALUMNO, `${base}/${parcial}`, 200)
+    expect(detalleParcial.body).toMatchObject({
+      notaFinal: { tipo: 'PARCIAL', nota: 5, porcentajeEvaluado: 40 },
+      evaluaciones: [
+        { nombre: 'Control', nota: 5 },
+        { nombre: 'Examen', nota: null },
+      ],
+    })
+    for (const id of [abierto, propuesta, futuro]) {
+      await consultar(ALUMNO, `${base}/${id}`, 404)
+    }
+    await consultar('alumno@sur.cursus.test', `${base}/${antiguo}`, 404)
+    await consultar(PROFESOR, base, 403)
+    await consultar(ADMIN_INGENIERIA, `${base}/${antiguo}`, 403)
   })
 })
 

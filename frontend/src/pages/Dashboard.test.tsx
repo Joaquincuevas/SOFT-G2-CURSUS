@@ -189,7 +189,7 @@ describe('dashboard del profesor (ESP-01)', () => {
       })
 
       const dashboard = await screen.findByRole('region', { name: 'Dashboard' })
-      expect(within(dashboard).queryByRole('link')).not.toBeInTheDocument()
+      expect(within(dashboard).queryByRole('list')).not.toBeInTheDocument()
       expect(pedidas).toBe(0)
     },
   )
