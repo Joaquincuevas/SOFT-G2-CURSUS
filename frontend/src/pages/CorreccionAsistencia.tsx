@@ -13,11 +13,13 @@ import { useDatos } from './useDatos'
 
 export function CorreccionAsistencia({
   alumno,
+  editable = true,
   ruta,
   alGuardar,
   alCorregir,
 }: {
   alumno: AlumnoAsistencia
+  editable?: boolean
   ruta: string
   alGuardar: () => void
   alCorregir?: () => void
@@ -90,74 +92,75 @@ export function CorreccionAsistencia({
 
   return (
     <div className="asistencia__correccion">
-      {!editando ? (
-        <button
-          type="button"
-          className="asistencia__enlace"
-          disabled={guardando}
-          aria-label={`Corregir asistencia de ${alumno.nombre}`}
-          onClick={() => {
-            setPresente(String(!alumno.presente))
-            setMotivo('')
-            setError(null)
-            setAviso(false)
-            setEditando(true)
-            setVerHistorial(false)
-          }}
-        >
-          Corregir
-        </button>
-      ) : (
-        <form
-          aria-label={`Corregir asistencia de ${alumno.nombre}`}
-          onSubmit={(e) => void guardar(e)}
-        >
-          <p>Marca actual: {alumno.presente ? 'Presente' : 'Ausente'}</p>
-          <label className="asistencia__campo">
-            Nueva marca
-            <select
-              value={presente}
-              onChange={(e) => setPresente(e.target.value)}
-              disabled={guardando}
-            >
-              <option value="true">Presente</option>
-              <option value="false">Ausente</option>
-            </select>
-          </label>
-          <label className="asistencia__campo">
-            Motivo de la corrección
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              required
-              maxLength={LARGO_MOTIVO_ASISTENCIA}
-              disabled={guardando}
-            />
-          </label>
+      {editable &&
+        (!editando ? (
           <button
-            className="asistencia__boton"
-            type="submit"
-            disabled={
-              guardando ||
-              !motivo.trim() ||
-              (presente === 'true') === alumno.presente
-            }
-          >
-            Guardar corrección
-          </button>
-          <button
-            className="asistencia__enlace"
             type="button"
+            className="asistencia__enlace"
             disabled={guardando}
+            aria-label={`Corregir asistencia de ${alumno.nombre}`}
             onClick={() => {
-              setEditando(false)
+              setPresente(String(!alumno.presente))
+              setMotivo('')
               setError(null)
+              setAviso(false)
+              setEditando(true)
+              setVerHistorial(false)
             }}
           >
-            Cancelar corrección
+            Corregir
           </button>
-        </form>
-      )}
+        ) : (
+          <form
+            aria-label={`Corregir asistencia de ${alumno.nombre}`}
+            onSubmit={(e) => void guardar(e)}
+          >
+            <p>Marca actual: {alumno.presente ? 'Presente' : 'Ausente'}</p>
+            <label className="asistencia__campo">
+              Nueva marca
+              <select
+                value={presente}
+                onChange={(e) => setPresente(e.target.value)}
+                disabled={guardando}
+              >
+                <option value="true">Presente</option>
+                <option value="false">Ausente</option>
+              </select>
+            </label>
+            <label className="asistencia__campo">
+              Motivo de la corrección
+              <textarea
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                required
+                maxLength={LARGO_MOTIVO_ASISTENCIA}
+                disabled={guardando}
+              />
+            </label>
+            <button
+              className="asistencia__boton"
+              type="submit"
+              disabled={
+                guardando ||
+                !motivo.trim() ||
+                (presente === 'true') === alumno.presente
+              }
+            >
+              Guardar corrección
+            </button>
+            <button
+              className="asistencia__enlace"
+              type="button"
+              disabled={guardando}
+              onClick={() => {
+                setEditando(false)
+                setError(null)
+              }}
+            >
+              Cancelar corrección
+            </button>
+          </form>
+        ))}
       {error && (
         <div role="alert">
           <p>{error}</p>

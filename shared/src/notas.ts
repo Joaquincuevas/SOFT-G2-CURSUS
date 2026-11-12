@@ -187,6 +187,7 @@ export interface ErrorNotaRecorregida {
 
 // GET y respuesta del PUT: los alumnos activos de la sección por nombre.
 export interface NotasEvaluacion {
+  cursoCerrado?: boolean
   evaluacion: Evaluacion
   // BORRADOR también si el ayudante aún no guarda nada.
   estado: EstadoRevisionNotas

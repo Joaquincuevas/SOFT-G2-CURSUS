@@ -17,6 +17,7 @@ interface Props {
   seccionId: string
   claseId: string
   rol: Rol
+  cursoCerrado?: boolean
 }
 
 // Fecha y hora del registro, en la zona de la universidad.
@@ -31,7 +32,12 @@ const fechaHora = (iso: string) =>
 // marca con motivo; los demás lectores solo consultan. Si no, marca presente o ausente
 // a cada alumno, con marcado masivo y conteos (ASI-03). Corregir una marca
 // ya guardada deja historial (ASI-04).
-export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
+export function AsistenciaDeClase({
+  seccionId,
+  claseId,
+  rol,
+  cursoCerrado,
+}: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases/${claseId}/asistencia`
   const [datos, recargar] = useDatos<AsistenciaClase>(ruta)
 
@@ -63,6 +69,7 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
           <MarcasRegistradas
             alumnos={alumnos}
             rol={rol}
+            editable={!cursoCerrado}
             ruta={ruta}
             recargar={recargar}
             alCorregir={() => avisarAsistenciaGuardada(seccionId)}
@@ -72,7 +79,7 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
         <p className="dashboard__texto">
           La sección no tiene alumnos inscritos
         </p>
-      ) : rol === 'PROFESOR' ? (
+      ) : rol === 'PROFESOR' && !cursoCerrado ? (
         <FormularioAsistencia
           ruta={ruta}
           alumnos={alumnos}
@@ -94,12 +101,14 @@ export function AsistenciaDeClase({ seccionId, claseId, rol }: Props) {
 function MarcasRegistradas({
   alumnos,
   rol,
+  editable,
   ruta,
   recargar,
   alCorregir,
 }: {
   alumnos: AlumnoAsistencia[]
   rol: Rol
+  editable: boolean
   ruta: string
   recargar: () => void
   alCorregir: () => void
@@ -122,6 +131,7 @@ function MarcasRegistradas({
               <td>
                 <CorreccionAsistencia
                   alumno={alumno}
+                  editable={editable}
                   ruta={ruta}
                   alGuardar={recargar}
                   alCorregir={alCorregir}

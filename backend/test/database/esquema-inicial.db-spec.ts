@@ -187,6 +187,7 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // HIS-02: quita los triggers de protección.
     await bd.undoLastMigration() // HIS-01: quita el cierre y su función.
     const SIN_CIERRE = TABLAS.filter((tabla) => tabla !== 'cierre_curso')
     expect(await tablasExistentes()).toEqual(SIN_CIERRE)
@@ -229,7 +230,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // HIS-01, MAT-07 y MAT-10 reaplicadas por runMigrations.
+    await bd.undoLastMigration() // HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration() // MAT-02.
@@ -335,7 +337,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó HIS-01,
+    await bd.undoLastMigration() // runMigrations también reaplicó HIS-02,
+    await bd.undoLastMigration() // HIS-01,
     await bd.undoLastMigration() // MAT-07,
     await bd.undoLastMigration() // MAT-10,
     await bd.undoLastMigration() // MAT-02,
