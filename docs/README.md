@@ -13,6 +13,7 @@ Documentación del proyecto:
 - [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
 - [MAT-07: versiones de un material, con historial para el profesor](mat-07-versiones-material.md)
 - [MET-01: indicadores consolidados del Director (aprobación, promedio y asistencia)](met-01-indicadores-consolidados.md)
+- [MET-02: comparación de indicadores entre universidades del Director](met-02-comparar-universidades.md)
 - [MET-04: drill-down de universidad a facultad del Director](met-04-drilldown-facultad.md)
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
 
