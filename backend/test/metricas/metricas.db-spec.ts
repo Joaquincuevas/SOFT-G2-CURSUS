@@ -346,6 +346,35 @@ describe('GET /api/metricas/consolidado (MET-01)', () => {
     }
   })
 
+  // ASI-05 solo cuenta cuentas de alumno vigentes. Archivar la cuenta de Ana
+  // sin retirar su inscripción quita sus 2 presentes de 2 registros: de 4 de 7
+  // (57,14 %) a 2 de 5 (40 %), como el resumen del profesor.
+  it('una cuenta de alumno archivada, con inscripción vigente, sale de la asistencia como en ASI-05', async () => {
+    const [{ id: ana }] = await bd.query<{ id: string }[]>(
+      `SELECT id FROM usuario WHERE correo LIKE $1 || '%@metricas.test'`,
+      [`anametricas.${ids.norte.slice(0, 8)}`],
+    )
+    await bd.query(`UPDATE usuario SET archived_at = now() WHERE id = $1`, [
+      ana,
+    ])
+    try {
+      expect((await consolidado()).asistencia).toEqual({
+        valor: 40,
+        presentes: 2,
+        registros: 5,
+      })
+      const resumen = await obtener<ResumenAsistenciaSeccion>(
+        PROFESOR,
+        `/api/espacio/secciones/${ids.norte}/asistencia/resumen`,
+      )
+      expect(resumen.alumnos.some((a) => a.id === ana)).toBe(false)
+    } finally {
+      await bd.query(`UPDATE usuario SET archived_at = NULL WHERE id = $1`, [
+        ana,
+      ])
+    }
+  })
+
   it('con el período activo pero sin evaluaciones vigentes, las notas dicen null y la asistencia sigue', async () => {
     const vigentes = (
       await bd.query<{ id: string }[]>(
