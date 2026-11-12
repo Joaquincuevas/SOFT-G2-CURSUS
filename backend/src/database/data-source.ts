@@ -58,6 +58,7 @@ import { LeerEntregasDocentes1792880000000 } from './migrations/1792880000000-Le
 import { CrearMaterialVersion1792890000000 } from './migrations/1792890000000-CrearMaterialVersion.js'
 import { CrearCierreCurso1792900000000 } from './migrations/1792900000000-CrearCierreCurso.js'
 import { ProtegerCursoCerrado1792910000000 } from './migrations/1792910000000-ProtegerCursoCerrado.js'
+import { ProtegerArchivoCurso1792920000000 } from './migrations/1792920000000-ProtegerArchivoCurso.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -137,6 +138,7 @@ export function opcionesDataSource(
       CrearMaterialVersion1792890000000,
       CrearCierreCurso1792900000000,
       ProtegerCursoCerrado1792910000000,
+      ProtegerArchivoCurso1792920000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

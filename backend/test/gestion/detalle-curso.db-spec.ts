@@ -1,4 +1,4 @@
-import type { CierreCurso, CursoDetalle } from '@cursus/shared'
+import type { CierreCurso, CursoDetalle, CursoListado } from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -514,5 +514,134 @@ describe('HIS-02 · registro académico de un curso cerrado', () => {
         ),
       ).rejects.toThrow('Curso cerrado')
     }
+  })
+})
+
+describe('PATCH /api/cursos/:id/archivar (HIS-03)', () => {
+  it('archiva únicamente un curso cerrado de la facultad y conserva su registro', async () => {
+    const [registro] = await bd.query<
+      {
+        curso: string
+        universidad: string
+        admin: string
+        periodo: string
+      }[]
+    >(
+      `
+      WITH nuevo AS (
+        INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+        SELECT universidad_id, carrera_id, periodo_id, 'HIS03', 'Curso para archivar'
+          FROM curso WHERE codigo = 'ICC101'
+        RETURNING id, universidad_id, periodo_id
+      ), seccion_nueva AS (
+        INSERT INTO seccion (universidad_id, curso_id, numero)
+        SELECT universidad_id, id, 1 FROM nuevo RETURNING id, universidad_id
+      ), evaluacion_nueva AS (
+        INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+        SELECT s.universidad_id, s.id, 'Control', '2026-11-02', 100, p.id
+          FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
+         WHERE p.correo = $1 RETURNING id, universidad_id
+      ), inscripcion_nueva AS (
+        INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+        SELECT s.universidad_id, s.id, a.id
+          FROM seccion_nueva s JOIN usuario a ON a.universidad_id = s.universidad_id
+         WHERE a.correo = $2
+      ), nota_publicada AS (
+        INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, estado, propuesta_por)
+        SELECT e.universidad_id, e.id, a.id, 5, 'PUBLICADA', y.id
+          FROM evaluacion_nueva e JOIN usuario a ON a.universidad_id = e.universidad_id
+          JOIN usuario y ON y.universidad_id = e.universidad_id
+         WHERE a.correo = $2 AND y.correo = $3
+      ), clase_nueva AS (
+        INSERT INTO clase (universidad_id, seccion_id, fecha, inicio, termino, sala, creada_por)
+        SELECT s.universidad_id, s.id, '2026-11-02', '09:00', '10:00', 'A1', p.id
+          FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
+         WHERE p.correo = $1 RETURNING id, universidad_id, creada_por
+      ), marca AS (
+        INSERT INTO asistencia (universidad_id, clase_id, alumno_id, presente, registrada_por)
+        SELECT c.universidad_id, c.id, a.id, true, c.creada_por
+          FROM clase_nueva c JOIN usuario a ON a.universidad_id = c.universidad_id
+         WHERE a.correo = $2
+      )
+      SELECT n.id AS curso, n.universidad_id AS universidad, n.periodo_id AS periodo, u.id AS admin
+        FROM nuevo n JOIN usuario u ON u.universidad_id = n.universidad_id
+       WHERE u.correo = $4
+    `,
+      [PROFESOR, ALUMNO, AYUDANTE, ADMIN_INGENIERIA],
+    )
+    const { curso, universidad, admin, periodo } = registro
+    const api = request(app.getHttpServer())
+    const ruta = `/api/cursos/${curso}`
+    const token = await tokenDe(ADMIN_INGENIERIA)
+    const archivar = async (correo: string, estado: number) => {
+      const acceso = await tokenDe(correo)
+      return api
+        .patch(`${ruta}/archivar`)
+        .set('Authorization', `Bearer ${acceso}`)
+        .expect(estado)
+    }
+    const listado = async () => {
+      const respuesta = await api
+        .get(`/api/cursos?periodoId=${periodo}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      return (respuesta.body as CursoListado[]).map(({ id }) => id)
+    }
+    const conRolApp = (sql: string) =>
+      bd.transaction(async (tx) => {
+        await tx.query('SET LOCAL ROLE cursus_app')
+        await tx.query(
+          `SELECT set_config('app.rol', 'ADMINISTRATIVO', true),
+                             set_config('app.universidad_id', $1, true),
+                             set_config('app.usuario_id', $2, true)`,
+          [universidad, admin],
+        )
+        await tx.query(sql, [curso])
+      })
+
+    await archivar(ADMIN_ECONOMIA, 404)
+    await archivar(ADMIN_SUR, 404)
+    await archivar(DIRECTOR, 403)
+    await archivar(ADMIN_INGENIERIA, 409)
+    await expect(
+      conRolApp('UPDATE curso SET archived_at = now() WHERE id = $1'),
+    ).rejects.toThrow('Solo se pueden archivar cursos cerrados')
+    expect(await listado()).toContain(curso)
+
+    await cerrar(ADMIN_INGENIERIA, curso, 200)
+    const datosAcademicos = () =>
+      bd.query<Record<string, unknown>[]>(
+        `SELECT to_jsonb(cc) AS cierre, to_jsonb(s) AS seccion, to_jsonb(e) AS evaluacion,
+              to_jsonb(n) AS nota, to_jsonb(i) AS inscripcion,
+              to_jsonb(cl) AS clase, to_jsonb(a) AS asistencia
+         FROM cierre_curso cc
+         JOIN seccion s ON s.curso_id = cc.id
+         JOIN evaluacion e ON e.seccion_id = s.id
+         JOIN nota n ON n.evaluacion_id = e.id
+         JOIN inscripcion i ON i.seccion_id = s.id AND i.usuario_id = n.alumno_id
+         JOIN clase cl ON cl.seccion_id = s.id
+         JOIN asistencia a ON a.clase_id = cl.id
+        WHERE cc.id = $1`,
+        [curso],
+      )
+    const datos = await datosAcademicos()
+    expect(datos).toHaveLength(1)
+    await expect(conRolApp('DELETE FROM curso WHERE id = $1')).rejects.toThrow(
+      'permission denied',
+    )
+    await api.delete(ruta).set('Authorization', `Bearer ${token}`).expect(404)
+    await archivar(ADMIN_INGENIERIA, 204)
+    const estadoArchivo = () =>
+      bd.query<{ archived_at: Date | null }[]>(
+        'SELECT archived_at FROM curso WHERE id = $1',
+        [curso],
+      )
+    const [archivo] = await estadoArchivo()
+    expect(archivo.archived_at).toBeInstanceOf(Date)
+    await archivar(ADMIN_INGENIERIA, 204)
+    expect(await estadoArchivo()).toEqual([archivo])
+    expect(await listado()).not.toContain(curso)
+    await detalle(ADMIN_INGENIERIA, curso, 404)
+    expect(await datosAcademicos()).toEqual(datos)
   })
 })

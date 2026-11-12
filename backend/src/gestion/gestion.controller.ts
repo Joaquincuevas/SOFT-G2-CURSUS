@@ -127,6 +127,17 @@ export class GestionController {
     return this.gestion.cerrarCurso(contexto, usuarioDe(req), id)
   }
 
+  @Puede('update', 'Curso')
+  @Patch('cursos/:id/archivar')
+  @HttpCode(204)
+  archivarCurso(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.gestion.archivarCurso(contexto, usuarioDe(req), id)
+  }
+
   @Puede('create', 'Curso')
   @Post('cursos')
   crearCurso(
