@@ -23,6 +23,7 @@ const TABLAS = [
   'asistencia_cambio',
   'ayudante_seccion',
   'carrera',
+  'cierre_curso',
   'clase',
   'curso',
   'curso_cambio',
@@ -186,10 +187,15 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    await bd.undoLastMigration() // HIS-01: quita el cierre y su función.
+    const SIN_CIERRE = TABLAS.filter((tabla) => tabla !== 'cierre_curso')
+    expect(await tablasExistentes()).toEqual(SIN_CIERRE)
     // MAT-07 es la última: quita el historial de versiones y devuelve el
     // bloqueo del material solo a quien lo subió.
     await bd.undoLastMigration()
-    const SIN_VERSIONES = TABLAS.filter((tabla) => tabla !== 'material_version')
+    const SIN_VERSIONES = SIN_CIERRE.filter(
+      (tabla) => tabla !== 'material_version',
+    )
     expect(await tablasExistentes()).toEqual(SIN_VERSIONES)
     const [{ bloqueo }] = await bd.query<{ bloqueo: string }[]>(
       `SELECT qual AS bloqueo FROM pg_policies
@@ -223,7 +229,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // MAT-07 y MAT-10, reaplicadas por runMigrations.
+    await bd.undoLastMigration() // HIS-01, MAT-07 y MAT-10 reaplicadas por runMigrations.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration() // MAT-02.
     await bd.undoLastMigration()
@@ -328,7 +335,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó MAT-07,
+    await bd.undoLastMigration() // runMigrations también reaplicó HIS-01,
+    await bd.undoLastMigration() // MAT-07,
     await bd.undoLastMigration() // MAT-10,
     await bd.undoLastMigration() // MAT-02,
     await bd.undoLastMigration() // MAT-04,
@@ -704,6 +712,7 @@ describe('migraciones', () => {
         t !== 'sesion_auth' &&
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
+        t !== 'cierre_curso' &&
         t !== 'asignacion_cambio' &&
         t !== 'nota_cambio' &&
         t !== 'anuncio_cambio' &&

@@ -351,6 +351,7 @@ describe('contrato del schema', () => {
       [
         ...TABLAS.map(([tabla]) => tabla),
         'curso_cambio',
+        'cierre_curso',
         'asignacion_cambio',
         // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-01).
         'clase',
@@ -399,7 +400,7 @@ describe('contrato del schema', () => {
         comandos:
           tabla.tabla === 'evaluacion_cambio'
             ? []
-            : tabla.tabla === 'superadmin_cambio'
+            : ['superadmin_cambio', 'cierre_curso'].includes(tabla.tabla)
               ? ['SELECT']
               : [
                     'curso_cambio',
