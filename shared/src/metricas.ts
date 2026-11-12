@@ -55,6 +55,9 @@ export interface PeriodoDisponible extends PeriodoMetrica {
   activo: boolean
 }
 
+// NOT-14 / MET-07: se aprueba una nota final desde 4,0.
+export const NOTA_MINIMA_APROBACION = 4
+
 interface IndicadoresDeGrupo {
   aprobacion: IndicadorAprobacion
   promedio: IndicadorPromedio
@@ -116,6 +119,23 @@ export interface MetricasCarrera {
   carrera: { id: string; nombre: string }
   periodo: PeriodoMetrica | null
   cursos: IndicadoresCurso[]
+}
+
+export interface RangoDistribucionNota {
+  minimo: number
+  maximo: number
+  alumnos: number
+}
+
+// MET-07: distribución de notas finales de un curso. El curso fija el período.
+export interface DistribucionNotas {
+  universidad: { id: string; nombre: string }
+  facultad: { id: string; nombre: string }
+  carrera: { id: string; nombre: string }
+  curso: { id: string; codigo: string; nombre: string }
+  totalEvaluados: number
+  notaMinimaAprobacion: number
+  rangos: RangoDistribucionNota[]
 }
 
 // MET-08: reporte del Administrativo sobre su facultad, agrupado por carrera

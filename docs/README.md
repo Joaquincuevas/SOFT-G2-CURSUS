@@ -17,6 +17,7 @@ Documentación del proyecto:
 - [MET-04: drill-down de universidad a facultad del Director](met-04-drilldown-facultad.md)
 - [MET-05: drill-down de facultad a carrera del Director](met-05-drilldown-carrera.md)
 - [MET-06: drill-down de carrera a curso del Director](met-06-drilldown-curso.md)
+- [MET-07: distribución de notas de un curso del Director](met-07-distribucion-notas.md)
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)

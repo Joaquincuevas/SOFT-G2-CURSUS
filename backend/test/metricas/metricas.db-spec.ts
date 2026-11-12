@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasCarrera,
+  DistribucionNotas,
   MetricasFacultad,
   MetricasUniversidad,
   ReporteFacultad,
@@ -526,6 +527,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       `/api/metricas/carreras/${id}/cursos${consulta}`,
       estado,
     )
+  const distribucion = (id: string, consulta = '', estado = 200) =>
+    obtener<DistribucionNotas>(
+      DIRECTOR,
+      `/api/metricas/cursos/${id}/distribucion${consulta}`,
+      estado,
+    )
   const RUTA_UNIVERSIDADES = '/api/metricas/universidades'
 
   it('lista carreras de una facultad, con indicadores y carreras sin datos', async () => {
@@ -673,6 +680,108 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       [ingenieria],
     )
     expect((await carreras(economia[0].id)).facultad.id).toBe(economia[0].id)
+  })
+
+  it('distribuye las notas finales en los seis rangos, incluidos los bordes', async () => {
+    const [{ universidadId, carreraId, periodoId }] = await bd.query<
+      { universidadId: string; carreraId: string; periodoId: string }[]
+    >(
+      `SELECT c.universidad_id AS "universidadId", c.carrera_id AS "carreraId",
+              c.periodo_id AS "periodoId"
+         FROM seccion s JOIN curso c ON c.id = s.curso_id WHERE s.id = $1`,
+      [ids.norte],
+    )
+    const codigo = `MET07-${Date.now()}`
+    const [{ id: cursoId }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       VALUES ($1, $2, $3, $4, 'Distribución de bordes') RETURNING id`,
+      [universidadId, carreraId, periodoId, codigo],
+    )
+    const [{ id: seccionId }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion (universidad_id, curso_id, numero, profesor_id)
+       VALUES ($1, $2, 77, $3) RETURNING id`,
+      [universidadId, cursoId, await idDe(PROFESOR)],
+    )
+    const evaluacion = await crearEvaluacion(seccionId, 'Final', 100)
+    const alumnos: string[] = []
+    try {
+      for (const [i, nota] of [1.9, 2.0, 3.9, 4.0, 5.9, 6.0, 7.0].entries()) {
+        const alumno = await inscribir(seccionId, `MET07 Alumno ${i}`)
+        alumnos.push(alumno)
+        await ponerNota(evaluacion, alumno, nota)
+      }
+      const reporte = await distribucion(cursoId)
+      expect(reporte.totalEvaluados).toBe(7)
+      expect(reporte.notaMinimaAprobacion).toBe(4)
+      expect(reporte.rangos.map((r) => r.alumnos)).toEqual([1, 1, 1, 1, 1, 2])
+      expect(reporte.rangos.reduce((total, r) => total + r.alumnos, 0)).toBe(
+        reporte.totalEvaluados,
+      )
+      // La suma de los rangos es el total y coincide con los evaluados de MET-06.
+      const deLaCarrera = await obtener<MetricasCarrera>(
+        DIRECTOR,
+        `/api/metricas/carreras/${carreraId}/cursos`,
+      )
+      expect(
+        deLaCarrera.cursos.find((c) => c.id === cursoId)?.aprobacion,
+      ).toMatchObject({ aprobados: 4, evaluados: reporte.totalEvaluados })
+      // Los alumnos de este curso no se mezclan con los de otro de la misma
+      // carrera: el curso del escenario sigue con sus dos notas finales.
+      const [{ cursoEscenario }] = await bd.query<{ cursoEscenario: string }[]>(
+        `SELECT curso_id AS "cursoEscenario" FROM seccion WHERE id = $1`,
+        [ids.norte],
+      )
+      const otro = await distribucion(cursoEscenario)
+      expect(otro.totalEvaluados).toBe(2)
+      expect(otro.rangos.map((r) => r.alumnos)).toEqual([0, 0, 1, 0, 1, 0])
+      expect(
+        deLaCarrera.cursos.find((c) => c.id === cursoEscenario)?.aprobacion
+          .evaluados,
+      ).toBe(otro.totalEvaluados)
+      await distribucion(cursoId, '?periodo=2026-1', 400)
+      await bd.query('UPDATE curso SET archived_at = now() WHERE id = $1', [
+        cursoId,
+      ])
+      expect((await distribucion(cursoId)).totalEvaluados).toBe(7)
+    } finally {
+      await bd.query('DELETE FROM nota WHERE evaluacion_id = $1', [evaluacion])
+      await bd.query('DELETE FROM evaluacion WHERE id = $1', [evaluacion])
+      await bd.query('DELETE FROM inscripcion WHERE seccion_id = $1', [
+        seccionId,
+      ])
+      await bd.query('DELETE FROM usuario WHERE id = ANY($1)', [alumnos])
+      await bd.query('DELETE FROM seccion_profesor WHERE seccion_id = $1', [
+        seccionId,
+      ])
+      await bd.query('DELETE FROM seccion WHERE id = $1', [seccionId])
+      await bd.query('DELETE FROM curso WHERE id = $1', [cursoId])
+    }
+  })
+
+  it('un curso sin notas devuelve seis rangos en cero y un curso inexistente o inválido falla', async () => {
+    const [{ universidadId, carreraId, periodoId }] = await bd.query<
+      { universidadId: string; carreraId: string; periodoId: string }[]
+    >(
+      `SELECT c.universidad_id AS "universidadId", c.carrera_id AS "carreraId",
+              c.periodo_id AS "periodoId"
+         FROM seccion s JOIN curso c ON c.id = s.curso_id WHERE s.id = $1`,
+      [ids.norte],
+    )
+    const [{ id: cursoId }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       VALUES ($1, $2, $3, $4, 'Curso sin notas') RETURNING id`,
+      [universidadId, carreraId, periodoId, `MET07-EMPTY-${Date.now()}`],
+    )
+    try {
+      const sinNotas = await distribucion(cursoId)
+      expect(sinNotas.rangos).toHaveLength(6)
+      expect(sinNotas.rangos.every((r) => r.alumnos === 0)).toBe(true)
+      expect(sinNotas.totalEvaluados).toBe(0)
+    } finally {
+      await bd.query('DELETE FROM curso WHERE id = $1', [cursoId])
+    }
+    await distribucion('no-es-uuid', '', 400)
+    await distribucion('00000000-0000-4000-8000-0000000000aa', '', 404)
   })
 
   it('lista cursos de una carrera, con null, período y cursos archivados', async () => {

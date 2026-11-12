@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasCarrera,
+  DistribucionNotas,
   MetricasFacultad,
   MetricasUniversidad,
   ResumenUniversidad,
@@ -21,6 +22,7 @@ const UNIVERSIDADES = '/api/metricas/universidades'
 const FACULTADES = `${UNIVERSIDADES}/u-norte/facultades`
 const CARRERAS_RUTA = '/api/metricas/facultades/f-ing/carreras'
 const CURSOS_RUTA = '/api/metricas/carreras/c-ing/cursos'
+const DISTRIBUCION_RUTA = '/api/metricas/cursos/curso-1/distribucion'
 
 const SIN_INDICADORES = {
   aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
@@ -120,6 +122,22 @@ const CURSOS: MetricasCarrera = {
       promedio: { valor: 6, alumnos: 10 },
       asistencia: { valor: 80, presentes: 8, registros: 10 },
     },
+  ],
+}
+const DISTRIBUCION: DistribucionNotas = {
+  universidad: { id: 'u-norte', nombre: 'Universidad Demo Norte' },
+  facultad: { id: 'f-ing', nombre: 'Ingeniería' },
+  carrera: { id: 'c-ing', nombre: 'Ingeniería Civil' },
+  curso: { id: 'curso-1', codigo: 'INF-101', nombre: 'Programación' },
+  totalEvaluados: 7,
+  notaMinimaAprobacion: 4,
+  rangos: [
+    { minimo: 1, maximo: 1.9, alumnos: 1 },
+    { minimo: 2, maximo: 2.9, alumnos: 1 },
+    { minimo: 3, maximo: 3.9, alumnos: 1 },
+    { minimo: 4, maximo: 4.9, alumnos: 1 },
+    { minimo: 5, maximo: 5.9, alumnos: 1 },
+    { minimo: 6, maximo: 7, alumnos: 2 },
   ],
 }
 
@@ -614,6 +632,173 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       )
       expect(
         screen.queryByRole('table', { name: 'Cursos de la carrera' }),
+      ).toBeNull()
+      expect(pedida).not.toHaveBeenCalled()
+    },
+  )
+
+  test('un curso muestra el histograma, tabla, línea de aprobación y breadcrumb', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1?periodo=2026-1',
+      {
+        [DISTRIBUCION_RUTA]: (_init, url) => {
+          expect(url).toBe(DISTRIBUCION_RUTA)
+          return DISTRIBUCION
+        },
+      },
+    )
+    const histograma = await screen.findByRole('img', {
+      name: /Distribución de notas/,
+    })
+    expect(histograma).toBeInTheDocument()
+    expect(histograma).toHaveAccessibleName(/aprobación.*4,0/i)
+    // El histograma usa clases propias: las `indicadores__barra*` son de la
+    // comparación de MET-02 y su CSS no debe alcanzarlo (ni al revés).
+    expect(
+      histograma.querySelectorAll('.indicadores__histograma-barra'),
+    ).toHaveLength(6)
+    expect(histograma.querySelector('[class*="indicadores__barra"]')).toBeNull()
+    // La línea de aprobación se rotula con la nota mínima de la API.
+    expect(screen.getByText('Aprobación 4,0')).toBeInTheDocument()
+    expect(
+      screen.getByRole('table', {
+        name: 'Tabla equivalente de distribución de notas',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('1,0–1,9').length).toBeGreaterThan(0)
+    expect(screen.getByText(/7\s+alumnos evaluados/)).toBeInTheDocument()
+    const migas = within(
+      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+    expect(
+      migas.getByRole('link', { name: 'Ingeniería Civil' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
+    )
+  })
+
+  // Un enlace directo puede combinar una facultad y una carrera que no son las
+  // del curso: el breadcrumb usa los ids de la API y conserva el período.
+  test('el breadcrumb del curso usa los ids de la API y conserva el período', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-url/carreras/c-url/cursos/curso-1?periodo=2026-1',
+      {
+        [DISTRIBUCION_RUTA]: () => ({
+          ...DISTRIBUCION,
+          universidad: { id: 'u-sur', nombre: 'Universidad Demo Sur' },
+          facultad: { id: 'f-sur', nombre: 'Facultad de Sur' },
+          carrera: { id: 'c-sur', nombre: 'Carrera de Sur' },
+        }),
+      },
+    )
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    expect(
+      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
+    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
+    expect(
+      migas.getByRole('link', { name: 'Facultad de Sur' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur/facultades/f-sur?periodo=2026-1',
+    )
+    expect(migas.getByRole('link', { name: 'Carrera de Sur' })).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur/facultades/f-sur/carreras/c-sur?periodo=2026-1',
+    )
+  })
+
+  // Se llega desde el último nivel del drill-down; la distribución no recibe
+  // el período (el curso fija el suyo), pero la navegación lo conserva.
+  test('un curso de la tabla abre su distribución sin enviar el período', async () => {
+    const pedidas: string[] = []
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
+      {
+        [CURSOS_RUTA]: () => CURSOS,
+        [DISTRIBUCION_RUTA]: (_init, url) => {
+          pedidas.push(url ?? '')
+          return DISTRIBUCION
+        },
+      },
+    )
+    fireEvent.click(await screen.findByRole('link', { name: /INF-101/ }))
+    expect(
+      await screen.findByRole('img', { name: /Distribución de notas/ }),
+    ).toBeInTheDocument()
+    expect(pedidas).toEqual([DISTRIBUCION_RUTA])
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+      ).getByRole('link', { name: 'Indicadores' }),
+    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
+  })
+
+  test('distribución: vacío, error con reintento y curso inexistente', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      {
+        [DISTRIBUCION_RUTA]: () => ({
+          ...DISTRIBUCION,
+          totalEvaluados: 0,
+          rangos: DISTRIBUCION.rangos.map((r) => ({ ...r, alumnos: 0 })),
+        }),
+      },
+    )
+    expect(
+      await screen.findByText('Sin notas finales para este curso'),
+    ).toBeInTheDocument()
+    cleanup()
+    let intentos = 0
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      {
+        [DISTRIBUCION_RUTA]: () =>
+          intentos++ === 0 ? json({}, 500) : DISTRIBUCION,
+      },
+    )
+    expect(
+      await screen.findByText('No pudimos cargar la distribución.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('img', { name: /Distribución de notas/ }),
+    ).toBeInTheDocument()
+    cleanup()
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      {
+        [DISTRIBUCION_RUTA]: () => json({}, 404),
+      },
+    )
+    expect(await screen.findByText('El curso no existe.')).toBeInTheDocument()
+  })
+
+  test.each<Rol>(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
+    '%s no accede a la distribución por URL',
+    async (rol) => {
+      const pedida = vi.fn(() => DISTRIBUCION)
+      await renderConSesion(
+        rol,
+        '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+        {
+          [DISTRIBUCION_RUTA]: pedida,
+        },
+      )
+      expect(
+        screen.queryByRole('img', { name: /Distribución de notas/ }),
       ).toBeNull()
       expect(pedida).not.toHaveBeenCalled()
     },

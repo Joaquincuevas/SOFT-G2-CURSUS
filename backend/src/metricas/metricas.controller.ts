@@ -2,6 +2,7 @@ import type {
   MetricasConsolidadas,
   MetricasFacultad,
   MetricasCarrera,
+  DistribucionNotas,
   MetricasUniversidad,
   PeriodoDisponible,
   ReporteFacultad,
@@ -117,5 +118,19 @@ export class MetricasController {
     @Query('periodo') periodo?: string,
   ): Promise<MetricasCarrera> {
     return this.metricas.cursos(contexto, id, periodoDe(periodo))
+  }
+
+  // MET-07: el período pertenece al curso; no se puede reemplazar por query.
+  @Puede('read', 'Metricas')
+  @Get('cursos/:id/distribucion')
+  distribucion(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('periodo') periodo?: string,
+  ): Promise<DistribucionNotas> {
+    if (periodo !== undefined) {
+      throw new BadRequestException('La distribución no acepta periodo')
+    }
+    return this.metricas.distribucion(contexto, id)
   }
 }

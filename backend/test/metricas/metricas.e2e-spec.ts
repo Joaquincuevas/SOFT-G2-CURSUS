@@ -2,6 +2,7 @@ import type {
   MetricasConsolidadas,
   MetricasFacultad,
   MetricasCarrera,
+  DistribucionNotas,
   MetricasUniversidad,
   ReporteFacultad,
   ResumenUniversidad,
@@ -65,6 +66,22 @@ const CURSOS_REPORTE: MetricasCarrera = {
   periodo: { anio: 2026, semestre: 2 },
   cursos: [],
 }
+const DISTRIBUCION: DistribucionNotas = {
+  universidad: { id: UNIVERSIDAD, nombre: 'Norte' },
+  facultad: { id: 'f-ingenieria', nombre: 'Ingeniería' },
+  carrera: { id: 'c-ingenieria', nombre: 'Ingeniería Civil' },
+  curso: { id: UNIVERSIDAD, codigo: 'INF-101', nombre: 'Programación' },
+  totalEvaluados: 2,
+  notaMinimaAprobacion: 4,
+  rangos: [
+    { minimo: 1, maximo: 1.9, alumnos: 0 },
+    { minimo: 2, maximo: 2.9, alumnos: 0 },
+    { minimo: 3, maximo: 3.9, alumnos: 1 },
+    { minimo: 4, maximo: 4.9, alumnos: 1 },
+    { minimo: 5, maximo: 5.9, alumnos: 0 },
+    { minimo: 6, maximo: 7, alumnos: 0 },
+  ],
+}
 const consolidado = vi.fn(() => Promise.resolve(CONSOLIDADO))
 const universidades = vi.fn(() => Promise.resolve([] as ResumenUniversidad[]))
 const facultades = vi.fn((_c: unknown, id: string) =>
@@ -89,6 +106,11 @@ const cursosMetricas = vi.fn((_c: unknown, id: string) =>
     ? Promise.resolve(CURSOS_REPORTE)
     : Promise.reject(new NotFoundException('La carrera no existe')),
 )
+const distribucionMetricas = vi.fn((_c: unknown, id: string) =>
+  id === UNIVERSIDAD
+    ? Promise.resolve(DISTRIBUCION)
+    : Promise.reject(new NotFoundException('El curso no existe')),
+)
 
 let app: INestApplication<App>
 beforeAll(async () => {
@@ -104,6 +126,7 @@ beforeAll(async () => {
       reporteFacultad,
       carreras: carrerasMetricas,
       cursos: cursosMetricas,
+      distribucion: distribucionMetricas,
     })
     .compile()
   app = modulo.createNestApplication<INestApplication<App>>({ logger: false })
@@ -347,6 +370,50 @@ describe('cursos de una carrera (MET-06)', () => {
       .expect(404)
     await request(app.getHttpServer())
       .get('/api/metricas/carreras/no-es-uuid/cursos')
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(400)
+  })
+})
+
+describe('distribución de notas (MET-07)', () => {
+  const ruta = `/api/metricas/cursos/${UNIVERSIDAD}/distribucion`
+
+  it('el Director recibe la distribución del curso', async () => {
+    await request(app.getHttpServer())
+      .get(ruta)
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(200, DISTRIBUCION)
+    expect(distribucionMetricas).toHaveBeenLastCalledWith(
+      expect.anything(),
+      UNIVERSIDAD,
+    )
+  })
+
+  it('responde 401, 403, 404, 400 y rechaza período', async () => {
+    await request(app.getHttpServer()).get(ruta).expect(401)
+    for (const rol of [
+      'ADMINISTRATIVO',
+      'PROFESOR',
+      'AYUDANTE',
+      'ALUMNO',
+    ] as Rol[]) {
+      await request(app.getHttpServer())
+        .get(ruta)
+        .set('Authorization', sesion(rol))
+        .expect(403)
+    }
+    await request(app.getHttpServer())
+      .get(
+        '/api/metricas/cursos/00000000-0000-4000-8000-0000000000ff/distribucion',
+      )
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(404)
+    await request(app.getHttpServer())
+      .get('/api/metricas/cursos/no-es-uuid/distribucion')
+      .set('Authorization', sesion('DIRECTOR'))
+      .expect(400)
+    await request(app.getHttpServer())
+      .get(`${ruta}?periodo=2026-1`)
       .set('Authorization', sesion('DIRECTOR'))
       .expect(400)
   })

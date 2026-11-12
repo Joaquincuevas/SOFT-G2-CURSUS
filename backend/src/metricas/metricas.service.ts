@@ -4,9 +4,11 @@ import type {
   PeriodoDisponible,
   MetricasFacultad,
   MetricasCarrera,
+  DistribucionNotas,
   ReporteFacultad,
   ResumenUniversidad,
 } from '@cursus/shared'
+import { NOTA_MINIMA_APROBACION } from '@cursus/shared'
 import { Injectable, NotFoundException } from '@nestjs/common'
 import {
   BaseDeDatos,
@@ -287,6 +289,51 @@ const CURSOS = `${BASE}
      AND f.archived_at IS NULL
      AND u.archived_at IS NULL`
 
+const PERIODO_CURSO = `
+  SELECT p.anio, p.semestre
+    FROM curso c
+    JOIN periodo p ON p.id = c.periodo_id
+   WHERE c.id = $1::uuid`
+
+// MET-07: usa las mismas filas FINAL de BASE. Los intervalos son cerrados a
+// la izquierda y abiertos a la derecha, salvo el último: la nota ya viene
+// redondeada a una décima por nota_final().
+const DISTRIBUCION = `${BASE}
+  , notas_curso AS (
+    SELECT count(*) AS total,
+           count(*) FILTER (WHERE nota >= 1.0 AND nota < 2.0) AS r1,
+           count(*) FILTER (WHERE nota >= 2.0 AND nota < 3.0) AS r2,
+           count(*) FILTER (WHERE nota >= 3.0 AND nota < 4.0) AS r3,
+           count(*) FILTER (WHERE nota >= ${NOTA_MINIMA_APROBACION}.0 AND nota < 5.0) AS r4,
+           count(*) FILTER (WHERE nota >= 5.0 AND nota < 6.0) AS r5,
+           count(*) FILTER (WHERE nota >= 6.0 AND nota <= 7.0) AS r6
+      FROM finales
+     WHERE curso_id = $4::uuid
+  )
+  SELECT json_build_object('id', u.id, 'nombre', u.nombre) AS universidad,
+         json_build_object('id', f.id, 'nombre', f.nombre) AS facultad,
+         json_build_object('id', ca.id, 'nombre', ca.nombre) AS carrera,
+         json_build_object('id', cu.id, 'codigo', cu.codigo, 'nombre', cu.nombre) AS curso,
+         coalesce(n.total, 0)::int AS "totalEvaluados",
+         ${NOTA_MINIMA_APROBACION}::float8 AS "notaMinimaAprobacion",
+         json_build_array(
+           json_build_object('minimo', 1.0, 'maximo', 1.9, 'alumnos', coalesce(n.r1, 0)::int),
+           json_build_object('minimo', 2.0, 'maximo', 2.9, 'alumnos', coalesce(n.r2, 0)::int),
+           json_build_object('minimo', 3.0, 'maximo', 3.9, 'alumnos', coalesce(n.r3, 0)::int),
+           json_build_object('minimo', 4.0, 'maximo', 4.9, 'alumnos', coalesce(n.r4, 0)::int),
+           json_build_object('minimo', 5.0, 'maximo', 5.9, 'alumnos', coalesce(n.r5, 0)::int),
+           json_build_object('minimo', 6.0, 'maximo', 7.0, 'alumnos', coalesce(n.r6, 0)::int)
+         ) AS rangos
+    FROM curso cu
+    JOIN carrera ca ON ca.id = cu.carrera_id AND ca.universidad_id = cu.universidad_id
+    JOIN facultad f ON f.id = ca.facultad_id AND f.universidad_id = ca.universidad_id
+    JOIN universidad u ON u.id = cu.universidad_id
+    CROSS JOIN notas_curso n
+   WHERE cu.id = $4::uuid
+     AND u.archived_at IS NULL
+     AND f.archived_at IS NULL
+     AND ca.archived_at IS NULL`
+
 // MET-08: las dimensiones (carreras y cursos) salen de los cursos del período y
 // de la facultad de la sesión, tengan o no secciones: un curso recién creado
 // aparece con sus indicadores en null. Los agregados reutilizan las filas de
@@ -448,6 +495,25 @@ export class MetricasService {
         [null, periodo?.anio ?? null, periodo?.semestre ?? null, carreraId],
       )
     if (!fila) throw new NotFoundException('La carrera no existe')
+    return fila
+  }
+
+  async distribucion(
+    contexto: ContextoUniversidad,
+    cursoId: string,
+  ): Promise<DistribucionNotas> {
+    const [periodo] = await this.bd.consultarEnTodasLasUniversidades<{
+      anio: number
+      semestre: number
+    }>(contexto, PERIODO_CURSO, [cursoId])
+    if (!periodo) throw new NotFoundException('El curso no existe')
+    const [fila] =
+      await this.bd.consultarEnTodasLasUniversidades<DistribucionNotas>(
+        contexto,
+        DISTRIBUCION,
+        [null, periodo.anio, periodo.semestre, cursoId],
+      )
+    if (!fila) throw new NotFoundException('El curso no existe')
     return fila
   }
 
