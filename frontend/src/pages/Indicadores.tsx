@@ -1,5 +1,6 @@
 import type {
   IndicadoresFacultad,
+  MetricasCarrera,
   MetricasConsolidadas,
   MetricasFacultad,
   MetricasUniversidad,
@@ -106,11 +107,15 @@ function SelectorPeriodo({ periodo }: { periodo: string | null }) {
   const [periodosDisponibles, recargar] = useDatos<PeriodoDisponible[]>(
     '/api/metricas/periodos',
   )
-  const [, fijarParams] = useSearchParams()
+  const [params, fijarParams] = useSearchParams()
   const valor = periodo ?? ''
+  // Solo cambia el período: el resto de la URL (por ejemplo, el orden de la
+  // tabla de cursos) se conserva para comparar semestres.
   const cambiar = (valorNuevo: string) => {
-    if (valorNuevo) fijarParams({ periodo: valorNuevo })
-    else fijarParams({})
+    const siguiente = new URLSearchParams(params)
+    if (valorNuevo) siguiente.set('periodo', valorNuevo)
+    else siguiente.delete('periodo')
+    fijarParams(siguiente)
   }
 
   if (periodosDisponibles === null) {
@@ -242,6 +247,10 @@ export function RutasIndicadores() {
   return (
     <Routes>
       <Route index element={<Indicadores />} />
+      <Route
+        path="universidades/:id/facultades/:facultadId/carreras/:carreraId"
+        element={<CursosCarrera />}
+      />
       <Route
         path="universidades/:id/facultades/:facultadId"
         element={<CarrerasFacultad />}
@@ -403,7 +412,14 @@ function CarrerasFacultad() {
           {datos.carreras.map((carrera) => (
             <li key={carrera.id} className="indicadores__facultad">
               <article aria-label={carrera.nombre}>
-                <h3 className="indicadores__subtitulo">{carrera.nombre}</h3>
+                <h3 className="indicadores__subtitulo">
+                  <Link
+                    className="indicadores__enlace"
+                    to={`/indicadores/universidades/${id}/facultades/${facultadId}/carreras/${carrera.id}${sufijo}`}
+                  >
+                    {carrera.nombre}
+                  </Link>
+                </h3>
                 <ul className="indicadores__tarjetas" aria-label="Indicadores">
                   <Tarjeta
                     titulo="Tasa de aprobación"
@@ -434,6 +450,179 @@ function CarrerasFacultad() {
       )}
     </section>
   )
+}
+
+type OrdenCurso = 'aprobacion' | 'promedio' | 'asistencia'
+type DireccionOrden = 'asc' | 'desc'
+
+function CursosCarrera() {
+  const { id, facultadId, carreraId } = useParams()
+  const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
+  const [params, fijarParams] = useSearchParams()
+  const orden = params.get('orden') as OrdenCurso | null
+  const direccion = params.get('direccion') as DireccionOrden | null
+  const ordenValido = ['aprobacion', 'promedio', 'asistencia'].includes(
+    orden ?? '',
+  )
+    ? orden
+    : null
+  const direccionValida = direccion === 'desc' ? 'desc' : 'asc'
+  const [datos, recargar, status] = useDatos<MetricasCarrera>(
+    valido ? `/api/metricas/carreras/${carreraId}/cursos${consulta}` : null,
+  )
+  // La universidad de la API manda sobre la de la URL (un enlace directo puede
+  // traer otra); mientras no cargue, vale la de la URL.
+  const universidadId = datos?.universidad.id ?? id
+  const universidadRuta = `/indicadores/universidades/${universidadId}${sufijo}`
+  // También la facultad de la API manda sobre la de la URL; el id de la URL es
+  // el respaldo mientras no carga.
+  const facultadRutaId = datos?.facultad.id ?? facultadId
+  const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
+  const volverIndicadores = `/indicadores${sufijo}`
+  const cambiarOrden = (nuevo: OrdenCurso) => {
+    const siguiente = new URLSearchParams(params)
+    siguiente.set('orden', nuevo)
+    siguiente.set(
+      'direccion',
+      ordenValido === nuevo && direccionValida === 'asc' ? 'desc' : 'asc',
+    )
+    fijarParams(siguiente)
+  }
+  if (!valido) return <PeriodoInvalido periodo={periodo} />
+
+  const cursos = datos
+    ? [...datos.cursos].sort((a, b) =>
+        comparaCursos(a, b, ordenValido, direccionValida),
+      )
+    : []
+  return (
+    <section className="indicadores" aria-label="Indicadores por curso">
+      <nav className="indicadores__migas" aria-label="Ruta de navegación">
+        <ol>
+          <li>
+            <Link to={volverIndicadores}>Indicadores</Link>
+          </li>
+          <li>
+            <Link to={universidadRuta}>
+              {datos?.universidad.nombre ?? 'Universidad'}
+            </Link>
+          </li>
+          <li>
+            <Link to={facultadRuta}>
+              {datos?.facultad.nombre ?? 'Facultad'}
+            </Link>
+          </li>
+          <li aria-current="page">{datos?.carrera.nombre ?? 'Carrera'}</li>
+        </ol>
+      </nav>
+      <SelectorPeriodo periodo={periodo} />
+      {datos === undefined ? (
+        <Cargando texto="Cargando cursos…" />
+      ) : datos === null ? (
+        status === 404 ? (
+          <div role="alert">
+            <p>La carrera no existe.</p>
+            <Link className="estado__boton" to={facultadRuta}>
+              Volver a la facultad
+            </Link>
+          </div>
+        ) : (
+          <ErrorEstado
+            mensaje="No pudimos cargar los cursos."
+            onReintentar={recargar}
+          />
+        )
+      ) : datos.cursos.length === 0 ? (
+        <p className="indicadores__alcance">Esta carrera no tiene cursos.</p>
+      ) : (
+        <TablaCursos
+          cursos={cursos}
+          orden={ordenValido}
+          direccion={direccionValida}
+          cambiarOrden={cambiarOrden}
+        />
+      )}
+    </section>
+  )
+}
+
+function comparaCursos(
+  a: MetricasCarrera['cursos'][number],
+  b: MetricasCarrera['cursos'][number],
+  orden: OrdenCurso | null,
+  direccion: DireccionOrden,
+) {
+  if (!orden)
+    return a.codigo.localeCompare(b.codigo, 'es') || a.id.localeCompare(b.id)
+  const va = a[orden].valor
+  const vb = b[orden].valor
+  if (va === null) return vb === null ? 0 : 1
+  if (vb === null) return -1
+  return (va - vb) * (direccion === 'desc' ? -1 : 1)
+}
+
+function TablaCursos({
+  cursos,
+  orden,
+  direccion,
+  cambiarOrden,
+}: {
+  cursos: MetricasCarrera['cursos']
+  orden: OrdenCurso | null
+  direccion: DireccionOrden
+  cambiarOrden: (orden: OrdenCurso) => void
+}) {
+  const columna = (clave: OrdenCurso, nombre: string) => (
+    <th
+      scope="col"
+      aria-sort={
+        orden === clave
+          ? direccion === 'asc'
+            ? 'ascending'
+            : 'descending'
+          : 'none'
+      }
+    >
+      <button
+        type="button"
+        onClick={() => cambiarOrden(clave)}
+        aria-label={`Ordenar por ${nombre}`}
+      >
+        {nombre}
+      </button>
+    </th>
+  )
+  return (
+    <table className="indicadores__tabla">
+      <caption>Cursos de la carrera</caption>
+      <thead>
+        <tr>
+          <th scope="col">Curso</th>
+          {columna('aprobacion', 'Aprobación')}
+          {columna('promedio', 'Promedio')}
+          {columna('asistencia', 'Asistencia')}
+        </tr>
+      </thead>
+      <tbody>
+        {cursos.map((curso) => (
+          <tr key={curso.id}>
+            <th scope="row">
+              <span>{curso.codigo}</span> {curso.nombre}
+            </th>
+            <td>{valorIndicador(curso.aprobacion.valor, 1, '%')}</td>
+            <td>{valorIndicador(curso.promedio.valor, 2)}</td>
+            <td>{valorIndicador(curso.asistencia.valor, 2, '%')}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function valorIndicador(valor: number | null, decimales: number, unidad = '') {
+  return valor === null
+    ? SIN_DATOS
+    : `${valor.toLocaleString('es-CL', { minimumFractionDigits: decimales, maximumFractionDigits: decimales })}${unidad}`
 }
 
 function Tarjeta({

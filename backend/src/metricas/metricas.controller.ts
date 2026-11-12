@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasFacultad,
+  MetricasCarrera,
   MetricasUniversidad,
   PeriodoDisponible,
   ReporteFacultad,
@@ -105,5 +106,16 @@ export class MetricasController {
     @Query('periodo') periodo?: string,
   ): Promise<MetricasFacultad> {
     return this.metricas.carreras(contexto, id, periodoDe(periodo))
+  }
+
+  // MET-06: cursos vigentes de una carrera. 404 si no existe o está archivada.
+  @Puede('read', 'Metricas')
+  @Get('carreras/:id/cursos')
+  cursos(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('periodo') periodo?: string,
+  ): Promise<MetricasCarrera> {
+    return this.metricas.cursos(contexto, id, periodoDe(periodo))
   }
 }

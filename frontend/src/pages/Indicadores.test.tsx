@@ -1,5 +1,6 @@
 import type {
   MetricasConsolidadas,
+  MetricasCarrera,
   MetricasFacultad,
   MetricasUniversidad,
   ResumenUniversidad,
@@ -19,6 +20,7 @@ const RUTA = '/api/metricas/consolidado'
 const UNIVERSIDADES = '/api/metricas/universidades'
 const FACULTADES = `${UNIVERSIDADES}/u-norte/facultades`
 const CARRERAS_RUTA = '/api/metricas/facultades/f-ing/carreras'
+const CURSOS_RUTA = '/api/metricas/carreras/c-ing/cursos'
 
 const SIN_INDICADORES = {
   aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
@@ -85,6 +87,38 @@ const CARRERAS: MetricasFacultad = {
       aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
       promedio: { valor: null, alumnos: 0 },
       asistencia: { valor: null, presentes: 0, registros: 0 },
+    },
+  ],
+}
+const CURSOS: MetricasCarrera = {
+  universidad: { id: 'u-norte', nombre: 'Universidad Demo Norte' },
+  facultad: { id: 'f-ing', nombre: 'Ingeniería' },
+  carrera: { id: 'c-ing', nombre: 'Ingeniería Civil' },
+  periodo: { anio: 2026, semestre: 2 },
+  cursos: [
+    {
+      id: 'curso-1',
+      codigo: 'INF-101',
+      nombre: 'Programación',
+      aprobacion: { valor: 50, aprobados: 1, evaluados: 2 },
+      promedio: { valor: 4.5, alumnos: 2 },
+      asistencia: { valor: 66.67, presentes: 4, registros: 6 },
+    },
+    {
+      id: 'curso-2',
+      codigo: 'MAT-101',
+      nombre: 'Cálculo',
+      aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+      promedio: { valor: null, alumnos: 0 },
+      asistencia: { valor: null, presentes: 0, registros: 0 },
+    },
+    {
+      id: 'curso-3',
+      codigo: 'FIS-101',
+      nombre: 'Física',
+      aprobacion: { valor: 90, aprobados: 9, evaluados: 10 },
+      promedio: { valor: 6, alumnos: 10 },
+      asistencia: { valor: 80, presentes: 8, registros: 10 },
     },
   ],
 }
@@ -347,6 +381,243 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       screen.getByRole('link', { name: 'Volver a la universidad' }),
     ).toHaveAttribute('href', '/indicadores/universidades/u-norte')
   })
+
+  test('una carrera abre sus cursos, conserva período y ordena null al final', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores?periodo=2026-1', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+      [FACULTADES]: () => DETALLE,
+      [CARRERAS_RUTA]: () => CARRERAS,
+      [CURSOS_RUTA]: (_init, url) => {
+        expect(url).toBe(`${CURSOS_RUTA}?periodo=2026-1`)
+        return CURSOS
+      },
+    })
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
+    )
+    fireEvent.click(await screen.findByRole('link', { name: 'Ingeniería' }))
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'Ingeniería Civil' }),
+    )
+    expect(await screen.findByText('Programación')).toBeInTheDocument()
+    expect(screen.getByText('Cálculo')).toBeInTheDocument()
+    const tabla = screen.getByRole('table', { name: 'Cursos de la carrera' })
+    expect(within(tabla).getAllByText('Sin datos suficientes')).toHaveLength(3)
+    const filas = within(tabla).getAllByRole('row')
+    expect(filas[1]).toHaveTextContent('FIS-101')
+    fireEvent.click(
+      within(tabla).getByRole('button', { name: 'Ordenar por Aprobación' }),
+    )
+    expect(
+      within(tabla).getByRole('columnheader', { name: /Aprobación/ }),
+    ).toHaveAttribute('aria-sort', 'ascending')
+    expect(within(tabla).getAllByRole('row')[1]).toHaveTextContent('INF-101')
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+      ).getByRole('link', { name: 'Indicadores' }),
+    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+      ).getByRole('link', { name: 'Ingeniería' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-norte/facultades/f-ing?periodo=2026-1',
+    )
+    // Y vuelve también a la universidad, conservando el período.
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
+      ).getByRole('link', { name: 'Universidad Demo Norte' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-norte?periodo=2026-1',
+    )
+  })
+
+  // La universidad de la API manda sobre la de la URL, como en el nivel de
+  // carreras.
+  test('el breadcrumb de la carrera vuelve a la universidad de la API', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
+      {
+        [CURSOS_RUTA]: () => ({
+          ...CURSOS,
+          universidad: { id: 'u-sur', nombre: 'Universidad Demo Sur' },
+          facultad: { id: 'f-otra', nombre: 'Facultad de Sur' },
+        }),
+      },
+    )
+    const migas = within(
+      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    )
+    expect(
+      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
+    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
+    // La URL trae f-ing, pero la carrera es de otra facultad: el enlace usa la
+    // de la API y conserva el período.
+    expect(
+      migas.getByRole('link', { name: 'Facultad de Sur' }),
+    ).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur/facultades/f-otra?periodo=2026-1',
+    )
+  })
+
+  // Cambiar el período no borra el orden de la tabla: permite comparar
+  // semestres sin volver a ordenar.
+  test('al cambiar el período se conservan el orden y la dirección', async () => {
+    const pedidas: string[] = []
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-2&orden=promedio&direccion=desc',
+      {
+        [CURSOS_RUTA]: (_init, url) => {
+          pedidas.push(url ?? '')
+          return CURSOS
+        },
+      },
+    )
+    const tabla = await screen.findByRole('table', {
+      name: 'Cursos de la carrera',
+    })
+    expect(
+      within(tabla).getByRole('columnheader', { name: 'Promedio' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Período' }), {
+      target: { value: '2026-1' },
+    })
+    await waitFor(() =>
+      expect(pedidas).toContain(`${CURSOS_RUTA}?periodo=2026-1`),
+    )
+    expect(
+      within(
+        await screen.findByRole('table', { name: 'Cursos de la carrera' }),
+      ).getByRole('columnheader', { name: 'Promedio' }),
+    ).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
+      '2026-1',
+    )
+  })
+
+  // Cada indicador ordena en los dos sentidos y los null quedan siempre al
+  // final.
+  test.each([
+    ['Aprobación', 'asc', ['B', 'C', 'A', 'N']],
+    ['Aprobación', 'desc', ['A', 'C', 'B', 'N']],
+    ['Promedio', 'asc', ['C', 'A', 'B', 'N']],
+    ['Promedio', 'desc', ['B', 'A', 'C', 'N']],
+    ['Asistencia', 'asc', ['A', 'B', 'C', 'N']],
+    ['Asistencia', 'desc', ['C', 'B', 'A', 'N']],
+  ] as const)(
+    'ordena por %s %s con los null al final',
+    async (columna, sentido, esperado) => {
+      const curso = (
+        codigo: string,
+        aprobacion: number | null,
+        promedio: number | null,
+        asistencia: number | null,
+      ) => ({
+        id: `id-${codigo}`,
+        codigo,
+        nombre: `Curso ${codigo}`,
+        aprobacion: { valor: aprobacion, aprobados: 0, evaluados: 0 },
+        promedio: { valor: promedio, alumnos: 0 },
+        asistencia: { valor: asistencia, presentes: 0, registros: 0 },
+      })
+      await renderConSesion(
+        'DIRECTOR',
+        '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+        {
+          [CURSOS_RUTA]: () => ({
+            ...CURSOS,
+            cursos: [
+              curso('N', null, null, null),
+              curso('A', 80, 5, 10),
+              curso('B', 20, 6, 20),
+              curso('C', 50, 4, 30),
+            ],
+          }),
+        },
+      )
+      const tabla = await screen.findByRole('table', {
+        name: 'Cursos de la carrera',
+      })
+      const boton = within(tabla).getByRole('button', {
+        name: `Ordenar por ${columna}`,
+      })
+      fireEvent.click(boton)
+      if (sentido === 'desc') fireEvent.click(boton)
+      expect(
+        within(tabla).getByRole('columnheader', { name: columna }),
+      ).toHaveAttribute(
+        'aria-sort',
+        sentido === 'asc' ? 'ascending' : 'descending',
+      )
+      const codigos = within(tabla)
+        .getAllByRole('row')
+        .slice(1)
+        .map((fila) => /Curso (\w)/.exec(fila.textContent ?? '')?.[1])
+      expect(codigos).toEqual(esperado)
+    },
+  )
+
+  test('cursos: vacío, error con reintento y carrera inexistente', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      {
+        [CURSOS_RUTA]: () => ({ ...CURSOS, cursos: [] }),
+      },
+    )
+    expect(
+      await screen.findByText('Esta carrera no tiene cursos.'),
+    ).toBeInTheDocument()
+    cleanup()
+    let intentos = 0
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      {
+        [CURSOS_RUTA]: () => (intentos++ === 0 ? json({}, 500) : CURSOS),
+      },
+    )
+    expect(
+      await screen.findByText('No pudimos cargar los cursos.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(await screen.findByText('Programación')).toBeInTheDocument()
+    cleanup()
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      {
+        [CURSOS_RUTA]: () => json({}, 404),
+      },
+    )
+    expect(await screen.findByText('La carrera no existe.')).toBeInTheDocument()
+  })
+
+  test.each<Rol>(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
+    '%s no accede a los cursos por URL',
+    async (rol) => {
+      const pedida = vi.fn(() => CURSOS)
+      await renderConSesion(
+        rol,
+        '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+        {
+          [CURSOS_RUTA]: pedida,
+        },
+      )
+      expect(
+        screen.queryByRole('table', { name: 'Cursos de la carrera' }),
+      ).toBeNull()
+      expect(pedida).not.toHaveBeenCalled()
+    },
+  )
 
   test.each<Rol>(['ADMINISTRATIVO', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
     '%s no accede a las carreras por URL',
