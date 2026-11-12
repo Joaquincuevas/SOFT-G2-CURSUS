@@ -1,16 +1,20 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  ReporteFacultad,
   ResumenUniversidad,
 } from '@cursus/shared'
 import {
   BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
   Query,
+  Req,
 } from '@nestjs/common'
+import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
@@ -24,7 +28,11 @@ function periodoDe(valor: string | undefined): PeriodoPedido | null {
   if (!partes) {
     throw new BadRequestException('periodo debe tener la forma AAAA-S')
   }
-  return { anio: Number(partes[1]), semestre: Number(partes[2]) }
+  const semestre = Number(partes[2])
+  if (semestre !== 1 && semestre !== 2) {
+    throw new BadRequestException('semestre debe ser 1 o 2')
+  }
+  return { anio: Number(partes[1]), semestre }
 }
 
 // MET-01 y MET-04: indicadores del Directorio. Solo el Director tiene read de
@@ -32,6 +40,21 @@ function periodoDe(valor: string | undefined): PeriodoPedido | null {
 @Controller('metricas')
 export class MetricasController {
   constructor(private readonly metricas: MetricasService) {}
+
+  @Puede('read', 'ReporteMetricasFacultad')
+  @Get('facultad')
+  reporteFacultad(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @Query('periodo') periodo?: string,
+  ): Promise<ReporteFacultad> {
+    if (contexto.rol !== 'ADMINISTRATIVO') throw new ForbiddenException()
+    return this.metricas.reporteFacultad(
+      contexto,
+      req.usuario?.sub as string,
+      periodoDe(periodo),
+    )
+  }
 
   @Puede('read', 'Metricas')
   @Get('consolidado')

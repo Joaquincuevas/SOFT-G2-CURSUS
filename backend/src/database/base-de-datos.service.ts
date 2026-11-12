@@ -134,6 +134,38 @@ export class BaseDeDatos implements OnModuleDestroy {
     })
   }
 
+  // MET-08. Lectura de las notas y la asistencia de la facultad del
+  // Administrativo para su reporte. La RLS de nota solo deja leer a profesores,
+  // ayudantes y Director, así que la transacción lee con el rol DIRECTOR; el
+  // alcance lo fija la consulta, que debe filtrar por la universidad ($1) y por
+  // facultad_actual(usuario_actual()), nunca por un dato del cliente. Corre en
+  // READ ONLY y responde 403 a cualquier otro rol.
+  async consultarFacultadDelAdministrativo<T>(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    sql: string,
+    parametros: unknown[] = [],
+  ): Promise<T[]> {
+    if (contexto.rol !== 'ADMINISTRATIVO' || !contexto.universidadId) {
+      throw new ForbiddenException()
+    }
+    if (!USA_UNIVERSIDAD.test(sql)) {
+      throw new Error('La consulta no filtra por universidad ($1)')
+    }
+    return this.enTransaccion(async (bd) => {
+      // Debe ir antes que cualquier otra consulta de la transacción.
+      await bd.query('SET TRANSACTION READ ONLY')
+      await bd.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await bd.query(
+        `SELECT set_config('app.rol', 'DIRECTOR', true),
+                set_config('app.universidad_id', $1, true),
+                set_config('app.usuario_id', $2, true)`,
+        [contexto.universidadId, usuarioId],
+      )
+      return bd.query<T>(sql, [contexto.universidadId, ...parametros])
+    })
+  }
+
   // MT-04 (ADR 0002). Lectura de las universidades y facultades de todas,
   // para que el superadmin elija dónde trabajar. Como la del Director, no
   // exige $1, responde 403 a cualquier otro rol y corre en una transacción

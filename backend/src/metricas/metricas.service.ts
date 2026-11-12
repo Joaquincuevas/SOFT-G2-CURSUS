@@ -1,6 +1,7 @@
 import type {
   MetricasConsolidadas,
   MetricasUniversidad,
+  ReporteFacultad,
   ResumenUniversidad,
 } from '@cursus/shared'
 import { Injectable, NotFoundException } from '@nestjs/common'
@@ -44,20 +45,25 @@ const BASE = `
        AND CASE WHEN $2::int IS NULL THEN p.activo
                 ELSE p.anio = $2::int AND p.semestre = $3::int END
   ), secciones AS (
-    SELECT s.id, s.universidad_id, cu.id AS curso_id, ca.facultad_id
+    SELECT s.id, s.universidad_id, cu.id AS curso_id,
+           cu.codigo AS curso_codigo, cu.nombre AS curso_nombre,
+           ca.id AS carrera_id, ca.nombre AS carrera_nombre, ca.facultad_id
       FROM seccion s
       JOIN curso cu ON cu.id = s.curso_id AND cu.universidad_id = s.universidad_id
       JOIN carrera ca ON ca.id = cu.carrera_id AND ca.universidad_id = cu.universidad_id
       JOIN periodo_activo p ON p.id = cu.periodo_id AND p.universidad_id = cu.universidad_id
-     WHERE s.archived_at IS NULL AND cu.archived_at IS NULL
+     WHERE s.archived_at IS NULL
   ), inscritos AS (
     SELECT i.universidad_id, i.seccion_id, i.usuario_id AS alumno_id,
-           s.curso_id, s.facultad_id
+           s.curso_id, s.curso_codigo, s.curso_nombre, s.carrera_id,
+           s.carrera_nombre, s.facultad_id
       FROM inscripcion i
       JOIN secciones s ON s.id = i.seccion_id AND s.universidad_id = i.universidad_id
      WHERE i.archived_at IS NULL
   ), finales AS (
-    SELECT ins.universidad_id, ins.facultad_id, nf.nota
+    SELECT ins.universidad_id, ins.facultad_id, ins.carrera_id,
+           ins.curso_id, ins.curso_codigo, ins.curso_nombre,
+           ins.carrera_nombre, nf.nota
       FROM inscritos ins
       CROSS JOIN LATERAL (
         SELECT array_agg(e.ponderacion::integer ORDER BY e.id) AS ponderaciones,
@@ -85,7 +91,9 @@ const BASE = `
         WHERE a.clase_id = c.id AND a.universidad_id = c.universidad_id
           AND a.archived_at IS NULL)
   ), registros AS (
-    SELECT ins.universidad_id, ins.facultad_id, coalesce(a.presente, false) AS presente
+    SELECT ins.universidad_id, ins.facultad_id, ins.carrera_id,
+           ins.curso_id, ins.curso_codigo, ins.curso_nombre,
+           ins.carrera_nombre, coalesce(a.presente, false) AS presente
       FROM inscritos ins
       JOIN usuario u ON u.id = ins.alumno_id AND u.universidad_id = ins.universidad_id
                     AND u.archived_at IS NULL AND u.rol = 'ALUMNO'
@@ -189,6 +197,64 @@ const FACULTADES = `${BASE}${agregados('facultad_id')}${volumen('facultad_id')}
     FROM universidad u
    WHERE u.id = $1::uuid AND u.archived_at IS NULL`
 
+// MET-08: las dimensiones salen de las secciones de la facultad de la sesión;
+// los agregados reutilizan las filas de finales y registros de BASE.
+const REPORTE_FACULTAD = `${BASE}
+  , cursos_reporte AS (
+    SELECT DISTINCT carrera_id, carrera_nombre, curso_id, curso_codigo, curso_nombre
+      FROM secciones
+     WHERE facultad_id = facultad_actual(usuario_actual())
+  ), notas_curso AS (
+    SELECT carrera_id, curso_id, count(*) AS evaluados,
+           count(*) FILTER (WHERE nota >= 4.0) AS aprobados,
+           round(avg(nota), 2) AS promedio
+      FROM finales
+     WHERE facultad_id = facultad_actual(usuario_actual())
+     GROUP BY carrera_id, curso_id
+  ), asistencia_curso AS (
+    SELECT carrera_id, curso_id, count(*) AS registros,
+           count(*) FILTER (WHERE presente) AS presentes
+      FROM registros
+     WHERE facultad_id = facultad_actual(usuario_actual())
+     GROUP BY carrera_id, curso_id
+  ), carreras_reporte AS (
+    SELECT c.carrera_id, c.carrera_nombre,
+           json_agg(json_build_object(
+             'id', c.curso_id, 'codigo', c.curso_codigo, 'nombre', c.curso_nombre,
+             'aprobacion', ${aprobacion('n')},
+             'promedio', ${promedio('n')},
+             'asistencia', ${asistencia('a')}
+           ) ORDER BY c.curso_codigo, c.curso_id) AS cursos,
+           sum(coalesce(n.evaluados, 0)) AS evaluados,
+           sum(coalesce(n.aprobados, 0)) AS aprobados,
+           sum(coalesce(n.promedio * n.evaluados, 0)) / NULLIF(sum(n.evaluados), 0) AS promedio,
+           sum(coalesce(a.registros, 0)) AS registros,
+           sum(coalesce(a.presentes, 0)) AS presentes
+      FROM cursos_reporte c
+      LEFT JOIN notas_curso n ON n.carrera_id = c.carrera_id AND n.curso_id = c.curso_id
+      LEFT JOIN asistencia_curso a ON a.carrera_id = c.carrera_id AND a.curso_id = c.curso_id
+     GROUP BY c.carrera_id, c.carrera_nombre
+  )
+  SELECT json_build_object('id', f.id, 'nombre', f.nombre) AS facultad,
+         (SELECT json_build_object('anio', p.anio, 'semestre', p.semestre)
+            FROM periodo_activo p) AS periodo,
+         coalesce((SELECT json_agg(json_build_object(
+           'id', r.carrera_id, 'nombre', r.carrera_nombre,
+           'aprobacion', json_build_object(
+             'valor', round(r.aprobados::numeric * 100 / NULLIF(r.evaluados, 0), 1)::float8,
+             'aprobados', r.aprobados::int, 'evaluados', r.evaluados::int),
+           'promedio', json_build_object(
+             'valor', r.promedio::float8, 'alumnos', r.evaluados::int),
+           'asistencia', json_build_object(
+             'valor', round(r.presentes::numeric * 100 / NULLIF(r.registros, 0), 2)::float8,
+             'presentes', r.presentes::int, 'registros', r.registros::int),
+           'cursos', r.cursos) ORDER BY r.carrera_nombre, r.carrera_id)
+           FROM carreras_reporte r), '[]'::json) AS carreras
+    FROM facultad f
+   WHERE f.universidad_id = $1::uuid
+     AND f.id = facultad_actual(usuario_actual())
+     AND f.archived_at IS NULL`
+
 // Período pedido en la URL (MET-03 agrega el selector): null es el activo.
 export interface PeriodoPedido {
   anio: number
@@ -240,6 +306,21 @@ export class MetricasService {
         [universidadId, periodo?.anio ?? null, periodo?.semestre ?? null],
       )
     if (!fila) throw new NotFoundException('La universidad no existe')
+    return fila
+  }
+
+  async reporteFacultad(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    periodo: PeriodoPedido | null,
+  ): Promise<ReporteFacultad> {
+    const [fila] =
+      await this.bd.consultarFacultadDelAdministrativo<ReporteFacultad>(
+        contexto,
+        usuarioId,
+        REPORTE_FACULTAD,
+        [periodo?.anio ?? null, periodo?.semestre ?? null],
+      )
     return fila
   }
 }
