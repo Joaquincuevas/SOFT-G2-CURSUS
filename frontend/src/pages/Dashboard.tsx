@@ -13,6 +13,7 @@ import {
   textoPendientes,
 } from './misSecciones'
 import { PanelSuperadmin } from './PanelSuperadmin'
+import { RUTA_HISTORIAL } from './HistorialAlumno'
 import { SeccionesAyudante } from './SeccionesAyudante'
 import { SeccionesAlumno } from './SeccionesAlumno'
 import { useDatos } from './useDatos'
@@ -27,7 +28,12 @@ export function Dashboard() {
     <section aria-label="Dashboard" className="dashboard">
       {user.rol === 'PROFESOR' && <SeccionesProfesor />}
       {user.rol === 'AYUDANTE' && <SeccionesAyudante />}
-      {user.rol === 'ALUMNO' && <SeccionesAlumno key={user.id} />}
+      {user.rol === 'ALUMNO' && (
+        <>
+          <Link to={RUTA_HISTORIAL}>Historial de notas</Link>
+          <SeccionesAlumno key={user.id} />
+        </>
+      )}
       {user.rol === 'SUPERADMIN' && <PanelSuperadmin />}
     </section>
   )

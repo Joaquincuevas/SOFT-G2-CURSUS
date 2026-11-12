@@ -35,7 +35,7 @@ const resumen: SeccionResumen = {
 }
 const tarjetas = async () =>
   within(
-    await screen.findByRole('region', { name: 'Dashboard' }),
+    await screen.findByRole('list', { name: 'Cursos del período activo' }),
   ).findAllByRole('link')
 
 describe('ESP-03: dashboard del alumno', () => {
@@ -183,10 +183,11 @@ describe('ESP-03: dashboard del alumno', () => {
       await screen.findByText('No tienes inscripciones en el período activo.'),
     ).toBeInTheDocument()
     expect(
-      within(screen.getByRole('region', { name: 'Dashboard' })).queryByRole(
-        'link',
-      ),
+      screen.queryByRole('list', { name: 'Cursos del período activo' }),
     ).toBeNull()
+    expect(
+      screen.getByRole('link', { name: 'Historial de notas' }),
+    ).toBeVisible()
   })
   test('muestra carga mientras espera la respuesta', async () => {
     await renderConSesion('ALUMNO', '/', {

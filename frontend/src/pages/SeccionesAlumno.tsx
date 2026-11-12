@@ -37,7 +37,10 @@ export function SeccionesAlumno() {
           No tienes inscripciones en el período activo.
         </p>
       ) : (
-        <ul className="dashboard__tarjetas">
+        <ul
+          className="dashboard__tarjetas"
+          aria-label="Cursos del período activo"
+        >
           {secciones.map(
             ({
               id,
