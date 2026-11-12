@@ -959,12 +959,7 @@ async function materialSql(titulo = 'Material de prueba') {
      RETURNING id`,
     [secciones.s1, archivoId, titulo, await idDe(PROFESOR)],
   )
-  // MAT-07: la versión 1, como la deja el backfill.
-  await bd.query(
-    `INSERT INTO material_version (universidad_id, material_id, version, archivo_id, subido_por)
-     SELECT universidad_id, id, 1, archivo_id, subido_por FROM material WHERE id = $1`,
-    [id],
-  )
+  // MAT-07: tg_material_version_inicial crea su versión 1, sin VersionId.
   return id
 }
 
@@ -1848,6 +1843,76 @@ describe('MAT-07: versiones de un material', () => {
     almacenamiento.objetos.set(clave, { tamano: 100, tipo: 'application/pdf' })
     await subirVersion(PROFESOR, secciones.s1, id, otro, 503)
     expect(await versionesEnBase(id)).toEqual([1])
+  })
+
+  // La descarga genérica de MAT-01 aplica la misma regla que las rutas de
+  // materiales: quien ya conocía el id del archivo reemplazado no obtiene una
+  // URL nueva, salvo el profesor.
+  it.each([
+    ['un alumno', ALUMNO, 404],
+    ['el ayudante', AYUDANTE, 404],
+    ['el Director', DIRECTOR, 404],
+    ['el profesor que lo subió', PROFESOR, 200],
+    ['el co-profesor', PROFESOR_S1, 200],
+  ] as const)(
+    'descarga genérica de la versión anterior: %s (%s) responde %i; la vigente, 200',
+    async (_q, correo, estado) => {
+      const { id, archivoId } = await materialConV1()
+      const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+      await subirVersion(PROFESOR, secciones.s1, id, v2, 201)
+      const generica = (archivo: string) =>
+        `/api/espacio/secciones/${secciones.s1}/archivos/${archivo}/descarga`
+      await obtener(correo, generica(archivoId), estado)
+      await obtener(correo, generica(v2), 200)
+    },
+  )
+
+  // Despliegue: la migración corre antes de que ECS cambie de backend. El
+  // anterior registra el material sin su versión; el trigger la crea.
+  it('un material que registra el backend anterior sigue visible y descargable', async () => {
+    const archivoId = await subir(PROFESOR, secciones.s1, 'anterior.pdf')
+    const q = bd.createQueryRunner()
+    await q.startTransaction()
+    let id: string
+    try {
+      await q.query(`SET LOCAL ROLE ${ROL_APP}`)
+      await q.query(
+        `SELECT set_config('app.universidad_id', $1, true),
+                set_config('app.rol', 'PROFESOR', true),
+                set_config('app.usuario_id', $2, true)`,
+        [norte, usuarios[PROFESOR]],
+      )
+      // El INSERT de MAT-04 antes de MAT-07, sin material_version.
+      ;[{ id }] = (await q.query(
+        `INSERT INTO material
+           (universidad_id, curso_id, archivo_id, categoria, titulo, subido_por)
+         SELECT universidad_id, curso_id, $2, 'GUIA', 'Del backend anterior', $3
+           FROM seccion WHERE id = $1
+         RETURNING id`,
+        [secciones.s1, archivoId, usuarios[PROFESOR]],
+      )) as { id: string }[]
+      await q.commitTransaction()
+    } finally {
+      if (q.isTransactionActive) await q.rollbackTransaction()
+      await q.release()
+    }
+
+    const [visto] = (await listar(ALUMNO, secciones.s1)).filter(
+      (m) => m.id === id,
+    )
+    expect(visto).toMatchObject({ version: 1, archivo: { id: archivoId } })
+    const { url } = await obtener<DescargaArchivo>(
+      ALUMNO,
+      `/api/espacio/secciones/${secciones.s1}/materiales/${id}/descarga`,
+    )
+    expect(url).toBe(
+      `https://s3.test/${await claveDe(archivoId)}?nombre=anterior.pdf`,
+    )
+    // Y el backend nuevo sigue numerando desde ahí.
+    const v2 = await subir(PROFESOR, secciones.s1, 'v2.pdf')
+    expect(
+      (await subirVersion(PROFESOR, secciones.s1, id, v2, 201)).version,
+    ).toBe(2)
   })
 
   it('la versión 1 migrada, sin versión de S3, se descarga sin VersionId', async () => {
