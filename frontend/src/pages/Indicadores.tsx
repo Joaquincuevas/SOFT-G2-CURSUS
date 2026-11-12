@@ -804,8 +804,10 @@ function DistribucionCurso() {
   )
 }
 
+const etiquetaNota = (nota: number) => nota.toFixed(1).replace('.', ',')
+
 function etiquetaRango(minimo: number, maximo: number) {
-  return `${minimo.toFixed(1).replace('.', ',')}–${maximo.toFixed(1).replace('.', ',')}`
+  return `${etiquetaNota(minimo)}–${etiquetaNota(maximo)}`
 }
 
 function DistribucionNotasVista({ datos }: { datos: DistribucionNotas }) {
@@ -829,13 +831,18 @@ function DistribucionNotasVista({ datos }: { datos: DistribucionNotas }) {
       >
         <div className="indicadores__histograma-barras">
           {datos.rangos.map((r) => (
-            <div className="indicadores__barra-grupo" key={r.minimo}>
-              <span className="indicadores__barra-valor">{r.alumnos}</span>
+            <div className="indicadores__histograma-grupo" key={r.minimo}>
+              <span className="indicadores__histograma-valor">{r.alumnos}</span>
               <div
-                className="indicadores__barra"
+                className="indicadores__histograma-barra"
                 style={{ height: `${(r.alumnos / maximo) * 100}%` }}
               />
-              <span>{etiquetaRango(r.minimo, r.maximo)}</span>
+              {/* El rótulo puede partirse tras el guion en pantallas
+                  angostas; el texto sigue siendo «1,0–1,9». */}
+              <span className="indicadores__histograma-etiqueta">
+                {etiquetaNota(r.minimo)}–<wbr />
+                {etiquetaNota(r.maximo)}
+              </span>
             </div>
           ))}
           <div className="indicadores__linea-aprobacion" aria-hidden="true">
