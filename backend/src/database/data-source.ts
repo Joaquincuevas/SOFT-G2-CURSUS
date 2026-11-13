@@ -65,6 +65,7 @@ import { RegistrarEgreso1792950000000 } from './migrations/1792950000000-Registr
 import { CrearEventoAuditoria1792960000000 } from './migrations/1792960000000-CrearEventoAuditoria.js'
 import { CrearMfaUsuario1792970000000 } from './migrations/1792970000000-CrearMfaUsuario.js'
 import { AgregarUltimoPasoMfa1792980000000 } from './migrations/1792980000000-AgregarUltimoPasoMfa.js'
+import { RecuperarPassword1792990000000 } from './migrations/1792990000000-RecuperarPassword.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -151,6 +152,7 @@ export function opcionesDataSource(
       CrearEventoAuditoria1792960000000,
       CrearMfaUsuario1792970000000,
       AgregarUltimoPasoMfa1792980000000,
+      RecuperarPassword1792990000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

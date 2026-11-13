@@ -103,6 +103,7 @@ export class AuthController {
       correo,
       ip,
       (bd) => this.auth.iniciarSesion(correo, password, bd),
+      'login',
       // SEG-02: la contraseña correcta que espera el código no reinicia el
       // límite (ver LimiteLogin.intentar).
       (r) => !('desafio' in r),

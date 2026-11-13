@@ -49,9 +49,11 @@ afterAll(() => app?.close())
 beforeEach(() => {
   intentar.mockReset()
   completarMfa.mockReset()
-  desafioMfaDe
-    .mockReset()
-    .mockResolvedValue({ usuarioId: USUARIO_ID, ultimoPaso: null })
+  desafioMfaDe.mockReset().mockResolvedValue({
+    usuarioId: USUARIO_ID,
+    ultimoPaso: null,
+    credencial: 'huella',
+  })
   query.mockReset().mockResolvedValue([])
 })
 
@@ -78,7 +80,7 @@ describe('paso 1 con MFA', () => {
   it('la contraseña correcta que espera el código no reinicia el límite', async () => {
     intentar.mockResolvedValue({ resultado: null, retryAfter: 0 })
     await paso1().expect(401)
-    const reinicia = intentar.mock.calls[0][3] as (r: object) => boolean
+    const reinicia = intentar.mock.calls[0][4] as (r: object) => boolean
     expect(reinicia({ usuarioId: USUARIO_ID, desafio: DESAFIO })).toBe(false)
     expect(reinicia(TOKENS)).toBe(true)
   })
@@ -100,7 +102,7 @@ describe('POST /api/auth/login/mfa', () => {
     expect(ip).toBe('127.0.0.1')
     await verificar({})
     expect(completarMfa).toHaveBeenCalledWith(
-      { usuarioId: USUARIO_ID, ultimoPaso: null },
+      { usuarioId: USUARIO_ID, ultimoPaso: null, credencial: 'huella' },
       CODIGO,
       {},
     )

@@ -12,7 +12,10 @@ import type { App } from 'supertest/types.js'
 import { DataSource } from 'typeorm'
 import { AppModule } from '../../src/app.module.js'
 import type { RespuestaLogin } from '../../src/auth/auth.controller.js'
-import { firmarDesafioMfa } from '../../src/auth/desafio-mfa.js'
+import {
+  firmarDesafioMfa,
+  huellaCredencial,
+} from '../../src/auth/desafio-mfa.js'
 import { MAX_FALLOS_CUENTA } from '../../src/auth/limite-login.service.js'
 import { configurarApp } from '../../src/config/configurar-app.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
@@ -90,6 +93,14 @@ const paso2 = (desafio: string, codigo: unknown) =>
 // Código de la app en el paso actual + delta (±1 es la tolerancia).
 const codigo = (cuenta: CuentaMfa, delta = 0) =>
   codigoTotp(cuenta.secreto, Date.now() + delta * PASO_MS)
+
+const hashDe = async (cuenta: CuentaMfa) =>
+  (
+    await bd.query<{ password_hash: string }[]>(
+      'SELECT password_hash FROM usuario WHERE id = $1',
+      [cuenta.id],
+    )
+  )[0].password_hash
 
 const ultimoPaso = async (cuenta: CuentaMfa) =>
   (
@@ -362,8 +373,16 @@ describe('paso 2: el código de la app', () => {
 })
 
 describe('el desafío', () => {
-  const firmado = (cuenta: CuentaMfa, expiresIn?: string) =>
-    firmarDesafioMfa(jwt, { usuarioId: cuenta.id, ultimoPaso: null }, expiresIn)
+  const firmado = async (cuenta: CuentaMfa, expiresIn?: string) =>
+    firmarDesafioMfa(
+      jwt,
+      {
+        usuarioId: cuenta.id,
+        ultimoPaso: null,
+        credencial: huellaCredencial(await hashDe(cuenta)),
+      },
+      expiresIn,
+    )
 
   it('expirado se rechaza y pide volver al paso 1', async () => {
     const cuenta = await crearCuenta()
@@ -438,6 +457,76 @@ describe('el desafío', () => {
         .set('Authorization', `Bearer ${desafio}`)
         .expect(401)
     }
+  })
+})
+
+describe('cambio de contraseña', () => {
+  const NUEVA = 'otra-contraseña-segura-1'
+
+  it('un desafío anterior al cambio se rechaza y un inicio nuevo con la contraseña actual funciona', async () => {
+    const cuenta = await crearCuenta()
+    // La sesión que cambia la contraseña (el login pasa por el código).
+    const inicial = await paso2(
+      await desafioDe(cuenta),
+      codigo(cuenta, -1),
+    ).expect(200)
+    const sesion = (inicial.body as RespuestaLogin).accessToken
+    // Un desafío emitido antes del cambio.
+    const anterior = await desafioDe(cuenta)
+    await request(app.getHttpServer())
+      .put('/api/auth/password')
+      .set('Authorization', `Bearer ${sesion}`)
+      .send({ passwordActual: PASSWORD, passwordNueva: NUEVA })
+      .expect(204)
+    const sesionesAntes = await sesionesDe(cuenta)
+    const pasoAntes = await ultimoPaso(cuenta)
+
+    // El código es válido y el desafío no ha expirado, pero la credencial
+    // cambió: se rechaza sin consumir el paso ni crear sesión.
+    const rechazado = await paso2(anterior, codigo(cuenta, 1))
+    expect(rechazado.status).toBe(401)
+    expect(rechazado.body).toMatchObject({ code: CODIGO_MFA_DESAFIO_INVALIDO })
+    expect(rechazado.get('Set-Cookie')).toBeUndefined()
+    expect(await sesionesDe(cuenta)).toBe(sesionesAntes)
+    expect(await ultimoPaso(cuenta)).toBe(pasoAntes)
+
+    // La contraseña anterior ya no entra; la actual pide el código y entra.
+    await paso1(cuenta.correo, PASSWORD).expect(401)
+    const nuevo = await paso1(cuenta.correo, NUEVA).expect(200)
+    const desafio = (nuevo.body as LoginMfaRequerido).desafio
+    const ok = await paso2(desafio, codigo(cuenta, 1)).expect(200)
+    expect(ok.body).toHaveProperty('accessToken')
+  })
+
+  it('restablecer la contraseña también invalida el desafío pendiente', async () => {
+    const cuenta = await crearCuenta()
+    const anterior = await desafioDe(cuenta)
+    // Lo que hace un restablecimiento: un hash nuevo en la cuenta.
+    await bd.query('UPDATE usuario SET password_hash = $2 WHERE id = $1', [
+      cuenta.id,
+      await hash(NUEVA),
+    ])
+    const rechazado = await paso2(anterior, codigo(cuenta))
+    expect(rechazado.status).toBe(401)
+    expect(rechazado.body).toMatchObject({ code: CODIGO_MFA_DESAFIO_INVALIDO })
+    expect(await sesionesDe(cuenta)).toBe(0)
+    expect(await ultimoPaso(cuenta)).toBeNull()
+    const desafio = (
+      (await paso1(cuenta.correo, NUEVA).expect(200)).body as LoginMfaRequerido
+    ).desafio
+    await paso2(desafio, codigo(cuenta)).expect(200)
+  })
+
+  it('un desafío que no es de la contraseña actual no sirve aunque se firme bien', async () => {
+    const cuenta = await crearCuenta()
+    const falso = await firmarDesafioMfa(jwt, {
+      usuarioId: cuenta.id,
+      ultimoPaso: null,
+      credencial: huellaCredencial('otro-hash'),
+    })
+    const respuesta = await paso2(falso, codigo(cuenta))
+    expect(respuesta.status).toBe(401)
+    expect(respuesta.body).toMatchObject({ code: CODIGO_MFA_DESAFIO_INVALIDO })
   })
 })
 

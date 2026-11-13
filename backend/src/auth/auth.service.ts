@@ -7,6 +7,7 @@ import { duracionRefresh } from '../config/entorno.js'
 import { MfaService } from '../seguridad/mfa.service.js'
 import {
   firmarDesafioMfa,
+  huellaCredencial,
   leerDesafioMfa,
   type DesafioMfa,
 } from './desafio-mfa.js'
@@ -125,7 +126,7 @@ export class AuthService {
                OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
           AND u.archived_at IS NULL AND un.archived_at IS NULL
         ORDER BY u.universidad_id NULLS LAST
-        LIMIT 1`,
+        LIMIT 1 FOR SHARE OF u`,
       [correo.trim().toLowerCase()],
     )
     const passwordValida = await verify(
@@ -142,6 +143,7 @@ export class AuthService {
         desafio: await firmarDesafioMfa(this.jwt, {
           usuarioId: usuario.id,
           ultimoPaso: mfa.ultimoPaso,
+          credencial: huellaCredencial(usuario.password_hash),
         }),
       }
     }
@@ -151,8 +153,26 @@ export class AuthService {
 
   // SEG-02. El desafío del paso 1, o null si no es válido (manipulado,
   // expirado, de otro propósito o un JWT de sesión).
-  desafioMfaDe(token: string): Promise<DesafioMfa | null> {
-    return leerDesafioMfa(this.jwt, token)
+  // También lo rechaza si la contraseña cambió desde que se emitió (la
+  // credencial de la cuenta ya no es la misma): hay que repetir el paso 1.
+  async desafioMfaDe(token: string): Promise<DesafioMfa | null> {
+    const desafio = await leerDesafioMfa(this.jwt, token)
+    if (!desafio) return null
+    return (await this.credencialVigente(desafio)) ? desafio : null
+  }
+
+  private async credencialVigente(
+    { usuarioId, credencial }: DesafioMfa,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
+    bloquear = false,
+  ): Promise<boolean> {
+    const [fila] = await bd.query<{ password_hash: string }>(
+      `SELECT password_hash FROM usuario WHERE id = $1 AND archived_at IS NULL${bloquear ? ' FOR SHARE' : ''}`,
+      [usuarioId],
+    )
+    return (
+      fila !== undefined && huellaCredencial(fila.password_hash) === credencial
+    )
   }
 
   // SEG-02. Segundo paso: con el código válido (y su paso aún sin usar)
@@ -162,6 +182,10 @@ export class AuthService {
     codigo: string,
     bd: Pick<BaseDeDatos, 'query'> = this.bd,
   ): Promise<SesionIniciada | null> {
+    // Antes de consumir el paso del código: la contraseña no cambió desde el
+    // desafío. FOR SHARE bloquea un cambio de contraseña concurrente hasta
+    // que termine el inicio de sesión.
+    if (!(await this.credencialVigente(desafio, bd, true))) return null
     const valido = await this.mfa.verificarParaLogin(
       desafio.usuarioId,
       codigo,

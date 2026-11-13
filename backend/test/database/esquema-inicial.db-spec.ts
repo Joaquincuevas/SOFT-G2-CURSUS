@@ -42,6 +42,7 @@ const TABLAS = [
   'nota',
   'nota_cambio',
   'periodo',
+  'recuperacion_password',
   'refresh_token',
   'revision_notas',
   'seccion',
@@ -189,7 +190,13 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // SEG-02 es la última: quita ultimo_paso y vuelve a la función de SEG-04.
+    // SEG-03 es la última: quita los enlaces de recuperación.
+    await bd.undoLastMigration()
+    const SIN_RECUPERACION = TABLAS.filter(
+      (tabla) => tabla !== 'recuperacion_password',
+    )
+    expect(await tablasExistentes()).toEqual(SIN_RECUPERACION)
+    // SEG-02: quita ultimo_paso y vuelve a la función de SEG-04.
     await bd.undoLastMigration()
     const [{ ultimoPaso, firmas }] = await bd.query<
       { ultimoPaso: string; firmas: string }[]
@@ -203,10 +210,12 @@ describe('migraciones', () => {
     expect(firmas).toBe(
       'p_correo text, p_ip inet, p_resultado text, p_usuario uuid',
     )
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_RECUPERACION)
     // SEG-01: solo quita la tabla de secretos TOTP.
     await bd.undoLastMigration()
-    const SIN_MFA = TABLAS.filter((tabla) => tabla !== 'mfa_usuario')
+    const SIN_MFA = TABLAS.filter(
+      (tabla) => tabla !== 'mfa_usuario' && tabla !== 'recuperacion_password',
+    )
     expect(await tablasExistentes()).toEqual(SIN_MFA)
     // SEG-04 va antes: quita el registro de eventos con sus funciones y los
     // triggers sobre el historial; el historial de origen queda.
@@ -277,7 +286,8 @@ describe('migraciones', () => {
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
     await bd.undoLastMigration()
-    await bd.undoLastMigration() // SEG-02, SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // SEG-03, SEG-02, SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -390,7 +400,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó SEG-02,
+    await bd.undoLastMigration() // runMigrations también reaplicó SEG-03,
+    await bd.undoLastMigration() // SEG-02,
     await bd.undoLastMigration() // SEG-01,
     await bd.undoLastMigration() // SEG-04,
     await bd.undoLastMigration() // HIS-06,
@@ -772,6 +783,7 @@ describe('migraciones', () => {
     for (const tabla of TABLAS.filter(
       (t) =>
         t !== 'refresh_token' &&
+        t !== 'recuperacion_password' &&
         t !== 'sesion_auth' &&
         // SEG-01: una credencial por usuario, como sesion_auth.
         t !== 'mfa_usuario' &&

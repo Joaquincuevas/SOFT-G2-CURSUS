@@ -30,6 +30,11 @@ TAG=${1:-$(service_image)}
 TAG=${TAG:-$(latest_image)}
 
 PARAMETERS=("Entorno=$ENVIRONMENT" "VpcId=$VPC" "SubnetIds=$SUBNETS" "ImageTag=$TAG")
+if [ -n "${RECUPERACION_REMITENTE:-}" ] || [ -n "${RECUPERACION_IDENTIDAD_SES:-}" ]; then
+  [ -n "${RECUPERACION_REMITENTE:-}" ] && [ -n "${RECUPERACION_IDENTIDAD_SES:-}" ] ||
+    fail "Configura RECUPERACION_REMITENTE y RECUPERACION_IDENTIDAD_SES juntas."
+  PARAMETERS+=("RemitenteRecuperacion=$RECUPERACION_REMITENTE" "IdentidadSesRecuperacion=$RECUPERACION_IDENTIDAD_SES")
+fi
 
 STACK_EXISTS=false
 if aws cloudformation describe-stacks --stack-name "$STACK" >/dev/null 2>&1; then

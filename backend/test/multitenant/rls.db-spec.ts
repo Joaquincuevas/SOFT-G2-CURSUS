@@ -234,16 +234,18 @@ describe('RLS por universidad', () => {
       })
     })
 
-    it.each(['refresh_token', 'sesion_auth', 'mfa_usuario'])(
-      '%s: no es accesible con el rol de la API',
-      async (tabla) => {
-        await comoApp(administrativo(), async (q) => {
-          await expect(q.query(`SELECT * FROM ${tabla}`)).rejects.toMatchObject(
-            { code: SIN_PERMISO },
-          )
+    it.each([
+      'refresh_token',
+      'sesion_auth',
+      'mfa_usuario',
+      'recuperacion_password',
+    ])('%s: no es accesible con el rol de la API', async (tabla) => {
+      await comoApp(administrativo(), async (q) => {
+        await expect(q.query(`SELECT * FROM ${tabla}`)).rejects.toMatchObject({
+          code: SIN_PERMISO,
         })
-      },
-    )
+      })
+    })
   })
 })
 

@@ -1,5 +1,9 @@
 import { JwtService } from '@nestjs/jwt'
-import { firmarDesafioMfa, leerDesafioMfa } from './desafio-mfa.js'
+import {
+  firmarDesafioMfa,
+  huellaCredencial,
+  leerDesafioMfa,
+} from './desafio-mfa.js'
 
 // SEG-02: el desafío del paso 1 no es un token de sesión y viceversa.
 describe('desafío del login con MFA', () => {
@@ -19,18 +23,22 @@ describe('desafío del login con MFA', () => {
     const token = await firmarDesafioMfa(jwt, {
       usuarioId: 'u1',
       ultimoPaso: 7,
+      credencial: 'huella',
     })
     expect(await leerDesafioMfa(jwt, token)).toEqual({
       usuarioId: 'u1',
       ultimoPaso: 7,
+      credencial: 'huella',
     })
     const nuevo = await firmarDesafioMfa(jwt, {
       usuarioId: 'u1',
       ultimoPaso: null,
+      credencial: 'huella',
     })
     expect(await leerDesafioMfa(jwt, nuevo)).toEqual({
       usuarioId: 'u1',
       ultimoPaso: null,
+      credencial: 'huella',
     })
   })
 
@@ -38,11 +46,13 @@ describe('desafío del login con MFA', () => {
     const token = await firmarDesafioMfa(jwt, {
       usuarioId: 'u1',
       ultimoPaso: null,
+      credencial: 'huella',
     })
     const cuerpo = JSON.parse(
       Buffer.from(token.split('.')[1], 'base64url').toString(),
     ) as Record<string, unknown>
     expect(Object.keys(cuerpo).sort()).toEqual([
+      'cv',
       'exp',
       'iat',
       'prop',
@@ -55,6 +65,7 @@ describe('desafío del login con MFA', () => {
     const token = await firmarDesafioMfa(jwt, {
       usuarioId: 'u1',
       ultimoPaso: null,
+      credencial: 'huella',
     })
     await expect(jwt.verifyAsync(token)).rejects.toThrow()
   })
@@ -75,16 +86,24 @@ describe('desafío del login con MFA', () => {
     expect(await leerDesafioMfa(jwt, conLaLlaveDeSesion)).toBeNull()
   })
 
+  it('la huella de la credencial cambia con el hash y no lo revela', () => {
+    const a = huellaCredencial('$argon2id$v=19$hash-a')
+    expect(a).toBe(huellaCredencial('$argon2id$v=19$hash-a'))
+    expect(a).not.toBe(huellaCredencial('$argon2id$v=19$hash-b'))
+    expect(a).not.toContain('argon2')
+  })
+
   it('expirado, manipulado o con un paso inválido se rechaza', async () => {
     const vencido = await firmarDesafioMfa(
       jwt,
-      { usuarioId: 'u1', ultimoPaso: null },
+      { usuarioId: 'u1', ultimoPaso: null, credencial: 'huella' },
       '-1s',
     )
     expect(await leerDesafioMfa(jwt, vencido)).toBeNull()
     const token = await firmarDesafioMfa(jwt, {
       usuarioId: 'u1',
       ultimoPaso: null,
+      credencial: 'huella',
     })
     expect(await leerDesafioMfa(jwt, `${token}x`)).toBeNull()
     expect(await leerDesafioMfa(jwt, 'basura')).toBeNull()

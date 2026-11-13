@@ -22,16 +22,19 @@ export class LimiteLogin {
     correo: string,
     ip: string | null,
     autenticar: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T | null>,
+    ambito: 'login' | 'recuperacion' = 'login',
     // SEG-02. Un resultado válido reinicia los contadores, salvo que esto
     // devuelva false: la contraseña correcta que aún espera el código del MFA
     // no los reinicia, o se podrían adivinar códigos reiniciando el límite con
     // cada contraseña. Tampoco cuenta como fallo.
     reinicia: (resultado: T) => boolean = () => true,
   ): Promise<{ resultado: T | null; retryAfter: number }> {
+    const clave = (tipo: 'cuenta' | 'ip', valor: string) =>
+      claveIntentos(tipo, ambito === 'login' ? valor : `recuperacion:${valor}`)
     const limites = new Map([
-      [claveIntentos('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
+      [clave('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
     ])
-    if (ip !== null) limites.set(claveIntentos('ip', ip), MAX_FALLOS_IP)
+    if (ip !== null) limites.set(clave('ip', ip), MAX_FALLOS_IP)
     const claves = [...limites.keys()].sort()
     // Los dos bloqueos se toman siempre en el mismo orden. Autenticación y
     // contadores usan la misma conexión para no agotar el pool al esperar.
@@ -79,7 +82,7 @@ export class LimiteLogin {
       if (espera()) return { resultado: null, retryAfter: espera() }
 
       const resultado = await autenticar(bd)
-      const valido = resultado !== null
+      const valido = resultado !== null && ambito === 'login'
       for (const fila of vigentes) {
         fila.fallos = valido
           ? reinicia(resultado)

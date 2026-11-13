@@ -22,6 +22,7 @@ Una contraseña incorrecta responde 401 «Credenciales inválidas» tenga o no M
 ## El desafío
 
 - **Firmado con otra llave.** Se firma con una llave derivada (HMAC-SHA256) de `JWT_SECRET` con otro propósito, no con `JWT_SECRET`. `JwtAuthGuard` verifica con `JWT_SECRET`, así que el desafío no sirve como token de sesión en ninguna ruta; y un JWT de sesión no pasa como desafío. Además lleva `prop: "mfa"` y no trae rol, universidad ni `sid`.
+- **Vinculado a la versión de la credencial.** Lleva una huella (HMAC con la llave del desafío) del hash de la contraseña de la cuenta (`cv`). Cambiar o restablecer la contraseña genera otro hash, así que un desafío emitido antes del cambio se rechaza aunque no haya expirado ni se haya usado, y no puede crear una sesión después de que se revocaron las anteriores. Se comprueba al leer el desafío y otra vez, con `FOR SHARE` sobre la cuenta, antes de consumir el paso del código: un cambio de contraseña concurrente espera a que termine el inicio de sesión. Un inicio nuevo con la contraseña actual funciona normal.
 - **Expira en 5 minutos.**
 - **De un solo uso.** Lleva el último paso TOTP aceptado de la cuenta cuando se emitió (`up`). Al iniciar sesión con él, ese paso avanza y el mismo desafío deja de valer, aunque llegue con un código nuevo. También se invalida si otro inicio de sesión de la cuenta usó un código entretanto (hay que repetir el paso 1).
 - Manipulado, vencido o de otro propósito: 401 con `code: "MFA_DESAFIO_INVALIDO"` y el mensaje «La verificación expiró. Inicia sesión de nuevo.». La pantalla vuelve al paso 1.
@@ -59,11 +60,11 @@ Tras el paso 1 con MFA, «Verificación en dos pasos»: campo con `inputMode="nu
 
 ## Pruebas
 
-- `backend/test/seguridad/login-mfa.db-spec.ts` (PostgreSQL, por HTTP): el paso 1 no emite sesión; usuario sin MFA y con MFA pendiente sin cambios; sin enumeración; código válido, con espacios, ±1 paso, ±2 pasos, inválido, mal formado, reusado, el de la confirmación y cuenta archivada; desafío de un solo uso, vencido, manipulado, de sesión y firmado con la llave de sesión; el desafío no sirve en rutas protegidas; límite por usuario y por IP, y que el paso 1 no lo reinicie; eventos de SEG-04 sin datos sensibles.
+- `backend/test/seguridad/login-mfa.db-spec.ts` (PostgreSQL, por HTTP): el paso 1 no emite sesión; usuario sin MFA y con MFA pendiente sin cambios; sin enumeración; código válido, con espacios, ±1 paso, ±2 pasos, inválido, mal formado, reusado, el de la confirmación y cuenta archivada; desafío de un solo uso, vencido, manipulado, de sesión y firmado con la llave de sesión; desafío anterior a un cambio o restablecimiento de contraseña (rechazado, sin consumir el paso) e inicio nuevo con la contraseña actual; el desafío no sirve en rutas protegidas; límite por usuario y por IP, y que el paso 1 no lo reinicie; eventos de SEG-04 sin datos sensibles.
 - `backend/test/auth/login-mfa.e2e-spec.ts`: forma de los dos pasos, `reinicia`, 401/429/400, el log fijo si falla el registro.
 - `backend/src/auth/desafio-mfa.spec.ts` y `backend/src/seguridad/mfa.service.spec.ts`: el desafío y el fallo cerrado sin `MFA_SECRET`.
 - `frontend/src/pages/LoginMfa.test.tsx`: los dos pasos, foco y atributos, código con espacios, mal formado, inválido con reintento, carga, desafío vencido, rate limit, error del servidor y volver.
-- Se revirtieron, y su prueba falla: la verificación del código (acepta cualquiera), el reuso del paso, emitir sesión sin pedir código, el reinicio del límite por el paso 1, el límite por usuario, la llave propia del desafío y su un solo uso.
+- Se revirtieron, y su prueba falla: la verificación del código (acepta cualquiera), el reuso del paso, emitir sesión sin pedir código, el reinicio del límite por el paso 1, el límite por usuario, la llave propia del desafío, su un solo uso y la comprobación de la credencial.
 
 ## Límites
 
