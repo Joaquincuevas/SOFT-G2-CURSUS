@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { type JwtSignOptions, JwtModule } from '@nestjs/jwt'
 import { duracionJwt, secretoJwt } from '../config/entorno.js'
+import { SeguridadModule } from '../seguridad/seguridad.module.js'
 import { AuthController } from './auth.controller.js'
 import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
@@ -14,6 +15,8 @@ import { RegistroEventos } from './registro-eventos.service.js'
 
 @Module({
   imports: [
+    // SEG-02: verifica el código TOTP al iniciar sesión.
+    SeguridadModule,
     // Se configura al arrancar, cuando el .env ya está cargado.
     JwtModule.registerAsync({
       useFactory: () => ({

@@ -4,6 +4,13 @@ import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { hash, verify } from 'argon2'
 import { duracionRefresh } from '../config/entorno.js'
+import { MfaService } from '../seguridad/mfa.service.js'
+import {
+  firmarDesafioMfa,
+  huellaCredencial,
+  leerDesafioMfa,
+  type DesafioMfa,
+} from './desafio-mfa.js'
 import {
   BaseDeDatos,
   type ContextoUniversidad,
@@ -50,6 +57,13 @@ export interface TokensSesion {
 // resolvió la autenticación (SEG-04 registra ese id, no vuelve a buscarla).
 export type SesionIniciada = TokensSesion & { usuarioId: string }
 
+// SEG-02. La contraseña es correcta pero la cuenta tiene MFA activo: no hay
+// sesión todavía, solo el desafío para el segundo paso.
+export interface MfaPendiente {
+  usuarioId: string
+  desafio: string
+}
+
 // Los refresh tokens se guardan solo como sha256, en hex.
 const hashDe = (token: string) =>
   createHash('sha256').update(token).digest('hex')
@@ -83,14 +97,18 @@ export class AuthService {
   constructor(
     private readonly bd: BaseDeDatos,
     private readonly jwt: JwtService,
+    private readonly mfa: MfaService,
   ) {}
 
   // Devuelve los tokens de la sesión, o null si las credenciales no son válidas.
+  // SEG-02: con la contraseña correcta y MFA activo no emite sesión: devuelve
+  // el desafío del segundo paso (completarMfa). Eso solo se sabe después de
+  // validar la contraseña, así que no permite enumerar cuentas con MFA.
   async iniciarSesion(
     correo: string,
     password: string,
     bd: Pick<BaseDeDatos, 'query'> = this.bd,
-  ): Promise<SesionIniciada | null> {
+  ): Promise<SesionIniciada | MfaPendiente | null> {
     // El correo es único por universidad, no global: la universidad se
     // identifica por el dominio del correo. Por eso no usa
     // consultarEnUniversidad: antes del login no hay universidad de sesión.
@@ -118,6 +136,71 @@ export class AuthService {
     if (!usuario || !passwordValida) {
       return null
     }
+    const mfa = await this.mfa.estadoParaLogin(usuario.id, bd)
+    if (mfa) {
+      return {
+        usuarioId: usuario.id,
+        desafio: await firmarDesafioMfa(this.jwt, {
+          usuarioId: usuario.id,
+          ultimoPaso: mfa.ultimoPaso,
+          credencial: huellaCredencial(usuario.password_hash),
+        }),
+      }
+    }
+    const tokens = await this.emitirTokens(usuario, undefined, bd)
+    return { ...tokens, usuarioId: usuario.id }
+  }
+
+  // SEG-02. El desafío del paso 1, o null si no es válido (manipulado,
+  // expirado, de otro propósito o un JWT de sesión).
+  // También lo rechaza si la contraseña cambió desde que se emitió (la
+  // credencial de la cuenta ya no es la misma): hay que repetir el paso 1.
+  async desafioMfaDe(token: string): Promise<DesafioMfa | null> {
+    const desafio = await leerDesafioMfa(this.jwt, token)
+    if (!desafio) return null
+    return (await this.credencialVigente(desafio)) ? desafio : null
+  }
+
+  private async credencialVigente(
+    { usuarioId, credencial }: DesafioMfa,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
+    bloquear = false,
+  ): Promise<boolean> {
+    const [fila] = await bd.query<{ password_hash: string }>(
+      `SELECT password_hash FROM usuario WHERE id = $1 AND archived_at IS NULL${bloquear ? ' FOR SHARE' : ''}`,
+      [usuarioId],
+    )
+    return (
+      fila !== undefined && huellaCredencial(fila.password_hash) === credencial
+    )
+  }
+
+  // SEG-02. Segundo paso: con el código válido (y su paso aún sin usar)
+  // emite la sesión; si no, null. Sin código válido nunca hay tokens.
+  async completarMfa(
+    desafio: DesafioMfa,
+    codigo: string,
+    bd: Pick<BaseDeDatos, 'query'> = this.bd,
+  ): Promise<SesionIniciada | null> {
+    // Antes de consumir el paso del código: la contraseña no cambió desde el
+    // desafío. FOR SHARE bloquea un cambio de contraseña concurrente hasta
+    // que termine el inicio de sesión.
+    if (!(await this.credencialVigente(desafio, bd, true))) return null
+    const valido = await this.mfa.verificarParaLogin(
+      desafio.usuarioId,
+      codigo,
+      desafio.ultimoPaso,
+      bd,
+    )
+    if (!valido) return null
+    const [usuario] = await bd.query<Omit<Credenciales, 'password_hash'>>(
+      `SELECT u.id, u.rol, u.universidad_id
+         FROM usuario u
+         LEFT JOIN universidad un ON un.id = u.universidad_id
+        WHERE u.id = $1 AND u.archived_at IS NULL AND un.archived_at IS NULL`,
+      [desafio.usuarioId],
+    )
+    if (!usuario) return null
     const tokens = await this.emitirTokens(usuario, undefined, bd)
     return { ...tokens, usuarioId: usuario.id }
   }

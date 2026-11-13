@@ -14,7 +14,7 @@ Tarjeta: [F6 SEG-01 Usuario activa MFA con una app autenticadora](https://trello
 
 ## Flujo
 
-1. `GET /api/perfil/mfa` → `{ activo }`. Si está activo, la tarjeta muestra «App autenticadora configurada» y una nota: cuando se habilite la verificación al iniciar sesión (SEG-02), se pedirá el código de la app en cada ingreso.
+1. `GET /api/perfil/mfa` → `{ activo }`. Si está activo, la tarjeta muestra «App autenticadora configurada» y una nota: el login pide el código de la app después de la contraseña (SEG-02).
 2. «Activar verificación en dos pasos» → `POST /api/perfil/mfa/inicio`. Genera un secreto nuevo y lo deja **pendiente** (`activado_en` NULL). Si ya había uno pendiente, lo reemplaza: el QR anterior deja de servir.
 3. El usuario escanea el QR (o ingresa la clave) y escribe el código de 6 dígitos. Los espacios se ignoran, porque las apps lo muestran como «123 456».
 4. `POST /api/perfil/mfa/confirmacion` → 204, y la tarjeta pasa al mismo estado del paso 1: «App autenticadora configurada» con la nota. Al volver al perfil se ve igual, porque el estado se lee de nuevo del backend.
@@ -48,7 +48,7 @@ La migración `CrearMfaUsuario1792970000000` crea `mfa_usuario (usuario_id PK, s
 
 ## Fuera de alcance
 
-- **Pedir el código al iniciar sesión** es SEG-02. Con esta tarjeta, el MFA queda activo pero el login todavía no lo exige. `pasoDelCodigo` devuelve el paso de 30 s en que calzó el código, para que SEG-02 pueda impedir que el mismo código se use dos veces.
+- **Pedir el código al iniciar sesión** es SEG-02. Con SEG-01 el MFA solo quedaba activo; SEG-02 hace que el login lo exija (`docs/seg-02-totp-en-login.md`). `pasoDelCodigo` devuelve el paso de 30 s en que calzó el código, y SEG-02 lo guarda en `ultimo_paso` para que el mismo código no se use dos veces.
 - **Desactivar el MFA** o recuperarlo si se pierde el teléfono: la tarjeta no lo pide. Por ahora, un `DELETE FROM mfa_usuario WHERE usuario_id = …` en la base lo resetea.
 - **Límite de intentos al confirmar:** no se agrega. Quien confirma ya tiene la sesión y acaba de ver el secreto, así que adivinar un código no le da nada que no tenga. En SEG-02 los intentos sí contarán para el rate limiting del login.
 

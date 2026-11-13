@@ -64,6 +64,7 @@ import { ConsultarCursoArchivado1792940000000 } from './migrations/1792940000000
 import { RegistrarEgreso1792950000000 } from './migrations/1792950000000-RegistrarEgreso.js'
 import { CrearEventoAuditoria1792960000000 } from './migrations/1792960000000-CrearEventoAuditoria.js'
 import { CrearMfaUsuario1792970000000 } from './migrations/1792970000000-CrearMfaUsuario.js'
+import { AgregarUltimoPasoMfa1792980000000 } from './migrations/1792980000000-AgregarUltimoPasoMfa.js'
 import { RecuperarPassword1792990000000 } from './migrations/1792990000000-RecuperarPassword.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
@@ -150,6 +151,7 @@ export function opcionesDataSource(
       RegistrarEgreso1792950000000,
       CrearEventoAuditoria1792960000000,
       CrearMfaUsuario1792970000000,
+      AgregarUltimoPasoMfa1792980000000,
       RecuperarPassword1792990000000,
     ],
     migrationsTableName: 'migraciones',

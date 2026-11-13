@@ -149,8 +149,8 @@ export function ActivarMfa() {
             App autenticadora configurada
           </p>
           <p className="perfil__nota">
-            Cuando se habilite la verificación al iniciar sesión, te pediremos
-            el código de tu app autenticadora cada vez que entres.
+            Al iniciar sesión te pediremos el código de tu app autenticadora
+            después de tu contraseña.
           </p>
         </>
       )}

@@ -89,6 +89,16 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     expect(screen.getByText(/3 eventos · página 1 de 1/)).toBeInTheDocument()
   })
 
+  test('el paso del código TOTP del login se muestra como verificación en dos pasos', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/accesos',
+      rutas(() => pagina([evento({ detalle: { subtipo: 'MFA' } })])),
+    )
+    const fila = within((await screen.findAllByRole('row'))[1])
+    expect(fila.getByText('Verificación en dos pasos')).toBeInTheDocument()
+  })
+
   test('las fechas llevan el instante y la zona horaria', async () => {
     await renderConSesion('DIRECTOR', '/accesos', rutas())
     const [hora] = await screen.findAllByRole('time')

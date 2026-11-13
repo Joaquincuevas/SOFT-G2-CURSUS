@@ -184,3 +184,19 @@
     max-width: var(--login-form-width);
   }
 }
+
+/* SEG-02: acción secundaria del paso del código. */
+.login__secondary {
+  height: var(--button-height);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: var(--font-button);
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.login__secondary:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
