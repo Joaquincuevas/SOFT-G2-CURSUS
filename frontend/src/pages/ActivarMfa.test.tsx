@@ -103,9 +103,10 @@ describe('verificación en dos pasos (SEG-01)', () => {
     fireEvent.change(campoCodigo(), { target: { value: '123 456' } })
     fireEvent.click(confirmarBoton())
 
-    expect(await within(tarjeta()).findByRole('status')).toHaveTextContent(
-      'Verificación en dos pasos activada.',
-    )
+    // El indicador de carga también es role="status": se espera el texto.
+    expect(
+      await within(tarjeta()).findByText('Verificación en dos pasos activada.'),
+    ).toHaveAttribute('role', 'status')
     expect(enviados).toEqual([{ codigo: '123456' }])
     expect(within(tarjeta()).queryByRole('img')).not.toBeInTheDocument()
     expect(
@@ -155,9 +156,12 @@ describe('verificación en dos pasos (SEG-01)', () => {
       '/api/perfil/mfa': () => ({ activo: true }),
     })
 
-    expect(await within(tarjeta()).findByRole('status')).toHaveTextContent(
-      'La verificación en dos pasos está activa en tu cuenta.',
-    )
+    // El indicador de carga también es role="status": se espera el texto.
+    expect(
+      await within(tarjeta()).findByText(
+        'La verificación en dos pasos está activa en tu cuenta.',
+      ),
+    ).toHaveAttribute('role', 'status')
     expect(
       within(tarjeta()).queryByRole('button', {
         name: 'Activar verificación en dos pasos',
@@ -189,9 +193,12 @@ describe('verificación en dos pasos (SEG-01)', () => {
       ).findByRole('button', { name: 'Activar verificación en dos pasos' }),
     )
 
-    expect(await within(tarjeta()).findByRole('status')).toHaveTextContent(
-      'La verificación en dos pasos está activa en tu cuenta.',
-    )
+    // El indicador de carga también es role="status": se espera el texto.
+    expect(
+      await within(tarjeta()).findByText(
+        'La verificación en dos pasos está activa en tu cuenta.',
+      ),
+    ).toHaveAttribute('role', 'status')
   })
 
   test('si el QR pendiente ya no existe, pide generar uno nuevo', async () => {
