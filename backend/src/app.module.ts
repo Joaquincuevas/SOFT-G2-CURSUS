@@ -17,6 +17,7 @@ import { MaterialesModule } from './materiales/materiales.module.js'
 import { SuperadminModule } from './superadmin/superadmin.module.js'
 import { ArchivosModule } from './archivos/archivos.module.js'
 import { MetricasModule } from './metricas/metricas.module.js'
+import { SeguridadModule } from './seguridad/seguridad.module.js'
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { MetricasModule } from './metricas/metricas.module.js'
     MetricasModule,
     SuperadminModule,
     ArchivosModule,
+    SeguridadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

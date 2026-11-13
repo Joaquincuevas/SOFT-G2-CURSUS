@@ -128,6 +128,17 @@ Resources:
         PasswordLength: 64
         ExcludePunctuation: true
 
+  # Secreto del que el backend deriva la llave que cifra los secretos TOTP del
+  # MFA (SEG-01). Si se rota, los MFA ya activados dejan de servir.
+  SecretoMfa:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'cursus-${Entorno}/mfa-secret'
+      Description: Secreto para cifrar los secretos TOTP del MFA.
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
   # Contraseña de los usuarios del seed (INFRA-08). Solo staging: el seed nunca
   # corre en production. Se consulta en Secrets Manager y se comparte por privado.
   SecretoSeed:
@@ -359,6 +370,7 @@ Resources:
                   - !Ref SecretoBaseDeDatos
                   - !Ref SecretoOrigen
                   - !Ref SecretoJwt
+                  - !Ref SecretoMfa
                   - !Ref SecretoSuperadmin
                   - !If [EsStaging, !Ref SecretoSeed, !Ref AWS::NoValue]
 
@@ -433,6 +445,8 @@ Resources:
               ValueFrom: !Ref SecretoOrigen
             - Name: JWT_SECRET
               ValueFrom: !Ref SecretoJwt
+            - Name: MFA_SECRET
+              ValueFrom: !Ref SecretoMfa
             # La usa la tarea que crea el superadmin (infra/aws/superadmin.sh).
             - Name: SUPERADMIN_PASSWORD
               ValueFrom: !Ref SecretoSuperadmin
