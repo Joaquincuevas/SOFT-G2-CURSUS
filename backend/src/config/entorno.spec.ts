@@ -2,6 +2,7 @@ import {
   duracionJwt,
   duracionRefresh,
   secretoJwt,
+  secretoMfa,
   VARIABLES_API,
   validarEntorno,
 } from './entorno.js'
@@ -80,6 +81,38 @@ describe('JWT_SECRET', () => {
   it('se exige también fuera de producción para firmar tokens', () => {
     expect(() => secretoJwt({ NODE_ENV: 'development' })).toThrow('JWT_SECRET')
     expect(secretoJwt({ JWT_SECRET: 'x'.repeat(32) })).toBe('x'.repeat(32))
+  })
+})
+
+describe('MFA_SECRET (SEG-01)', () => {
+  it('es opcional: sin él la API arranca y solo el MFA responde 503', () => {
+    expect(() => validarEntorno(VARIABLES_API, completo)).not.toThrow()
+    expect(secretoMfa({})).toBeNull()
+    expect(secretoMfa({ MFA_SECRET: '' })).toBeNull()
+  })
+
+  it('si viene, exige al menos 32 caracteres al arrancar en producción', () => {
+    const corto = { ...completo, MFA_SECRET: 'secreto-mfa-corto' }
+    expect(() => validarEntorno(VARIABLES_API, corto)).toThrow(
+      'MFA_SECRET debe tener al menos 32 caracteres',
+    )
+    expect(() =>
+      validarEntorno(VARIABLES_API, {
+        ...completo,
+        MFA_SECRET: 'y'.repeat(32),
+      }),
+    ).not.toThrow()
+  })
+
+  it('no incluye el valor en el mensaje de error', () => {
+    let mensaje = ''
+    try {
+      secretoMfa({ MFA_SECRET: 'secreto-mfa-corto' })
+    } catch (error) {
+      mensaje = String(error)
+    }
+    expect(mensaje).toContain('MFA_SECRET')
+    expect(mensaje).not.toContain('secreto-mfa-corto')
   })
 })
 
