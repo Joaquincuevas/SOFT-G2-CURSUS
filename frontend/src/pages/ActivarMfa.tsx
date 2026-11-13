@@ -30,7 +30,6 @@ export function ActivarMfa() {
   const [inicio, setInicio] = useState<InicioMfa | null>(null)
   const [codigo, setCodigo] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [activado, setActivado] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function generarQr() {
@@ -78,7 +77,6 @@ export function ActivarMfa() {
       })
       if (respuesta.ok) {
         setInicio(null)
-        setActivado(true)
         fijarEstado({ activo: true })
         return
       }
@@ -143,12 +141,18 @@ export function ActivarMfa() {
         />
       )}
 
+      {/* Mismo estado al confirmar y al volver al perfil. El login todavía no
+          pide el código: lo hará SEG-02, y la nota lo dice sin prometer más. */}
       {estado?.activo && (
-        <p className="perfil__exito" role="status">
-          {activado
-            ? 'Verificación en dos pasos activada.'
-            : 'La verificación en dos pasos está activa en tu cuenta.'}
-        </p>
+        <>
+          <p className="perfil__exito" role="status">
+            App autenticadora configurada
+          </p>
+          <p className="perfil__nota">
+            Cuando se habilite la verificación al iniciar sesión, te pediremos
+            el código de tu app autenticadora cada vez que entres.
+          </p>
+        </>
       )}
 
       {estado && !estado.activo && !inicio && (
