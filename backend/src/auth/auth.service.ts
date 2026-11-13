@@ -34,6 +34,7 @@ export interface EleccionSuperadmin {
 // Estado de la sesión que JwtAuthGuard lee de la base en cada petición.
 export interface SesionVigente {
   credencialProvisoria: boolean
+  egresado: boolean
   // Solo del superadmin, si eligió una facultad que sigue vigente.
   eleccion: EleccionSuperadmin | null
 }
@@ -59,6 +60,7 @@ interface FilaUsuario {
   universidad_color: string
   facultad_nombre: string | null
   credencial_provisoria: boolean
+  egresado?: boolean
 }
 
 // El Director ve todas las universidades: el Figma lo muestra como "Directorio".
@@ -298,10 +300,11 @@ export class AuthService {
   ): Promise<SesionVigente | null> {
     const [sesion] = await this.bd.query<{
       credencial_provisoria: boolean
+      egresado: boolean
       universidad_id: string | null
       facultad_id: string | null
     }>(
-      `SELECT u.credencial_provisoria, un.id AS universidad_id,
+      `SELECT u.credencial_provisoria, u.egresado_en IS NOT NULL AS egresado, un.id AS universidad_id,
               f.id AS facultad_id
          FROM sesion_auth s
          JOIN usuario u ON u.id = s.usuario_id
@@ -323,6 +326,7 @@ export class AuthService {
     }
     return {
       credencialProvisoria: sesion.credencial_provisoria,
+      egresado: sesion.egresado,
       eleccion:
         sesion.universidad_id && sesion.facultad_id
           ? {
@@ -372,7 +376,7 @@ export class AuthService {
       `SELECT u.id, u.nombre, u.correo, u.rol, u.universidad_id,
               un.nombre AS universidad_nombre, f.nombre AS facultad_nombre,
               un.color AS universidad_color,
-              u.credencial_provisoria
+              u.credencial_provisoria, u.egresado_en IS NOT NULL AS egresado
          FROM usuario u
          JOIN universidad un ON un.id = u.universidad_id
          LEFT JOIN facultad f ON f.id = u.facultad_id
@@ -387,6 +391,7 @@ export class AuthService {
       nombre: fila.nombre,
       correo: fila.correo,
       rol: fila.rol,
+      ...(fila.egresado && { egresado: true }),
       universidadId: fila.universidad_id,
       universidadNombre:
         fila.rol === 'DIRECTOR' ? NOMBRE_DIRECTORIO : fila.universidad_nombre,

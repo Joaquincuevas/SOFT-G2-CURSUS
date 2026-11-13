@@ -17,11 +17,13 @@ const formato = new Intl.NumberFormat('es-CL', {
 export function RecorreccionesNotas({
   ruta,
   alumnos,
+  editable = true,
   alGuardar,
   alRecargar,
 }: {
   ruta: string
   alumnos: NotaAlumno[]
+  editable?: boolean
   alGuardar: (notas: NotasEvaluacion) => void
   alRecargar: () => void
 }) {
@@ -37,7 +39,7 @@ export function RecorreccionesNotas({
               <th scope="col">Alumno</th>
               <th scope="col">Nota</th>
               <th scope="col">Estado</th>
-              <th scope="col">Recorrección</th>
+              {editable && <th scope="col">Recorrección</th>}
             </tr>
           </thead>
           <tbody>
@@ -51,28 +53,30 @@ export function RecorreccionesNotas({
                     <span className="notas__recorregida">Recorregida</span>
                   )}
                 </td>
-                <td>
-                  {a.estado === 'PUBLICADA' && a.nota !== null && (
-                    <button
-                      type="button"
-                      className="notas__enlace"
-                      aria-label={`Recorregir nota de ${a.nombre}`}
-                      disabled={elegido !== null}
-                      onClick={() => {
-                        setAviso(null)
-                        setElegido(a.id)
-                      }}
-                    >
-                      Recorregir
-                    </button>
-                  )}
-                </td>
+                {editable && (
+                  <td>
+                    {a.estado === 'PUBLICADA' && a.nota !== null && (
+                      <button
+                        type="button"
+                        className="notas__enlace"
+                        aria-label={`Recorregir nota de ${a.nombre}`}
+                        disabled={elegido !== null}
+                        onClick={() => {
+                          setAviso(null)
+                          setElegido(a.id)
+                        }}
+                      >
+                        Recorregir
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {alumno && alumno.nota !== null && (
+      {editable && alumno && alumno.nota !== null && (
         <FormularioRecorreccion
           key={`${alumno.id}-${alumno.nota}`}
           ruta={`${ruta}/${alumno.id}/recorreccion`}

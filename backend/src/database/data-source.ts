@@ -56,6 +56,12 @@ import { CrearMaterial1792860000000 } from './migrations/1792860000000-CrearMate
 import { CrearSilabo1792870000000 } from './migrations/1792870000000-CrearSilabo.js'
 import { LeerEntregasDocentes1792880000000 } from './migrations/1792880000000-LeerEntregasDocentes.js'
 import { CrearMaterialVersion1792890000000 } from './migrations/1792890000000-CrearMaterialVersion.js'
+import { CrearCierreCurso1792900000000 } from './migrations/1792900000000-CrearCierreCurso.js'
+import { ProtegerCursoCerrado1792910000000 } from './migrations/1792910000000-ProtegerCursoCerrado.js'
+import { ProtegerArchivoCurso1792920000000 } from './migrations/1792920000000-ProtegerArchivoCurso.js'
+import { CalcularNotaFinal1792930000000 } from './migrations/1792930000000-CalcularNotaFinal.js'
+import { ConsultarCursoArchivado1792940000000 } from './migrations/1792940000000-ConsultarCursoArchivado.js'
+import { RegistrarEgreso1792950000000 } from './migrations/1792950000000-RegistrarEgreso.js'
 
 // El .env vive en la raíz del monorepo (ver .env.example). Si no existe, se
 // usan las variables ya definidas en el entorno (por ejemplo, en el CI).
@@ -133,6 +139,12 @@ export function opcionesDataSource(
       CrearSilabo1792870000000,
       LeerEntregasDocentes1792880000000,
       CrearMaterialVersion1792890000000,
+      CrearCierreCurso1792900000000,
+      ProtegerCursoCerrado1792910000000,
+      ProtegerArchivoCurso1792920000000,
+      CalcularNotaFinal1792930000000,
+      ConsultarCursoArchivado1792940000000,
+      RegistrarEgreso1792950000000,
     ],
     migrationsTableName: 'migraciones',
     migrationsTransactionMode: 'each',

@@ -2,10 +2,23 @@
 
 Documentación del proyecto:
 
+- [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)
+- [HIS-05 · Historial de notas del alumno](his-05-historial-notas-alumno.md)
+- [HIS-04 · Consulta de cursos archivados por período](his-04-consultar-cursos-archivados.md)
+- [HIS-03 · Archivo de un curso cerrado](his-03-archivar-curso.md)
+- [HIS-02 · Registro académico de solo lectura en cursos cerrados](his-02-registro-curso-cerrado.md)
+- [HIS-01 · Cierre de curso y guía de revisión](his-01-cierre-curso.md)
 - [MAT-05 · Materiales del curso agrupados por categoría](mat-05-materiales-por-categoria.md)
 - [MAT-03 · Sílabo vigente en la vista del curso](mat-03-silabo-vigente.md)
 - [MAT-06: descarga de los materiales del curso y guía de revisión](mat-06-descargar-material.md)
 - [MAT-07: versiones de un material, con historial para el profesor](mat-07-versiones-material.md)
+- [MET-01: indicadores consolidados del Director (aprobación, promedio y asistencia)](met-01-indicadores-consolidados.md)
+- [MET-02: comparación de indicadores entre universidades del Director](met-02-comparar-universidades.md)
+- [MET-04: drill-down de universidad a facultad del Director](met-04-drilldown-facultad.md)
+- [MET-05: drill-down de facultad a carrera del Director](met-05-drilldown-carrera.md)
+- [MET-06: drill-down de carrera a curso del Director](met-06-drilldown-curso.md)
+- [MET-07: distribución de notas de un curso del Director](met-07-distribucion-notas.md)
+- [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 

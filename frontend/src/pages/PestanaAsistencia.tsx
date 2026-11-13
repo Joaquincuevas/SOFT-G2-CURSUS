@@ -24,7 +24,11 @@ const LEEN = ['PROFESOR', 'AYUDANTE', 'DIRECTOR']
 // ASI-01 (RN-13): clases de la sección, por fecha. Solo el profesor de la
 // sección las registra; el ayudante ve la lista. Al elegir una clase se
 // muestra su asistencia (ASI-02).
-export function PestanaAsistencia({ seccionId, rol }: PropsPestana) {
+export function PestanaAsistencia({
+  seccionId,
+  rol,
+  cursoCerrado,
+}: PropsPestana) {
   if (rol === 'ALUMNO')
     return <MiAsistencia key={seccionId} seccionId={seccionId} />
   if (!LEEN.includes(rol)) {
@@ -34,10 +38,16 @@ export function PestanaAsistencia({ seccionId, rol }: PropsPestana) {
       </p>
     )
   }
-  return <ClasesSeccion seccionId={seccionId} rol={rol} />
+  return (
+    <ClasesSeccion
+      seccionId={seccionId}
+      rol={rol}
+      cursoCerrado={cursoCerrado}
+    />
+  )
 }
 
-function ClasesSeccion({ seccionId, rol }: PropsPestana) {
+function ClasesSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
   const ruta = `/api/espacio/secciones/${seccionId}/clases`
   const [clases, recargar] = useDatos<Clase[]>(ruta)
   const [elegida, setElegida] = useState<string | null>(null)
@@ -45,7 +55,7 @@ function ClasesSeccion({ seccionId, rol }: PropsPestana) {
   return (
     <section className="asistencia" aria-label="Clases">
       <h3 className="vista-seccion__subtitulo">Clases</h3>
-      {rol === 'PROFESOR' && (
+      {rol === 'PROFESOR' && !cursoCerrado && (
         <FormularioClase seccionId={seccionId} ruta={ruta} alCrear={recargar} />
       )}
       {clases === undefined ? (
@@ -99,6 +109,7 @@ function ClasesSeccion({ seccionId, rol }: PropsPestana) {
           seccionId={seccionId}
           claseId={elegida}
           rol={rol}
+          cursoCerrado={cursoCerrado}
         />
       )}
       {rol === 'PROFESOR' && <ResumenAsistencia seccionId={seccionId} />}

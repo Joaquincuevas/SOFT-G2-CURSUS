@@ -1,4 +1,9 @@
-import type { CursoDetalle } from '@cursus/shared'
+import type {
+  CierreCurso,
+  CursoArchivadoListado,
+  CursoDetalle,
+  CursoListado,
+} from '@cursus/shared'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -21,6 +26,9 @@ const ADMIN_INGENIERIA = 'administrativo.ingenieria@norte.cursus.test'
 const ADMIN_ECONOMIA = 'administrativo.economia@norte.cursus.test'
 const ADMIN_SUR = 'administrativo@sur.cursus.test'
 const DIRECTOR = 'director@norte.cursus.test'
+const ALUMNO = 'alumno@norte.cursus.test'
+const PROFESOR = 'profesor@norte.cursus.test'
+const AYUDANTE = 'ayudante@norte.cursus.test'
 
 let admin: DataSource
 let bd: DataSource
@@ -47,6 +55,14 @@ async function detalle(correo: string, id: string, estado = 200) {
     .set('Authorization', `Bearer ${token}`)
     .expect(estado)
   return respuesta.body as CursoDetalle
+}
+
+async function cerrar(correo: string, id: string, estado: number) {
+  const token = await tokenDe(correo)
+  return request(app.getHttpServer())
+    .post(`/api/cursos/${id}/cierre`)
+    .set('Authorization', `Bearer ${token}`)
+    .expect(estado)
 }
 
 const idDe = async (codigo: string) =>
@@ -185,5 +201,511 @@ describe('GET /api/cursos/:id', () => {
       universidadNombre: 'Universidad Demo Sur',
     })
     expect(curso.secciones.map((s) => s.numero)).toEqual([1, 2])
+  })
+})
+
+describe('POST /api/cursos/:id/cierre (HIS-01)', () => {
+  it('rechaza el cierre fuera de la facultad o universidad y a un Director', async () => {
+    const curso = await idDe('ICC101')
+    await cerrar(ADMIN_ECONOMIA, curso, 404)
+    await cerrar(ADMIN_SUR, curso, 404)
+    await cerrar(DIRECTOR, curso, 403)
+  })
+
+  it('exige notas publicadas y 100 % por sección antes de registrar un solo cierre', async () => {
+    const [{ id: curso }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       SELECT universidad_id, carrera_id, periodo_id, 'HIS01', 'Curso de cierre'
+         FROM curso WHERE codigo = 'ICC101' RETURNING id`,
+    )
+    await bd.query(
+      `INSERT INTO seccion (universidad_id, curso_id, numero)
+       SELECT universidad_id, id, numero FROM curso CROSS JOIN (VALUES (1), (2), (3)) AS n(numero)
+        WHERE id = $1`,
+      [curso],
+    )
+    const evaluaciones = await bd.query<{ id: string; nombre: string }[]>(
+      `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+       SELECT s.universidad_id, s.id, 'Control ' || s.numero, current_date,
+              CASE WHEN s.numero = 1 THEN 80 ELSE 100 END, u.id
+         FROM seccion s JOIN usuario u ON u.universidad_id = s.universidad_id
+        WHERE s.curso_id = $1 AND s.numero IN (1, 2) AND u.correo = $2
+        RETURNING id, nombre`,
+      [curso, PROFESOR],
+    )
+    await bd.query(
+      `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por, archived_at)
+       SELECT universidad_id, seccion_id, 'Control archivado', fecha, 20, creada_por, now()
+         FROM evaluacion WHERE id = $1`,
+      [evaluaciones.find((e) => e.nombre === 'Control 1')?.id],
+    )
+    await bd.query(
+      `INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+       SELECT s.universidad_id, s.id, u.id
+         FROM seccion s JOIN usuario u ON u.universidad_id = s.universidad_id
+        WHERE s.curso_id = $1 AND s.numero IN (1, 2) AND u.correo = $2
+       ON CONFLICT DO NOTHING`,
+      [curso, ALUMNO],
+    )
+    await bd.query(
+      `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por)
+       SELECT e.universidad_id, e.id, a.id, 5.0, y.id
+         FROM evaluacion e
+         JOIN usuario a ON a.universidad_id = e.universidad_id AND a.correo = $2
+         JOIN usuario y ON y.universidad_id = e.universidad_id AND y.correo = $3
+        WHERE e.id = $1`,
+      [
+        evaluaciones.find((e) => e.nombre === 'Control 1')?.id,
+        ALUMNO,
+        AYUDANTE,
+      ],
+    )
+
+    const intento = await cerrar(ADMIN_INGENIERIA, curso, 409)
+    const ponderaciones = [
+      { seccion: 1, sumaPonderaciones: 80, faltan: 20, sobran: 0 },
+      { seccion: 3, sumaPonderaciones: 0, faltan: 100, sobran: 0 },
+    ]
+    expect(intento.body).toEqual({
+      message: 'Hay requisitos pendientes para cerrar el curso.',
+      ponderaciones,
+      pendientes: [1, 2].map((seccion) => ({
+        evaluacionId: evaluaciones.find(
+          (e) => e.nombre === `Control ${seccion}`,
+        )?.id,
+        nombre: `Control ${seccion}`,
+        seccion,
+        notasPendientes: 1,
+      })),
+    })
+    expect((await detalle(ADMIN_INGENIERIA, curso)).cierre).toBeUndefined()
+    await bd.query(
+      `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por, estado)
+       SELECT e.universidad_id, e.id, a.id, 5.0, y.id, 'PUBLICADA'
+         FROM evaluacion e
+         JOIN inscripcion i ON i.seccion_id = e.seccion_id AND i.archived_at IS NULL
+         JOIN usuario a ON a.id = i.usuario_id AND a.rol = 'ALUMNO' AND a.archived_at IS NULL
+         JOIN usuario y ON y.universidad_id = e.universidad_id AND y.correo = $2
+        WHERE e.id = ANY($1::uuid[])
+       ON CONFLICT (evaluacion_id, alumno_id) WHERE archived_at IS NULL
+       DO UPDATE SET estado = 'PUBLICADA'`,
+      [evaluaciones.map((e) => e.id), AYUDANTE],
+    )
+
+    expect((await cerrar(ADMIN_INGENIERIA, curso, 409)).body).toMatchObject({
+      pendientes: [],
+      ponderaciones,
+    })
+    expect((await detalle(ADMIN_INGENIERIA, curso)).cierre).toBeUndefined()
+    await bd.query(
+      `WITH complemento AS (
+         INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+         SELECT universidad_id, seccion_id, 'Control complementario', fecha, 20, creada_por
+           FROM evaluacion WHERE id = $1
+         RETURNING id, universidad_id
+       )
+       INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, propuesta_por, estado)
+       SELECT c.universidad_id, c.id, n.alumno_id, n.valor, n.propuesta_por, 'PUBLICADA'
+         FROM complemento c CROSS JOIN nota n WHERE n.evaluacion_id = $1`,
+      [evaluaciones.find((e) => e.nombre === 'Control 1')?.id],
+    )
+    await bd.query(
+      `UPDATE seccion SET archived_at = now() WHERE curso_id = $1 AND numero = 3`,
+      [curso],
+    )
+
+    const [actor] = await bd.query<{ id: string }[]>(
+      'SELECT id FROM usuario WHERE correo = $1',
+      [ADMIN_INGENIERIA],
+    )
+    const respuesta = await cerrar(ADMIN_INGENIERIA, curso, 200)
+    const cierre = respuesta.body as CierreCurso
+    expect(cierre.responsableId).toBe(actor.id)
+    expect(Number.isFinite(Date.parse(cierre.fecha))).toBe(true)
+    expect((await detalle(ADMIN_INGENIERIA, curso)).cierre).toEqual(cierre)
+    expect((await cerrar(ADMIN_INGENIERIA, curso, 200)).body).toEqual(cierre)
+
+    const universidades = await bd.query<{ universidad_id: string }[]>(
+      'SELECT universidad_id FROM usuario WHERE correo IN ($1, $2) ORDER BY correo',
+      [ADMIN_SUR, PROFESOR],
+    )
+    await bd.transaction(async (tx) => {
+      await tx.query('SET LOCAL ROLE cursus_app')
+      await tx.query("SELECT set_config('app.rol', 'PROFESOR', true)")
+      for (const [i, { universidad_id }] of universidades.entries()) {
+        await tx.query("SELECT set_config('app.universidad_id', $1, true)", [
+          universidad_id,
+        ])
+        expect(
+          await tx.query('SELECT curso_cerrado($1) AS cerrado', [curso]),
+        ).toEqual([{ cerrado: i === 1 }])
+      }
+    })
+  })
+})
+
+describe('HIS-02 · registro académico de un curso cerrado', () => {
+  it('rechaza escrituras de todos los roles y conserva las lecturas', async () => {
+    const [{ id: curso }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+       SELECT universidad_id, carrera_id, periodo_id, 'HIS02', 'Curso protegido'
+         FROM curso WHERE codigo = 'ICC101' RETURNING id`,
+    )
+    const [ids] = await bd.query<
+      {
+        universidad: string
+        profesor: string
+        ayudante: string
+        alumno: string
+      }[]
+    >(
+      `SELECT p.universidad_id AS universidad, p.id AS profesor, y.id AS ayudante, a.id AS alumno
+         FROM usuario p CROSS JOIN usuario y CROSS JOIN usuario a
+        WHERE p.correo = $1 AND y.correo = $2 AND a.correo = $3`,
+      [PROFESOR, AYUDANTE, ALUMNO],
+    )
+    const superadmin = 'superadmin-his02@cursus.test'
+    await bd.query(
+      `INSERT INTO usuario (correo, nombre, password_hash, rol)
+       SELECT $1, 'Superadmin de prueba', password_hash, 'SUPERADMIN'
+         FROM usuario WHERE id = $2`,
+      [superadmin, ids.profesor],
+    )
+    const [{ id: seccion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO seccion (universidad_id, curso_id, numero, profesor_id)
+       VALUES ($1, $2, 1, $3) RETURNING id`,
+      [ids.universidad, curso, ids.profesor],
+    )
+    await bd.query(
+      'INSERT INTO ayudante_seccion (universidad_id, seccion_id, usuario_id) VALUES ($1, $2, $3)',
+      [ids.universidad, seccion, ids.ayudante],
+    )
+    await bd.query(
+      'INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id) VALUES ($1, $2, $3)',
+      [ids.universidad, seccion, ids.alumno],
+    )
+    const [{ id: evaluacion }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+       VALUES ($1, $2, 'Control', '2026-11-02', 100, $3) RETURNING id`,
+      [ids.universidad, seccion, ids.profesor],
+    )
+    await bd.query(
+      `INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, estado, propuesta_por)
+       VALUES ($1, $2, $3, 5, 'PUBLICADA', $4)`,
+      [ids.universidad, evaluacion, ids.alumno, ids.ayudante],
+    )
+    await bd.query(
+      `INSERT INTO revision_notas (universidad_id, evaluacion_id, estado, actualizado_por)
+       VALUES ($1, $2, 'APROBADA', $3)`,
+      [ids.universidad, evaluacion, ids.profesor],
+    )
+    const [{ id: clase }] = await bd.query<{ id: string }[]>(
+      `INSERT INTO clase (universidad_id, seccion_id, fecha, inicio, termino, sala, creada_por)
+       VALUES ($1, $2, '2026-11-02', '09:00', '10:00', 'A1', $3) RETURNING id`,
+      [ids.universidad, seccion, ids.profesor],
+    )
+    await bd.query(
+      `INSERT INTO asistencia (universidad_id, clase_id, alumno_id, presente, registrada_por)
+       VALUES ($1, $2, $3, true, $4)`,
+      [ids.universidad, clase, ids.alumno, ids.profesor],
+    )
+    await cerrar(ADMIN_INGENIERIA, curso, 200)
+
+    const ruta = `/api/espacio/secciones/${seccion}`
+    const evaluaciones = `${ruta}/evaluaciones`
+    const notas = `${evaluaciones}/${evaluacion}/notas`
+    const asistencia = `${ruta}/clases/${clase}/asistencia`
+    const cambioEvaluacion = {
+      nombre: 'Editada',
+      fecha: '2026-11-02',
+      ponderacion: 100,
+    }
+    const cambioNota = { notas: [{ alumnoId: ids.alumno, nota: 6 }] }
+    const marcas = { marcas: [{ alumnoId: ids.alumno, presente: false }] }
+    for (const correo of [
+      DIRECTOR,
+      ADMIN_INGENIERIA,
+      PROFESOR,
+      AYUDANTE,
+      ALUMNO,
+      superadmin,
+    ]) {
+      const auth = `Bearer ${await tokenDe(correo)}`
+      const api = request(app.getHttpServer())
+      await api
+        .put(`${evaluaciones}/${evaluacion}`)
+        .set('Authorization', auth)
+        .send(cambioEvaluacion)
+        .expect(403)
+      await api
+        .put(notas)
+        .set('Authorization', auth)
+        .send(cambioNota)
+        .expect(403)
+      await api
+        .post(asistencia)
+        .set('Authorization', auth)
+        .send(marcas)
+        .expect(403)
+    }
+    const profesor = `Bearer ${await tokenDe(PROFESOR)}`
+    const ayudante = `Bearer ${await tokenDe(AYUDANTE)}`
+    const api = request(app.getHttpServer())
+    const mensaje = {
+      statusCode: 403,
+      message: 'Curso cerrado',
+      error: 'Forbidden',
+    }
+    await api
+      .post(evaluaciones)
+      .set('Authorization', profesor)
+      .send(cambioEvaluacion)
+      .expect(403, mensaje)
+    await api
+      .post(`${ruta}/clases`)
+      .set('Authorization', profesor)
+      .send({ fecha: '2026-11-02', inicio: '09:00' })
+      .expect(403, mensaje)
+    await api
+      .post(`${notas}/envio`)
+      .set('Authorization', ayudante)
+      .expect(403, mensaje)
+    await api
+      .post(`${notas}/aprobacion`)
+      .set('Authorization', profesor)
+      .expect(403, mensaje)
+    await api
+      .post(`${notas}/devolucion`)
+      .set('Authorization', profesor)
+      .send({ comentario: 'Revisar' })
+      .expect(403, mensaje)
+    await api
+      .post(`${notas}/${ids.alumno}/recorreccion`)
+      .set('Authorization', profesor)
+      .send({ notaAnterior: 5, notaNueva: 6, motivo: 'Revisar' })
+      .expect(403, mensaje)
+    await api
+      .patch(`${asistencia}/alumnos/${ids.alumno}`)
+      .set('Authorization', profesor)
+      .send({ anterior: true, presente: false, motivo: 'Revisar' })
+      .expect(403, mensaje)
+    expect(
+      (
+        await api
+          .get(`${ruta}/resumen`)
+          .set('Authorization', profesor)
+          .expect(200)
+      ).body,
+    ).toMatchObject({ cursoCerrado: true })
+    expect(
+      (await api.get(notas).set('Authorization', profesor).expect(200)).body,
+    ).toMatchObject({ cursoCerrado: true, alumnos: [{ nota: 5 }] })
+    expect(
+      (await api.get(asistencia).set('Authorization', profesor).expect(200))
+        .body,
+    ).toMatchObject({ alumnos: [{ presente: true }] })
+
+    for (const [tabla, columna, id] of [
+      ['evaluacion', 'id', evaluacion],
+      ['nota', 'evaluacion_id', evaluacion],
+      ['revision_notas', 'evaluacion_id', evaluacion],
+      ['clase', 'id', clase],
+      ['asistencia', 'clase_id', clase],
+    ]) {
+      await expect(
+        bd.query(
+          `UPDATE ${tabla} SET updated_at = now() WHERE ${columna} = $1`,
+          [id],
+        ),
+      ).rejects.toThrow('Curso cerrado')
+    }
+  })
+})
+
+describe('archivo de cursos (HIS-03 y HIS-04)', () => {
+  it('archiva únicamente un curso cerrado y conserva su registro para la consulta histórica', async () => {
+    const [registro] = await bd.query<
+      {
+        curso: string
+        universidad: string
+        admin: string
+        periodo: string
+      }[]
+    >(
+      `
+      WITH antiguo AS (
+        INSERT INTO periodo (universidad_id, anio, semestre, fecha_inicio, fecha_termino, activo)
+        SELECT universidad_id, 2014, 2, '2014-08-01', '2014-12-31', false
+          FROM curso WHERE codigo = 'ICC101' RETURNING id, universidad_id
+      ), nuevo AS (
+        INSERT INTO curso (universidad_id, carrera_id, periodo_id, codigo, nombre)
+        SELECT c.universidad_id, c.carrera_id, p.id, 'HIS04', 'Curso histórico'
+          FROM curso c JOIN antiguo p ON p.universidad_id = c.universidad_id
+         WHERE c.codigo = 'ICC101'
+        RETURNING id, universidad_id, periodo_id
+      ), seccion_nueva AS (
+        INSERT INTO seccion (universidad_id, curso_id, numero)
+        SELECT universidad_id, id, 1 FROM nuevo RETURNING id, universidad_id
+      ), evaluacion_nueva AS (
+        INSERT INTO evaluacion (universidad_id, seccion_id, nombre, fecha, ponderacion, creada_por)
+        SELECT s.universidad_id, s.id, 'Control', '2014-11-03', 100, p.id
+          FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
+         WHERE p.correo = $1 RETURNING id, universidad_id
+      ), inscripcion_nueva AS (
+        INSERT INTO inscripcion (universidad_id, seccion_id, usuario_id)
+        SELECT s.universidad_id, s.id, a.id
+          FROM seccion_nueva s JOIN usuario a ON a.universidad_id = s.universidad_id
+         WHERE a.correo = $2
+      ), nota_publicada AS (
+        INSERT INTO nota (universidad_id, evaluacion_id, alumno_id, valor, estado, propuesta_por)
+        SELECT e.universidad_id, e.id, a.id, 5, 'PUBLICADA', y.id
+          FROM evaluacion_nueva e JOIN usuario a ON a.universidad_id = e.universidad_id
+          JOIN usuario y ON y.universidad_id = e.universidad_id
+         WHERE a.correo = $2 AND y.correo = $3
+      ), clase_nueva AS (
+        INSERT INTO clase (universidad_id, seccion_id, fecha, inicio, termino, sala, creada_por)
+        SELECT s.universidad_id, s.id, '2014-11-03', '09:00', '10:00', 'A1', p.id
+          FROM seccion_nueva s JOIN usuario p ON p.universidad_id = s.universidad_id
+         WHERE p.correo = $1 RETURNING id, universidad_id, creada_por
+      ), marca AS (
+        INSERT INTO asistencia (universidad_id, clase_id, alumno_id, presente, registrada_por)
+        SELECT c.universidad_id, c.id, a.id, true, c.creada_por
+          FROM clase_nueva c JOIN usuario a ON a.universidad_id = c.universidad_id
+         WHERE a.correo = $2
+      )
+      SELECT n.id AS curso, n.universidad_id AS universidad, n.periodo_id AS periodo, u.id AS admin
+        FROM nuevo n JOIN usuario u ON u.universidad_id = n.universidad_id
+       WHERE u.correo = $4
+    `,
+      [PROFESOR, ALUMNO, AYUDANTE, ADMIN_INGENIERIA],
+    )
+    const { curso, universidad, admin, periodo } = registro
+    const api = request(app.getHttpServer())
+    const ruta = `/api/cursos/${curso}`
+    const historico = '/api/cursos-archivados'
+    const token = await tokenDe(ADMIN_INGENIERIA)
+    const consultarArchivo = async (
+      correo: string,
+      url: string,
+      estado: number,
+    ) => {
+      const acceso = await tokenDe(correo)
+      return api
+        .get(url)
+        .set('Authorization', `Bearer ${acceso}`)
+        .expect(estado)
+    }
+    const archivar = async (correo: string, estado: number) => {
+      const acceso = await tokenDe(correo)
+      return api
+        .patch(`${ruta}/archivar`)
+        .set('Authorization', `Bearer ${acceso}`)
+        .expect(estado)
+    }
+    const listado = async () => {
+      const respuesta = await api
+        .get(`/api/cursos?periodoId=${periodo}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      return (respuesta.body as CursoListado[]).map(({ id }) => id)
+    }
+    const conRolApp = (sql: string) =>
+      bd.transaction(async (tx) => {
+        await tx.query('SET LOCAL ROLE cursus_app')
+        await tx.query(
+          `SELECT set_config('app.rol', 'ADMINISTRATIVO', true),
+                             set_config('app.universidad_id', $1, true),
+                             set_config('app.usuario_id', $2, true)`,
+          [universidad, admin],
+        )
+        await tx.query(sql, [curso])
+      })
+
+    await archivar(ADMIN_ECONOMIA, 404)
+    await archivar(ADMIN_SUR, 404)
+    await archivar(DIRECTOR, 403)
+    await archivar(ADMIN_INGENIERIA, 409)
+    await expect(
+      conRolApp('UPDATE curso SET archived_at = now() WHERE id = $1'),
+    ).rejects.toThrow('Solo se pueden archivar cursos cerrados')
+    expect(await listado()).toContain(curso)
+    await consultarArchivo(ADMIN_INGENIERIA, `${historico}/${curso}`, 404)
+
+    await cerrar(ADMIN_INGENIERIA, curso, 200)
+    const datosAcademicos = () =>
+      bd.query<Record<string, unknown>[]>(
+        `SELECT to_jsonb(cc) AS cierre, to_jsonb(s) AS seccion, to_jsonb(e) AS evaluacion,
+              to_jsonb(n) AS nota, to_jsonb(i) AS inscripcion,
+              to_jsonb(cl) AS clase, to_jsonb(a) AS asistencia
+         FROM cierre_curso cc
+         JOIN seccion s ON s.curso_id = cc.id
+         JOIN evaluacion e ON e.seccion_id = s.id
+         JOIN nota n ON n.evaluacion_id = e.id
+         JOIN inscripcion i ON i.seccion_id = s.id AND i.usuario_id = n.alumno_id
+         JOIN clase cl ON cl.seccion_id = s.id
+         JOIN asistencia a ON a.clase_id = cl.id
+        WHERE cc.id = $1`,
+        [curso],
+      )
+    const datos = await datosAcademicos()
+    expect(datos).toHaveLength(1)
+    await expect(conRolApp('DELETE FROM curso WHERE id = $1')).rejects.toThrow(
+      'permission denied',
+    )
+    await api.delete(ruta).set('Authorization', `Bearer ${token}`).expect(404)
+    await archivar(ADMIN_INGENIERIA, 204)
+    const estadoArchivo = () =>
+      bd.query<{ archived_at: Date | null }[]>(
+        'SELECT archived_at FROM curso WHERE id = $1',
+        [curso],
+      )
+    const [archivo] = await estadoArchivo()
+    expect(archivo.archived_at).toBeInstanceOf(Date)
+    await archivar(ADMIN_INGENIERIA, 204)
+    expect(await estadoArchivo()).toEqual([archivo])
+    expect(await listado()).not.toContain(curso)
+    await detalle(ADMIN_INGENIERIA, curso, 404)
+    expect(await datosAcademicos()).toEqual(datos)
+
+    await bd.query(
+      `UPDATE curso SET archived_at = now() WHERE codigo IN ('ICO201', 'ENF201')`,
+    )
+    const lista = await consultarArchivo(ADMIN_INGENIERIA, historico, 200)
+    expect(
+      (lista.body as CursoArchivadoListado[]).map((c) => c.codigo),
+    ).toEqual(['HIS04'])
+    expect(lista.body).toMatchObject([
+      { id: curso, periodo: { id: periodo, anio: 2014, semestre: 2 } },
+    ])
+    const detalleHistorico = await consultarArchivo(
+      ADMIN_INGENIERIA,
+      `${historico}/${curso}`,
+      200,
+    )
+    expect(detalleHistorico.body).toMatchObject({
+      id: curso,
+      periodo: { anio: 2014, semestre: 2 },
+      secciones: [
+        {
+          numero: 1,
+          evaluaciones: [
+            {
+              nombre: 'Control',
+              notas: [{ alumno: 'Alumno Norte', valor: 5 }],
+            },
+          ],
+          clases: [
+            {
+              fecha: '2014-11-03',
+              marcas: [{ alumno: 'Alumno Norte', presente: true }],
+            },
+          ],
+        },
+      ],
+    })
+    await consultarArchivo(ADMIN_ECONOMIA, `${historico}/${curso}`, 404)
+    await consultarArchivo(ADMIN_SUR, `${historico}/${curso}`, 404)
+    await consultarArchivo(DIRECTOR, historico, 403)
+    await consultarArchivo(PROFESOR, `${historico}/${curso}`, 403)
   })
 })

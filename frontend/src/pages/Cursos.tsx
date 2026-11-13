@@ -20,6 +20,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { EditarCurso } from './EditarCurso'
 import { CursoDetalle } from './CursoDetalle'
+import { CursosArchivados } from './CursosArchivados'
 import { useDatos } from './useDatos'
 import './Cursos.css'
 
@@ -31,6 +32,8 @@ export function Cursos() {
     <Routes>
       <Route index element={<InicioCursos opciones={opciones} />} />
       <Route path="nuevo" element={<NuevoCurso opciones={opciones} />} />
+      <Route path="archivados" element={<CursosArchivados />} />
+      <Route path="archivados/:id" element={<CursosArchivados />} />
       <Route path=":id/editar" element={<EditarCurso />} />
       <Route path=":id" element={<CursoDetalle />} />
       <Route path="*" element={<Navigate to="/cursos" replace />} />
@@ -38,9 +41,9 @@ export function Cursos() {
   )
 }
 
-// State con el que NuevoCurso vuelve a /cursos después de crear.
-interface EstadoCreado {
+interface EstadoCursos {
   creado?: string
+  archivado?: string
 }
 
 // Carreras y períodos para los filtros del listado (GES-04) y el formulario
@@ -107,7 +110,7 @@ function BotonCrear() {
 
 function InicioCursos({ opciones }: { opciones: Opciones }) {
   const puedeCrear = usePuede('create', 'Curso')
-  const creado = (useLocation().state as EstadoCreado | null)?.creado
+  const estado = useLocation().state as EstadoCursos | null
   const { carreras, periodos } = opciones
   const [carreraId, setCarreraId] = useState('')
   // Hasta que el usuario elige uno, el período es el activo (o todos si no
@@ -198,9 +201,24 @@ function InicioCursos({ opciones }: { opciones: Opciones }) {
   return (
     <section className="cursos" aria-label="Gestión de cursos">
       <Encabezado titulo="Gestión de cursos" />
-      {creado && (
+      {puedeCrear && (
+        <div>
+          <Link
+            className="cursos__boton cursos__boton--secundario"
+            to="/cursos/archivados"
+          >
+            Archivados
+          </Link>
+        </div>
+      )}
+      {estado?.creado && (
         <p className="cursos__exito" role="status">
-          Curso {creado} creado.
+          Curso {estado.creado} creado.
+        </p>
+      )}
+      {estado?.archivado && (
+        <p className="cursos__exito" role="status">
+          Curso {estado.archivado} archivado.
         </p>
       )}
       {/* Con la lista vacía y sin filtros, el botón va solo en el estado vacío. */}
@@ -282,7 +300,7 @@ function NuevoCurso({ opciones }: { opciones: Opciones }) {
       >
       if (respuesta.ok) {
         navigate('/cursos', {
-          state: { creado: cuerpo.codigo } satisfies EstadoCreado,
+          state: { creado: cuerpo.codigo } satisfies EstadoCursos,
         })
         return
       }

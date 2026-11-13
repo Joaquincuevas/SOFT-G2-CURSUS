@@ -4,9 +4,11 @@ import type {
   AlumnoQuitado,
   BloqueHorario,
   AlumnosSeccion,
+  CierreCurso,
   CursoCreado,
   CursoDetalle,
   CursoListado,
+  PendientesCierreCurso,
   DocenteCreado,
   FiltroCursos,
   MotivoErrorCsv,
@@ -26,6 +28,7 @@ import {
   BaseDeDatos,
   type ContextoUniversidad,
   fijarMotivo,
+  fijarUsuario,
 } from '../database/base-de-datos.service.js'
 import type { AgregarAlumnoDto } from './agregar-alumno.dto.js'
 import type { CrearCursoDto } from './crear-curso.dto.js'
@@ -54,6 +57,10 @@ const DESDE_CURSO = `
   JOIN carrera ca ON ca.id = c.carrera_id
   JOIN periodo p ON p.id = c.periodo_id
   JOIN universidad un ON un.id = c.universidad_id`
+
+const COLUMNA_CIERRE = `
+  (SELECT json_build_object('fecha', cc.fecha, 'responsableId', cc.responsable_id)
+     FROM cierre_curso cc WHERE cc.id = c.id) AS cierre`
 
 // Secciones vigentes del curso (GES-08): la cantidad para el listado y la
 // lista ordenada por número para el detalle, con el nombre del profesor a
@@ -182,6 +189,7 @@ interface FilaAlumno {
 }
 
 interface FilaDetalle extends Omit<FilaListado, 'secciones'> {
+  cierre: CierreCurso | null
   secciones: FilaSeccion[]
 }
 
@@ -276,13 +284,13 @@ export class GestionService {
     const [fila] = esDirector
       ? await this.bd.consultarEnTodasLasUniversidades<FilaDetalle>(
           contexto,
-          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES} ${DESDE_CURSO}
+          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES}, ${COLUMNA_CIERRE} ${DESDE_CURSO}
             WHERE c.id = $1 AND c.archived_at IS NULL`,
           [cursoId],
         )
       : await this.bd.consultarEnUniversidad<FilaDetalle>(
           contexto,
-          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES} ${DESDE_CURSO}
+          `SELECT ${COLUMNAS_CURSO}, ${LISTA_SECCIONES}, ${COLUMNA_CIERRE} ${DESDE_CURSO}
             WHERE c.universidad_id = $1 AND c.id = $2
               AND c.archived_at IS NULL
               AND ca.facultad_id = ${facultadDe('$3')}`,
@@ -306,7 +314,64 @@ export class GestionService {
         universidadNombre: fila.universidad_nombre,
       }),
       secciones: fila.secciones.map(seccionDetalle),
+      ...(fila.cierre && { cierre: fila.cierre }),
     }
+  }
+
+  async cerrarCurso(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<CierreCurso> {
+    return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      const [{ resultado }] = await bd.query<{
+        resultado: CierreCurso | PendientesCierreCurso | null
+      }>('SELECT public.cerrar_curso($1) AS resultado', [cursoId])
+      if (!resultado) throw new NotFoundException('El curso no existe')
+      if ('pendientes' in resultado) {
+        throw new ConflictException({
+          message: 'Hay requisitos pendientes para cerrar el curso.',
+          ...resultado,
+        })
+      }
+      return resultado
+    })
+  }
+
+  async archivarCurso(
+    contexto: ContextoUniversidad,
+    usuarioId: string,
+    cursoId: string,
+  ): Promise<void> {
+    await this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await fijarUsuario(bd, usuarioId)
+      const [curso] = await bd.query<{ archived_at: Date | null }>(
+        `SELECT c.archived_at FROM curso c
+           JOIN carrera ca ON ca.id = c.carrera_id AND ca.universidad_id = c.universidad_id
+          WHERE c.universidad_id = $1 AND c.id = $2
+            AND ca.facultad_id = ${facultadDe('$3')}
+          FOR UPDATE OF c`,
+        [contexto.universidadId, cursoId, usuarioId],
+      )
+      if (!curso) throw new NotFoundException('El curso no existe')
+      if (curso.archived_at) return
+
+      // Una consulta nueva ve el cierre si se confirmó mientras se esperaba
+      // el bloqueo sobre la fila del curso.
+      const [{ archivado }] = await bd.query<{ archivado: boolean }>(
+        `WITH archivo AS (
+           UPDATE curso SET archived_at = clock_timestamp()
+            WHERE universidad_id = $1 AND id = $2 AND public.curso_cerrado(id)
+           RETURNING id
+         )
+         SELECT EXISTS (SELECT 1 FROM archivo) AS archivado`,
+        [contexto.universidadId, cursoId],
+      )
+      if (!archivado) {
+        throw new ConflictException('Solo se pueden archivar cursos cerrados')
+      }
+    })
   }
 
   // GES-09. Agrega la siguiente sección del curso, con el número correlativo.

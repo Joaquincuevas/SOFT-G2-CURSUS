@@ -28,6 +28,7 @@ import {
   type ContextoUniversidad,
   fijarUsuario,
 } from '../database/base-de-datos.service.js'
+import { exigirCursoAbierto } from '../database/curso-abierto.js'
 import { AuditoriaNotasService } from './auditoria-notas.service.js'
 import { bloquearNotasDe } from './bloqueo-notas.js'
 import {
@@ -247,6 +248,7 @@ export class NotasService {
       )
     }
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       await fijarUsuario(bd, usuarioId)
       await bloquearNotasDe(bd, evaluacionId)
       // Fija la sección para que una reasignación del profesor espere al
@@ -356,7 +358,8 @@ export class NotasService {
           )
         : await this.bd.consultarEnUniversidad<NotasEvaluacion>(
             contexto,
-            `SELECT ${COLUMNAS_NOTAS} ${DESDE_EVALUACION} ${CON_REVISION}
+            `SELECT ${COLUMNAS_NOTAS}, public.curso_cerrado(s.curso_id) AS "cursoCerrado"
+               ${DESDE_EVALUACION} ${CON_REVISION}
               WHERE e.universidad_id = $1 AND s.id = $2 AND e.id = $3
                 AND e.archived_at IS NULL`,
             [seccion.id, evaluacionId],
@@ -364,7 +367,8 @@ export class NotasService {
     if (!fila) {
       throw new NotFoundException('La evaluación no existe')
     }
-    return fila
+    const { cursoCerrado, ...notas } = fila
+    return { ...notas, ...(cursoCerrado && { cursoCerrado }) }
   }
 
   async historial(
@@ -455,6 +459,7 @@ export class NotasService {
     const dobles = repetidos(notas.map((n) => n.alumnoId))
 
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       // NOT-08: una evaluación enviada a revisión o aprobada no se edita.
       await bloquearEvaluacionEditable(
         bd,
@@ -587,6 +592,7 @@ export class NotasService {
     evaluacionId: string,
   ): Promise<NotasEvaluacion> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       await bloquearEvaluacionEditable(
         bd,
         contexto,
@@ -683,6 +689,7 @@ export class NotasService {
     evaluacionId: string,
   ): Promise<NotasEvaluacion> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       await bloquearEvaluacionEnRevision(
         bd,
         contexto,
@@ -782,6 +789,7 @@ export class NotasService {
     { comentario }: DevolverNotas,
   ): Promise<NotasEvaluacion> {
     return this.bd.enTransaccionEnUniversidad(contexto, async (bd) => {
+      await exigirCursoAbierto(bd, seccion.id)
       await bloquearEvaluacionEnRevision(
         bd,
         contexto,

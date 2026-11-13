@@ -11,6 +11,7 @@ describe('navegación por rol', () => {
       'DIRECTOR',
       [
         ['Dashboard', '/'],
+        ['Indicadores', '/indicadores'],
         ['Universidades', '/universidades'],
         ['Gestión académica', '/cursos'],
       ],
@@ -19,6 +20,7 @@ describe('navegación por rol', () => {
       'ADMINISTRATIVO',
       [
         ['Dashboard', '/'],
+        ['Reporte académico', '/reporte-facultad'],
         ['Mis Cursos', '/cursos'],
         ['Carreras', '/carreras'],
         ['Períodos', '/periodos'],

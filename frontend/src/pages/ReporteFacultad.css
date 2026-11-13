@@ -1,0 +1,39 @@
+.reporte-facultad {
+  display: grid;
+  gap: 1rem;
+}
+
+.reporte-facultad__periodo {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 24rem;
+  font-size: 0.875rem;
+}
+
+.reporte-facultad__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.reporte-facultad__tabla caption {
+  margin-bottom: 0.5rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.reporte-facultad__tabla th,
+.reporte-facultad__tabla td {
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.reporte-facultad__carrera {
+  background: var(--color-background);
+}
+
+.reporte-facultad__curso {
+  padding-left: 2rem !important;
+  font-weight: 400;
+}

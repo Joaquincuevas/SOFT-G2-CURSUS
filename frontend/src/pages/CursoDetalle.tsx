@@ -10,6 +10,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { EditarHorarioDialogo } from './EditarHorario'
+import { GestionarCierreCurso } from './GestionarCierreCurso'
 import './Cursos.css'
 import { nombresProfesores } from './misSecciones'
 import { useDatos } from './useDatos'
@@ -218,6 +219,7 @@ function Detalle({ id }: { id: string }) {
           )}
         </div>
       )}
+      {puedeEditar && <GestionarCierreCurso key={id} curso={curso} />}
       {aviso?.exito && (
         <p className="cursos__exito" role="status">
           {aviso.texto}

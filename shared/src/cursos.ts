@@ -1,5 +1,7 @@
 // DTOs de gestión académica.
 
+import type { Clase } from './asistencia.js'
+
 export interface PeriodoResumen {
   id: string
   anio: number
@@ -38,6 +40,29 @@ export interface CursoCreado {
   periodo: PeriodoResumen
 }
 
+export interface CursoArchivadoListado extends CursoCreado {
+  archivadoEn: string
+}
+
+export interface SeccionArchivada {
+  id: string
+  numero: number
+  evaluaciones: {
+    id: string
+    nombre: string
+    fecha: string
+    ponderacion: number
+    notas: { alumnoId: string; alumno: string; valor: number }[]
+  }[]
+  clases: (Clase & {
+    marcas: { alumnoId: string; alumno: string; presente: boolean }[]
+  })[]
+}
+
+export interface CursoArchivado extends CursoArchivadoListado {
+  secciones: SeccionArchivada[]
+}
+
 // Query opcional de GET /api/cursos (GES-04): se pueden combinar.
 export interface FiltroCursos {
   carreraId?: string
@@ -74,6 +99,28 @@ export interface SeccionDetalle {
   alumnos: number
 }
 
+export interface CierreCurso {
+  fecha: string
+  responsableId: string
+}
+
+export interface EvaluacionPendienteDeCierre {
+  evaluacionId: string
+  nombre: string
+  seccion: number
+  notasPendientes: number
+}
+
+export interface PendientesCierreCurso {
+  pendientes: EvaluacionPendienteDeCierre[]
+  ponderaciones: {
+    seccion: number
+    sumaPonderaciones: number
+    faltan: number
+    sobran: number
+  }[]
+}
+
 // Respuesta de GET /api/cursos/:id (GES-08).
 export interface CursoDetalle {
   id: string
@@ -81,6 +128,7 @@ export interface CursoDetalle {
   nombre: string
   carreraNombre: string
   periodo: PeriodoResumen
+  cierre?: CierreCurso
   // Solo para el Director, que ve los cursos de todas las universidades.
   universidadId?: string
   universidadNombre?: string

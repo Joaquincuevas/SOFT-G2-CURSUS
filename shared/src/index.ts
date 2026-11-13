@@ -19,6 +19,7 @@ export interface UsuarioSesion {
   nombre: string
   correo: string
   rol: Rol
+  egresado?: boolean
   // MT-04: el superadmin no tiene universidad propia. Es la que eligió para
   // trabajar, o null mientras no elija una (ver ContextoSuperadmin).
   universidadId: string | null
@@ -52,6 +53,7 @@ export * from './notas.js'
 export * from './materiales.js'
 export * from './superadmin.js'
 export * from './colores.js'
+export * from './metricas.js'
 
 // GES-01: los identificadores de facultad/universidad se resuelven en la API.
 export interface Carrera {
