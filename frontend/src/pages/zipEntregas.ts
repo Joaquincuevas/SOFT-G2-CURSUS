@@ -2,13 +2,15 @@ import type { ArchivoEntregasZip } from '@cursus/shared'
 import { Zip, ZipPassThrough } from 'fflate'
 
 export async function descargarZipEntregas(archivos: ArchivoEntregasZip[]) {
-  if (archivos.length >= 0xffff) throw new Error('Demasiadas entradas para un ZIP')
+  if (archivos.length >= 0xffff)
+    throw new Error('Demasiadas entradas para un ZIP')
   const partes: BlobPart[] = []
   let total = 0
   const zip = new Zip((error, datos) => {
     if (error) throw error
     total += datos.byteLength
-    if (total >= 0xffffffff) throw new Error('El archivo excede el tamaño de ZIP')
+    if (total >= 0xffffffff)
+      throw new Error('El archivo excede el tamaño de ZIP')
     partes.push(Uint8Array.from(datos))
   })
   // Los PDF ya suelen estar comprimidos. Se incorpora cada flujo por
