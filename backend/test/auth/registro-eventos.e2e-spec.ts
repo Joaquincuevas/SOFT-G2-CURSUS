@@ -88,7 +88,13 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     expect(respuesta.body).toEqual({ accessToken: 'jwt-de-prueba' })
     expect(respuesta.get('Set-Cookie')?.[0]).toContain('refresh=')
     // Un éxito registra la cuenta que resolvió el login, sin el correo.
-    expect(registrado()).toEqual([null, '198.51.100.20', 'EXITOSO', USUARIO_ID])
+    expect(registrado()).toEqual([
+      null,
+      '198.51.100.20',
+      'EXITOSO',
+      USUARIO_ID,
+      null,
+    ])
   })
 
   it('un fallo registra FALLIDO y responde 401 con el mismo mensaje', async () => {
@@ -96,7 +102,7 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     const respuesta = await login().expect(401)
     expect(respuesta.body).toMatchObject({ message: 'Credenciales inválidas' })
     expect(respuesta.get('Set-Cookie')).toBeUndefined()
-    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'FALLIDO', null])
+    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'FALLIDO', null, null])
   })
 
   it('el bloqueo registra BLOQUEADO y responde 429 con Retry-After', async () => {
@@ -104,7 +110,13 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     const respuesta = await login().expect(429)
     expect(respuesta.headers['retry-after']).toBe('120')
     expect(respuesta.body).toMatchObject({ statusCode: 429, retryAfter: 120 })
-    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'BLOQUEADO', null])
+    expect(registrado()).toEqual([
+      CORREO,
+      '203.0.113.7',
+      'BLOQUEADO',
+      null,
+      null,
+    ])
   })
 
   it('sin la configuración de proxy ignora la IP que declara el cliente', async () => {
@@ -150,7 +162,7 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
         Object.assign(new Error(`valor inválido: ${CORREO} ${PASSWORD}`), {
           code: '22P02',
           query:
-            'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid)',
+            'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid, $5)',
           parameters: [CORREO, PASSWORD],
         }),
       )

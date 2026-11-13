@@ -206,7 +206,7 @@ describe('registro append-only', () => {
                                 OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a
                                             WHERE a.grantee = 0)) AS publicas,
               has_function_privilege('${ROL_APP}',
-                'public.registrar_inicio_sesion(text, inet, text, uuid)', 'EXECUTE') AS aplicacion
+                'public.registrar_inicio_sesion(text, inet, text, uuid, text)', 'EXECUTE') AS aplicacion
          FROM pg_proc p
         WHERE p.proname IN ('registrar_inicio_sesion', 'registrar_evento_de_historial')`,
     )

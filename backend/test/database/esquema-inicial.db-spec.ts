@@ -189,7 +189,22 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // SEG-01 es la última: solo quita la tabla de secretos TOTP.
+    // SEG-02 es la última: quita ultimo_paso y vuelve a la función de SEG-04.
+    await bd.undoLastMigration()
+    const [{ ultimoPaso, firmas }] = await bd.query<
+      { ultimoPaso: string; firmas: string }[]
+    >(
+      `SELECT (SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'mfa_usuario' AND column_name = 'ultimo_paso') AS "ultimoPaso",
+              (SELECT string_agg(pg_get_function_identity_arguments(oid), ';')
+                 FROM pg_proc WHERE proname = 'registrar_inicio_sesion') AS firmas`,
+    )
+    expect(Number(ultimoPaso)).toBe(0)
+    expect(firmas).toBe(
+      'p_correo text, p_ip inet, p_resultado text, p_usuario uuid',
+    )
+    expect(await tablasExistentes()).toEqual(TABLAS)
+    // SEG-01: solo quita la tabla de secretos TOTP.
     await bd.undoLastMigration()
     const SIN_MFA = TABLAS.filter((tabla) => tabla !== 'mfa_usuario')
     expect(await tablasExistentes()).toEqual(SIN_MFA)
@@ -261,7 +276,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
+    await bd.undoLastMigration() // SEG-02, SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -374,7 +390,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó SEG-01,
+    await bd.undoLastMigration() // runMigrations también reaplicó SEG-02,
+    await bd.undoLastMigration() // SEG-01,
     await bd.undoLastMigration() // SEG-04,
     await bd.undoLastMigration() // HIS-06,
     await bd.undoLastMigration() // HIS-04,
