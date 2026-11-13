@@ -41,7 +41,15 @@ const ROLES: Record<string, string> = {
   SUPERADMIN: 'Superadmin',
 }
 const UUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+// Un día que existe: el patrón solo revisa la forma, y Date corrige en silencio
+// lo imposible (2026-02-30 sería el 2 de marzo), así que se compara de vuelta.
 const DIA = /^\d{4}-\d{2}-\d{2}$/
+const diaExiste = (dia: string) => {
+  if (!DIA.test(dia)) return false
+  const fecha = new Date(`${dia}T00:00:00Z`)
+  // Un mes 13 da Date inválida: toISOString lanzaría.
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().startsWith(dia)
+}
 
 // Las fechas se muestran en la zona horaria del navegador, y la zona va en
 // cada fecha y en el aviso de arriba.
@@ -75,16 +83,17 @@ export function RegistroAccesos() {
     (!tipo || (TIPOS_EVENTO as readonly string[]).includes(tipo)) &&
     (!universidadId || UUID.test(universidadId)) &&
     (!usuarioId || UUID.test(usuarioId)) &&
-    (!desde || DIA.test(desde)) &&
-    (!hasta || DIA.test(hasta))
+    (!desde || diaExiste(desde)) &&
+    (!hasta || diaExiste(hasta))
   const rangoInvalido = Boolean(desde && hasta && desde > hasta)
 
   const consulta = new URLSearchParams()
   if (tipo) consulta.set('tipo', tipo)
   if (universidadId) consulta.set('universidadId', universidadId)
   if (usuarioId) consulta.set('usuarioId', usuarioId)
-  if (desde) consulta.set('desde', inicioDelDia(desde))
-  if (hasta) consulta.set('hasta', finDelDia(hasta))
+  // Con un filtro inválido no se arma la consulta (toISOString lanzaría).
+  if (filtrosValidos && desde) consulta.set('desde', inicioDelDia(desde))
+  if (filtrosValidos && hasta) consulta.set('hasta', finDelDia(hasta))
   if (pagina > 1) consulta.set('pagina', String(pagina))
   const texto = consulta.toString()
 
@@ -205,11 +214,25 @@ export function RegistroAccesos() {
           onReintentar={recargar}
         />
       ) : resultado.eventos.length === 0 ? (
-        <p className="accesos__vacio">
-          {resultado.total === 0
-            ? 'No hay eventos con estos filtros.'
-            : 'Esta página no tiene eventos.'}
-        </p>
+        resultado.total === 0 ? (
+          <p className="accesos__vacio">No hay eventos con estos filtros.</p>
+        ) : (
+          // Página fuera de rango (un enlace viejo): la salida conserva los
+          // filtros y solo quita la página.
+          <div className="accesos__vacio" role="status">
+            <p>
+              Esta página no tiene eventos: con estos filtros hay{' '}
+              {Math.ceil(resultado.total / resultado.tamano)}{' '}
+              {Math.ceil(resultado.total / resultado.tamano) === 1
+                ? 'página'
+                : 'páginas'}
+              .
+            </p>
+            <button type="button" onClick={() => irA(1)}>
+              Volver a la primera página
+            </button>
+          </div>
+        )
       ) : (
         <>
           <div className="accesos__tabla">

@@ -250,6 +250,66 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     expect(eventos).not.toHaveBeenCalled()
   })
 
+  test.each(['2026-13-01', '2026-02-30', '2026-00-10', '2026-04-31'])(
+    'la fecha imposible %s avisa y no consulta ni se corrige en silencio',
+    async (dia) => {
+      const eventos = vi.fn(() => LISTA)
+      for (const filtro of ['desde', 'hasta']) {
+        await renderConSesion(
+          'DIRECTOR',
+          `/accesos?${filtro}=${dia}`,
+          rutas(eventos),
+        )
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+          'Los filtros de la dirección no son válidos.',
+        )
+        cleanup()
+      }
+      expect(eventos).not.toHaveBeenCalled()
+    },
+  )
+
+  test('una fecha bisiesta válida sí se consulta', async () => {
+    const eventos = vi.fn(() => LISTA)
+    await renderConSesion(
+      'DIRECTOR',
+      '/accesos?desde=2028-02-29',
+      rutas(eventos),
+    )
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(eventos).toHaveBeenCalledTimes(1)
+  })
+
+  test('una página fuera de rango ofrece volver a la primera conservando los filtros', async () => {
+    const fetch = vi.fn()
+    await renderConSesion('DIRECTOR', '/accesos?tipo=CAMBIO_NOTA&pagina=3', {
+      [EVENTOS]: (_init, url) => {
+        fetch(url)
+        const n = Number(
+          new URL(url as string, 'http://x').searchParams.get('pagina') ?? 1,
+        )
+        return n === 1
+          ? pagina([evento()], { total: 30, pagina: 1 })
+          : pagina([], { total: 30, pagina: n })
+      },
+      [UNIVERSIDADES]: () => OPCIONES,
+    })
+    expect(
+      await screen.findByText(/Esta página no tiene eventos: .* 2 páginas/),
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Volver a la primera página' }),
+    )
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    const consulta = new URL(
+      String(fetch.mock.calls.at(-1)?.[0]),
+      'http://localhost',
+    ).searchParams
+    expect(consulta.get('tipo')).toBe('CAMBIO_NOTA')
+    expect(consulta.has('pagina')).toBe(false)
+    expect(screen.getByLabelText('Tipo de evento')).toHaveValue('CAMBIO_NOTA')
+  })
+
   test('filtros inválidos en la URL no llegan a la API', async () => {
     const eventos = vi.fn(() => LISTA)
     await renderConSesion(

@@ -42,7 +42,7 @@ El superadmin lee la tabla en la base, pero la API no le da acceso: la tarjeta p
 
 ## Vista
 
-`/accesos`, solo en el menú y las rutas del Director (el mismo permiso de CASL que el backend). Filtros de tipo, universidad, desde y hasta; tabla con fecha, evento, resultado, usuario, universidad, IP y detalle; paginación Anterior/Siguiente; estados de carga, vacío y error con «Reintentar». Los filtros y la página viven en la URL.
+`/accesos`, solo en el menú y las rutas del Director (el mismo permiso de CASL que el backend). Filtros de tipo, universidad, desde y hasta; tabla con fecha, evento, resultado, usuario, universidad, IP y detalle; paginación Anterior/Siguiente; estados de carga, vacío y error con «Reintentar». Los filtros y la página viven en la URL: una fecha que no existe (`2026-02-30`, `2026-13-01`) se avisa y no se consulta, y una página fuera de rango muestra cuántas hay y un botón «Volver a la primera página» que conserva los filtros.
 
 Las fechas se muestran en la zona horaria del navegador, con su abreviatura en cada fecha y el nombre de la zona sobre la tabla; el instante exacto va en el atributo `dateTime`. Los días de los filtros son días completos de esa zona (de 00:00:00 a 23:59:59.999) y se envían como instantes.
 
