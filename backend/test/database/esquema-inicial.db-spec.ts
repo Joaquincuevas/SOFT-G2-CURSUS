@@ -37,6 +37,7 @@ const TABLAS = [
   'limite_login',
   'material',
   'material_version',
+  'mfa_usuario',
   'nota',
   'nota_cambio',
   'periodo',
@@ -187,10 +188,14 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    // SEG-01 es la última: solo quita la tabla de secretos TOTP.
+    await bd.undoLastMigration()
+    const SIN_MFA = TABLAS.filter((tabla) => tabla !== 'mfa_usuario')
+    expect(await tablasExistentes()).toEqual(SIN_MFA)
     await bd.undoLastMigration() // HIS-06: quita el estado de egreso.
     await bd.undoLastMigration() // HIS-04: quita la consulta histórica.
     await bd.undoLastMigration() // MET-01: quita la función nota_final.
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_MFA)
     const [{ notaFinal }] = await bd.query<{ notaFinal: string }[]>(
       `SELECT count(*) AS "notaFinal" FROM pg_proc WHERE proname = 'nota_final'`,
     )
@@ -198,7 +203,7 @@ describe('migraciones', () => {
     await bd.undoLastMigration() // HIS-03: quita la protección del archivo.
     await bd.undoLastMigration() // HIS-02: quita los triggers de protección.
     await bd.undoLastMigration() // HIS-01: quita el cierre y su función.
-    const SIN_CIERRE = TABLAS.filter((tabla) => tabla !== 'cierre_curso')
+    const SIN_CIERRE = SIN_MFA.filter((tabla) => tabla !== 'cierre_curso')
     expect(await tablasExistentes()).toEqual(SIN_CIERRE)
     // MAT-07: quita el historial de versiones y devuelve el bloqueo del
     // material solo a quien lo subió.
@@ -239,7 +244,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // SEG-01, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -350,7 +356,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó HIS-06,
+    await bd.undoLastMigration() // runMigrations también reaplicó SEG-01,
+    await bd.undoLastMigration() // HIS-06,
     await bd.undoLastMigration() // HIS-04,
     await bd.undoLastMigration() // MET-01,
     await bd.undoLastMigration() // HIS-03,
@@ -730,6 +737,8 @@ describe('migraciones', () => {
       (t) =>
         t !== 'refresh_token' &&
         t !== 'sesion_auth' &&
+        // SEG-01: una credencial por usuario, como sesion_auth.
+        t !== 'mfa_usuario' &&
         t !== 'limite_login' &&
         t !== 'curso_cambio' &&
         t !== 'cierre_curso' &&

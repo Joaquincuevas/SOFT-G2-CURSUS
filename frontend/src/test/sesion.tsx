@@ -101,6 +101,8 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
   '/api/dashboard/secciones-ayudante': () => [],
   '/api/dashboard/secciones-alumno': () => [],
   '/api/mis-cursos/historial': () => [],
+  // Verificación en dos pasos del perfil (SEG-01): inactiva.
+  '/api/perfil/mfa': () => ({ activo: false }),
 }
 
 // Rutas con un id en el medio, que no se pueden comparar exactas. Lista de
