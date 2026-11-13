@@ -1,5 +1,11 @@
 import type { InicioMfa } from '@cursus/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
@@ -56,6 +62,21 @@ async function abrirQr() {
   })
 }
 
+// SEG-01 (revisión): con el MFA activo, al confirmar y al volver al perfil
+// se ve el mismo estado, con la nota de que el login pedirá el código cuando
+// se habilite (SEG-02). El indicador de carga también es role="status": por
+// eso se busca el texto.
+async function esperarConfigurada() {
+  expect(
+    await within(tarjeta()).findByText('App autenticadora configurada'),
+  ).toHaveAttribute('role', 'status')
+  expect(
+    within(tarjeta()).getByText(
+      /Cuando se habilite la verificación al iniciar sesión, te pediremos el código/,
+    ),
+  ).toBeInTheDocument()
+}
+
 describe('verificación en dos pasos (SEG-01)', () => {
   test.each(['ALUMNO', 'PROFESOR', 'ADMINISTRATIVO', 'DIRECTOR'] as const)(
     '%s la ve en su perfil, inactiva, con el botón para activarla',
@@ -103,11 +124,38 @@ describe('verificación en dos pasos (SEG-01)', () => {
     fireEvent.change(campoCodigo(), { target: { value: '123 456' } })
     fireEvent.click(confirmarBoton())
 
-    // El indicador de carga también es role="status": se espera el texto.
-    expect(
-      await within(tarjeta()).findByText('Verificación en dos pasos activada.'),
-    ).toHaveAttribute('role', 'status')
+    await esperarConfigurada()
     expect(enviados).toEqual([{ codigo: '123456' }])
+    expect(within(tarjeta()).queryByRole('img')).not.toBeInTheDocument()
+    expect(
+      within(tarjeta()).queryByRole('button', {
+        name: 'Activar verificación en dos pasos',
+      }),
+    ).not.toBeInTheDocument()
+  })
+
+  test('al volver al perfil después de confirmar, sigue configurada', async () => {
+    // El backend simulado recuerda la activación, como la base real.
+    let activo = false
+    const rutasConEstado = {
+      '/api/perfil/mfa': () => ({ activo }),
+      '/api/perfil/mfa/inicio': () => INICIO,
+      '/api/perfil/mfa/confirmacion': () => {
+        activo = true
+        return new Response(null, { status: 204 })
+      },
+    }
+    await renderConSesion('ALUMNO', '/perfil', rutasConEstado)
+    await abrirQr()
+    fireEvent.change(campoCodigo(), { target: { value: '123456' } })
+    fireEvent.click(confirmarBoton())
+    await esperarConfigurada()
+
+    // Sale y vuelve a entrar al perfil: la tarjeta lee el estado de nuevo.
+    cleanup()
+    await renderConSesion('ALUMNO', '/perfil', rutasConEstado)
+
+    await esperarConfigurada()
     expect(within(tarjeta()).queryByRole('img')).not.toBeInTheDocument()
     expect(
       within(tarjeta()).queryByRole('button', {
@@ -156,12 +204,7 @@ describe('verificación en dos pasos (SEG-01)', () => {
       '/api/perfil/mfa': () => ({ activo: true }),
     })
 
-    // El indicador de carga también es role="status": se espera el texto.
-    expect(
-      await within(tarjeta()).findByText(
-        'La verificación en dos pasos está activa en tu cuenta.',
-      ),
-    ).toHaveAttribute('role', 'status')
+    await esperarConfigurada()
     expect(
       within(tarjeta()).queryByRole('button', {
         name: 'Activar verificación en dos pasos',
@@ -193,12 +236,7 @@ describe('verificación en dos pasos (SEG-01)', () => {
       ).findByRole('button', { name: 'Activar verificación en dos pasos' }),
     )
 
-    // El indicador de carga también es role="status": se espera el texto.
-    expect(
-      await within(tarjeta()).findByText(
-        'La verificación en dos pasos está activa en tu cuenta.',
-      ),
-    ).toHaveAttribute('role', 'status')
+    await esperarConfigurada()
   })
 
   test('si el QR pendiente ya no existe, pide generar uno nuevo', async () => {
