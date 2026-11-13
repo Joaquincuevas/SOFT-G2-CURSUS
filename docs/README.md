@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [OBS-02 · Alertas de salud y errores 5xx en producción](obs-02-alertas-produccion.md)
 - [EXP-02 · Descargar entregas de una actividad en ZIP](exp-02-entregas-zip.md)
 - [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
 - [EXP-01 · Exportación de notas publicadas a CSV](exp-01-exportar-notas-csv.md)
