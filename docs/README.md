@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [EXP-01 · Exportación de notas publicadas a CSV](exp-01-exportar-notas-csv.md)
 - [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)
 - [HIS-05 · Historial de notas del alumno](his-05-historial-notas-alumno.md)
 - [HIS-04 · Consulta de cursos archivados por período](his-04-consultar-cursos-archivados.md)
