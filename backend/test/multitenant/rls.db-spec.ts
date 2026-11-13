@@ -234,7 +234,7 @@ describe('RLS por universidad', () => {
       })
     })
 
-    it.each(['refresh_token', 'sesion_auth'])(
+    it.each(['refresh_token', 'sesion_auth', 'mfa_usuario'])(
       '%s: no es accesible con el rol de la API',
       async (tabla) => {
         await comoApp(administrativo(), async (q) => {

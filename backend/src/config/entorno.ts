@@ -33,6 +33,8 @@ export function validarEntorno(
   }
   if (nombres.includes('JWT_SECRET')) {
     secretoJwt(entorno)
+    // SEG-01. Opcional para arrancar, pero si viene debe ser válido.
+    secretoMfa(entorno)
   }
 }
 
@@ -43,6 +45,25 @@ export function secretoJwt(entorno: NodeJS.ProcessEnv = process.env): string {
   if (!secreto || secreto.length < LARGO_MINIMO_SECRETO_JWT) {
     throw new Error(
       `JWT_SECRET debe tener al menos ${LARGO_MINIMO_SECRETO_JWT} caracteres`,
+    )
+  }
+  return secreto
+}
+
+// SEG-01. Secreto del que se deriva la llave que cifra los secretos TOTP. Es
+// opcional, como S3_BUCKET: sin él la API arranca y solo el MFA responde 503,
+// para que un deploy no se caiga si el stack de AWS aún no tiene el secreto.
+// Si viene, debe tener el mismo largo mínimo que el de los JWT.
+export function secretoMfa(
+  entorno: NodeJS.ProcessEnv = process.env,
+): string | null {
+  const secreto = entorno.MFA_SECRET
+  if (!secreto) {
+    return null
+  }
+  if (secreto.length < LARGO_MINIMO_SECRETO_JWT) {
+    throw new Error(
+      `MFA_SECRET debe tener al menos ${LARGO_MINIMO_SECRETO_JWT} caracteres`,
     )
   }
   return secreto
