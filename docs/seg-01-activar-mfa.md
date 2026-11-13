@@ -14,10 +14,10 @@ Tarjeta: [F6 SEG-01 Usuario activa MFA con una app autenticadora](https://trello
 
 ## Flujo
 
-1. `GET /api/perfil/mfa` → `{ activo }`. Si está activo, la tarjeta solo lo informa.
+1. `GET /api/perfil/mfa` → `{ activo }`. Si está activo, la tarjeta muestra «App autenticadora configurada» y una nota: cuando se habilite la verificación al iniciar sesión (SEG-02), se pedirá el código de la app en cada ingreso.
 2. «Activar verificación en dos pasos» → `POST /api/perfil/mfa/inicio`. Genera un secreto nuevo y lo deja **pendiente** (`activado_en` NULL). Si ya había uno pendiente, lo reemplaza: el QR anterior deja de servir.
 3. El usuario escanea el QR (o ingresa la clave) y escribe el código de 6 dígitos. Los espacios se ignoran, porque las apps lo muestran como «123 456».
-4. `POST /api/perfil/mfa/confirmacion` → 204 y la tarjeta muestra «Verificación en dos pasos activada.».
+4. `POST /api/perfil/mfa/confirmacion` → 204, y la tarjeta pasa al mismo estado del paso 1: «App autenticadora configurada» con la nota. Al volver al perfil se ve igual, porque el estado se lee de nuevo del backend.
 
 «Cancelar» oculta el QR. El secreto pendiente queda guardado, pero no sirve para nada mientras no se confirme, y el siguiente QR lo reemplaza.
 
@@ -67,7 +67,7 @@ La migración `CrearMfaUsuario1792970000000` crea `mfa_usuario (usuario_id PK, s
 
 ![QR y clave para configurar la app autenticadora](evidencias/seg-01-mfa-qr.png)
 
-![Verificación en dos pasos activada](evidencias/seg-01-mfa-activada.png)
+![App autenticadora configurada](evidencias/seg-01-mfa-activada.png)
 
 ![QR a 320 px de ancho](evidencias/seg-01-mfa-qr-movil.png)
 
@@ -77,6 +77,6 @@ La migración `CrearMfaUsuario1792970000000` crea `mfa_usuario (usuario_id PK, s
 2. Entrar con `alumno@norte.cursus.test` (contraseña `SEED_PASSWORD`, por defecto `cursus_demo`) e ir a **Mi perfil**.
 3. En «Verificación en dos pasos», pulsar «Activar verificación en dos pasos» y escanear el QR con Google Authenticator o Authy. Esperado: la cuenta aparece como «CURSUS (alumno@norte.cursus.test)».
 4. Escribir un código incorrecto. Esperado: aviso de código inválido, y el QR sigue visible.
-5. Escribir el código de la app. Esperado: «Verificación en dos pasos activada.». Al recargar, la tarjeta dice que está activa.
+5. Escribir el código de la app. Esperado: «App autenticadora configurada» y la nota sobre el inicio de sesión. Al salir y volver a Mi perfil se ve igual.
 6. En la base: `SELECT secreto_cifrado FROM mfa_usuario;`. Esperado: `v1.…`, sin la clave que mostró la pantalla.
 7. Sin `MFA_SECRET` en `.env`, reiniciar el backend: el perfil carga y activar responde «no está disponible por ahora».
