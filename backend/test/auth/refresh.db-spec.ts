@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { hash } from 'argon2'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import request from 'supertest'
@@ -10,6 +11,7 @@ import { configurarApp } from '../../src/config/configurar-app.js'
 import { opcionesDataSource } from '../../src/database/data-source.js'
 import { ejecutarSeed } from '../../src/database/seed.js'
 import { CorreoRecuperacion } from '../../src/auth/correo-recuperacion.service.js'
+import { RecuperacionService } from '../../src/auth/recuperacion.service.js'
 import { vi } from 'vitest'
 
 const enviarRecuperacion = vi.fn<CorreoRecuperacion['enviar']>()
@@ -88,6 +90,7 @@ beforeAll(async () => {
 })
 
 it('SEG-03 responde igual, expira y consume el enlace una vez, revocando sesiones', async () => {
+  enviarRecuperacion.mockClear()
   const correo = 'recuperacion@sur.cursus.test'
   await bd.query(
     `INSERT INTO usuario (universidad_id, nombre, correo, password_hash, rol)
@@ -107,6 +110,8 @@ it('SEG-03 responde igual, expira y consume el enlace una vez, revocando sesione
     solicitar('ausente@sur.cursus.test'),
   ])
   expect(existe.text).toBe(falta.text)
+  expect(enviarRecuperacion).toHaveBeenCalledTimes(1)
+  await solicitar(correo)
   expect(enviarRecuperacion).toHaveBeenCalledTimes(1)
   const [, vencido] = enviarRecuperacion.mock.calls[0]
   const passwordNueva = 'contraseña-nueva-SEG03'
@@ -135,7 +140,39 @@ it('SEG-03 responde igual, expira y consume el enlace una vez, revocando sesione
     .post('/api/auth/login')
     .send({ correo, password: passwordNueva })
     .expect(200)
-}, 15000)
+}, 20000)
+
+it('SEG-03 descarta el enlace si falla el envío y el cambio de credencial invalida el siguiente', async () => {
+  enviarRecuperacion.mockClear()
+  enviarRecuperacion.mockResolvedValueOnce(false).mockResolvedValue(true)
+  const correo = 'recuperacion-fallida@sur.cursus.test'
+  const [{ id }] = await bd.query<{ id: string }[]>(
+    `INSERT INTO usuario (universidad_id, nombre, correo, password_hash, rol)
+     SELECT universidad_id, 'Alumno recuperación', $1, password_hash, rol
+       FROM usuario WHERE correo = 'alumno@sur.cursus.test' RETURNING id`,
+    [correo],
+  )
+  const recuperacion = app.get(RecuperacionService)
+  await recuperacion.solicitar(correo, null)
+  expect(enviarRecuperacion).toHaveBeenCalledTimes(1)
+  expect(
+    await bd.query(
+      'SELECT 1 FROM recuperacion_password WHERE usuario_id = $1',
+      [id],
+    ),
+  ).toEqual([])
+
+  await recuperacion.solicitar(correo, null)
+  expect(enviarRecuperacion).toHaveBeenCalledTimes(2)
+  const [, token] = enviarRecuperacion.mock.calls[1]
+  await bd.query(
+    'UPDATE usuario SET password_hash = $2 WHERE id = $1',
+    [id, await hash('contraseña cambiada')],
+  )
+  await expect(
+    recuperacion.restablecer(token, 'contraseña nueva'),
+  ).resolves.toBe(false)
+})
 
 afterAll(async () => {
   await app?.close()

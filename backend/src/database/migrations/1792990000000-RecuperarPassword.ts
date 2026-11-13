@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm'
 
-export class RecuperarPassword1792980000000 implements MigrationInterface {
-  name = 'RecuperarPassword1792980000000'
+export class RecuperarPassword1792990000000 implements MigrationInterface {
+  name = 'RecuperarPassword1792990000000'
 
   async up(q: QueryRunner): Promise<void> {
     // Solo la conexión de autenticación accede a esta tabla.
