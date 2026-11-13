@@ -51,6 +51,7 @@ describe('perfil (PER-01)', () => {
   test('al guardar, el encabezado muestra el nombre nuevo de inmediato', async () => {
     const pedidos: unknown[] = []
     await renderConSesion('ALUMNO', '/perfil', {
+      '/api/perfil/mfa': () => new Promise(() => {}),
       '/api/perfil': (init) => {
         pedidos.push(JSON.parse(String(init?.body)))
         return { nombre: 'Camila Rojas' }
@@ -61,8 +62,12 @@ describe('perfil (PER-01)', () => {
     fireEvent.change(campo('Nombre'), { target: { value: 'Camila Rojas' } })
     fireEvent.click(guardar())
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      'Nombre actualizado.',
+    expect(
+      screen.getByText('Cargando la verificación en dos pasos…'),
+    ).toBeVisible()
+    expect(await screen.findByText('Nombre actualizado.')).toHaveAttribute(
+      'role',
+      'status',
     )
     expect(pedidos).toEqual([{ nombre: 'Camila Rojas' }])
     const encabezado = within(screen.getByRole('banner'))
