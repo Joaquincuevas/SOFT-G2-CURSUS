@@ -20,6 +20,7 @@ Documentación del proyecto:
 - [MET-06: drill-down de carrera a curso del Director](met-06-drilldown-curso.md)
 - [MET-07: distribución de notas de un curso del Director](met-07-distribucion-notas.md)
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
+- [SEG-04: registro de inicios de sesión y acciones sensibles](seg-04-registro-accesos.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 

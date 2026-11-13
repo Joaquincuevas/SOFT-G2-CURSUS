@@ -7,6 +7,7 @@ import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
 import { PermisosGuard } from './permisos.guard.js'
 import { LimiteLogin } from './limite-login.service.js'
+import { RegistroEventos } from './registro-eventos.service.js'
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { LimiteLogin } from './limite-login.service.js'
   providers: [
     AuthService,
     LimiteLogin,
+    RegistroEventos,
     // Todas las rutas exigen sesión, salvo las marcadas con @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Corre después del JWT: cada ruta debe declarar quién puede usarla.
