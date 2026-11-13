@@ -25,6 +25,7 @@ import { Public } from './publico.decorator.js'
 import { contextoDeLaSesion } from './universidad-actual.decorator.js'
 import { LimiteLogin } from './limite-login.service.js'
 import { ipLogin } from './ip-login.js'
+import { RegistroEventos } from './registro-eventos.service.js'
 
 export interface RespuestaLogin {
   accessToken: string
@@ -77,6 +78,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly limiteLogin: LimiteLogin,
+    private readonly registro: RegistroEventos,
   ) {}
 
   @Public()
@@ -88,11 +90,28 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<RespuestaLogin> {
+    // SEG-04: la IP es la que ya acepta el límite de intentos (la del proxy de
+    // confianza o la del socket); sin una confiable, el evento no lleva IP.
+    const ip = ipLogin(req)
     const { resultado: tokens, retryAfter } = await this.limiteLogin.intentar(
       correo,
-      ipLogin(req),
+      ip,
       (bd) => this.auth.iniciarSesion(correo, password, bd),
     )
+    // Después del commit del límite y antes de responder: no cambia la
+    // respuesta ni la tumba (RegistroEventos no lanza).
+    // Un éxito registra la cuenta que resolvió el login, no una nueva búsqueda.
+    await (tokens
+      ? this.registro.inicioSesion(
+          { usuarioId: tokens.usuarioId },
+          ip,
+          'EXITOSO',
+        )
+      : this.registro.inicioSesion(
+          { correo },
+          ip,
+          retryAfter ? 'BLOQUEADO' : 'FALLIDO',
+        ))
     if (retryAfter) {
       demasiadosIntentos(res, retryAfter)
     }

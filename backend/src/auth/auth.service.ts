@@ -46,6 +46,10 @@ export interface TokensSesion {
   refreshToken: string
 }
 
+// Lo que devuelve un login exitoso: además de los tokens, la cuenta que
+// resolvió la autenticación (SEG-04 registra ese id, no vuelve a buscarla).
+export type SesionIniciada = TokensSesion & { usuarioId: string }
+
 // Los refresh tokens se guardan solo como sha256, en hex.
 const hashDe = (token: string) =>
   createHash('sha256').update(token).digest('hex')
@@ -86,7 +90,7 @@ export class AuthService {
     correo: string,
     password: string,
     bd: Pick<BaseDeDatos, 'query'> = this.bd,
-  ): Promise<TokensSesion | null> {
+  ): Promise<SesionIniciada | null> {
     // El correo es único por universidad, no global: la universidad se
     // identifica por el dominio del correo. Por eso no usa
     // consultarEnUniversidad: antes del login no hay universidad de sesión.
@@ -114,7 +118,8 @@ export class AuthService {
     if (!usuario || !passwordValida) {
       return null
     }
-    return this.emitirTokens(usuario, undefined, bd)
+    const tokens = await this.emitirTokens(usuario, undefined, bd)
+    return { ...tokens, usuarioId: usuario.id }
   }
 
   // Rota el refresh token: lo revoca y emite uno nuevo junto a un JWT de
