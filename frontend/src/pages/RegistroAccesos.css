@@ -1,0 +1,84 @@
+/* SEG-05: registro de accesos del Director. */
+.accesos {
+  display: grid;
+  gap: 1rem;
+}
+
+.accesos__zona {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.accesos__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.accesos__campo {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.accesos__chip,
+.accesos__enlace {
+  cursor: pointer;
+  font: inherit;
+}
+
+.accesos__chip {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+}
+
+.accesos__enlace {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary, inherit);
+  text-decoration: underline;
+}
+
+.accesos__tabla {
+  overflow-x: auto;
+}
+
+.accesos__tabla table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.accesos__tabla th,
+.accesos__tabla td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.accesos__resumen {
+  padding-bottom: 0.5rem;
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+
+.accesos__rol {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.accesos__resultado--fallido,
+.accesos__resultado--bloqueado {
+  font-weight: 600;
+}
+
+.accesos__paginas {
+  display: flex;
+  gap: 0.5rem;
+}

@@ -31,6 +31,7 @@ const SUJETOS: SujetoTabla[] = [
   'MaterialVersion',
   'Metricas',
   'ReporteMetricasFacultad',
+  'RegistroAccesos',
 ]
 const SECCIONES: SujetoSeccion[] = [
   'PanelDirectorio',
@@ -69,6 +70,8 @@ const MATRIZ: Record<Rol, Partial<Record<SujetoTabla, AccionConcreta[]>>> = {
     Inscripcion: LECTURA,
     // MET-01: indicadores consolidados.
     Metricas: LECTURA,
+    // SEG-05: el log de accesos es solo del Director.
+    RegistroAccesos: LECTURA,
   },
   // MET-08: el reporte académico de su facultad. El superadmin no lo tiene.
   ADMINISTRATIVO: { ...ADMINISTRATIVO, ReporteMetricasFacultad: LECTURA },

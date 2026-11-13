@@ -16,6 +16,7 @@ import { AnunciosModule } from './anuncios/anuncios.module.js'
 import { MaterialesModule } from './materiales/materiales.module.js'
 import { SuperadminModule } from './superadmin/superadmin.module.js'
 import { ArchivosModule } from './archivos/archivos.module.js'
+import { AuditoriaModule } from './auditoria/auditoria.module.js'
 import { MetricasModule } from './metricas/metricas.module.js'
 import { SeguridadModule } from './seguridad/seguridad.module.js'
 
@@ -35,6 +36,7 @@ import { SeguridadModule } from './seguridad/seguridad.module.js'
     AnunciosModule,
     MaterialesModule,
     MetricasModule,
+    AuditoriaModule,
     SuperadminModule,
     ArchivosModule,
     SeguridadModule,
