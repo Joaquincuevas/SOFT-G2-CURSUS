@@ -7,6 +7,9 @@ import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
 import { PermisosGuard } from './permisos.guard.js'
 import { LimiteLogin } from './limite-login.service.js'
+import { RecuperacionController } from './recuperacion.controller.js'
+import { RecuperacionService } from './recuperacion.service.js'
+import { CorreoRecuperacion } from './correo-recuperacion.service.js'
 import { RegistroEventos } from './registro-eventos.service.js'
 
 @Module({
@@ -23,10 +26,12 @@ import { RegistroEventos } from './registro-eventos.service.js'
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, RecuperacionController],
   providers: [
     AuthService,
     LimiteLogin,
+    RecuperacionService,
+    CorreoRecuperacion,
     RegistroEventos,
     // Todas las rutas exigen sesión, salvo las marcadas con @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },

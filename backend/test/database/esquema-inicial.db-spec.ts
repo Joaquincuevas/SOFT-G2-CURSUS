@@ -42,6 +42,7 @@ const TABLAS = [
   'nota',
   'nota_cambio',
   'periodo',
+  'recuperacion_password',
   'refresh_token',
   'revision_notas',
   'seccion',
@@ -189,9 +190,12 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
-    // SEG-01 es la última: solo quita la tabla de secretos TOTP.
+    await bd.undoLastMigration() // SEG-03: quita los enlaces de recuperación.
+    // SEG-01 solo quita la tabla de secretos TOTP.
     await bd.undoLastMigration()
-    const SIN_MFA = TABLAS.filter((tabla) => tabla !== 'mfa_usuario')
+    const SIN_MFA = TABLAS.filter(
+      (tabla) => tabla !== 'mfa_usuario' && tabla !== 'recuperacion_password',
+    )
     expect(await tablasExistentes()).toEqual(SIN_MFA)
     // SEG-04 va antes: quita el registro de eventos con sus funciones y los
     // triggers sobre el historial; el historial de origen queda.
@@ -261,7 +265,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // SEG-03, SEG-01, SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -374,7 +379,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó SEG-01,
+    await bd.undoLastMigration() // runMigrations también reaplicó SEG-03,
+    await bd.undoLastMigration() // SEG-01,
     await bd.undoLastMigration() // SEG-04,
     await bd.undoLastMigration() // HIS-06,
     await bd.undoLastMigration() // HIS-04,
@@ -755,6 +761,7 @@ describe('migraciones', () => {
     for (const tabla of TABLAS.filter(
       (t) =>
         t !== 'refresh_token' &&
+        t !== 'recuperacion_password' &&
         t !== 'sesion_auth' &&
         // SEG-01: una credencial por usuario, como sesion_auth.
         t !== 'mfa_usuario' &&

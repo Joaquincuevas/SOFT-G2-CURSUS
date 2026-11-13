@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router'
+import { Link, Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/auth'
 import { PanelMarca } from '../components/PanelMarca'
 import './Login.css'
@@ -90,6 +90,7 @@ export function Login() {
             <button className="login__button" type="submit" disabled={enviando}>
               Ingresar
             </button>
+            <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
             <p className="login__caption login__note">
               <span className="login__dot" aria-hidden="true" />
               Acceso reservado a usuarios autorizados.

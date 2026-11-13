@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
 - [EXP-01 · Exportación de notas publicadas a CSV](exp-01-exportar-notas-csv.md)
 - [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)
 - [HIS-05 · Historial de notas del alumno](his-05-historial-notas-alumno.md)

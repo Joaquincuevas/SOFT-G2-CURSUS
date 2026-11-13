@@ -60,7 +60,17 @@ Parameters:
       https://cursus-g2.vercel.app, y staging https://cursus-staging.vercel.app y
       los previews de Vercel del proyecto.
 
+  RemitenteRecuperacion:
+    Type: String
+    Default: ''
+    Description: Correo remitente verificado en SES para recuperar contraseñas.
+  IdentidadSesRecuperacion:
+    Type: String
+    Default: ''
+    Description: Identidad verificada en SES (dominio o correo remitente).
+
 Conditions:
+  HayRemitenteRecuperacion: !Not [!Equals [!Ref RemitenteRecuperacion, '']]
   EsStaging: !Equals [!Ref Entorno, staging]
   HayImagen: !Not [!Equals [!Ref ImageTag, '']]
   UsarUsuario: !Equals [!Ref AccesoGitHub, usuario]
@@ -399,6 +409,19 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:PutObject
                 Resource: !Sub '${BucketArchivos.Arn}/*'
+        - !If
+          - HayRemitenteRecuperacion
+          - PolicyName: correo-de-recuperacion
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action: ses:SendEmail
+                  Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${IdentidadSesRecuperacion}'
+                  Condition:
+                    StringEquals:
+                      ses:FromAddress: !Ref RemitenteRecuperacion
+          - !Ref AWS::NoValue
 
   # La crea CloudFormation con la imagen de ImageTag; el workflow de deploy
   # registra revisiones nuevas de la misma familia con otras imágenes
@@ -436,6 +459,18 @@ Resources:
             # MAT-01. Las credenciales de S3 vienen de RolTarea.
             - { Name: S3_BUCKET, Value: !Ref BucketArchivos }
             - { Name: S3_REGION, Value: !Ref AWS::Region }
+            - { Name: AWS_REGION, Value: !Ref AWS::Region }
+            - {
+                Name: RECUPERACION_REMITENTE,
+                Value: !Ref RemitenteRecuperacion,
+              }
+            - Name: RECUPERACION_ORIGEN
+              Value:
+                !If [
+                  EsStaging,
+                  'https://cursus-staging.vercel.app',
+                  'https://cursus-g2.vercel.app',
+                ]
           Secrets:
             - Name: POSTGRES_USER
               ValueFrom: !Sub '${SecretoBaseDeDatos}:username::'
