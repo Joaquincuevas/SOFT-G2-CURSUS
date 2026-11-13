@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [EXP-02 · Descargar entregas de una actividad en ZIP](exp-02-entregas-zip.md)
 - [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
 - [EXP-01 · Exportación de notas publicadas a CSV](exp-01-exportar-notas-csv.md)
 - [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)

@@ -129,6 +129,11 @@ export interface MiEntregaActividad {
 // inscrito vigente, con su última entrega o null si no entregó. versiones
 // cuenta las entregas del alumno en la actividad (la última incluida). La
 // descarga (…/entregas/:entregaId/descarga) responde DescargaArchivo.
+export interface ArchivoEntregasZip {
+  nombre: string
+  url: string
+}
+
 export interface EntregaDeAlumno {
   alumno: { id: string; nombre: string; correo: string }
   entrega: (EntregaInforme & { versiones: number }) | null
