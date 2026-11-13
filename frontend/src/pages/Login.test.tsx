@@ -27,6 +27,34 @@ async function completarFormulario(correo = CORREO) {
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 }
 
+describe('SEG-03: recuperación de contraseña', () => {
+  test('abre la recuperación desde el login y muestra el mensaje genérico', async () => {
+    const api = vi.fn((ruta: string) =>
+      Promise.resolve(
+        new Response(null, {
+          status: ruta === '/api/auth/recuperar-password' ? 204 : 401,
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', api)
+    renderApp('/login')
+    fireEvent.click(
+      await screen.findByRole('link', { name: '¿Olvidaste tu contraseña?' }),
+    )
+    fireEvent.change(screen.getByLabelText('Correo institucional'), {
+      target: { value: CORREO },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar enlace' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Si existe una cuenta',
+    )
+    expect(api).toHaveBeenCalledWith(
+      '/api/auth/recuperar-password',
+      expect.objectContaining({ body: JSON.stringify({ correo: CORREO }) }),
+    )
+  })
+})
+
 describe('AUTH-02: credenciales inválidas', () => {
   test.each([CORREO, 'nadie@norte.cursus.test'])(
     'muestra el mismo mensaje, conserva %s y limpia la contraseña',

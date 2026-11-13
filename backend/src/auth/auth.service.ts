@@ -108,7 +108,7 @@ export class AuthService {
                OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
           AND u.archived_at IS NULL AND un.archived_at IS NULL
         ORDER BY u.universidad_id NULLS LAST
-        LIMIT 1`,
+        LIMIT 1 FOR SHARE OF u`,
       [correo.trim().toLowerCase()],
     )
     const passwordValida = await verify(

@@ -6,6 +6,7 @@ import { CambioObligatorio } from './pages/CambioObligatorio'
 import { AppShell } from './layout/AppShell'
 import { NAV_ITEMS } from './navigation'
 import { Login } from './pages/Login'
+import { RecuperarPassword } from './pages/RecuperarPassword'
 import { NoEncontrada } from './pages/NoEncontrada'
 
 // /login es pública; el resto exige sesión y el permiso de su ítem del menú.
@@ -15,6 +16,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/recuperar-password" element={<RecuperarPassword />} />
+      <Route
+        path="/restablecer-password"
+        element={<RecuperarPassword restablecer />}
+      />
       <Route element={<RequireAuth />}>
         {/* PER-03: sin el menú, porque no se puede ir a otra pantalla. */}
         <Route path={RUTA_CAMBIO_OBLIGATORIO} element={<CambioObligatorio />} />

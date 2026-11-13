@@ -22,11 +22,14 @@ export class LimiteLogin {
     correo: string,
     ip: string | null,
     autenticar: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T | null>,
+    ambito: 'login' | 'recuperacion' = 'login',
   ): Promise<{ resultado: T | null; retryAfter: number }> {
+    const clave = (tipo: 'cuenta' | 'ip', valor: string) =>
+      claveIntentos(tipo, ambito === 'login' ? valor : `recuperacion:${valor}`)
     const limites = new Map([
-      [claveIntentos('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
+      [clave('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
     ])
-    if (ip !== null) limites.set(claveIntentos('ip', ip), MAX_FALLOS_IP)
+    if (ip !== null) limites.set(clave('ip', ip), MAX_FALLOS_IP)
     const claves = [...limites.keys()].sort()
     // Los dos bloqueos se toman siempre en el mismo orden. Autenticación y
     // contadores usan la misma conexión para no agotar el pool al esperar.
@@ -74,7 +77,7 @@ export class LimiteLogin {
       if (espera()) return { resultado: null, retryAfter: espera() }
 
       const resultado = await autenticar(bd)
-      const valido = resultado !== null
+      const valido = resultado !== null && ambito === 'login'
       for (const fila of vigentes) {
         fila.fallos = valido ? [] : [...fila.fallos, ahora]
         await bd.query(`UPDATE limite_login SET fallos = $2 WHERE clave = $1`, [
