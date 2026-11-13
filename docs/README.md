@@ -23,6 +23,7 @@ Documentación del proyecto:
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
 - [SEG-04: registro de inicios de sesión y acciones sensibles](seg-04-registro-accesos.md)
 - [SEG-05: el Director consulta el log de accesos](seg-05-consulta-log-accesos.md)
+- [OBS-01: logs centralizados del backend en AWS](obs-01-logs-centralizados.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 
