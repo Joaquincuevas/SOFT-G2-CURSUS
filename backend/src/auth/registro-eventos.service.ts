@@ -4,8 +4,11 @@ import { BaseDeDatos } from '../database/base-de-datos.service.js'
 export type ResultadoInicioSesion = 'EXITOSO' | 'FALLIDO' | 'BLOQUEADO'
 
 // SEG-04: registro de eventos de acceso. Lo escribe registrar_inicio_sesion
-// (SECURITY DEFINER), que resuelve la cuenta dentro de la base y nunca guarda
-// el correo digitado: aquí no se calcula ni se pasa ningún id de usuario.
+// (SECURITY DEFINER). Un éxito lleva el id de la cuenta que resolvió el login
+// (no se vuelve a buscar por correo). Un fallo lleva el correo digitado solo
+// para que la base resuelva la cuenta; nunca lo guarda.
+export type CuentaDelIntento = { usuarioId: string } | { correo: string }
+
 @Injectable()
 export class RegistroEventos {
   private readonly logger = new Logger(RegistroEventos.name)
@@ -13,22 +16,24 @@ export class RegistroEventos {
   constructor(private readonly bd: BaseDeDatos) {}
 
   // Nunca lanza: un fallo al registrar no debe tumbar ni cambiar la respuesta
-  // del login. Queda en el log del servidor, sin el correo ni los parámetros
-  // de la consulta (el error de TypeORM los trae).
+  // del login. El log lleva un mensaje fijo, el resultado y el SQLSTATE: el
+  // texto del error viene del driver y puede traer lo digitado.
   async inicioSesion(
-    correo: string,
+    cuenta: CuentaDelIntento,
     ip: string | null,
     resultado: ResultadoInicioSesion,
   ): Promise<void> {
+    const [correo, usuarioId] =
+      'usuarioId' in cuenta ? [null, cuenta.usuarioId] : [cuenta.correo, null]
     try {
       await this.bd.query(
-        'SELECT public.registrar_inicio_sesion($1, $2::inet, $3)',
-        [correo, ip, resultado],
+        'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid)',
+        [correo, ip, resultado, usuarioId],
       )
     } catch (error) {
-      const { code, message } = error as { code?: string; message?: string }
+      const { code } = error as { code?: unknown }
       this.logger.error(
-        `No se pudo registrar el inicio de sesión ${resultado}: ${code ?? 'sin código'} ${message ?? ''}`.trim(),
+        `No se pudo registrar el inicio de sesión ${resultado} (SQLSTATE ${typeof code === 'string' ? code : 'desconocido'})`,
       )
     }
   }

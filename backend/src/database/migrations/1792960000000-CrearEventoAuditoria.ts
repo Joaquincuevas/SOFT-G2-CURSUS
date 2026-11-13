@@ -115,32 +115,44 @@ export class CrearEventoAuditoria1792960000000 implements MigrationInterface {
         USING (rol_actual() IN ('DIRECTOR', 'SUPERADMIN'));
     `)
 
-    // El login ocurre antes de tener sesión. La función recibe lo digitado
-    // solo para resolver la cuenta, con la misma regla que AuthService
-    // (correo en minúsculas, universidad por el dominio o superadmin, sin
-    // cuentas archivadas), y nunca lo guarda. Una cuenta archivada o
-    // inexistente deja un evento sin usuario: el log no distingue cuál es.
+    // El login ocurre antes de tener sesión. En un éxito la app pasa el id de
+    // la cuenta que resolvió la autenticación (p_usuario): se registra esa, sin
+    // volver a buscar por correo (una cuenta archivada entre medio, o una
+    // normalización distinta, dejarían el éxito sin usuario). En un fallo la
+    // función recibe lo digitado solo para resolver la cuenta, con la misma
+    // regla que AuthService (correo sin espacios en los extremos y en
+    // minúsculas, universidad por el dominio o superadmin, sin cuentas
+    // archivadas), y nunca lo guarda. Una cuenta archivada o inexistente deja un
+    // evento sin usuario: el log no distingue cuál es.
     await q.query(`
       CREATE FUNCTION public.registrar_inicio_sesion(
-        p_correo text, p_ip inet, p_resultado text
+        p_correo text, p_ip inet, p_resultado text, p_usuario uuid DEFAULT NULL
       ) RETURNS void
       LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
       DECLARE
-        v_correo text := lower(btrim(p_correo));
+        -- Como String.trim() de JS: quita todo espacio en blanco, no solo ' '.
+        v_correo text := lower(regexp_replace(p_correo, '^\\s+|\\s+$', '', 'g'));
         v_usuario uuid;
         v_universidad uuid;
         v_provisoria boolean;
       BEGIN
-        SELECT u.id, u.universidad_id, u.credencial_provisoria
-          INTO v_usuario, v_universidad, v_provisoria
-          FROM public.usuario u
-          LEFT JOIN public.universidad un ON un.id = u.universidad_id
-         WHERE lower(u.correo) = v_correo
-           AND (un.dominio_correo = split_part(v_correo, '@', 2)
-                OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
-           AND u.archived_at IS NULL AND un.archived_at IS NULL
-         ORDER BY u.universidad_id NULLS LAST
-         LIMIT 1;
+        IF p_usuario IS NOT NULL THEN
+          SELECT u.id, u.universidad_id, u.credencial_provisoria
+            INTO v_usuario, v_universidad, v_provisoria
+            FROM public.usuario u
+           WHERE u.id = p_usuario;
+        ELSE
+          SELECT u.id, u.universidad_id, u.credencial_provisoria
+            INTO v_usuario, v_universidad, v_provisoria
+            FROM public.usuario u
+            LEFT JOIN public.universidad un ON un.id = u.universidad_id
+           WHERE lower(u.correo) = v_correo
+             AND (un.dominio_correo = split_part(v_correo, '@', 2)
+                  OR (u.universidad_id IS NULL AND u.rol = 'SUPERADMIN'))
+             AND u.archived_at IS NULL AND un.archived_at IS NULL
+           ORDER BY u.universidad_id NULLS LAST
+           LIMIT 1;
+        END IF;
         INSERT INTO public.evento_auditoria
           (tipo, resultado, usuario_id, universidad_id, ip, detalle)
         VALUES ('INICIO_SESION', p_resultado, v_usuario, v_universidad, p_ip,
@@ -149,8 +161,8 @@ export class CrearEventoAuditoria1792960000000 implements MigrationInterface {
                      ELSE '{}'::jsonb END);
       END;
       $$;
-      REVOKE ALL ON FUNCTION public.registrar_inicio_sesion(text, inet, text) FROM PUBLIC;
-      GRANT EXECUTE ON FUNCTION public.registrar_inicio_sesion(text, inet, text) TO ${ROL_APP};
+      REVOKE ALL ON FUNCTION public.registrar_inicio_sesion(text, inet, text, uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION public.registrar_inicio_sesion(text, inet, text, uuid) TO ${ROL_APP};
     `)
 
     // Acciones sensibles, tomadas de las tablas de historial que ya existen.
@@ -211,7 +223,7 @@ export class CrearEventoAuditoria1792960000000 implements MigrationInterface {
       DROP TRIGGER tg_asignacion_cambio_registrar_evento ON asignacion_cambio;
       DROP TRIGGER tg_nota_cambio_registrar_evento ON nota_cambio;
       DROP FUNCTION public.registrar_evento_de_historial();
-      DROP FUNCTION public.registrar_inicio_sesion(text, inet, text);
+      DROP FUNCTION public.registrar_inicio_sesion(text, inet, text, uuid);
       DROP TABLE evento_auditoria;
       DROP FUNCTION evento_auditoria_inmutable();
     `)

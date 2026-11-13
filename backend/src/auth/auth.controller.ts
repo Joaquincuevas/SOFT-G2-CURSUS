@@ -100,11 +100,18 @@ export class AuthController {
     )
     // Después del commit del límite y antes de responder: no cambia la
     // respuesta ni la tumba (RegistroEventos no lanza).
-    await this.registro.inicioSesion(
-      correo,
-      ip,
-      retryAfter ? 'BLOQUEADO' : tokens ? 'EXITOSO' : 'FALLIDO',
-    )
+    // Un éxito registra la cuenta que resolvió el login, no una nueva búsqueda.
+    await (tokens
+      ? this.registro.inicioSesion(
+          { usuarioId: tokens.usuarioId },
+          ip,
+          'EXITOSO',
+        )
+      : this.registro.inicioSesion(
+          { correo },
+          ip,
+          retryAfter ? 'BLOQUEADO' : 'FALLIDO',
+        ))
     if (retryAfter) {
       demasiadosIntentos(res, retryAfter)
     }

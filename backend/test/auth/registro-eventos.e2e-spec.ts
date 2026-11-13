@@ -16,9 +16,11 @@ import { BaseDeDatos } from '../../src/database/base-de-datos.service.js'
 const SECRETO = 'origen-solo-para-tests'
 const CORREO = 'persona@norte.cursus.test'
 const PASSWORD = 'password-de-prueba'
+const USUARIO_ID = '7d3c2b1a-0000-4000-8000-000000000001'
 const TOKENS = {
   accessToken: 'jwt-de-prueba',
   refreshToken: 'refresh-de-prueba',
+  usuarioId: USUARIO_ID,
 }
 
 const intentar = vi.fn()
@@ -66,11 +68,17 @@ const login = (ip = '203.0.113.7') =>
     .set('x-vercel-forwarded-for', ip)
     .send({ correo: CORREO, password: PASSWORD })
 
-// Parámetros del único evento registrado: [correo digitado, ip, resultado].
+// Parámetros del único evento registrado: [correo digitado, ip, resultado,
+// id de la cuenta que resolvió el login].
 const registrado = () => {
   expect(query).toHaveBeenCalledTimes(1)
   expect(query.mock.calls[0][0]).toContain('registrar_inicio_sesion')
-  return query.mock.calls[0][1] as [string, string | null, string]
+  return query.mock.calls[0][1] as [
+    string | null,
+    string | null,
+    string,
+    string | null,
+  ]
 }
 
 describe('POST /api/auth/login registra el intento (SEG-04)', () => {
@@ -79,7 +87,8 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     const respuesta = await login('198.51.100.20').expect(200)
     expect(respuesta.body).toEqual({ accessToken: 'jwt-de-prueba' })
     expect(respuesta.get('Set-Cookie')?.[0]).toContain('refresh=')
-    expect(registrado()).toEqual([CORREO, '198.51.100.20', 'EXITOSO'])
+    // Un éxito registra la cuenta que resolvió el login, sin el correo.
+    expect(registrado()).toEqual([null, '198.51.100.20', 'EXITOSO', USUARIO_ID])
   })
 
   it('un fallo registra FALLIDO y responde 401 con el mismo mensaje', async () => {
@@ -87,7 +96,7 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     const respuesta = await login().expect(401)
     expect(respuesta.body).toMatchObject({ message: 'Credenciales inválidas' })
     expect(respuesta.get('Set-Cookie')).toBeUndefined()
-    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'FALLIDO'])
+    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'FALLIDO', null])
   })
 
   it('el bloqueo registra BLOQUEADO y responde 429 con Retry-After', async () => {
@@ -95,7 +104,7 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     const respuesta = await login().expect(429)
     expect(respuesta.headers['retry-after']).toBe('120')
     expect(respuesta.body).toMatchObject({ statusCode: 429, retryAfter: 120 })
-    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'BLOQUEADO'])
+    expect(registrado()).toEqual([CORREO, '203.0.113.7', 'BLOQUEADO', null])
   })
 
   it('sin la configuración de proxy ignora la IP que declara el cliente', async () => {
@@ -126,13 +135,22 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
     ['fallido', { resultado: null, retryAfter: 0 }, 401],
     ['bloqueado', { resultado: null, retryAfter: 30 }, 429],
   ])(
-    'si el registro falla, el login %s responde igual y el error queda en el log sin el correo',
-    async (_caso, limite, estado) => {
+    'si el registro falla, el login %s responde igual y el log lleva un mensaje fijo sin lo digitado',
+    async (caso, limite, estado) => {
+      const resultado = {
+        exitoso: 'EXITOSO',
+        fallido: 'FALLIDO',
+        bloqueado: 'BLOQUEADO',
+      }[caso]
       intentar.mockResolvedValue(limite)
-      // El error de TypeORM trae la consulta y sus parámetros.
+      // El texto del error viene del driver y puede repetir lo digitado
+      // (p. ej. "invalid input syntax for type inet: ..."); TypeORM además
+      // adjunta la consulta y sus parámetros.
       query.mockRejectedValue(
-        Object.assign(new Error('relation "evento_auditoria" does not exist'), {
-          code: '42P01',
+        Object.assign(new Error(`valor inválido: ${CORREO} ${PASSWORD}`), {
+          code: '22P02',
+          query:
+            'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid)',
           parameters: [CORREO, PASSWORD],
         }),
       )
@@ -144,7 +162,9 @@ describe('POST /api/auth/login registra el intento (SEG-04)', () => {
         expect(error).toHaveBeenCalledTimes(1)
         const mensaje = String(error.mock.calls[0][0])
         expect(mensaje).toContain('No se pudo registrar el inicio de sesión')
-        expect(mensaje).toContain('42P01')
+        expect(mensaje).toBe(
+          `No se pudo registrar el inicio de sesión ${resultado} (SQLSTATE 22P02)`,
+        )
         expect(mensaje).not.toContain(CORREO)
         expect(mensaje).not.toContain(PASSWORD)
       } finally {

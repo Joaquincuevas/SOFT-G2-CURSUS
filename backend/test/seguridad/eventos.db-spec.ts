@@ -206,7 +206,7 @@ describe('registro append-only', () => {
                                 OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a
                                             WHERE a.grantee = 0)) AS publicas,
               has_function_privilege('${ROL_APP}',
-                'public.registrar_inicio_sesion(text, inet, text)', 'EXECUTE') AS aplicacion
+                'public.registrar_inicio_sesion(text, inet, text, uuid)', 'EXECUTE') AS aplicacion
          FROM pg_proc p
         WHERE p.proname IN ('registrar_inicio_sesion', 'registrar_evento_de_historial')`,
     )
@@ -269,6 +269,46 @@ describe('inicios de sesión', () => {
       expect(await eventos()).toHaveLength(1)
     },
   )
+
+  it('un éxito registra la cuenta que resolvió el login aunque el correo venga con espacios o mayúsculas', async () => {
+    // El login normaliza con trim() de JS (también tabuladores y saltos de
+    // línea) y en minúsculas: el evento guarda el id que resolvió esa regla.
+    await login(`\t ${ALUMNO.toUpperCase()}\n`, PASSWORD).expect(200)
+    expect(await eventos()).toMatchObject([
+      {
+        resultado: 'EXITOSO',
+        usuario_id: await idDe(ALUMNO),
+        universidad_id: await universidadDe(ALUMNO),
+      },
+    ])
+  })
+
+  it('un fallo con el correo entre tabuladores resuelve la misma cuenta que el login', async () => {
+    await login(`\t${ALUMNO}\n`).expect(401)
+    expect((await eventos())[0]).toMatchObject({
+      resultado: 'FALLIDO',
+      usuario_id: await idDe(ALUMNO),
+    })
+  })
+
+  it('un éxito conserva el id de la cuenta aunque se archive antes de registrarlo', async () => {
+    // El login ya emitió la sesión; la cuenta se archiva antes del registro.
+    // La función recibe el id resuelto, no vuelve a buscar por correo.
+    const id = await idDe(AYUDANTE)
+    await bd.query(`UPDATE usuario SET archived_at = now() WHERE id = $1`, [id])
+    await bd.query(
+      `SELECT registrar_inicio_sesion(NULL, '198.51.100.9', 'EXITOSO', $1)`,
+      [id],
+    )
+    expect(await eventos()).toMatchObject([
+      {
+        resultado: 'EXITOSO',
+        usuario_id: id,
+        universidad_id: await universidadDe(AYUDANTE),
+        ip: '198.51.100.9',
+      },
+    ])
+  })
 
   it('una cuenta archivada responde y se registra como una inexistente', async () => {
     const inexistente = await login('no-existe@norte.cursus.test', PASSWORD)
@@ -422,7 +462,7 @@ describe('un fallo al registrar no tumba el login', () => {
     }
   }
 
-  it('el login responde igual y el error queda en el log del servidor, sin el correo', async () => {
+  it('el login responde igual y el log del servidor lleva un mensaje fijo, sin lo digitado', async () => {
     const error = vi
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => {})
@@ -436,6 +476,7 @@ describe('un fallo al registrar no tumba el login', () => {
       expect(error).toHaveBeenCalledTimes(2)
       const mensajes = error.mock.calls.map((c) => String(c[0])).join('\n')
       expect(mensajes).toContain('No se pudo registrar el inicio de sesión')
+      expect(mensajes).toContain('SQLSTATE 42P01')
       expect(mensajes).not.toContain(ALUMNO)
       expect(mensajes).not.toContain(PASSWORD)
     } finally {

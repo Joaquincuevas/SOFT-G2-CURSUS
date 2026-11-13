@@ -37,9 +37,9 @@ El detalle apunta a la fila de origen (`origen`, `origenId`) para investigar; no
 ## Qué NO se registra (privacidad)
 
 - Contraseñas, tokens, hashes ni RUT.
-- **El correo digitado.** La gente pega la contraseña en ese campo. `registrar_inicio_sesion` recibe lo digitado solo para resolver la cuenta dentro de la base, con la misma regla que el login (correo en minúsculas, universidad por el dominio o superadmin, sin cuentas archivadas), y guarda únicamente el `usuario_id`. Si no hay cuenta, el evento queda sin usuario: solo fecha, IP y resultado. Una cuenta archivada se registra igual que una inexistente, como responde el login.
+- **El correo digitado.** La gente pega la contraseña en ese campo. Un éxito registra el `usuario_id` que resolvió el login (`AuthService.iniciarSesion` lo devuelve y el controlador lo pasa a `registrar_inicio_sesion`): no se vuelve a buscar por correo, así que una cuenta archivada justo después del login no deja el éxito sin usuario. En un fallo la función recibe lo digitado solo para resolver la cuenta dentro de la base, con la misma regla que el login (sin espacios en blanco en los extremos, en minúsculas, universidad por el dominio o superadmin, sin cuentas archivadas), y guarda únicamente el `usuario_id`. Si no hay cuenta, el evento queda sin usuario: solo fecha, IP y resultado. Una cuenta archivada se registra igual que una inexistente, como responde el login.
 - Valores de notas, motivos y nombres. Una prueba busca en toda la tabla las contraseñas y correos digitados.
-- Los mensajes de error del servidor al fallar el registro no incluyen el correo ni los parámetros de la consulta.
+- Al fallar el registro, el log del servidor lleva un mensaje fijo con el resultado y el SQLSTATE; nunca el texto del error del driver, que puede repetir lo digitado.
 
 ## IP
 
