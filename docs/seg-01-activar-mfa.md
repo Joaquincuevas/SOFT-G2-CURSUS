@@ -61,6 +61,15 @@ La migración `CrearMfaUsuario1792970000000` crea `mfa_usuario (usuario_id PK, s
 - `backend/test/database/esquema-inicial.db-spec.ts`: la migración se aplica y se revierte.
 - `frontend/src/pages/ActivarMfa.test.tsx`: tarjeta para alumno, profesor, administrativo y Director; QR y clave agrupada; activación con un código con espacio; código incorrecto con reintento; formato inválido sin petición; ya activa; cancelar; 409 desde otra pestaña; QR que ya no existe; 503; errores al generar y al confirmar; error al cargar con «Reintentar».
 - CSS medido en Chromium a 320, 375 y 1280 px: sin scroll horizontal, con el QR de 192 px, la clave sin espacios y los botones dentro de la tarjeta.
+- Recorrido en la app local (backend, frontend y PostgreSQL con el seed) en Chromium: el QR, un código incorrecto, la activación con un código con espacio y el estado activo al recargar. El QR de las capturas se decodificó con jsQR y entrega la misma uri y clave que muestra la pantalla.
+
+## Evidencias
+
+![QR y clave para configurar la app autenticadora](evidencias/seg-01-mfa-qr.png)
+
+![Verificación en dos pasos activada](evidencias/seg-01-mfa-activada.png)
+
+![QR a 320 px de ancho](evidencias/seg-01-mfa-qr-movil.png)
 
 ## Pasos manuales para el reviewer
 
