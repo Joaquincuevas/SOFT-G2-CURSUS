@@ -63,8 +63,7 @@ async function abrirQr() {
 }
 
 // SEG-01 (revisión): con el MFA activo, al confirmar y al volver al perfil
-// se ve el mismo estado, con la nota de que el login pedirá el código cuando
-// se habilite (SEG-02). El indicador de carga también es role="status": por
+// se ve el mismo estado, con la nota de que el login pide el código (SEG-02). El indicador de carga también es role="status": por
 // eso se busca el texto.
 async function esperarConfigurada() {
   expect(
@@ -72,7 +71,7 @@ async function esperarConfigurada() {
   ).toHaveAttribute('role', 'status')
   expect(
     within(tarjeta()).getByText(
-      /Cuando se habilite la verificación al iniciar sesión, te pediremos el código/,
+      /Al iniciar sesión te pediremos el código de tu app autenticadora/,
     ),
   ).toBeInTheDocument()
 }

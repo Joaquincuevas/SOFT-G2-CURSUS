@@ -31,6 +31,8 @@ const SUBTIPOS: Record<string, string> = {
   RECORRECCION: 'Recorrección',
   PROFESOR: 'Profesor',
   AYUDANTE: 'Ayudante',
+  // SEG-02: el paso del código TOTP del login.
+  MFA: 'Verificación en dos pasos',
 }
 const ROLES: Record<string, string> = {
   DIRECTOR: 'Director',

@@ -19,6 +19,8 @@ export class LoginLimitado extends Error {
   }
 }
 
+export type ResultadoMfa = 'ok' | 'codigo' | 'desafio' | 'limitado' | 'error'
+
 export interface AuthValue {
   // Token con el que empezó la sesión (login o restauración). Los JWT que
   // llegan al renovar no cambian este valor, para no recargar la sesión.
@@ -27,8 +29,15 @@ export interface AuthValue {
   restaurando: boolean
   // Aviso para la pantalla de login, por ejemplo cuando la sesión expiró.
   aviso: string | null
-  // Devuelve true si el backend aceptó las credenciales.
-  iniciarSesion: (correo: string, password: string) => Promise<boolean>
+  // Devuelve true si el backend aceptó las credenciales; { desafio } si son
+  // correctas pero la cuenta tiene MFA activo (SEG-02): falta el código.
+  iniciarSesion: (
+    correo: string,
+    password: string,
+  ) => Promise<boolean | { desafio: string }>
+  // SEG-02: segundo paso con el código de la app. 'limitado' deja el aviso con
+  // la espera (rate limit); 'desafio' es que la verificación ya expiró.
+  completarMfa: (desafio: string, codigo: string) => Promise<ResultadoMfa>
   // Único punto de cierre de sesión: todo logout pasa por aquí.
   cerrarSesion: (aviso?: string) => Promise<void>
   // fetch con el JWT de la sesión. Ante un 401 renueva el JWT una vez y
@@ -60,11 +69,20 @@ async function pedirAccessToken(
   }
 }
 
+// Espera de un 429, del login o del código MFA.
+function limitadoPor(respuesta: Response): LoginLimitado {
+  const segundos = Number(respuesta.headers.get('Retry-After'))
+  return new LoginLimitado(
+    Number.isFinite(segundos) && segundos > 0 ? segundos : 900,
+  )
+}
+
 // POST /api/auth/login. El backend además setea la cookie del refresh token.
+// Con MFA activo no hay sesión todavía: devuelve { desafio } (SEG-02).
 export function pedirToken(
   correo: string,
   password: string,
-): Promise<string | null> {
+): Promise<string | { desafio: string } | null> {
   return conCandado(async () => {
     try {
       const respuesta = await fetch('/api/auth/login', {
@@ -72,20 +90,56 @@ export function pedirToken(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ correo, password }),
       })
-      if (respuesta.status === 429) {
-        const segundos = Number(respuesta.headers.get('Retry-After'))
-        throw new LoginLimitado(
-          Number.isFinite(segundos) && segundos > 0 ? segundos : 900,
-        )
-      }
+      if (respuesta.status === 429) throw limitadoPor(respuesta)
       if (!respuesta.ok) return null
-      const { accessToken } = (await respuesta.json()) as {
-        accessToken: string
+      const cuerpo = (await respuesta.json()) as {
+        accessToken?: string
+        mfaRequerido?: boolean
+        desafio?: string
       }
-      return accessToken
+      if (cuerpo.mfaRequerido && cuerpo.desafio) {
+        return { desafio: cuerpo.desafio }
+      }
+      return cuerpo.accessToken ?? null
     } catch (error) {
       if (error instanceof LoginLimitado) throw error
       return null
+    }
+  })
+}
+
+// POST /api/auth/login/mfa (SEG-02): el desafío del paso 1 y el código de la
+// app. Devuelve el JWT, o por qué no: 'codigo' (inválido o ya usado),
+// 'desafio' (la verificación expiró: hay que volver al paso 1) o 'error'. Un
+// 429 lanza LoginLimitado, como el login.
+export function pedirTokenMfa(
+  desafio: string,
+  codigo: string,
+): Promise<string | Exclude<ResultadoMfa, 'ok' | 'limitado'>> {
+  return conCandado(async () => {
+    try {
+      const respuesta = await fetch('/api/auth/login/mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desafio, codigo }),
+      })
+      if (respuesta.status === 429) throw limitadoPor(respuesta)
+      if (respuesta.ok) {
+        const { accessToken } = (await respuesta.json()) as {
+          accessToken: string
+        }
+        return accessToken
+      }
+      if (respuesta.status === 401) {
+        const cuerpo = (await respuesta.json().catch(() => ({}))) as {
+          code?: string
+        }
+        return cuerpo.code === 'MFA_DESAFIO_INVALIDO' ? 'desafio' : 'codigo'
+      }
+      return respuesta.status === 400 ? 'codigo' : 'error'
+    } catch (error) {
+      if (error instanceof LoginLimitado) throw error
+      return 'error'
     }
   })
 }
