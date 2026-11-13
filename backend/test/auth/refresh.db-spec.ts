@@ -165,10 +165,10 @@ it('SEG-03 descarta el enlace si falla el envío y el cambio de credencial inval
   await recuperacion.solicitar(correo, null)
   expect(enviarRecuperacion).toHaveBeenCalledTimes(2)
   const [, token] = enviarRecuperacion.mock.calls[1]
-  await bd.query(
-    'UPDATE usuario SET password_hash = $2 WHERE id = $1',
-    [id, await hash('contraseña cambiada')],
-  )
+  await bd.query('UPDATE usuario SET password_hash = $2 WHERE id = $1', [
+    id,
+    await hash('contraseña cambiada'),
+  ])
   await expect(
     recuperacion.restablecer(token, 'contraseña nueva'),
   ).resolves.toBe(false)
