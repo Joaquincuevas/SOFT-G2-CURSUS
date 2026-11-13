@@ -1,4 +1,9 @@
-import type { UsuarioSesion } from '@cursus/shared'
+import {
+  CODIGO_MFA_CODIGO_INVALIDO,
+  CODIGO_MFA_DESAFIO_INVALIDO,
+  type LoginMfaRequerido,
+  type UsuarioSesion,
+} from '@cursus/shared'
 import {
   BadRequestException,
   Body,
@@ -16,6 +21,7 @@ import {
 import type { CookieOptions, Request, Response } from 'express'
 import { AuthService, type TokensSesion } from './auth.service.js'
 import { LoginDto } from './login.dto.js'
+import { LoginMfaDto } from './login-mfa.dto.js'
 import { CambiarPasswordDto } from './cambiar-password.dto.js'
 import { PermitidaConProvisoria } from './credencial-provisoria.decorator.js'
 import { PermitidaEgresado } from './permitida-egresado.decorator.js'
@@ -89,15 +95,24 @@ export class AuthController {
     @Body() { correo, password }: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<RespuestaLogin> {
+  ): Promise<RespuestaLogin | LoginMfaRequerido> {
     // SEG-04: la IP es la que ya acepta el límite de intentos (la del proxy de
     // confianza o la del socket); sin una confiable, el evento no lleva IP.
     const ip = ipLogin(req)
-    const { resultado: tokens, retryAfter } = await this.limiteLogin.intentar(
+    const { resultado, retryAfter } = await this.limiteLogin.intentar(
       correo,
       ip,
       (bd) => this.auth.iniciarSesion(correo, password, bd),
+      // SEG-02: la contraseña correcta que espera el código no reinicia el
+      // límite (ver LimiteLogin.intentar).
+      (r) => !('desafio' in r),
     )
+    // SEG-02: contraseña correcta con MFA activo. No hay sesión ni evento de
+    // acceso todavía: el resultado se registra en el segundo paso.
+    if (resultado && 'desafio' in resultado) {
+      return { mfaRequerido: true, desafio: resultado.desafio }
+    }
+    const tokens = resultado
     // Después del commit del límite y antes de responder: no cambia la
     // respuesta ni la tumba (RegistroEventos no lanza).
     // Un éxito registra la cuenta que resolvió el login, no una nueva búsqueda.
@@ -119,6 +134,54 @@ export class AuthController {
     // Mismo mensaje si el correo no existe o la contraseña no calza.
     if (!tokens) {
       throw new UnauthorizedException('Credenciales inválidas')
+    }
+    return this.responder(res, tokens)
+  }
+
+  // SEG-02. Segundo paso del login con MFA: el desafío del paso 1 y el código
+  // de la app. Cada código fallido cuenta para el límite de intentos de la
+  // cuenta y de la IP (el mismo mecanismo del login). Sin código válido no se
+  // emite sesión. Los mensajes no dicen nada del secreto ni del código.
+  @Public()
+  @Post('login/mfa')
+  @HttpCode(200)
+  async loginMfa(
+    @Body() { desafio, codigo }: LoginMfaDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<RespuestaLogin> {
+    const ip = ipLogin(req)
+    const lectura = await this.auth.desafioMfaDe(desafio)
+    if (!lectura) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: 'La verificación expiró. Inicia sesión de nuevo.',
+        error: 'Unauthorized',
+        code: CODIGO_MFA_DESAFIO_INVALIDO,
+      })
+    }
+    const { resultado: tokens, retryAfter } = await this.limiteLogin.intentar(
+      // El límite por cuenta de los códigos es por usuario, no por correo.
+      `usuario:${lectura.usuarioId}`,
+      ip,
+      (bd) => this.auth.completarMfa(lectura, codigo, bd),
+    )
+    await this.registro.inicioSesion(
+      { usuarioId: lectura.usuarioId },
+      ip,
+      retryAfter ? 'BLOQUEADO' : tokens ? 'EXITOSO' : 'FALLIDO',
+      'MFA',
+    )
+    if (retryAfter) {
+      demasiadosIntentos(res, retryAfter)
+    }
+    if (!tokens) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: 'Código inválido o expirado',
+        error: 'Unauthorized',
+        code: CODIGO_MFA_CODIGO_INVALIDO,
+      })
     }
     return this.responder(res, tokens)
   }

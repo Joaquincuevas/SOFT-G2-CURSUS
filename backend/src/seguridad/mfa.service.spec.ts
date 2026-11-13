@@ -33,6 +33,15 @@ describe('MfaService sin MFA_SECRET', () => {
     expect(query).not.toHaveBeenCalled()
   })
 
+  // SEG-02: sin llave no se puede verificar el código, y no verificar nunca es
+  // aceptar: el login con MFA falla cerrado, sin tocar la base.
+  it('no verifica códigos del login: falla cerrado', async () => {
+    await expect(
+      servicio.verificarParaLogin('usuario', '123456', null),
+    ).resolves.toBe(false)
+    expect(query).not.toHaveBeenCalled()
+  })
+
   it('el estado sigue respondiendo', async () => {
     await expect(servicio.estado('usuario')).resolves.toEqual({
       activo: false,

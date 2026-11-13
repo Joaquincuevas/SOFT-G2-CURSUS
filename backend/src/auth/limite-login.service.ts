@@ -22,6 +22,11 @@ export class LimiteLogin {
     correo: string,
     ip: string | null,
     autenticar: (bd: Pick<BaseDeDatos, 'query'>) => Promise<T | null>,
+    // SEG-02. Un resultado válido reinicia los contadores, salvo que esto
+    // devuelva false: la contraseña correcta que aún espera el código del MFA
+    // no los reinicia, o se podrían adivinar códigos reiniciando el límite con
+    // cada contraseña. Tampoco cuenta como fallo.
+    reinicia: (resultado: T) => boolean = () => true,
   ): Promise<{ resultado: T | null; retryAfter: number }> {
     const limites = new Map([
       [claveIntentos('cuenta', correo.trim().toLowerCase()), MAX_FALLOS_CUENTA],
@@ -76,7 +81,11 @@ export class LimiteLogin {
       const resultado = await autenticar(bd)
       const valido = resultado !== null
       for (const fila of vigentes) {
-        fila.fallos = valido ? [] : [...fila.fallos, ahora]
+        fila.fallos = valido
+          ? reinicia(resultado)
+            ? []
+            : fila.fallos
+          : [...fila.fallos, ahora]
         await bd.query(`UPDATE limite_login SET fallos = $2 WHERE clave = $1`, [
           fila.clave,
           fila.fallos,

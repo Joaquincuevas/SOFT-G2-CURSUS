@@ -22,13 +22,15 @@ export class RegistroEventos {
     cuenta: CuentaDelIntento,
     ip: string | null,
     resultado: ResultadoInicioSesion,
+    // SEG-02: el paso del código TOTP se registra con subtipo 'MFA'.
+    subtipo: 'MFA' | null = null,
   ): Promise<void> {
     const [correo, usuarioId] =
       'usuarioId' in cuenta ? [null, cuenta.usuarioId] : [cuenta.correo, null]
     try {
       await this.bd.query(
-        'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid)',
-        [correo, ip, resultado, usuarioId],
+        'SELECT public.registrar_inicio_sesion($1, $2::inet, $3, $4::uuid, $5)',
+        [correo, ip, resultado, usuarioId, subtipo],
       )
     } catch (error) {
       const { code } = error as { code?: unknown }
