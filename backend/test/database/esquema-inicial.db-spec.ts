@@ -30,6 +30,7 @@ const TABLAS = [
   'entrega',
   'evaluacion',
   'evaluacion_cambio',
+  'evento_auditoria',
   'facultad',
   'horario_seccion',
   'inscripcion',
@@ -187,10 +188,26 @@ describe('migraciones', () => {
 
   it('se aplican y se revierten', async () => {
     expect(await tablasExistentes()).toEqual(TABLAS)
+    // SEG-04 es la última: quita el registro de eventos con sus funciones y
+    // los triggers sobre el historial; el historial de origen queda.
+    await bd.undoLastMigration()
+    const SIN_EVENTOS = TABLAS.filter((tabla) => tabla !== 'evento_auditoria')
+    expect(await tablasExistentes()).toEqual(SIN_EVENTOS)
+    const [{ restosEventos }] = await bd.query<{ restosEventos: string }[]>(
+      `SELECT (SELECT count(*) FROM pg_proc
+                WHERE proname IN ('registrar_inicio_sesion',
+                                  'registrar_evento_de_historial',
+                                  'evento_auditoria_inmutable'))
+            + (SELECT count(*) FROM pg_trigger
+                WHERE tgname IN ('tg_nota_cambio_registrar_evento',
+                                 'tg_asignacion_cambio_registrar_evento',
+                                 'tg_cierre_curso_registrar_evento')) AS "restosEventos"`,
+    )
+    expect(Number(restosEventos)).toBe(0)
     await bd.undoLastMigration() // HIS-06: quita el estado de egreso.
     await bd.undoLastMigration() // HIS-04: quita la consulta histórica.
     await bd.undoLastMigration() // MET-01: quita la función nota_final.
-    expect(await tablasExistentes()).toEqual(TABLAS)
+    expect(await tablasExistentes()).toEqual(SIN_EVENTOS)
     const [{ notaFinal }] = await bd.query<{ notaFinal: string }[]>(
       `SELECT count(*) AS "notaFinal" FROM pg_proc WHERE proname = 'nota_final'`,
     )
@@ -198,7 +215,7 @@ describe('migraciones', () => {
     await bd.undoLastMigration() // HIS-03: quita la protección del archivo.
     await bd.undoLastMigration() // HIS-02: quita los triggers de protección.
     await bd.undoLastMigration() // HIS-01: quita el cierre y su función.
-    const SIN_CIERRE = TABLAS.filter((tabla) => tabla !== 'cierre_curso')
+    const SIN_CIERRE = SIN_EVENTOS.filter((tabla) => tabla !== 'cierre_curso')
     expect(await tablasExistentes()).toEqual(SIN_CIERRE)
     // MAT-07: quita el historial de versiones y devuelve el bloqueo del
     // material solo a quien lo subió.
@@ -239,7 +256,8 @@ describe('migraciones', () => {
     expect(Number(restosMaterial.restos)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration() // SEG-04, HIS-06, HIS-04, MET-01, HIS-03, HIS-02, HIS-01, MAT-07 y MAT-10 reaplicadas.
+    await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
     await bd.undoLastMigration()
@@ -350,7 +368,8 @@ describe('migraciones', () => {
     expect(Number(restosVariosProfesores)).toBe(0)
     await bd.runMigrations()
     expect(await tablasExistentes()).toEqual(TABLAS)
-    await bd.undoLastMigration() // runMigrations también reaplicó HIS-06,
+    await bd.undoLastMigration() // runMigrations también reaplicó SEG-04,
+    await bd.undoLastMigration() // HIS-06,
     await bd.undoLastMigration() // HIS-04,
     await bd.undoLastMigration() // MET-01,
     await bd.undoLastMigration() // HIS-03,
@@ -738,6 +757,7 @@ describe('migraciones', () => {
         t !== 'anuncio_cambio' &&
         t !== 'asistencia_cambio' &&
         t !== 'evaluacion_cambio' &&
+        t !== 'evento_auditoria' &&
         t !== 'silabo' &&
         t !== 'material_version' &&
         t !== 'lectura_anuncio' &&
