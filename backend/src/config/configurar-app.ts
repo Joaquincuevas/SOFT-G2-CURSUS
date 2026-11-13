@@ -7,6 +7,9 @@ import {
 import type { NextFunction, Request, Response } from 'express'
 import { ORIGEN_VERIFICADO, type RequestLogin } from '../auth/ip-login.js'
 import helmet from 'helmet'
+import { HttpAdapterHost } from '@nestjs/core'
+import { FiltroExcepciones } from '../observabilidad/filtro-excepciones.js'
+import { registroDeSolicitudes } from '../observabilidad/solicitud.middleware.js'
 
 export const PREFIJO_API = 'api'
 export const HEADER_SECRETO = 'x-origin-secret'
@@ -33,6 +36,12 @@ export function configurarApp(
   { secretoOrigen = process.env.ORIGIN_SECRET }: OpcionesApp = {},
 ): void {
   app.setGlobalPrefix(PREFIJO_API)
+  // OBS-01: requestId, línea de acceso y registro de los 5xx. Va primero para
+  // que todo lo demás corra dentro del contexto de la solicitud.
+  app.use(registroDeSolicitudes())
+  app.useGlobalFilters(
+    new FiltroExcepciones(app.get(HttpAdapterHost).httpAdapter),
+  )
   // La API solo devuelve JSON: la CSP no permite cargar ni embeber nada. El
   // resto de las cabeceras son los defaults de helmet (nosniff, HSTS, etc.).
   app.use(
