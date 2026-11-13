@@ -100,6 +100,7 @@ Documentación del proyecto:
 - [AUTH-07: límite de login y guía de revisión](auth-07-rate-limiting-login.md)
 
 - [SEG-01: activar MFA con una app autenticadora y guía de revisión](seg-01-activar-mfa.md)
+- [SEG-02: el usuario ingresa un código TOTP al iniciar sesión](seg-02-totp-en-login.md)
 
 - `informes/`: entregas e informes del curso
 - `c4/`: diagramas C4 (contexto, contenedores, componentes)
