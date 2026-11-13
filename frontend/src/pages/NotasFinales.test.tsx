@@ -2,6 +2,9 @@ import type { NotasFinalesSeccion, Rol, SeccionResumen } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
+import { descargar } from './csvErrores'
+
+vi.mock('./csvErrores', () => ({ descargar: vi.fn() }))
 
 const VISTA = '/mis-cursos/secciones/seccion-1'
 const RESUMEN_RUTA = '/api/espacio/secciones/seccion-1/resumen'
@@ -54,6 +57,31 @@ async function abrirNotas(
 }
 
 describe('NOT-14: el profesor ve la nota final de cada alumno', () => {
+  test('EXP-01 descarga el CSV con BOM', async () => {
+    const csv = '"Alumno";"Nota final"\r\n"Ana Ávila";5,1\r\n'
+    const { panel } = await abrirNotas('PROFESOR', {
+      [NOTAS_FINALES]: () => FINALES,
+      [`${NOTAS_FINALES}/csv`]: () => new Response('\uFEFF' + csv),
+    })
+    fireEvent.click(panel.getByRole('button', { name: 'Exportar notas a CSV' }))
+    await vi.waitFor(() =>
+      expect(descargar).toHaveBeenCalledWith('notas.csv', '\uFEFF' + csv),
+    )
+  })
+
+  test('EXP-01 muestra un aviso si falla la descarga', async () => {
+    const exportar = vi.fn(() => json({}, 403))
+    const { panel } = await abrirNotas('PROFESOR', {
+      [NOTAS_FINALES]: () => FINALES,
+      [`${NOTAS_FINALES}/csv`]: exportar,
+    })
+    fireEvent.click(panel.getByRole('button', { name: 'Exportar notas a CSV' }))
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'No pudimos exportar las notas.',
+    )
+    expect(exportar).toHaveBeenCalledTimes(1)
+  })
+
   test('ve la nota final o parcial de cada alumno, como la calcula el backend', async () => {
     const { panel } = await abrirNotas('PROFESOR', {
       [NOTAS_FINALES]: () => FINALES,
