@@ -359,6 +359,34 @@ describe('MAT-10: listado de entregas', () => {
 })
 
 describe('MAT-10: descarga', () => {
+  it('EXP-02 firma solo la última entrega de cada alumno en la actividad para su equipo docente', async () => {
+    const a = await actividad()
+    const otra = await actividad()
+    const ajena = await actividad(otraSeccion)
+    await entregar(a)
+    const ultima = await entregar(a, ALUMNO, 'Última.pdf')
+    const segunda = await entregar(a, otroCorreo)
+    await entregar(otra)
+    const ruta = `${base(a)}/entregas/zip`
+    for (const docente of [PROFESOR, AYUDANTE]) {
+      firmarDescarga.mockClear()
+      expect(await get(ruta, docente, 200)).toEqual([
+        expect.objectContaining({ nombre: `1-${otroCorreo}.pdf` }),
+        expect.objectContaining({ nombre: `2-${ALUMNO}.pdf` }),
+      ])
+      expect(firmarDescarga.mock.calls).toEqual([
+        [segunda.clave, `1-${otroCorreo}.pdf`, `v-${segunda.archivo}`],
+        [ultima.clave, `2-${ALUMNO}.pdf`, `v-${ultima.archivo}`],
+      ])
+    }
+    firmarDescarga.mockClear()
+    await get(ruta, ALUMNO, 403)
+    await get(ruta, ADMIN, 403)
+    await get(ruta, 'profesor@sur.cursus.test', 404)
+    await get(`${base(ajena)}/entregas/zip`, PROFESOR, 404)
+    expect(firmarDescarga).not.toHaveBeenCalled()
+  })
+
   it('firma la versión acreditada de esa entrega, no la última del objeto', async () => {
     const a = await actividad()
     const e = await entregar(a)
