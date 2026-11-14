@@ -1,5 +1,6 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { NavLink } from 'react-router'
+import { CursusLogo } from '@/components/brand/CursusLogo'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,
@@ -42,13 +43,14 @@ export function Sidebar({ colapsado = false, onAlternar, onNavigate }: Props) {
           colapsado ? 'justify-center px-2' : 'px-5',
         )}
       >
-        <span
-          aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground"
-        >
-          C
-        </span>
-        {/* El nombre se oculta al contraer; el monograma queda. */}
+        {/* Con el texto al lado el isotipo es decorativo; contraído queda solo
+            él y es el que lleva el nombre accesible. */}
+        <CursusLogo
+          size={32}
+          decorativo={!colapsado}
+          className="shrink-0 text-primary"
+        />
+        {/* El nombre se oculta al contraer; el isotipo queda. */}
         <span
           className={cn(
             'font-bold tracking-[2px] text-(color:--color-primary-dark)',

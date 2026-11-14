@@ -79,6 +79,26 @@ Un segundo ajuste de esta tarjeta: el color casi no se notaba (solo un tinte cla
 | Administrativo, Sur (375) | ![](evidencias/uix-04-color-antes-sur-administrativo-375.png)  | ![](evidencias/uix-04-color-despues-sur-administrativo-375.png)  |
 | Foco del menú de usuario  | ![](evidencias/uix-04-color-antes-norte-alumno-foco-1280.png)  | ![](evidencias/uix-04-color-despues-norte-alumno-foco-1280.png)  |
 
+## Isotipo de CURSUS
+
+`components/brand/CursusLogo.tsx` dibuja el isotipo como SVG en línea con `fill="currentColor"`: toma el color del texto de donde se use. Props: `size` (32 por defecto), `className` y `title` (nombre accesible, «CURSUS» por defecto). Tiene `role="img"` y `aria-label`; con `decorativo` se oculta a los lectores de pantalla (junto al texto «CURSUS» para que no se lea dos veces). Los archivos de origen están en `src/assets/cursus-isotipo.svg` y `public/brand/` (PNG azul y blanco).
+
+| Lugar                                                                                                                          | Cambio                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Menú lateral expandido (`layout/Sidebar.tsx`)                                                                                  | Isotipo de 32 px en `text-primary` (cambia con la universidad), sin recuadro, junto al texto «CURSUS». Reemplaza el recuadro con la «C».                                                                                                                                                         |
+| Menú lateral contraído                                                                                                         | Solo el isotipo, con el nombre accesible «CURSUS».                                                                                                                                                                                                                                               |
+| Login, segundo paso de MFA, recuperar contraseña y cambio obligatorio (`components/PanelMarca.tsx`)                            | Isotipo blanco de 40 px junto al texto, sobre el panel oscuro. Solo cambia el logo.                                                                                                                                                                                                              |
+| Carga de pantalla completa, error de la app y 404 (`Cargando`, `ErrorEstado` con `pantallaCompleta`, `pages/NoEncontrada.tsx`) | Isotipo de 56 px centrado en `text-primary`; en la tarjeta de error y en el 404 el contenido queda centrado (`.estado--centrado`).                                                                                                                                                               |
+| `index.html` y `public/`                                                                                                       | `favicon.svg` (azul `#1b4f72` fijo: el favicon no hereda el tema), `favicon-32.png`, `apple-touch-icon.png` (180 px, fondo blanco porque iOS no admite transparencia), `icon-192.png` e `icon-512.png`; etiquetas `icon`, `apple-touch-icon`, `theme-color` `#1b4f72` y `<title>CURSUS</title>`. |
+
+Los PNG de 32, 180, 192 y 512 px salen de `cursus-isotipo-azul.png` con `npx sharp-cli`, sin agregar dependencias.
+
+El encabezado no lleva el isotipo (el menú lateral es quien lo muestra), así que no hay versión blanca sobre el color de la universidad fuera del login.
+
+Aparece el nombre «CURSUS» como texto (no como logo) en: el título «Bienvenido a CURSUS» y el pie del login, el texto del panel de marca, la etiqueta accesible del panel móvil, el emisor del código de MFA (`backend/src/seguridad/totp.ts`), el asunto del correo de recuperación (`correo-recuperacion.service.ts`) y `NOMBRE_PLATAFORMA` (`auth.service.ts`). No se tocaron: el backend queda fuera de esta tarjeta y ninguno usa imagen ni una «C» como logo.
+
+Capturas en `docs/evidencias/uix-04-logo-*.png`: Norte, Sur y Director con el menú expandido y contraído a 1280 px y el panel móvil a 375 px, el 404 con sesión, y sin sesión el login, la pantalla de error y la de carga a 1280 y 375 px. `uix-04-logo-iconos.png` muestra el favicon a 16 px (en una pestaña clara y una oscura) y los íconos; `uix-04-logo-isotipo-32px-sur.png` es el isotipo del menú a 32 px ampliado al doble.
+
 ## Fuera de alcance
 
 Páginas internas, dashboards, backend, `@cursus/shared` y `components/ui/`. Las páginas todavía no migradas siguen con su `.css`; el tamaño del bundle principal (688 kB, 523 kB antes) crece por Radix (menú, panel, tooltip, pestañas) y el aviso de más de 500 kB de Vite ya existía.

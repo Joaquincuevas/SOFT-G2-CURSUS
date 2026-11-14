@@ -1,3 +1,4 @@
+import { CursusLogo } from '@/components/brand/CursusLogo'
 import './estados.css'
 
 interface Props {
@@ -19,7 +20,11 @@ export function ErrorEstado({
   pantallaCompleta,
 }: Props) {
   const tarjeta = (
-    <section className="estado" role="alert">
+    <section
+      className={pantallaCompleta ? 'estado estado--centrado' : 'estado'}
+      role="alert"
+    >
+      {pantallaCompleta && <CursusLogo size={56} className="text-primary" />}
       <h2 className="estado__titulo estado__titulo--error">{titulo}</h2>
       <p className="estado__texto">{mensaje}</p>
       <button className="estado__boton" type="button" onClick={onReintentar}>

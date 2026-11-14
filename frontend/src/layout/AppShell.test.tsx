@@ -102,6 +102,40 @@ describe('íconos del menú', () => {
   )
 })
 
+describe('isotipo de CURSUS', () => {
+  const riel = () => document.querySelector('aside#sidebar') as HTMLElement
+
+  test('el menú expandido lleva el isotipo en el color primario, junto al nombre y sin recuadro', async () => {
+    await renderApp('PROFESOR')
+    const isotipo = riel().querySelector('svg[viewBox]') as SVGElement
+    expect(isotipo).toHaveClass('text-primary')
+    expect(isotipo).toHaveAttribute('width', '32')
+    // Con el nombre al lado, el isotipo no se lee dos veces.
+    expect(isotipo).toHaveAttribute('aria-hidden', 'true')
+    expect(within(riel()).getByText('CURSUS')).toBeVisible()
+    expect(riel().querySelector('.bg-primary.rounded-lg')).toBeNull()
+  })
+
+  test('contraído queda solo el isotipo, con el nombre accesible', async () => {
+    await renderApp('PROFESOR')
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
+    expect(within(riel()).getByRole('img', { name: 'CURSUS' })).toHaveClass(
+      'text-primary',
+    )
+    expect(within(riel()).getByText('CURSUS').className).toContain('sr-only')
+  })
+
+  test('el 404 dentro de la app lleva el isotipo en el color primario', async () => {
+    await renderApp('PROFESOR', '/no-existe')
+    const pagina = await screen.findByRole('region', {
+      name: 'Página no encontrada',
+    })
+    expect(within(pagina).getByRole('img', { name: 'CURSUS' })).toHaveClass(
+      'text-primary',
+    )
+  })
+})
+
 describe('color de la universidad en el menú', () => {
   test('el ítem activo va con relleno sólido y texto blanco, y los demás con hover suave', async () => {
     await renderApp('PROFESOR')
