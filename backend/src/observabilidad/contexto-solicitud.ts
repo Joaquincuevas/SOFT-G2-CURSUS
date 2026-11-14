@@ -12,15 +12,11 @@ export const contextoSolicitud = new AsyncLocalStorage<ContextoSolicitud>()
 
 export const HEADER_REQUEST_ID = 'x-request-id'
 
-// X-Request-Id entrante: solo se respeta si es una cadena corta de caracteres
-// inocuos. Un valor con saltos de línea, comillas, espacios o muy largo no
-// llega al log (es la puerta a la inyección de líneas): se genera uno nuevo.
-const FORMATO_REQUEST_ID = /^[A-Za-z0-9._-]{8,64}$/
-
-export function requestIdDe(entrante: unknown): string {
-  return typeof entrante === 'string' && FORMATO_REQUEST_ID.test(entrante)
-    ? entrante
-    : randomUUID()
-}
+// El requestId lo genera siempre la API (un UUID). El X-Request-Id que manda
+// el cliente se ignora: un valor que cumpla un formato "inocuo" igual podría
+// ser un dato sensible (un token, un RUT sin puntos) y terminaría escrito en el
+// log. Si algún día hay un proxy propio que fije el id, habrá que aceptarlo solo
+// de ese proxy, verificado como el secreto de origen, y no del cliente.
+export const nuevoRequestId = (): string => randomUUID()
 
 export const requestIdActual = () => contextoSolicitud.getStore()?.requestId

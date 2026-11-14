@@ -1,4 +1,4 @@
-import { contextoSolicitud, requestIdDe } from './contexto-solicitud.js'
+import { contextoSolicitud, nuevoRequestId } from './contexto-solicitud.js'
 import { LoggerJson, nivelDesde } from './logger-json.js'
 
 function capturar(opciones: ConstructorParameters<typeof LoggerJson>[0] = {}) {
@@ -72,17 +72,28 @@ describe('LoggerJson', () => {
     expect(json()[0].timestamp).not.toBe('1970')
   })
 
-  it('el stack de error() sale redactado', () => {
+  it('el stack de error() sale sin su primera línea, solo con los frames', () => {
     const { logger, lineas } = capturar()
     logger.error(
       'falló',
-      'Error: password=Contraseña-Segura-123\n    at x (/a.ts:1:1)',
+      'Error: zeta-valor-sintetico-91827\n    at x (/a.ts:1:1)',
       'Ctx',
     )
-    expect(lineas[0]).not.toContain('Contraseña-Segura-123')
+    expect(lineas[0]).not.toContain('zeta-valor-sintetico-91827')
     expect(JSON.parse(lineas[0])).toMatchObject({
       context: 'Ctx',
       message: 'falló',
+      stack: '    at x (/a.ts:1:1)',
+    })
+  })
+
+  it('un Error pasado al logger no escribe su mensaje', () => {
+    const { logger, lineas } = capturar()
+    logger.error(new Error('valor-sintetico-sin-etiqueta-55'))
+    expect(lineas[0]).not.toContain('valor-sintetico-sin-etiqueta-55')
+    expect(JSON.parse(lineas[0])).toMatchObject({
+      message: 'error no controlado',
+      error: { name: 'Error' },
     })
   })
 
@@ -113,31 +124,12 @@ describe('LoggerJson', () => {
   })
 })
 
-describe('requestIdDe', () => {
-  const UUID =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-  it.each([
-    'abcd1234',
-    '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b',
-    'Root.1-abc_DEF',
-    'a'.repeat(64),
-  ])('respeta uno válido (%s)', (id) => expect(requestIdDe(id)).toBe(id))
-  it.each([
-    'corto',
-    'a'.repeat(65),
-    'con espacio 123',
-    'linea\nfalsa{"level":"error"}',
-    'a\r\nb1234567',
-    '"; DROP TABLE x;--',
-    '<script>alert(1)</script>',
-    'ñandú12345',
-    '',
-    ['abcd1234', 'efgh5678'],
-    undefined,
-    123456789,
-  ])('reemplaza uno inválido (%j)', (id) => {
-    const nuevo = requestIdDe(id)
-    expect(nuevo).toMatch(UUID)
-    expect(nuevo).not.toBe(id)
+describe('nuevoRequestId', () => {
+  it('es un UUID generado por la API, distinto cada vez', () => {
+    const UUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    const a = nuevoRequestId()
+    expect(a).toMatch(UUID)
+    expect(nuevoRequestId()).not.toBe(a)
   })
 })

@@ -1,6 +1,11 @@
 import type { LoggerService } from '@nestjs/common'
 import { requestIdActual } from './contexto-solicitud.js'
-import { redactar, redactarTexto } from './redaccion.js'
+import {
+  errorSeguro,
+  redactar,
+  redactarTexto,
+  stackSeguro,
+} from './redaccion.js'
 
 // Niveles de más a menos importante. LOG_LEVEL deja pasar ese y los anteriores.
 const NIVELES = ['fatal', 'error', 'warn', 'info', 'debug', 'verbose'] as const
@@ -92,11 +97,17 @@ export class LoggerJson implements LoggerService {
       typeof mensaje === 'string'
         ? mensaje
         : mensaje instanceof Error
-          ? mensaje.message
+          ? // El texto de un error no se escribe (ver errorSeguro).
+            'error no controlado'
           : typeof extras.message === 'string'
             ? extras.message
             : JSON.stringify(redactar(mensaje))
     delete extras.message
+    // Un Error en un campo (error: …) también se reduce a tipo, código y
+    // frames, y no pasa por la redacción por clave (que ocultaría "code").
+    const errorExtra =
+      extras.error instanceof Error ? errorSeguro(extras.error) : undefined
+    if (errorExtra) delete extras.error
     for (const clave of RESERVADAS) delete extras[clave]
     const requestId = requestIdActual()
     // Primero las claves fijas, para leer la línea de corrido; los campos del
@@ -109,10 +120,11 @@ export class LoggerJson implements LoggerService {
       ...(requestId ? { requestId } : {}),
       message: redactarTexto(texto),
       ...(redactar(extras) as Record<string, unknown>),
+      ...(errorExtra ? { error: errorExtra } : {}),
       ...(mensaje instanceof Error
-        ? { error: redactar(mensaje) }
+        ? { error: errorSeguro(mensaje) }
         : stack
-          ? { stack: redactarTexto(stack) }
+          ? { stack: stackSeguro(stack) }
           : {}),
     }
     // JSON.stringify escapa los saltos de línea: es una sola línea.

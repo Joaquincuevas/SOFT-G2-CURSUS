@@ -1,4 +1,4 @@
-import { redactar, redactarTexto, REDACTADO } from './redaccion.js'
+import { errorSeguro, redactar, redactarTexto, REDACTADO } from './redaccion.js'
 
 // OBS-01: lo que no debe llegar a CloudWatch. Cada caso intenta filtrar un
 // tipo de dato, en texto, en un objeto y en un error.
@@ -105,20 +105,42 @@ describe('redactar', () => {
     })
   })
 
-  it('el mensaje y el stack de un error salen redactados, sin sus otras propiedades', () => {
+  // Un valor sin etiqueta ni formato reconocible: ningún patrón lo atrapa.
+  const SINTETICO = 'zeta-valor-sintetico-91827'
+
+  it('un error se registra sin su mensaje ni la primera línea del stack', () => {
     const error = Object.assign(
       new Error(
-        `falló con password=Contraseña-Segura-123 y ${JWT} del rut 12.345.678-5`,
+        `duplicate key value (${SINTETICO}) con password=Contraseña-Segura-123\nsegunda línea ${SINTETICO}`,
       ),
       {
+        code: '23505',
         parameters: ['ana.perez@norte.cursus.test', 'Contraseña-Segura-123'],
         query: 'SELECT 1',
       },
     )
-    error.stack = `Error: ${error.message}\n    at x (/app/y.ts:1:1)`
+    error.stack = `Error: ${error.message}\n    at Servicio.hacer (/app/servicio.js:10:5)\n    at async Controlador.ir (/app/c.js:3:1)`
     const salida = redactar(error) as Record<string, unknown>
+    expect(JSON.stringify(salida)).not.toContain(SINTETICO)
     sinSecretos(salida)
-    expect(Object.keys(salida).sort()).toEqual(['message', 'name', 'stack'])
+    expect(salida).toEqual({
+      name: 'Error',
+      code: '23505',
+      stack:
+        '    at Servicio.hacer (/app/servicio.js:10:5)\n    at async Controlador.ir (/app/c.js:3:1)',
+    })
+  })
+
+  it('un código o un nombre de error con formato raro no se copia', () => {
+    const error = Object.assign(new Error('x'), {
+      code: `${SINTETICO} con espacios`,
+    })
+    error.name = `Nombre ${SINTETICO}`
+    expect(errorSeguro(error)).toMatchObject({ name: 'Error' })
+    expect(errorSeguro(error)).not.toHaveProperty('code')
+    expect(errorSeguro('texto suelto ' + SINTETICO)).toEqual({
+      name: 'ErrorDesconocido',
+    })
   })
 
   it('no se cae con ciclos, profundidad, BigInt ni Buffer', () => {

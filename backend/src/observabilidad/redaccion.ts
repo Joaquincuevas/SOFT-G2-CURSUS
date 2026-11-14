@@ -102,6 +102,43 @@ export function redactarTexto(texto: string): string {
   )
 }
 
+// Un error se registra sin su mensaje: el texto lo escribe el driver o una
+// dependencia y puede traer un dato sensible sin etiqueta reconocible (un valor
+// de una columna, un RUT sin puntos), también en la primera línea del stack. Se
+// conserva lo que sirve para diagnosticar y no lleva datos: el tipo de error,
+// su código (SQLSTATE, ECONNREFUSED…) y los frames del stack, es decir, dónde
+// ocurrió.
+const MAX_FRAMES = 30
+
+export interface ErrorSeguro {
+  name: string
+  code?: string
+  stack?: string
+}
+
+export const stackSeguro = (stack: unknown): string | undefined => {
+  if (typeof stack !== 'string') return undefined
+  const frames = stack
+    .split('\n')
+    .filter((linea) => /^\s+at\s/.test(linea))
+    .slice(0, MAX_FRAMES)
+    .map((linea) => redactarTexto(linea.slice(0, 300)))
+  return frames.length ? frames.join('\n') : undefined
+}
+
+export function errorSeguro(error: unknown): ErrorSeguro {
+  if (!(error instanceof Error)) return { name: 'ErrorDesconocido' }
+  const { code } = error as { code?: unknown }
+  const stack = stackSeguro(error.stack)
+  return {
+    name: /^[A-Za-z0-9_.$]{1,80}$/.test(error.name) ? error.name : 'Error',
+    ...(typeof code === 'string' && /^[A-Za-z0-9_]{1,40}$/.test(code)
+      ? { code }
+      : {}),
+    ...(stack ? { stack } : {}),
+  }
+}
+
 // Redacta cualquier valor: textos por patrón, objetos por clave, errores por
 // nombre, mensaje y stack. No toca los números ni los booleanos.
 export function redactar(
@@ -120,15 +157,7 @@ export function redactar(
     if (vistos.has(valor)) return '[CIRCULAR]'
     vistos.add(valor)
     if (Buffer.isBuffer(valor)) return `[Buffer ${valor.length} bytes]`
-    if (valor instanceof Error) {
-      // Solo nombre, mensaje y stack: nunca las demás propiedades del error
-      // (TypeORM adjunta la consulta y sus parámetros).
-      return {
-        name: valor.name,
-        message: redactarTexto(valor.message),
-        ...(valor.stack ? { stack: redactarTexto(valor.stack) } : {}),
-      }
-    }
+    if (valor instanceof Error) return errorSeguro(valor)
     if (Array.isArray(valor)) {
       return valor.map((v) => redactar(v, profundidad + 1, vistos))
     }

@@ -1,10 +1,6 @@
 import { Logger } from '@nestjs/common'
 import type { NextFunction, Request, Response } from 'express'
-import {
-  contextoSolicitud,
-  HEADER_REQUEST_ID,
-  requestIdDe,
-} from './contexto-solicitud.js'
+import { contextoSolicitud, nuevoRequestId } from './contexto-solicitud.js'
 
 const logger = new Logger('Acceso')
 const ES_UUID =
@@ -24,12 +20,11 @@ export function rutaDe(req: Request): string {
     : '(sin ruta)'
 }
 
-// OBS-01. Primero de la cadena: asigna el requestId (el entrante solo si es
-// válido), lo devuelve en X-Request-Id y deja una línea de acceso al terminar
+// OBS-01. Primero de la cadena: asigna el requestId (siempre generado por la API), lo devuelve en X-Request-Id y deja una línea de acceso al terminar
 // la respuesta. Corre todo lo demás dentro del contexto de la solicitud.
 export function registroDeSolicitudes() {
   return (req: Request, res: Response, next: NextFunction) => {
-    const requestId = requestIdDe(req.headers[HEADER_REQUEST_ID])
+    const requestId = nuevoRequestId()
     res.setHeader('X-Request-Id', requestId)
     const inicio = process.hrtime.bigint()
     contextoSolicitud.run({ requestId }, () => {
