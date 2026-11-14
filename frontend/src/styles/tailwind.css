@@ -29,6 +29,11 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 @import 'tw-animate-css';
 
+/* Los componentes de shadcn traen variantes dark:. CURSUS no tiene modo oscuro:
+   `dark` se ata a una clase .dark que nadie pone, en vez de a la preferencia del
+   sistema, que las activaría en el navegador de quien use el tema oscuro. */
+@custom-variant dark (&:is(.dark *));
+
 /*
  * `inline`: las utilidades usan el valor de cada variable de shadcn en vez de
  * una variable propia de Tailwind. Así `--color-primary` sigue siendo la del
@@ -115,10 +120,78 @@
 }
 
 @layer base {
-  /* shadcn pone el color de borde y de outline con `*`; acotado a los
-     componentes de shadcn (todos llevan data-slot) para no tocar el CSS legacy. */
+  /*
+   * Mini-reset de los componentes de shadcn. Sus clases suponen el reset global
+   * de preflight (botones, campos y enlaces sin la apariencia del navegador,
+   * títulos y listas sin márgenes, bordes en 0). Sin preflight, un <button>
+   * mostraría su borde biselado y un <textarea> su fuente monoespaciada.
+   *
+   * Va solo sobre el elemento que lleva data-slot, nunca sobre sus hijos: una
+   * página legacy montada dentro de un componente (por ejemplo, en un TabsContent)
+   * conserva sus estilos. Está en la capa base, así que cualquier utilidad
+   * (`border`, `px-3`, `text-sm`…) y cualquier regla legacy lo supera. Se retira
+   * en UIX-24, cuando se activa preflight.
+   */
   [data-slot] {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
     border-color: var(--border);
     outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+
+  :is(button, input, select, optgroup, textarea)[data-slot] {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background-color: transparent;
+    border-radius: 0;
+  }
+
+  button[data-slot] {
+    background-image: none;
+    cursor: pointer;
+  }
+
+  button[data-slot]:disabled {
+    cursor: default;
+  }
+
+  textarea[data-slot] {
+    resize: vertical;
+  }
+
+  a[data-slot] {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  :is(h1, h2, h3, h4, h5, h6)[data-slot] {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :is(ol, ul, li)[data-slot] {
+    list-style: none;
+  }
+
+  table[data-slot] {
+    border-collapse: collapse;
+    text-indent: 0;
+  }
+
+  /* Mínimo táctil de 44 px (WCAG 2.5.8 pide 24; Apple, 44) en los controles de
+     shadcn, solo con puntero grueso: en escritorio conservan su tamaño. */
+  @media (pointer: coarse) {
+    [data-slot='button'],
+    [data-slot='native-select'],
+    [data-slot='input'],
+    [data-slot='tabs-trigger'] {
+      min-height: 44px;
+    }
+    [data-slot='button']:where([data-size^='icon']) {
+      min-width: 44px;
+    }
   }
 }
