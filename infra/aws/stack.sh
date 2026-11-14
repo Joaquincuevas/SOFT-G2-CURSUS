@@ -30,6 +30,10 @@ TAG=${1:-$(service_image)}
 TAG=${TAG:-$(latest_image)}
 
 PARAMETERS=("Entorno=$ENVIRONMENT" "VpcId=$VPC" "SubnetIds=$SUBNETS" "ImageTag=$TAG")
+if [ "${OBS_ALERTAS_CORREO+x}" = x ]; then
+  [ "$ENVIRONMENT" = production ] || fail "OBS_ALERTAS_CORREO solo se configura en producción."
+  PARAMETERS+=("CorreoAlertasProduccion=$OBS_ALERTAS_CORREO")
+fi
 if [ -n "${RECUPERACION_REMITENTE:-}" ] || [ -n "${RECUPERACION_IDENTIDAD_SES:-}" ]; then
   [ -n "${RECUPERACION_REMITENTE:-}" ] && [ -n "${RECUPERACION_IDENTIDAD_SES:-}" ] ||
     fail "Configura RECUPERACION_REMITENTE y RECUPERACION_IDENTIDAD_SES juntas."
