@@ -124,7 +124,7 @@ test.each(['crear', 'activar'])(
       ),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Universidad Demo Norte · Semestre 2027-1'),
+      within(screen.getByRole('banner')).getByText('Semestre 2027-1'),
     ).toBeInTheDocument()
     const filas = within(screen.getByRole('table')).getAllByRole('row')
     expect(within(filas[1]).getByText('2027-1')).toBeInTheDocument()
