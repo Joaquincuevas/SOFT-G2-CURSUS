@@ -69,9 +69,19 @@ Parameters:
     Default: ''
     Description: Identidad verificada en SES (dominio o correo remitente).
 
+  CorreoAlertasProduccion:
+    Type: String
+    Default: ''
+    AllowedPattern: '^([^\s@]+@[^\s@]+\.[^\s@]+)?$'
+    Description: Buzón del equipo para alertas de producción. Vacío deshabilita OBS-02.
+
 Conditions:
   HayRemitenteRecuperacion: !Not [!Equals [!Ref RemitenteRecuperacion, '']]
   EsStaging: !Equals [!Ref Entorno, staging]
+  AlertasProduccion: !And
+    - !Not [!Condition EsStaging]
+    - !Condition HayImagen
+    - !Not [!Equals [!Ref CorreoAlertasProduccion, '']]
   HayImagen: !Not [!Equals [!Ref ImageTag, '']]
   UsarUsuario: !Equals [!Ref AccesoGitHub, usuario]
   UsarOidc: !Equals [!Ref AccesoGitHub, oidc]
@@ -580,6 +590,177 @@ Resources:
         ThrottlingBurstLimit: 50
         ThrottlingRateLimit: 20
 
+  # --- OBS-02: salud y errores de producción ----------------------------------
+
+  TemaAlertasProduccion:
+    Type: AWS::SNS::Topic
+    Condition: AlertasProduccion
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref CorreoAlertasProduccion
+
+  RolSondaSalud:
+    Type: AWS::IAM::Role
+    Condition: AlertasProduccion
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: sonda-salud
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref SecretoOrigen
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: CURSUS/Salud
+
+  SondaSalud:
+    Type: AWS::Lambda::Function
+    Condition: AlertasProduccion
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt RolSondaSalud.Arn
+      Timeout: 25
+      Environment:
+        Variables:
+          API_ID: !Ref Api
+          API_ORIGEN: !Sub 'https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+          SECRETO_ORIGEN_ARN: !Ref SecretoOrigen
+      Code:
+        ZipFile: |
+          import json
+          import os
+          from urllib.error import URLError
+          from urllib.request import Request, build_opener, HTTPRedirectHandler
+
+          import boto3
+          from botocore.config import Config
+
+          config = Config(connect_timeout=3, read_timeout=3, retries={'total_max_attempts': 1})
+          secretos = boto3.client('secretsmanager', config=config)
+          metricas = boto3.client('cloudwatch', config=config)
+
+          class SinRedireccion(HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          http = build_opener(SinRedireccion())
+
+          def saludable(ruta, esperado, headers):
+              solicitud = Request(os.environ['API_ORIGEN'] + ruta, headers=headers)
+              try:
+                  with http.open(solicitud, timeout=5) as respuesta:
+                      return respuesta.status == 200 and json.loads(respuesta.read(1024)) == esperado
+              except (URLError, OSError, ValueError):
+                  return False
+
+          def handler(event, context):
+              api = saludable('/api/health', {'status': 'ok'}, {})
+              base = False
+              if api:
+                  secreto = secretos.get_secret_value(SecretId=os.environ['SECRETO_ORIGEN_ARN'])
+                  base = saludable('/api/health/db', {'status': 'ok', 'database': 'ok'},
+                                   {'x-origin-secret': secreto['SecretString']})
+              metricas.put_metric_data(Namespace='CURSUS/Salud', MetricData=[{
+                  'MetricName': 'FalloSalud',
+                  'Dimensions': [{'Name': 'ApiId', 'Value': os.environ['API_ID']}],
+                  'Value': int(not (api and base)),
+              }])
+              print(json.dumps({'apiSaludable': api, 'baseSaludable': base if api else None}))
+
+  ProgramarSondaSalud:
+    Type: AWS::Events::Rule
+    Condition: AlertasProduccion
+    Properties:
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Id: sonda
+          Arn: !GetAtt SondaSalud.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 0
+            MaximumEventAgeInSeconds: 60
+
+  PermisoInvocarSondaSalud:
+    Type: AWS::Lambda::Permission
+    Condition: AlertasProduccion
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SondaSalud
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ProgramarSondaSalud.Arn
+
+  AlarmaSaludProduccion:
+    Type: AWS::CloudWatch::Alarm
+    Condition: AlertasProduccion
+    Properties:
+      AlarmName: cursus-production-salud
+      AlarmDescription: API o base sin salud durante seis comprobaciones de un minuto, o sonda sin datos.
+      AlarmActions: [!Ref TemaAlertasProduccion]
+      OKActions: [!Ref TemaAlertasProduccion]
+      Namespace: CURSUS/Salud
+      MetricName: FalloSalud
+      Dimensions:
+        - { Name: ApiId, Value: !Ref Api }
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 6
+      DatapointsToAlarm: 6
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+
+  AlarmaTasa5xxProduccion:
+    Type: AWS::CloudWatch::Alarm
+    Condition: AlertasProduccion
+    Properties:
+      AlarmName: cursus-production-tasa-5xx
+      AlarmDescription: Al menos 5 por ciento de errores 5xx y 10 errores en cinco minutos.
+      AlarmActions: [!Ref TemaAlertasProduccion]
+      OKActions: [!Ref TemaAlertasProduccion]
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      Metrics:
+        - Id: tasa
+          Expression: IF((errores >= 10) AND (total > 0), 100 * errores / total, 0)
+          ReturnData: true
+        - Id: errores
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApiGateway
+              MetricName: 5xx
+              Dimensions:
+                - { Name: ApiId, Value: !Ref Api }
+            Period: 300
+            Stat: Sum
+        - Id: total
+          ReturnData: false
+          MetricStat:
+            Metric:
+              Namespace: AWS/ApiGateway
+              MetricName: Count
+              Dimensions:
+                - { Name: ApiId, Value: !Ref Api }
+            Period: 300
+            Stat: SampleCount
+
   # --- Apagado automático (por si alguien olvida apagar) ------------------------
 
   RolScheduler:
@@ -609,6 +790,7 @@ Resources:
     Type: AWS::Scheduler::Schedule
     Properties:
       Name: !Sub 'cursus-${Entorno}-apagar-rds'
+      State: !If [AlertasProduccion, DISABLED, ENABLED]
       ScheduleExpression: !Ref HorarioApagado
       ScheduleExpressionTimezone: America/Santiago
       FlexibleTimeWindow: { Mode: 'OFF' }
@@ -624,6 +806,7 @@ Resources:
     Condition: HayImagen
     Properties:
       Name: !Sub 'cursus-${Entorno}-apagar-backend'
+      State: !If [AlertasProduccion, DISABLED, ENABLED]
       ScheduleExpression: !Ref HorarioApagado
       ScheduleExpressionTimezone: America/Santiago
       FlexibleTimeWindow: { Mode: 'OFF' }
