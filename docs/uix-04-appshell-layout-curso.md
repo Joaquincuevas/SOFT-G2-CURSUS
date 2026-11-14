@@ -15,7 +15,7 @@ Tarjeta: UIX-04. Reemplaza el menú lateral, el encabezado y la vista de una sec
   - Ya no repite el título de la página: la ruta es el breadcrumb y su último paso es el `h1`.
   - El breadcrumb sale de `NAV_ITEMS` y de las pocas subrutas con nombre propio (Historial, Pendientes). La sección de un curso aporta su nombre con `useEtiquetaDeMiga` (`layout/migas-contexto.ts`, `layout/MigasProvider.tsx`).
   - Bajo 640 px el camino no cabe: queda el título y un botón «Volver a …». El título pasa a dos líneas en vez de cortarse con «…».
-  - Menú de usuario (`DropdownMenu`): avatar con iniciales, nombre y rol, «Mi perfil» (solo si la persona tiene la ruta; el egresado no la tiene) y «Cerrar sesión», que salió del menú lateral.
+  - Menú de usuario (`DropdownMenu`): avatar con iniciales, nombre y rol, «Mi perfil» (solo si la persona tiene la ruta; el egresado no la tiene) y «Cerrar sesión», que salió del menú lateral. Ver «Menú de usuario» más abajo.
   - El período activo es una `Badge` («Semestre 2026-2»), oculta bajo 768 px.
 - **Layout de curso** (`pages/VistaSeccion.tsx`). Navegación del curso a la izquierda y el contenido a la derecha; bajo 1024 px es una fila de pestañas que se desplaza y deja a la vista la elegida.
   - Vistas: Home, Anuncios, Material, Entregas, Notas, Asistencia e Integrantes. Los cinco contenidos que ya existían (ESP-04 a MAT-08) se montan tal cual.
@@ -98,6 +98,29 @@ El encabezado no lleva el isotipo (el menú lateral es quien lo muestra), así q
 Aparece el nombre «CURSUS» como texto (no como logo) en: el título «Bienvenido a CURSUS» y el pie del login, el texto del panel de marca, la etiqueta accesible del panel móvil, el emisor del código de MFA (`backend/src/seguridad/totp.ts`), el asunto del correo de recuperación (`correo-recuperacion.service.ts`) y `NOMBRE_PLATAFORMA` (`auth.service.ts`). No se tocaron: el backend queda fuera de esta tarjeta y ninguno usa imagen ni una «C» como logo.
 
 Capturas en `docs/evidencias/uix-04-logo-*.png`: Norte, Sur y Director con el menú expandido y contraído a 1280 px y el panel móvil a 375 px, el 404 con sesión, y sin sesión el login, la pantalla de error y la de carga a 1280 y 375 px. `uix-04-logo-iconos.png` muestra el favicon a 16 px (en una pestaña clara y una oscura) y los íconos; `uix-04-logo-isotipo-32px-sur.png` es el isotipo del menú a 32 px ampliado al doble.
+
+## Menú de usuario
+
+`layout/MenuUsuario.tsx`. Solo clases de Tailwind y los tokens existentes (`--primary`, `--accent`, `--destructive`); rutas, permisos y backend no cambian, y `Header.tsx` no necesitó cambios.
+
+- **Disparador** (sobre el color de la universidad): avatar con iniciales y nombre truncado, con el nombre completo en `title`; el rol va debajo, en una línea más pequeña. El chevron gira 180° al abrir (y no se anima con «reducir movimiento»). Bajo 768 px quedan solo el avatar y el chevron, y el nombre sigue siendo el nombre accesible del botón. Mide 44 px como mínimo.
+- **Panel** (`align="end"`, 280 px como mínimo, sombra suave y la animación de entrada del componente):
+  1. Cabecera con un 8 % de `--color-primary` sobre blanco: avatar de 40 px, nombre completo (puede ocupar dos líneas), correo de la sesión, el rol en un `Badge` y el nombre de la universidad con un punto de su color.
+  2. Separador.
+  3. «Mi perfil», con su ícono. El egresado no lo tiene: queda un solo separador.
+  4. Separador.
+  5. «Cerrar sesión», aparte, en el color de peligro (`--destructive`) y con `LogOut`.
+- **Estados.** Al pasar el mouse o enfocar una fila toma el tinte de la universidad (`--accent`, con texto `--accent-foreground`); con el teclado suma un aro dentro de la fila (`--ring`, o `--destructive` en «Cerrar sesión»). Las flechas, Inicio, Fin, Enter y Escape son los de Radix, y al cerrar el foco vuelve al disparador.
+- **Contraste.** `layout/contraste-color.test.ts` mide la cabecera (nombre, correo y universidad sobre el tinte), las iniciales blancas, el hover y foco, el aro y el color de peligro (en reposo y con su fondo de foco) en cada rol y en cinco colores de universidad; el Director usa el azul de CURSUS en todas. Mínimos: 4,5:1 para texto y 3:1 para ícono y aro. Valores medidos: el correo y la universidad (`#666`) sobre la cabecera, 5,06:1 con Norte y el Director y 5,05:1 con Sur (4,82:1 en el peor caso, con un color negro); el nombre, 11,1:1; y `#b3261e` en «Cerrar sesión», 6,54:1 sobre blanco y 5,54:1 sobre su fondo de foco.
+
+Capturas en `docs/evidencias/uix-04-menu-usuario-*.png` (Director Sur, Administrativo Norte y Alumno Sur, a 1280 y 375 px, con el disparador cerrado y el panel abierto):
+
+| Alumno Sur, 1280 px | Antes                                                                 | Después                                                                 |
+| ------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Disparador cerrado  | ![](evidencias/uix-04-menu-usuario-antes-sur-alumno-cerrado-1280.png) | ![](evidencias/uix-04-menu-usuario-despues-sur-alumno-cerrado-1280.png) |
+| Panel abierto       | ![](evidencias/uix-04-menu-usuario-antes-sur-alumno-abierto-1280.png) | ![](evidencias/uix-04-menu-usuario-despues-sur-alumno-abierto-1280.png) |
+
+Con el teclado: [foco en el disparador](evidencias/uix-04-menu-usuario-despues-sur-alumno-disparador-foco-1280.png), [fila «Mi perfil»](evidencias/uix-04-menu-usuario-despues-sur-alumno-teclado-mi-perfil-1280.png) y [fila «Cerrar sesión»](evidencias/uix-04-menu-usuario-despues-sur-alumno-teclado-cerrar-sesion-1280.png).
 
 ## Fuera de alcance
 
