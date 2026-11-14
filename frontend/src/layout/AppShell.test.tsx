@@ -102,6 +102,21 @@ describe('íconos del menú', () => {
   )
 })
 
+describe('color de la universidad en el menú', () => {
+  test('el ítem activo va con relleno sólido y texto blanco, y los demás con hover suave', async () => {
+    await renderApp('PROFESOR')
+    const activo = within(principal()).getByRole('link', { name: 'Dashboard' })
+    expect(activo).toHaveAttribute('aria-current', 'page')
+    expect(activo).toHaveClass(
+      'aria-[current=page]:bg-primary',
+      'aria-[current=page]:text-primary-foreground',
+    )
+    const otro = within(principal()).getByRole('link', { name: 'Mis Cursos' })
+    expect(otro).not.toHaveAttribute('aria-current')
+    expect(otro).toHaveClass('hover:bg-accent')
+  })
+})
+
 describe('egresado (HIS-06)', () => {
   const egresado = (): UsuarioSesion => ({
     ...usuarioDePrueba('ALUMNO'),

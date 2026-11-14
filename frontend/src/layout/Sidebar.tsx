@@ -30,7 +30,12 @@ export function Sidebar({ colapsado = false, onAlternar, onNavigate }: Props) {
   )
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card">
+    <div className="relative flex h-full min-h-0 flex-col bg-card">
+      {/* Acento: continúa el color del encabezado sobre el menú. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-[3px] bg-primary"
+      />
       <div
         className={cn(
           'flex h-16 shrink-0 items-center gap-2.5 border-b border-border',
@@ -107,23 +112,17 @@ function ItemDelMenu({
       end={item.to === '/'}
       onClick={onNavigate}
       className={cn(
-        'group relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors',
-        'hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-        // Estado activo: el color de la universidad en el fondo suave, la
-        // barra y el ícono; el texto, en el tono oscuro de ese mismo color.
-        'aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-accent-foreground',
+        'flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors',
+        // Hover: un tinte suave del color de la universidad.
+        'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:outline-none',
+        // Estado activo: relleno sólido con el color de la universidad y texto
+        // e ícono blancos (colorConContraste asegura 4,5:1 con blanco).
+        'aria-[current=page]:bg-primary aria-[current=page]:font-semibold aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary aria-[current=page]:hover:text-primary-foreground',
         colapsado && 'justify-center px-0',
       )}
     >
-      <Icono
-        aria-hidden="true"
-        className="size-5 shrink-0 group-aria-[current=page]:text-primary"
-      />
+      <Icono aria-hidden="true" className="size-5 shrink-0" />
       <span className={colapsado ? 'sr-only' : 'truncate'}>{etiqueta}</span>
-      <span
-        aria-hidden="true"
-        className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary opacity-0 group-aria-[current=page]:opacity-100"
-      />
     </NavLink>
   )
 

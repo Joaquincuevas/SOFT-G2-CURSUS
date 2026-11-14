@@ -49,7 +49,7 @@ export function AppShell() {
   return (
     <TooltipProvider>
       <MigasProvider>
-        <div className="min-h-svh bg-background lg:flex">
+        <div className="min-h-svh bg-(color:--color-fondo-pagina) lg:flex">
           <aside
             id="sidebar"
             className={cn(

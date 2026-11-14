@@ -10,10 +10,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
 import { useAuth } from '../auth/auth'
 import { ROL_LABEL } from '../session/roles'
 import { useSession } from '../session/session'
 import { iniciales } from './iniciales'
+import { SOBRE_COLOR } from './sobre-color'
 
 // Menú de la cuenta, en el encabezado: nombre y rol, el perfil (PER-01) y
 // Cerrar sesión. El egresado no tiene perfil: solo puede ver su historial.
@@ -28,7 +30,10 @@ export function MenuUsuario() {
         <Button
           type="button"
           variant="ghost"
-          className="h-auto gap-2.5 px-2 py-1.5 data-[state=open]:bg-muted"
+          className={cn(
+            'h-auto gap-2.5 px-2 py-1.5 data-[state=open]:bg-(color:--color-primary-dark)',
+            SOBRE_COLOR,
+          )}
         >
           <Avatar className="size-9">
             <AvatarFallback
@@ -41,17 +46,12 @@ export function MenuUsuario() {
           {/* En pantallas angostas queda solo el avatar; el nombre sigue siendo
               el nombre accesible del botón. */}
           <span className="grid min-w-0 text-left max-sm:sr-only">
-            <span className="max-w-40 truncate text-sm leading-5 font-medium text-foreground">
+            <span className="max-w-40 truncate text-sm leading-5 font-medium">
               {user.nombre}
             </span>
-            <span className="text-xs leading-[18px] font-normal text-muted-foreground">
-              {rol}
-            </span>
+            <span className="text-xs leading-[18px] font-normal">{rol}</span>
           </span>
-          <ChevronDown
-            aria-hidden="true"
-            className="text-muted-foreground max-sm:hidden"
-          />
+          <ChevronDown aria-hidden="true" className="max-sm:hidden" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">

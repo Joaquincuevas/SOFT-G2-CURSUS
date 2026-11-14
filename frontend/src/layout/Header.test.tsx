@@ -41,6 +41,21 @@ describe('encabezado por rol', () => {
     },
   )
 
+  test('va sobre el color de la universidad, con texto blanco y los controles con foco visible', async () => {
+    const banner = await renderApp('PROFESOR')
+    expect(banner).toHaveClass('bg-primary', 'text-primary-foreground')
+    const cuenta = within(banner).getByRole('button', {
+      name: /Profesor Norte/,
+    })
+    expect(cuenta).toHaveClass(
+      'text-primary-foreground',
+      'focus-visible:ring-primary-foreground',
+    )
+    expect(within(banner).getByRole('button', { name: 'Menú' })).toHaveClass(
+      'focus-visible:ring-primary-foreground',
+    )
+  })
+
   test('no repite el título como subtítulo: un solo encabezado, sin la universidad', async () => {
     const header = within(await renderApp('PROFESOR'))
     expect(header.getAllByRole('heading')).toHaveLength(1)

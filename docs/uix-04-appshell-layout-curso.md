@@ -6,11 +6,12 @@ Tarjeta: UIX-04. Reemplaza el menú lateral, el encabezado y la vista de una sec
 
 - **Menú lateral** (`layout/Sidebar.tsx`, `layout/AppShell.tsx`). Riel claro, con la marca arriba, la navegación en el medio y la universidad y la facultad abajo (antes eran el subtítulo del encabezado).
   - Cada ítem de `NAV_ITEMS` lleva un ícono de lucide (campo `icon` en `navigation.ts`); rutas y permisos son los mismos.
-  - El ítem activo se marca con fondo `--accent`, texto `--accent-foreground`, ícono y barra `--primary`: cambia con el color de la universidad (el Director y el login conservan el de CURSUS).
+  - El ítem activo lleva relleno sólido `--primary` con texto e ícono blancos; el hover es un tinte suave (`--accent`). Una franja de 3 px de `--primary` arriba del menú continúa el color del encabezado. El menú sigue en blanco para que el color destaque. Todo cambia con el color de la universidad (el Director y el login conservan el de CURSUS).
   - Desde 1024 px se puede contraer a solo íconos (`w-16`); el ítem pasa a tener un `Tooltip` con su nombre. La preferencia se guarda en `localStorage` (`cursus-menu-colapsado`) solo cuando la persona la cambia, y la pantalla funciona igual si el navegador no deja guardar.
   - Bajo 1024 px el menú es un `Sheet` que se abre desde el botón «Menú» del encabezado y se cierra al elegir un ítem. `TooltipProvider` se monta una vez en `AppShell`.
   - El egresado sigue viendo solo su historial (el filtro de `navItemsFor` no cambió).
 - **Encabezado** (`layout/Header.tsx`, `layout/MenuUsuario.tsx`, `layout/migas.ts`).
+  - Va sobre el color de la universidad: fondo `--primary` y texto blanco (título, breadcrumbs y menú de usuario). El pill de semestre y el avatar son claros (`--accent` con texto `--accent-foreground`). El hover y el menú abierto usan `--color-primary-dark`, y el foco es un aro blanco separado del fondo (`layout/sobre-color.ts`).
   - Ya no repite el título de la página: la ruta es el breadcrumb y su último paso es el `h1`.
   - El breadcrumb sale de `NAV_ITEMS` y de las pocas subrutas con nombre propio (Historial, Pendientes). La sección de un curso aporta su nombre con `useEtiquetaDeMiga` (`layout/migas-contexto.ts`, `layout/MigasProvider.tsx`).
   - Bajo 640 px el camino no cabe: queda el título y un botón «Volver a …». El título pasa a dos líneas en vez de cortarse con «…».
@@ -24,26 +25,27 @@ Tarjeta: UIX-04. Reemplaza el menú lateral, el encabezado y la vista de una sec
 
 ## Decisiones de diseño
 
-- **Sobrio e institucional, estilo Canvas.** Riel claro con el nombre de la universidad abajo, contenido sobre `--background`, bordes de 1 px y radios de 8 px. Una sola cosa llama la atención: la barra y el fondo del ítem activo, que llevan el color de la universidad.
-- **Sin color nuevo.** Todo sale de los tokens de UIX-01 (`--primary`, `--accent`, `--muted`, `--border`). Inter es la tipografía.
+- **Sobrio e institucional, estilo Canvas.** Riel blanco con el nombre de la universidad abajo, bordes de 1 px y radios de 8 px. El color de la universidad aparece en cuatro lugares y en ningún otro: el encabezado, el ítem activo del menú, la franja fina sobre el menú y un tinte leve en el fondo de la página.
+- **Fondo de la página.** `--color-fondo-pagina` (`tokens.css`) es un 5 % de `--color-primary` sobre blanco: Norte queda `#f4f6f8` y Sur `#f3f7f5`, y las tarjetas siguen blancas. Se eligió 5 % porque con más, el título o los enlaces en `--primary` de las páginas sin migrar pierden margen de contraste en colores cercanos al mínimo de 4,5:1.
+- **Sin color nuevo.** Todo sale de los tokens de UIX-01 (`--primary`, `--accent`, `--muted`, `--border`). Inter es la tipografía. Para el texto sobre el color no hace falta calcular otro: `colorConContraste` solo guarda un color que tenga 4,5:1 con blanco, así que el blanco siempre cumple AA.
 - **El menú no repite el cierre de sesión ni el nombre de la universidad en el encabezado.** Cada dato vive en un solo lugar.
 - **Anchos.** `--sidebar-width` en el riel abierto, `w-16` contraído; el contenido tiene `p-4`, `sm:p-6`, `lg:p-8`.
 
-### Contraste del estado activo
+### Contraste del color de la universidad
 
-Calculado con `contrasteColores` de `@cursus/shared` y comprobado en `layout/contraste-activo.test.ts` con cinco colores de universidad:
+Calculado con `contrasteColores` de `@cursus/shared` y comprobado en `layout/contraste-color.test.ts` con cinco colores de universidad (los dos del seed, el de CURSUS que usa el Director y tres más):
 
-| Universidad    | Texto sobre fondo activo | Título (`--primary` sobre blanco) | Ícono sobre fondo activo |
-| -------------- | ------------------------ | --------------------------------- | ------------------------ |
-| CURSUS y Norte | 11,72:1                  | 8,72:1                            | 7,05:1                   |
-| Sur            | 11,39:1                  | 8,09:1                            | 6,91:1                   |
+| Universidad              | Blanco sobre `--primary` (encabezado, ítem activo) | Blanco sobre el tono oscuro (hover) | Oscuro sobre claro (pill, avatar) | `#666` sobre el fondo | `--primary` sobre el fondo |
+| ------------------------ | -------------------------------------------------- | ----------------------------------- | --------------------------------- | --------------------- | -------------------------- |
+| CURSUS, Norte y Director | 8,72:1                                             | 14,50:1                             | 11,72:1                           | 5,30:1                | 8,05:1                     |
+| Sur                      | 8,09:1                                             | 13,33:1                             | 11,39:1                           | 5,31:1                | 7,48:1                     |
 
-Se exige 4,5:1 para texto y 3:1 para ícono y barra (WCAG 1.4.11). Los otros tres colores del test también pasan.
+Se exige 4,5:1 para texto y 3:1 para el aro de foco, la franja y el ícono (WCAG 1.4.11). Además, una prueba recorre colores al azar y confirma que todo color que acepta `colorConContraste` admite texto blanco con AA, junto con sus tonos claro y oscuro.
 
 ## Cómo verificar
 
 1. `npm run dev -w frontend` y entra con cada rol (profesor, ayudante, alumno, administrativo, director y un egresado).
-2. A 1280 px: el riel muestra el ítem activo con barra; «Contraer menú» deja solo íconos con tooltip y el estado se mantiene al recargar.
+2. A 1280 px: el riel muestra el ítem activo con relleno sólido; «Contraer menú» deja solo íconos con tooltip y el estado se mantiene al recargar.
 3. A 768 y 375 px: el botón «Menú» abre el `Sheet`; elegir un ítem lo cierra.
 4. Entra a una sección (`/mis-cursos/secciones/:id`): el breadcrumb dice «Inicio › ICC101 · Sección 1», la navegación del curso está a la izquierda y `?vista=notas` abre Notas. A 375 px son pestañas.
 5. Menú de usuario: nombre y rol, «Mi perfil» (no para el egresado) y «Cerrar sesión».
@@ -65,6 +67,17 @@ Todas en `docs/evidencias/uix-04-antes-*.png` y `uix-04-despues-*.png`, con el n
 Solo «después»: [menú de usuario](evidencias/uix-04-despues-norte-profesor-menu-usuario-1280.png), [riel contraído](evidencias/uix-04-despues-norte-profesor-riel-contraido-1280.png), [Integrantes](evidencias/uix-04-despues-norte-profesor-curso-integrantes-1280.png), [menú móvil](evidencias/uix-04-despues-norte-alumno-panel-movil-375.png) y [Notas a 375 px](evidencias/uix-04-despues-norte-alumno-curso-notas-375.png).
 
 El cuerpo de Inicio del Administrativo y del Director aparece vacío en «antes» y «después»: sus dashboards están fuera de esta tarjeta.
+
+## Refuerzo del color de la universidad
+
+Un segundo ajuste de esta tarjeta: el color casi no se notaba (solo un tinte claro en el ítem activo, el título y el avatar). Capturas con Director, Administrativo y Alumno, en Norte y Sur, a 1280 y 375 px, en `docs/evidencias/uix-04-color-antes-*.png` y `uix-04-color-despues-*.png` (también la sección del alumno y el foco del menú de usuario):
+
+| Pantalla                  | Antes                                                          | Después                                                          |
+| ------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Alumno, Sur (1280)        | ![](evidencias/uix-04-color-antes-sur-alumno-1280.png)         | ![](evidencias/uix-04-color-despues-sur-alumno-1280.png)         |
+| Alumno, sección (1280)    | ![](evidencias/uix-04-color-antes-norte-alumno-curso-1280.png) | ![](evidencias/uix-04-color-despues-norte-alumno-curso-1280.png) |
+| Administrativo, Sur (375) | ![](evidencias/uix-04-color-antes-sur-administrativo-375.png)  | ![](evidencias/uix-04-color-despues-sur-administrativo-375.png)  |
+| Foco del menú de usuario  | ![](evidencias/uix-04-color-antes-norte-alumno-foco-1280.png)  | ![](evidencias/uix-04-color-despues-norte-alumno-foco-1280.png)  |
 
 ## Fuera de alcance
 

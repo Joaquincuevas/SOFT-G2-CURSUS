@@ -11,10 +11,12 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useSession } from '../session/session'
 import { MenuUsuario } from './MenuUsuario'
 import { useMigasDinamica } from './migas-contexto'
 import { migasDe, type Miga } from './migas'
+import { SOBRE_COLOR } from './sobre-color'
 
 interface Props {
   // Abre el panel del menú (solo bajo 1024 px, donde no hay riel fijo).
@@ -32,12 +34,15 @@ export function Header({ onAbrirMenu, menuAbierto }: Props) {
   const { periodoActivo } = user
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-card px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 bg-primary px-4 text-primary-foreground shadow-sm sm:px-6 lg:px-8">
       <Button
         type="button"
         variant="outline"
         size="icon"
-        className="shrink-0 lg:hidden"
+        className={cn(
+          'shrink-0 border-primary-foreground/50 bg-transparent lg:hidden',
+          SOBRE_COLOR,
+        )}
         aria-label="Menú"
         aria-controls="menu-movil"
         aria-expanded={menuAbierto}
@@ -66,7 +71,7 @@ function Migas({ migas }: { migas: Miga[] }) {
   // En pantallas angostas el título pasa a dos líneas en vez de cortarse
   // («Bienvenido/a, Administrati…»); desde sm vuelve a una línea.
   const clasesTitulo =
-    'm-0 min-w-0 text-sm leading-tight font-semibold text-primary max-sm:line-clamp-2 sm:truncate sm:text-base'
+    'm-0 min-w-0 text-sm leading-tight font-semibold text-primary-foreground max-sm:line-clamp-2 sm:truncate sm:text-base'
 
   if (previas.length === 0) {
     return (
@@ -86,7 +91,7 @@ function Migas({ migas }: { migas: Miga[] }) {
           asChild
           variant="ghost"
           size="icon-sm"
-          className="-ml-1 shrink-0 sm:hidden"
+          className={cn('-ml-1 shrink-0 sm:hidden', SOBRE_COLOR)}
         >
           <Link to={padre.to} aria-label={`Volver a ${padre.etiqueta}`}>
             <ChevronLeft />
@@ -94,11 +99,14 @@ function Migas({ migas }: { migas: Miga[] }) {
         </Button>
       )}
       <Breadcrumb className="min-w-0 flex-1" aria-label="Ubicación">
-        <BreadcrumbList className="flex-nowrap gap-1.5 sm:gap-2">
+        <BreadcrumbList className="flex-nowrap gap-1.5 text-primary-foreground sm:gap-2">
           {previas.map((miga) => (
             <Fragment key={`${miga.to}:${miga.etiqueta}`}>
               <BreadcrumbItem className="max-sm:hidden">
-                <BreadcrumbLink asChild>
+                <BreadcrumbLink
+                  asChild
+                  className="rounded-sm text-primary-foreground underline-offset-4 hover:text-primary-foreground hover:underline focus-visible:ring-2 focus-visible:ring-primary-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-primary focus-visible:outline-none"
+                >
                   <Link to={miga.to ?? '/'}>{miga.etiqueta}</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
