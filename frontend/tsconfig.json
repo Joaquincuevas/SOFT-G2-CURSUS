@@ -1,5 +1,9 @@
 {
   "files": [],
+  // El CLI de shadcn lee este archivo (no tsconfig.app.json) para resolver @/.
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] }
+  },
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
