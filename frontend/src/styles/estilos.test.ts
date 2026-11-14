@@ -210,3 +210,38 @@ describe('tailwind sin preflight', () => {
     )
   })
 })
+
+describe('componentes de shadcn sin preflight', () => {
+  const sinComentarios = tailwind.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  test('el mini-reset cubre botones, campos, enlaces, títulos, listas y tablas', () => {
+    for (const regla of [
+      /:is\(button, input, select, optgroup, textarea\)\[data-slot\]\s*{[^}]*font:\s*inherit/,
+      /button\[data-slot\]\s*{[^}]*background-image:\s*none/,
+      /textarea\[data-slot\]\s*{[^}]*resize:\s*vertical/,
+      /a\[data-slot\]\s*{[^}]*text-decoration:\s*inherit/,
+      /\[data-slot\]\s*{[^}]*border:\s*0 solid/,
+      /:is\(ol, ul, li\)\[data-slot\]\s*{[^}]*list-style:\s*none/,
+      /table\[data-slot\]\s*{[^}]*border-collapse:\s*collapse/,
+    ]) {
+      expect(sinComentarios).toMatch(regla)
+    }
+  })
+
+  test('el mini-reset va en la capa base y solo sobre el elemento, no sobre sus hijos', () => {
+    expect(sinComentarios).toMatch(/@layer base\s*{/)
+    // Un descendiente (`[data-slot] *`, `[data-slot] p`…) tocaría una página
+    // legacy montada dentro de un componente.
+    expect(sinComentarios).not.toMatch(/\[data-slot[^\]]*\]\s+[a-z*.:[]/i)
+  })
+
+  test('la variante dark depende de una clase, no de la preferencia del sistema', () => {
+    expect(sinComentarios).toMatch(/@custom-variant dark \(&:is\(\.dark \*\)\)/)
+  })
+
+  test('el mínimo táctil de 44 px es solo para puntero grueso', () => {
+    expect(sinComentarios).toMatch(
+      /@media \(pointer: coarse\)\s*{[\s\S]*min-height:\s*44px/,
+    )
+  })
+})
