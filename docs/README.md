@@ -37,6 +37,7 @@ Documentación del proyecto:
 - [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
 - [UI-04: tema institucional, contraste y guía de revisión](ui-04-tema-universidad.md)
+- [UIX-01: Tailwind v4, shadcn y tokens (fundación de UI)](uix-01-tailwind-shadcn-base.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
 - [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
