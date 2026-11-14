@@ -1,0 +1,34 @@
+/*
+ * Alertas suaves: fondo muy claro, borde de intensidad media y texto oscuro
+ * del mismo tono, con el enlace en negrita y subrayado (utilidad alert-link,
+ * tailwind.css). Cinco estados: success, danger, warning, info y accent
+ * (violeta). Es "accent" de las alertas; no tiene relación con --accent de
+ * shadcn (el hover de los menús).
+ *
+ * Contraste del texto sobre su fondo: 8,1:1 o más en los cinco (AA pide 4,5:1),
+ * y también sobre blanco y sobre la superficie de la página (#f4f8fb).
+ *
+ * Son colores semánticos, fijos: no cambian con la universidad. Sin modo
+ * oscuro: el proyecto no lo soporta.
+ */
+:root {
+  --alert-success: #e8f5e9;
+  --alert-success-border: #9fd3a6;
+  --alert-success-foreground: #14532d;
+
+  --alert-danger: #fdeceb;
+  --alert-danger-border: #efa9a3;
+  --alert-danger-foreground: #7a1a13;
+
+  --alert-warning: #fff7d6;
+  --alert-warning-border: #ecd272;
+  --alert-warning-foreground: #5c4300;
+
+  --alert-info: #e6f4fb;
+  --alert-info-border: #8fcbe9;
+  --alert-info-foreground: #0b4a68;
+
+  --alert-accent: #f1ebfc;
+  --alert-accent-border: #bfa9ee;
+  --alert-accent-foreground: #3f2680;
+}
