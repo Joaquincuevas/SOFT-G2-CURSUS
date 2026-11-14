@@ -46,13 +46,38 @@ const PORCENTAJE_FONDO = Number(
     tokens,
   )?.[1],
 )
-function fondoDePagina(color: string) {
+// color-mix(in srgb, color pct%, #ffffff)
+function tinte(color: string, porcentaje: number) {
   const canales = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16))
   const mezcla = canales.map((c) =>
-    Math.round((c * PORCENTAJE_FONDO + 255 * (100 - PORCENTAJE_FONDO)) / 100),
+    Math.round((c * porcentaje + 255 * (100 - porcentaje)) / 100),
   )
   return `#${mezcla.map((c) => c.toString(16).padStart(2, '0')).join('')}`
 }
+const fondoDePagina = (color: string) => tinte(color, PORCENTAJE_FONDO)
+
+// Menú de usuario (MenuUsuario.tsx): el tinte de su cabecera sale de la clase
+// que se pinta, y el color de peligro, de tokens.css (--destructive apunta a
+// --color-error).
+const rutaMenu = './MenuUsuario.tsx'
+const fuenteMenu = readFileSync(new URL(rutaMenu, import.meta.url), 'utf8')
+const PORCENTAJE_CABECERA = Number(
+  /bg-\[color-mix\(in_srgb,var\(--color-primary\)_(\d+)%,#fff\)\]/.exec(
+    fuenteMenu,
+  )?.[1],
+)
+const PELIGRO = /--color-error:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1] ?? ''
+// El Director conserva el color de CURSUS en cualquier universidad
+// (TemaUniversidad).
+const ROLES = [
+  'DIRECTOR',
+  'ADMINISTRATIVO',
+  'PROFESOR',
+  'AYUDANTE',
+  'ALUMNO',
+] as const
+const colorDelRol = (rol: string, color: string) =>
+  rol === 'DIRECTOR' ? COLOR_CURSUS : color
 
 describe('contraste del color de la universidad', () => {
   test('el fondo de la página sale de un porcentaje leído de tokens.css', () => {
@@ -88,6 +113,67 @@ describe('contraste del color de la universidad', () => {
       )
       // Los títulos y enlaces en el color de la universidad también.
       expect(contrasteColores(primario, fondo)).toBeGreaterThanOrEqual(4.5)
+    })
+  })
+
+  describe('menú de usuario, por rol y universidad', () => {
+    test('lee el tinte de la cabecera y el color de peligro de donde se pintan', () => {
+      expect(PORCENTAJE_CABECERA).toBeGreaterThan(0)
+      expect(PORCENTAJE_CABECERA).toBeLessThanOrEqual(10)
+      expect(PELIGRO).toMatch(/^#[0-9a-f]{6}$/i)
+    })
+
+    const casos = ROLES.flatMap((rol) =>
+      UNIVERSIDADES.map(([nombre, color]) => [rol, nombre, color] as const),
+    )
+    describe.each(casos)('%s en %s', (rol, _nombre, colorUniversidad) => {
+      const { primario, claro, oscuro } = tonos(
+        colorDelRol(rol, colorUniversidad),
+      )
+
+      test('cabecera: nombre, correo y universidad sobre el tinte, y las iniciales blancas sobre el color: AA', () => {
+        const fondo = tinte(primario, PORCENTAJE_CABECERA)
+        expect(contrasteColores(TEXTO, fondo)).toBeGreaterThanOrEqual(4.5)
+        expect(
+          contrasteColores(TEXTO_SECUNDARIO, fondo),
+        ).toBeGreaterThanOrEqual(4.5)
+        expect(contrasteColores(BLANCO, primario)).toBeGreaterThanOrEqual(4.5)
+        // El rol va en un Badge blanco con texto oscuro.
+        expect(contrasteColores(TEXTO, BLANCO)).toBeGreaterThanOrEqual(4.5)
+      })
+
+      test('hover y foco de Mi perfil: texto oscuro sobre el tinte (AA), ícono y aro de foco: 3:1', () => {
+        expect(contrasteColores(oscuro, claro)).toBeGreaterThanOrEqual(4.5)
+        expect(
+          contrasteColores(TEXTO_SECUNDARIO, claro),
+        ).toBeGreaterThanOrEqual(3)
+        expect(contrasteColores(primario, claro)).toBeGreaterThanOrEqual(3)
+        expect(contrasteColores(TEXTO, BLANCO)).toBeGreaterThanOrEqual(4.5)
+      })
+
+      test('Cerrar sesión en el color de peligro: AA en reposo y con el fondo de foco; el aro, 3:1', () => {
+        const fondoFoco = tinte(PELIGRO, 10)
+        expect(contrasteColores(PELIGRO, BLANCO)).toBeGreaterThanOrEqual(4.5)
+        expect(contrasteColores(PELIGRO, fondoFoco)).toBeGreaterThanOrEqual(4.5)
+      })
+    })
+
+    test('para cualquier color aceptado la cabecera y el hover se leen (AA)', () => {
+      let semilla = 777
+      const azar = () => (semilla = (semilla * 1664525 + 1013904223) % 2 ** 32)
+      let aceptados = 0
+      for (let i = 0; i < 6000; i++) {
+        const color = `#${(azar() % 2 ** 24).toString(16).padStart(6, '0')}`
+        if (!colorConContraste(color)) continue
+        aceptados++
+        const { primario, claro, oscuro } = tonos(color)
+        const fondo = tinte(primario, PORCENTAJE_CABECERA)
+        expect(
+          contrasteColores(TEXTO_SECUNDARIO, fondo),
+        ).toBeGreaterThanOrEqual(4.5)
+        expect(contrasteColores(oscuro, claro)).toBeGreaterThanOrEqual(4.5)
+      }
+      expect(aceptados).toBeGreaterThan(100)
     })
   })
 
