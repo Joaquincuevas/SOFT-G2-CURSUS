@@ -1245,6 +1245,36 @@ describe('nota final (NOT-14)', () => {
     ])
   })
 
+  it('EXP-01 exporta las notas publicadas, con una fila por inscrito y solo notas finales completas', async () => {
+    const token = await tokenDe(PROFESOR)
+    const url = `${rutaFinales()}/csv`
+    const respuesta = await request(app.getHttpServer())
+      .get(url)
+      .set('Authorization', `Bearer ${token}`)
+      .expect('Content-Type', /text\/csv/)
+      .expect('Content-Disposition', 'attachment; filename="notas.csv"')
+      .expect('Cache-Control', 'no-store')
+      .expect(200)
+    const [cabecera, ...filas] = respuesta.text.trimEnd().split('\r\n')
+    expect(cabecera).toBe(
+      '\uFEFF"Alumno";"Nota final 1";"Nota final 2";"Nota final 3";"Nota final"',
+    )
+    expect(filas).toHaveLength(3)
+    expect(filas.map((fila) => fila.slice(fila.indexOf(';')))).toEqual(
+      expect.arrayContaining([';4,0;5,0;6,0;5,1', ';7,0;;;', ';;;;']),
+    )
+    for (const correo of [
+      AYUDANTE,
+      ALUMNO,
+      DIRECTOR,
+      ADMIN_INGENIERIA,
+      (await otroProfesorDeNorte()).correo,
+      PROFESOR_SUR,
+    ]) {
+      await consultar(url, correo, correo === PROFESOR_SUR ? 404 : 403)
+    }
+  })
+
   it('el profesor ve la nota final o parcial de cada alumno activo, por nombre', async () => {
     const { alumnos: lista } = await consultar<NotasFinalesSeccion>(
       rutaFinales(),

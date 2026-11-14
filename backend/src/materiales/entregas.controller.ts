@@ -1,4 +1,5 @@
 import type {
+  ArchivoEntregasZip,
   DescargaArchivo,
   EntregaDeAlumno,
   MiEntregaActividad,
@@ -8,6 +9,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Put,
@@ -82,6 +84,24 @@ export class EntregasDocentesController {
     @Param('actividadId', ParseUUIDPipe) actividadId: string,
   ): Promise<EntregaDeAlumno[]> {
     return this.entregas.listar(
+      contexto,
+      req.usuario!.sub,
+      seccion,
+      actividadId,
+    )
+  }
+
+  @Puede('read', 'Entrega')
+  @IntegranteDeSeccion()
+  @Get('zip')
+  @Header('Cache-Control', 'no-store')
+  archivosZip(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @Req() req: RequestConUsuario,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Param('actividadId', ParseUUIDPipe) actividadId: string,
+  ): Promise<ArchivoEntregasZip[]> {
+    return this.entregas.archivosZip(
       contexto,
       req.usuario!.sub,
       seccion,

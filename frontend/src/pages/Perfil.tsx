@@ -7,13 +7,15 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { ROL_LABEL } from '../session/roles'
 import { useSession } from '../session/session'
+import { ActivarMfa } from './ActivarMfa'
 import { CambiarPassword } from './CambiarPassword'
 import './Perfil.css'
 
 // Perfil del usuario (PER-01). El Figma no tiene esta pantalla: sigue el
 // estilo de las tarjetas y campos de gestión de cursos. Solo el nombre se
 // edita; el Director lo ve en solo lectura (ADR 0001). Debajo, todos los roles
-// pueden cambiar su contraseña (PER-02).
+// pueden cambiar su contraseña (PER-02) y activar la verificación en dos
+// pasos (SEG-01).
 export function Perfil() {
   const { user, actualizarNombre } = useSession()
   const { fetchConSesion } = useAuth()
@@ -142,6 +144,7 @@ export function Perfil() {
         )}
       </form>
       <CambiarPassword />
+      <ActivarMfa />
     </section>
   )
 }

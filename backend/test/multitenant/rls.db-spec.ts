@@ -234,16 +234,18 @@ describe('RLS por universidad', () => {
       })
     })
 
-    it.each(['refresh_token', 'sesion_auth'])(
-      '%s: no es accesible con el rol de la API',
-      async (tabla) => {
-        await comoApp(administrativo(), async (q) => {
-          await expect(q.query(`SELECT * FROM ${tabla}`)).rejects.toMatchObject(
-            { code: SIN_PERMISO },
-          )
+    it.each([
+      'refresh_token',
+      'sesion_auth',
+      'mfa_usuario',
+      'recuperacion_password',
+    ])('%s: no es accesible con el rol de la API', async (tabla) => {
+      await comoApp(administrativo(), async (q) => {
+        await expect(q.query(`SELECT * FROM ${tabla}`)).rejects.toMatchObject({
+          code: SIN_PERMISO,
         })
-      },
-    )
+      })
+    })
   })
 })
 
@@ -352,6 +354,8 @@ describe('contrato del schema', () => {
         ...TABLAS.map(([tabla]) => tabla),
         'curso_cambio',
         'cierre_curso',
+        // SEG-04: registro de solo adición; prueba test/seguridad/eventos.
+        'evento_auditoria',
         'asignacion_cambio',
         // Sin filas en el seed: su RLS la prueba test/asistencia (ASI-01).
         'clase',
@@ -400,7 +404,11 @@ describe('contrato del schema', () => {
         comandos:
           tabla.tabla === 'evaluacion_cambio'
             ? []
-            : ['superadmin_cambio', 'cierre_curso'].includes(tabla.tabla)
+            : [
+                  'superadmin_cambio',
+                  'cierre_curso',
+                  'evento_auditoria',
+                ].includes(tabla.tabla)
               ? ['SELECT']
               : [
                     'curso_cambio',
@@ -432,7 +440,7 @@ describe('contrato del schema', () => {
         WHERE n.nspname = 'public' AND c.relkind = 'r'
           AND c.relname NOT IN ('curso_cambio', 'asignacion_cambio',
                                 'nota_cambio', 'anuncio_cambio', 'asistencia_cambio', 'superadmin_cambio', 'evaluacion_cambio',
-                                'lectura_anuncio')
+                                'evento_auditoria', 'lectura_anuncio')
           AND (c.relname = 'universidad' OR EXISTS (
             SELECT FROM information_schema.columns col
              WHERE col.table_schema = 'public' AND col.table_name = c.relname

@@ -3,6 +3,7 @@ import {
   LARGO_TITULO_ACTIVIDAD,
   ZONA_HORARIA_UNIVERSIDAD,
   type Actividad,
+  type ArchivoEntregasZip,
   type CrearActividad,
   type DescargaArchivo,
   type EntregaDeAlumno,
@@ -107,6 +108,26 @@ function EntregasActividad({ ruta, titulo }: { ruta: string; titulo: string }) {
   const [descargando, setDescargando] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  async function descargarTodas() {
+    setDescargando('zip')
+    setError(null)
+    try {
+      const res = await fetchConSesion(`${ruta}/zip`)
+      if (!res.ok) throw new Error()
+      const archivos = (await res.json()) as ArchivoEntregasZip[]
+      if (!archivos.length) {
+        setError('No hay entregas disponibles para descargar.')
+        return
+      }
+      const { descargarZipEntregas } = await import('./zipEntregas')
+      await descargarZipEntregas(archivos)
+    } catch {
+      setError('No pudimos descargar todas las entregas. Inténtalo nuevamente.')
+    } finally {
+      setDescargando(null)
+    }
+  }
+
   async function descargar(entregaId: string) {
     setDescargando(entregaId)
     setError(null)
@@ -143,6 +164,18 @@ function EntregasActividad({ ruta, titulo }: { ruta: string; titulo: string }) {
       <p className="entregas__resumen">
         {entregados} de {entregas.length} alumnos entregaron
       </p>
+      {entregados > 0 && (
+        <button
+          className="entregas__boton entregas__boton--secundario"
+          type="button"
+          disabled={descargando !== null}
+          onClick={() => void descargarTodas()}
+        >
+          {descargando === 'zip'
+            ? 'Preparando ZIP…'
+            : 'Descargar entregas en ZIP'}
+        </button>
+      )}
       <table className="entregas__tabla" aria-label={`Entregas de ${titulo}`}>
         <thead>
           <tr>

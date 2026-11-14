@@ -12,6 +12,7 @@ import {
   AuthContext,
   pedirLogout,
   pedirToken,
+  pedirTokenMfa,
   renovarToken,
   SESION_CERRADA,
   LoginLimitado,
@@ -134,12 +135,31 @@ export function AuthProvider({ children, initialToken = null }: Props) {
         try {
           const nuevo = await pedirToken(correo, password)
           if (version !== generacion.current) return false
-          if (nuevo) empezar(nuevo)
-          return nuevo !== null
+          if (typeof nuevo === 'string') empezar(nuevo)
+          return typeof nuevo === 'string' ? true : (nuevo ?? false)
         } catch (error) {
           if (version === generacion.current && error instanceof LoginLimitado)
             setAviso(error.message)
           return false
+        }
+      },
+      completarMfa: async (desafio: string, codigo: string) => {
+        await cierreEnCurso.current
+        const version = ++generacion.current
+        setAviso(null)
+        try {
+          const resultado = await pedirTokenMfa(desafio, codigo)
+          if (version !== generacion.current) return 'error' as const
+          if (resultado === 'codigo' || resultado === 'desafio') {
+            return resultado
+          }
+          if (resultado === 'error') return resultado
+          empezar(resultado)
+          return 'ok' as const
+        } catch (error) {
+          if (version === generacion.current && error instanceof LoginLimitado)
+            setAviso(error.message)
+          return 'limitado' as const
         }
       },
       cerrarSesion,

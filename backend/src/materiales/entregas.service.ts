@@ -1,4 +1,5 @@
 import type {
+  ArchivoEntregasZip,
   DescargaArchivo,
   EntregaDeAlumno,
   EntregaInforme,
@@ -280,6 +281,56 @@ export class EntregasService {
         },
       }))
     })
+  }
+
+  async archivosZip(
+    contexto: ContextoUniversidad,
+    usuario: string,
+    seccion: SeccionEspacio,
+    actividad: string,
+  ): Promise<ArchivoEntregasZip[]> {
+    this.exigirDocente(contexto, seccion)
+    const archivos = await this.bd.enTransaccionEnUniversidad(
+      contexto,
+      async (bd) => {
+        await fijarUsuario(bd, usuario)
+        await this.actividadDeSeccion(
+          bd,
+          contexto.universidadId,
+          seccion.id,
+          actividad,
+        )
+        return bd.query<{ correo: string; clave: string; version: string }>(
+          `SELECT u.correo, f.clave, e.version_objeto AS version
+           FROM inscripcion i
+           JOIN usuario u ON u.id = i.usuario_id AND u.universidad_id = i.universidad_id
+           JOIN LATERAL (
+             SELECT x.archivo_id, x.version_objeto FROM entrega x
+              WHERE x.universidad_id = i.universidad_id AND x.actividad_id = $3
+                AND x.alumno_id = u.id
+              ORDER BY x.entregada_at DESC, x.id DESC LIMIT 1
+           ) e ON true
+           JOIN archivo f ON f.id = e.archivo_id AND f.universidad_id = i.universidad_id
+                         AND f.seccion_id = i.seccion_id
+          WHERE i.universidad_id = $1 AND i.seccion_id = $2
+            AND i.archived_at IS NULL AND u.archived_at IS NULL AND u.rol = 'ALUMNO'
+          ORDER BY u.correo, u.id`,
+          [contexto.universidadId, seccion.id, actividad],
+        )
+      },
+    )
+    return Promise.all(
+      archivos.map(async ({ correo, clave, version }, indice) => {
+        // Nombres planos y únicos, incluso si dos correos coinciden al sanearlos.
+        const nombre = `${indice + 1}-${correo.replace(/[^a-zA-Z0-9@._+-]/g, '_').slice(0, 180)}.pdf`
+        const { url } = await this.almacenamiento.firmarDescarga(
+          clave,
+          nombre,
+          version,
+        )
+        return { nombre, url }
+      }),
+    )
   }
 
   // URL firmada de la versión acreditada (version_objeto) de esa entrega,

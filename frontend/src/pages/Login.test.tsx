@@ -27,6 +27,106 @@ async function completarFormulario(correo = CORREO) {
   fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 }
 
+describe('SEG-03: recuperación de contraseña', () => {
+  test('rechaza un fragmento inválido antes de mostrar el formulario', async () => {
+    simularLogin(() => Promise.resolve(new Response(null, { status: 401 })))
+    renderApp('/restablecer-password#invalido')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'El enlace es inválido',
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Guardar contraseña' }),
+    ).toBeNull()
+  })
+
+  test.each([204, 400])(
+    'restablece con confirmación y maneja HTTP %i',
+    async (status) => {
+      const token = 'a'.repeat(64)
+      const api = vi.fn((ruta: string) =>
+        Promise.resolve(
+          new Response(null, {
+            status: ruta === '/api/auth/restablecer-password' ? status : 401,
+          }),
+        ),
+      )
+      vi.stubGlobal('fetch', api)
+      const reemplazar = vi.spyOn(window.history, 'replaceState')
+      try {
+        renderApp(`/restablecer-password#${token}`)
+        const passwordNueva = 'contraseña nueva'
+        fireEvent.change(await screen.findByLabelText('Nueva contraseña'), {
+          target: { value: passwordNueva },
+        })
+        const confirmacion = screen.getByLabelText('Confirma la contraseña')
+        const guardar = screen.getByRole('button', {
+          name: 'Guardar contraseña',
+        })
+        fireEvent.change(confirmacion, { target: { value: 'otra contraseña' } })
+        fireEvent.click(guardar)
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Las contraseñas deben coincidir',
+        )
+        expect(
+          api.mock.calls.some(
+            ([ruta]) => ruta === '/api/auth/restablecer-password',
+          ),
+        ).toBe(false)
+        fireEvent.change(confirmacion, { target: { value: passwordNueva } })
+        fireEvent.click(guardar)
+        if (status === 204) {
+          expect(
+            await screen.findByText(/Contraseña actualizada/),
+          ).toBeVisible()
+          expect(reemplazar).toHaveBeenCalledWith(
+            window.history.state,
+            '',
+            '/restablecer-password',
+          )
+        } else {
+          expect(
+            await screen.findByText(/El enlace es inválido o expiró/),
+          ).toBeVisible()
+        }
+        expect(api).toHaveBeenCalledWith(
+          '/api/auth/restablecer-password',
+          expect.objectContaining({
+            body: JSON.stringify({ token, passwordNueva }),
+          }),
+        )
+      } finally {
+        reemplazar.mockRestore()
+      }
+    },
+  )
+
+  test('abre la recuperación desde el login y muestra el mensaje genérico', async () => {
+    const api = vi.fn((ruta: string) =>
+      Promise.resolve(
+        new Response(null, {
+          status: ruta === '/api/auth/recuperar-password' ? 204 : 401,
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', api)
+    renderApp('/login')
+    fireEvent.click(
+      await screen.findByRole('link', { name: '¿Olvidaste tu contraseña?' }),
+    )
+    fireEvent.change(screen.getByLabelText('Correo institucional'), {
+      target: { value: CORREO },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar enlace' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Si existe una cuenta',
+    )
+    expect(api).toHaveBeenCalledWith(
+      '/api/auth/recuperar-password',
+      expect.objectContaining({ body: JSON.stringify({ correo: CORREO }) }),
+    )
+  })
+})
+
 describe('AUTH-02: credenciales inválidas', () => {
   test.each([CORREO, 'nadie@norte.cursus.test'])(
     'muestra el mismo mensaje, conserva %s y limpia la contraseña',

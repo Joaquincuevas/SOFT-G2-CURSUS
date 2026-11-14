@@ -12,6 +12,7 @@ describe('navegación por rol', () => {
       [
         ['Dashboard', '/'],
         ['Indicadores', '/indicadores'],
+        ['Registro de accesos', '/accesos'],
         ['Universidades', '/universidades'],
         ['Gestión académica', '/cursos'],
       ],

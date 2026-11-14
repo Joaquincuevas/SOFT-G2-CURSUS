@@ -5,6 +5,7 @@ import type { Accion, AppAbility, Sujeto } from '@cursus/shared'
 import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { RutasIndicadores } from './pages/Indicadores'
+import { RegistroAccesos } from './pages/RegistroAccesos'
 import { ReporteFacultad } from './pages/ReporteFacultad'
 import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
@@ -79,6 +80,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
     page: RutasIndicadores,
     title: () => 'Indicadores',
     subtitle: () => 'Período activo de todas las universidades',
+  },
+  {
+    // SEG-05: log de accesos y acciones sensibles, solo del Director.
+    to: '/accesos',
+    label: 'Registro de accesos',
+    icon: 'grid',
+    permiso: { accion: 'read', sujeto: 'RegistroAccesos' },
+    page: RegistroAccesos,
+    title: () => 'Registro de accesos',
+    subtitle: () => 'Inicios de sesión y acciones sensibles',
   },
   {
     // MET-08: reporte académico de la facultad del Administrativo.

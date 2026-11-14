@@ -1,5 +1,6 @@
 import type { NotasFinalesSeccion, SeccionEspacio } from '@cursus/shared'
-import { Controller, Get } from '@nestjs/common'
+import { Controller, Get, Header, Req } from '@nestjs/common'
+import type { RequestConUsuario } from '../auth/jwt-auth.guard.js'
 import { Puede } from '../auth/permisos.decorator.js'
 import { UniversidadActual } from '../auth/universidad-actual.decorator.js'
 import type { ContextoUniversidad } from '../database/base-de-datos.service.js'
@@ -24,5 +25,23 @@ export class NotasFinalesController {
     @SeccionActual() seccion: SeccionEspacio,
   ): Promise<NotasFinalesSeccion> {
     return this.notasFinales.obtener(contexto, seccion)
+  }
+
+  @Puede('read', 'Nota')
+  @IntegranteDeSeccion()
+  @Get('csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="notas.csv"')
+  @Header('Cache-Control', 'no-store')
+  exportarCsv(
+    @UniversidadActual() contexto: ContextoUniversidad,
+    @SeccionActual() seccion: SeccionEspacio,
+    @Req() req: RequestConUsuario,
+  ): Promise<string> {
+    return this.notasFinales.exportarCsv(
+      contexto,
+      seccion,
+      req.usuario?.sub as string,
+    )
   }
 }

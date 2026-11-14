@@ -2,6 +2,10 @@
 
 Documentación del proyecto:
 
+- [OBS-02 · Alertas de salud y errores 5xx en producción](obs-02-alertas-produccion.md)
+- [EXP-02 · Descargar entregas de una actividad en ZIP](exp-02-entregas-zip.md)
+- [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
+- [EXP-01 · Exportación de notas publicadas a CSV](exp-01-exportar-notas-csv.md)
 - [HIS-06 · Acceso de egresados al historial de notas](his-06-acceso-egresados.md)
 - [HIS-05 · Historial de notas del alumno](his-05-historial-notas-alumno.md)
 - [HIS-04 · Consulta de cursos archivados por período](his-04-consultar-cursos-archivados.md)
@@ -19,6 +23,9 @@ Documentación del proyecto:
 - [MET-06: drill-down de carrera a curso del Director](met-06-drilldown-curso.md)
 - [MET-07: distribución de notas de un curso del Director](met-07-distribucion-notas.md)
 - [MET-08: reporte académico de la facultad del Administrativo](met-08-reporte-facultad.md)
+- [SEG-04: registro de inicios de sesión y acciones sensibles](seg-04-registro-accesos.md)
+- [SEG-05: el Director consulta el log de accesos](seg-05-consulta-log-accesos.md)
+- [OBS-01: logs centralizados del backend en AWS](obs-01-logs-centralizados.md)
 
 - [GES-26: vista única de integrantes de una sección](ges-26-integrantes-seccion.md)
 
@@ -95,6 +102,9 @@ Documentación del proyecto:
 - [AUTH-02: credenciales inválidas y guía de revisión](auth-02-credenciales-invalidas.md)
 - [AUTH-03: cierre de sesión y guía de revisión](auth-03-cierre-sesion.md)
 - [AUTH-07: límite de login y guía de revisión](auth-07-rate-limiting-login.md)
+
+- [SEG-01: activar MFA con una app autenticadora y guía de revisión](seg-01-activar-mfa.md)
+- [SEG-02: el usuario ingresa un código TOTP al iniciar sesión](seg-02-totp-en-login.md)
 
 - `informes/`: entregas e informes del curso
 - `c4/`: diagramas C4 (contexto, contenedores, componentes)

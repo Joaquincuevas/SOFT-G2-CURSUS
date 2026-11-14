@@ -2,14 +2,21 @@ import { Module } from '@nestjs/common'
 import { APP_GUARD } from '@nestjs/core'
 import { type JwtSignOptions, JwtModule } from '@nestjs/jwt'
 import { duracionJwt, secretoJwt } from '../config/entorno.js'
+import { SeguridadModule } from '../seguridad/seguridad.module.js'
 import { AuthController } from './auth.controller.js'
 import { AuthService } from './auth.service.js'
 import { JwtAuthGuard } from './jwt-auth.guard.js'
 import { PermisosGuard } from './permisos.guard.js'
 import { LimiteLogin } from './limite-login.service.js'
+import { RecuperacionController } from './recuperacion.controller.js'
+import { RecuperacionService } from './recuperacion.service.js'
+import { CorreoRecuperacion } from './correo-recuperacion.service.js'
+import { RegistroEventos } from './registro-eventos.service.js'
 
 @Module({
   imports: [
+    // SEG-02: verifica el código TOTP al iniciar sesión.
+    SeguridadModule,
     // Se configura al arrancar, cuando el .env ya está cargado.
     JwtModule.registerAsync({
       useFactory: () => ({
@@ -22,10 +29,13 @@ import { LimiteLogin } from './limite-login.service.js'
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, RecuperacionController],
   providers: [
     AuthService,
     LimiteLogin,
+    RecuperacionService,
+    CorreoRecuperacion,
+    RegistroEventos,
     // Todas las rutas exigen sesión, salvo las marcadas con @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // Corre después del JWT: cada ruta debe declarar quién puede usarla.

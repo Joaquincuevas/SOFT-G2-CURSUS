@@ -41,6 +41,8 @@ export type SujetoTabla =
   | 'Metricas'
   // MET-08: reporte académico de la facultad del Administrativo.
   | 'ReporteMetricasFacultad'
+  // SEG-05: log de accesos y acciones sensibles (SEG-04), solo del Director.
+  | 'RegistroAccesos'
 
 // Sujetos de sección: no son tablas, sino las secciones del menú del frontend.
 // Existen porque las secciones dependen del rol y no de los permisos sobre
@@ -98,6 +100,8 @@ export function definirAbilityPara(usuario: { rol: Rol }): AppAbility {
       ])
       // MET-01: indicadores consolidados de todas las universidades.
       can('read', 'Metricas')
+      // SEG-05: consulta el log de accesos de todas las universidades.
+      can('read', 'RegistroAccesos')
       // Ve Gestión académica en solo lectura (vista consolidada).
       can('read', ['PanelDirectorio', 'GestionAcademica'])
       break
