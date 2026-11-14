@@ -1,4 +1,7 @@
 @import './styles/tokens.css';
+@import './styles/shadcn.css';
+@import './styles/alertas.css';
+@import './styles/tailwind.css';
 
 *,
 *::before,

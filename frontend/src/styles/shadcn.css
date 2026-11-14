@@ -1,0 +1,60 @@
+/*
+ * Variables de shadcn mapeadas a los tokens de tokens.css. No hay colores
+ * nuevos: cada una apunta a un token existente (o lo deriva), así que
+ * TemaUniversidad, que sobrescribe --color-primary y sus derivados por
+ * universidad, también cambia los componentes de shadcn.
+ *
+ * Los nombres de shadcn (--background, --card, --accent…) no son los de
+ * tokens.css (--color-background, --color-surface…): el significado también
+ * difiere. Aquí --background es el fondo de la página (--color-surface) y
+ * --card el de las tarjetas (--color-background, blanco).
+ *
+ * Sin modo oscuro: el proyecto no lo soporta.
+ */
+:root {
+  /* 8 px, el --radius-md de tokens.css. Tailwind deriva de aquí sm, md, lg y xl
+     (tailwind.css). */
+  --radius: var(--radius-md);
+
+  --background: var(--color-surface);
+  --foreground: var(--color-text-primary);
+
+  --card: var(--color-background);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-background);
+  --popover-foreground: var(--color-text-primary);
+
+  --primary: var(--color-primary);
+  /* Blanco, no un token: colorConContraste (@cursus/shared) rechaza al guardar
+     un color de universidad que no tenga contraste 4,5:1 con blanco, así que
+     el texto blanco sobre --primary siempre es legible. */
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--color-primary-light);
+  --secondary-foreground: var(--color-primary-dark);
+  /* Hover de los ítems de menús y listas. */
+  --accent: var(--color-primary-light);
+  --accent-foreground: var(--color-primary-dark);
+
+  /* Un gris neutro un poco más oscuro que la página: se distingue del fondo y
+     del blanco de las tarjetas. --muted-foreground (--color-text-secondary)
+     tiene contraste 4,8:1 sobre él. */
+  --muted: color-mix(
+    in srgb,
+    var(--color-text-primary) 6%,
+    var(--color-surface)
+  );
+  --muted-foreground: var(--color-text-secondary);
+
+  --destructive: var(--color-error);
+
+  --border: var(--color-border);
+  /* Borde de los campos de formulario: contraste 3:1 con blanco y con la superficie
+     (WCAG 1.4.11), más marcado que el borde de las tarjetas. */
+  --input: color-mix(
+    in srgb,
+    var(--color-text-secondary) 75%,
+    var(--color-background)
+  );
+  --ring: var(--color-primary);
+}
