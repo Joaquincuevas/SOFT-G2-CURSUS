@@ -1,9 +1,17 @@
-import type { Rol } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import type { Rol, UsuarioSesion } from '@cursus/shared'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import { renderConSesion } from '../test/sesion'
+import { NAV_ITEMS } from '../navigation'
+import {
+  cerrarSesionDesdeElMenu,
+  renderConSesion,
+  usuarioDePrueba,
+} from '../test/sesion'
 
 const renderApp = renderConSesion
+const principal = () =>
+  screen.getByRole('navigation', { name: 'Navegación principal' })
+const menu = () => screen.getByRole('button', { name: 'Menú' })
 
 describe('navegación por rol', () => {
   test.each<[Rol, [string, string][]]>([
@@ -56,9 +64,121 @@ describe('navegación por rol', () => {
     expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual(
       esperados,
     )
+    // Cerrar sesión está en el menú de la cuenta, no en el menú lateral.
     expect(
-      screen.getByRole('button', { name: 'Cerrar Sesión' }),
-    ).toBeInTheDocument()
+      within(nav).queryByRole('button', { name: /cerrar sesión/i }),
+    ).toBeNull()
+  })
+})
+
+describe('íconos del menú', () => {
+  test('todo ítem de NAV_ITEMS declara un ícono y se dibuja', () => {
+    for (const item of NAV_ITEMS) {
+      expect(item.icon, item.to).toBeDefined()
+      const { container, unmount } = render(<item.icon />)
+      expect(container.querySelector('svg'), item.to).not.toBeNull()
+      unmount()
+    }
+  })
+
+  test.each<Rol>([
+    'DIRECTOR',
+    'ADMINISTRATIVO',
+    'PROFESOR',
+    'AYUDANTE',
+    'ALUMNO',
+  ])(
+    'cada ítem del menú de %s lleva su ícono, oculto al lector de pantalla',
+    async (rol) => {
+      const nav = await renderApp(rol)
+      const enlaces = within(nav).getAllByRole('link')
+      expect(enlaces.length).toBeGreaterThan(1)
+      for (const enlace of enlaces) {
+        const icono = enlace.querySelector('svg')
+        expect(icono, enlace.textContent ?? '').not.toBeNull()
+        expect(icono).toHaveAttribute('aria-hidden', 'true')
+      }
+    },
+  )
+})
+
+describe('isotipo de CURSUS', () => {
+  const riel = () => document.querySelector('aside#sidebar') as HTMLElement
+
+  test('el menú expandido lleva el isotipo en el color primario, junto al nombre y sin recuadro', async () => {
+    await renderApp('PROFESOR')
+    const isotipo = riel().querySelector('svg[viewBox]') as SVGElement
+    expect(isotipo).toHaveClass('text-primary')
+    expect(isotipo).toHaveAttribute('width', '32')
+    // Con el nombre al lado, el isotipo no se lee dos veces.
+    expect(isotipo).toHaveAttribute('aria-hidden', 'true')
+    expect(within(riel()).getByText('CURSUS')).toBeVisible()
+    expect(riel().querySelector('.bg-primary.rounded-lg')).toBeNull()
+  })
+
+  test('contraído queda solo el isotipo, con el nombre accesible', async () => {
+    await renderApp('PROFESOR')
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
+    expect(within(riel()).getByRole('img', { name: 'CURSUS' })).toHaveClass(
+      'text-primary',
+    )
+    expect(within(riel()).getByText('CURSUS').className).toContain('sr-only')
+  })
+
+  test('el 404 dentro de la app lleva el isotipo en el color primario', async () => {
+    await renderApp('PROFESOR', '/no-existe')
+    const pagina = await screen.findByRole('region', {
+      name: 'Página no encontrada',
+    })
+    expect(within(pagina).getByRole('img', { name: 'CURSUS' })).toHaveClass(
+      'text-primary',
+    )
+  })
+})
+
+describe('color de la universidad en el menú', () => {
+  test('el ítem activo va con relleno sólido y texto blanco, y los demás con hover suave', async () => {
+    await renderApp('PROFESOR')
+    const activo = within(principal()).getByRole('link', { name: 'Dashboard' })
+    expect(activo).toHaveAttribute('aria-current', 'page')
+    expect(activo).toHaveClass(
+      'aria-[current=page]:bg-primary',
+      'aria-[current=page]:text-primary-foreground',
+    )
+    const otro = within(principal()).getByRole('link', { name: 'Mis Cursos' })
+    expect(otro).not.toHaveAttribute('aria-current')
+    expect(otro).toHaveClass('hover:bg-accent')
+  })
+})
+
+describe('egresado (HIS-06)', () => {
+  const egresado = (): UsuarioSesion => ({
+    ...usuarioDePrueba('ALUMNO'),
+    egresado: true,
+  })
+
+  test('el menú ofrece solo el historial de notas, con su ícono', async () => {
+    const nav = await renderApp('ALUMNO', '/', {
+      '/api/auth/yo': egresado,
+    })
+    const enlaces = within(nav).getAllByRole('link')
+    expect(enlaces.map((l) => [l.textContent, l.getAttribute('href')])).toEqual(
+      [['Historial de notas', '/mis-cursos/historial']],
+    )
+    expect(enlaces[0].querySelector('svg')).not.toBeNull()
+  })
+
+  test('el menú de la cuenta no tiene Mi perfil, solo Cerrar sesión', async () => {
+    await renderApp('ALUMNO', '/', { '/api/auth/yo': egresado })
+    await screen.findByRole('heading', { name: 'Historial de notas' })
+    const disparador = within(screen.getByRole('banner'))
+      .getAllByRole('button')
+      .find((b) => b.getAttribute('aria-haspopup') === 'menu')!
+    fireEvent.keyDown(disparador, { key: 'Enter' })
+    const opciones = within(await screen.findByRole('menu')).getAllByRole(
+      'menuitem',
+    )
+    expect(opciones.map((o) => o.textContent)).toEqual(['Cerrar sesión'])
   })
 })
 
@@ -79,9 +199,9 @@ test('el ítem activo cambia al navegar', async () => {
   ).toBeInTheDocument()
 })
 
-test('Cerrar Sesión olvida el token y vuelve a /login', async () => {
+test('Cerrar sesión olvida el token y vuelve a /login', async () => {
   await renderApp('DIRECTOR', '/universidades')
-  fireEvent.click(screen.getByRole('button', { name: 'Cerrar Sesión' }))
+  await cerrarSesionDesdeElMenu()
 
   expect(
     await screen.findByRole('heading', {
@@ -94,36 +214,130 @@ test('Cerrar Sesión olvida el token y vuelve a /login', async () => {
   ).not.toBeInTheDocument()
 })
 
-describe('menú en pantalla angosta', () => {
-  const menuButton = () => screen.getByRole('button', { name: 'Menú' })
-  const sidebar = () => document.getElementById('sidebar')
+describe('menú contraíble', () => {
+  const contraer = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
 
-  test('el botón abre y cierra el menú', async () => {
-    await renderApp('ALUMNO')
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
-    expect(sidebar()).toHaveAttribute('data-open', 'false')
+  test('al contraer quedan los íconos con su nombre accesible y vuelve a expandirse', async () => {
+    await renderApp('PROFESOR')
+    contraer()
 
-    fireEvent.click(menuButton())
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'true')
-    expect(sidebar()).toHaveAttribute('data-open', 'true')
+    const boton = screen.getByRole('button', { name: 'Expandir menú' })
+    // Los nombres siguen en el árbol de accesibilidad aunque no se vean.
+    expect(
+      within(principal()).getByRole('link', { name: 'Mis Cursos' }),
+    ).toBeInTheDocument()
+    expect(within(principal()).getByText('Mis Cursos').className).toContain(
+      'sr-only',
+    )
 
-    fireEvent.click(menuButton())
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(boton)
+    expect(
+      screen.getByRole('button', { name: 'Contraer menú' }),
+    ).toBeInTheDocument()
+    expect(within(principal()).getByText('Mis Cursos').className).not.toContain(
+      'sr-only',
+    )
   })
 
-  test('se cierra al navegar, con clic fuera y con Escape', async () => {
+  test('al contraer, el nombre aparece en un tooltip al enfocar el ícono', async () => {
+    await renderApp('PROFESOR')
+    contraer()
+
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    fireEvent.focus(
+      within(principal()).getByRole('link', { name: 'Mis Cursos' }),
+    )
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Mis Cursos')
+  })
+
+  test('sin contraer no hay tooltips', async () => {
+    await renderApp('PROFESOR')
+    fireEvent.focus(
+      within(principal()).getByRole('link', { name: 'Mis Cursos' }),
+    )
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
+  test('se recuerda en este navegador, y solo cuando se cambia', async () => {
+    expect(localStorage.length).toBe(0)
+    await renderApp('PROFESOR')
+    expect(localStorage.length).toBe(0)
+
+    contraer()
+    expect(localStorage.getItem('cursus-menu-colapsado')).toBe('1')
+  })
+
+  test('arranca contraído si así quedó la última vez', async () => {
+    localStorage.setItem('cursus-menu-colapsado', '1')
+    await renderApp('PROFESOR')
+    expect(
+      screen.getByRole('button', { name: 'Expandir menú' }),
+    ).toBeInTheDocument()
+  })
+
+  test('muestra la universidad y la facultad al pie, solo con el menú expandido', async () => {
+    await renderApp('ADMINISTRATIVO')
+    const riel = document.getElementById('sidebar')!
+    expect(within(riel).getByText('Universidad Demo Norte')).toBeInTheDocument()
+    expect(within(riel).getByText('Facultad de Ingeniería')).toBeInTheDocument()
+
+    contraer()
+    expect(within(riel).queryByText('Universidad Demo Norte')).toBeNull()
+  })
+})
+
+describe('panel del menú en pantalla angosta', () => {
+  test('el botón del encabezado abre el panel con el mismo menú', async () => {
+    await renderApp('ALUMNO')
+    // Con el panel abierto, el resto de la página queda oculto al lector de
+    // pantalla: el botón se toma antes.
+    const boton = menu()
+    expect(boton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    fireEvent.click(boton)
+    const panel = within(await screen.findByRole('dialog', { name: 'Menú' }))
+    expect(boton).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      panel
+        .getAllByRole('link')
+        .map((l) => [l.textContent, l.getAttribute('href')]),
+    ).toEqual([
+      ['Dashboard', '/'],
+      ['Mis Cursos', '/mis-cursos'],
+    ])
+    // En el panel el menú siempre va completo: sin botón para contraer.
+    expect(
+      panel.queryByRole('button', { name: /contraer|expandir/i }),
+    ).toBeNull()
+  })
+
+  test('se cierra al navegar y con Escape', async () => {
     await renderApp('ALUMNO')
 
-    fireEvent.click(menuButton())
-    fireEvent.click(screen.getByRole('link', { name: 'Mis Cursos' }))
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(menu())
+    const panel = within(await screen.findByRole('dialog', { name: 'Menú' }))
+    fireEvent.click(panel.getByRole('link', { name: 'Mis Cursos' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Mis Cursos' }),
+    ).toBeInTheDocument()
 
-    fireEvent.click(menuButton())
-    fireEvent.click(screen.getByTestId('menu-backdrop'))
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(menu())
+    await screen.findByRole('dialog', { name: 'Menú' })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 
-    fireEvent.click(menuButton())
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(menuButton()).toHaveAttribute('aria-expanded', 'false')
+  test('el panel también lleva el ítem del egresado', async () => {
+    await renderApp('ALUMNO', '/', {
+      '/api/auth/yo': () => ({ ...usuarioDePrueba('ALUMNO'), egresado: true }),
+    })
+    fireEvent.click(menu())
+    const panel = within(await screen.findByRole('dialog', { name: 'Menú' }))
+    expect(panel.getAllByRole('link').map((l) => l.textContent)).toEqual([
+      'Historial de notas',
+    ])
   })
 })

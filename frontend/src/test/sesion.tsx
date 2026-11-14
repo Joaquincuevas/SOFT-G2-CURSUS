@@ -1,5 +1,5 @@
 import type { Rol, UsuarioSesion } from '@cursus/shared'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 import App from '../App'
@@ -250,4 +250,22 @@ export async function renderConSesion(
   simularBackend(rol, rutas)
   renderApp(path, 'jwt-de-prueba')
   return screen.findByRole('navigation', { name: 'Navegación principal' })
+}
+
+// Abre el menú de la cuenta, en el encabezado. Radix lo abre con el teclado en
+// jsdom (con el puntero espera eventos que jsdom no genera).
+export async function abrirMenuUsuario() {
+  const encabezado = await screen.findByRole('banner')
+  const disparador = within(encabezado)
+    .getAllByRole('button')
+    .find((boton) => boton.getAttribute('aria-haspopup') === 'menu')
+  if (!disparador)
+    throw new Error('El encabezado no tiene el menú de la cuenta')
+  fireEvent.keyDown(disparador, { key: 'Enter' })
+  return screen.findByRole('menu')
+}
+
+export async function cerrarSesionDesdeElMenu() {
+  await abrirMenuUsuario()
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
 }

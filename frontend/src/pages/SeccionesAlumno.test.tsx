@@ -66,7 +66,9 @@ describe('ESP-03: dashboard del alumno', () => {
     fireEvent.click((await tarjetas())[0])
     fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
     await screen.findByText('Nuevo')
-    fireEvent.click(screen.getByRole('link', { name: 'Volver al Dashboard' }))
+    fireEvent.click(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Inicio' }),
+    )
     expect((await tarjetas())[0]).toHaveTextContent('1 anuncio nuevo')
     leido = true
     registrar(new Response(null, { status: 204 }))
@@ -111,7 +113,9 @@ describe('ESP-03: dashboard del alumno', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
     await screen.findByText('Nuevo')
     await waitFor(() => expect(marcas).toBe(1))
-    fireEvent.click(screen.getByRole('link', { name: 'Volver al Dashboard' }))
+    fireEvent.click(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Inicio' }),
+    )
     expect((await tarjetas())[0]).toHaveTextContent('0 anuncios nuevos')
     fireEvent.click((await tarjetas())[0])
     fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))

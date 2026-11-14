@@ -141,50 +141,47 @@ describe('vista de la sección (ESP-04)', () => {
       await renderConSesion(rol, VISTA, { [RUTA]: () => ({ ...RESUMEN, rol }) })
 
       const v = await vista()
-      // Solo las pestañas deshabilitadas y el enlace de vuelta: ningún botón
-      // de gestión (agregar o quitar alumnos, cargar CSV, asignar docentes,
-      // editar horario).
+      // Solo pestañas y accesos (enlaces): ningún botón de gestión (agregar o
+      // quitar alumnos, cargar CSV, asignar docentes, editar horario).
       expect(v.queryAllByRole('button')).toEqual([])
       expect(
-        v.queryByRole('button', {
+        v.queryByRole('link', {
           name: /agregar|quitar|cargar|asignar|editar/i,
         }),
       ).not.toBeInTheDocument()
-      expect(v.getAllByRole('link').map((a) => a.textContent)).toEqual([
-        'Volver al Dashboard',
-      ])
+      expect(v.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(
+        [
+          `${VISTA}?vista=anuncios`,
+          `${VISTA}?vista=material`,
+          `${VISTA}?vista=entregas`,
+          `${VISTA}?vista=notas`,
+          `${VISTA}?vista=asistencia`,
+        ],
+      )
     },
   )
 
-  test('muestra las pestañas de la Fase 4; solo las implementadas se habilitan', async () => {
+  test('la navegación de la sección tiene Home y las demás secciones, todas habilitadas', async () => {
     await renderConSesion('ALUMNO', VISTA, { [RUTA]: () => RESUMEN })
 
     const pestanas = within(
       (await vista()).getByRole('tablist', { name: 'Pestañas de la sección' }),
     ).getAllByRole('tab')
     expect(pestanas.map((p) => p.textContent)).toEqual([
-      'Notas',
-      'Material',
+      'Home',
       'Anuncios',
-      'Asistencia',
+      'Material',
       'Entregas',
+      'Notas',
+      'Asistencia',
+      'Integrantes',
     ])
-    // Implementadas: Notas (NOT-01), Material (MAT-06), Anuncios (ANU-01),
-    // Asistencia (ASI-01) y Entregas (MAT-08).
-    const HABILITADAS = [
-      'Notas',
-      'Material',
-      'Anuncios',
-      'Asistencia',
-      'Entregas',
-    ]
     for (const pestana of pestanas) {
-      if (HABILITADAS.includes(pestana.textContent ?? '')) {
-        expect(pestana).toBeEnabled()
-      } else {
-        expect(pestana).toBeDisabled()
-      }
-      expect(pestana).toHaveAttribute('aria-selected', 'false')
+      expect(pestana).toBeEnabled()
+      expect(pestana).toHaveAttribute(
+        'aria-selected',
+        String(pestana.textContent === 'Home'),
+      )
     }
     // Sin textos de trabajo pendiente en la UI.
     expect(document.body).not.toHaveTextContent(/TODO|pendiente|próximamente/i)
@@ -224,6 +221,8 @@ describe('vista de la sección (ESP-04)', () => {
 
 describe('alumnos de la sección (ESP-05)', () => {
   const ALUMNOS = '/api/espacio/secciones/seccion-1/alumnos'
+  // La lista de alumnos está en Integrantes (?vista=integrantes).
+  const INTEGRANTES = `${VISTA}?vista=integrantes`
   const LISTA: AlumnosEspacio = {
     total: 3,
     // El backend ya los entrega ordenados por nombre.
@@ -250,7 +249,7 @@ describe('alumnos de la sección (ESP-05)', () => {
     within(await screen.findByRole('region', { name: nombre }))
 
   test('el profesor ve el total y la lista con nombre y correo, en orden', async () => {
-    await renderConSesion('PROFESOR', VISTA, {
+    await renderConSesion('PROFESOR', INTEGRANTES, {
       [RUTA]: () => comoProfesor,
       [ALUMNOS]: () => LISTA,
     })
@@ -268,7 +267,7 @@ describe('alumnos de la sección (ESP-05)', () => {
   })
 
   test('la lista es de solo lectura: sin botones ni enlaces', async () => {
-    await renderConSesion('PROFESOR', VISTA, {
+    await renderConSesion('PROFESOR', INTEGRANTES, {
       [RUTA]: () => comoProfesor,
       [ALUMNOS]: () => LISTA,
     })
@@ -282,7 +281,7 @@ describe('alumnos de la sección (ESP-05)', () => {
   })
 
   test('sin alumnos inscritos muestra el estado vacío', async () => {
-    await renderConSesion('PROFESOR', VISTA, {
+    await renderConSesion('PROFESOR', INTEGRANTES, {
       [RUTA]: () => comoProfesor,
       [ALUMNOS]: () => ({ total: 0, alumnos: [] }),
     })
@@ -295,7 +294,7 @@ describe('alumnos de la sección (ESP-05)', () => {
 
   test('si falla la carga permite reintentar', async () => {
     let intentos = 0
-    await renderConSesion('PROFESOR', VISTA, {
+    await renderConSesion('PROFESOR', INTEGRANTES, {
       [RUTA]: () => comoProfesor,
       [ALUMNOS]: () => (++intentos === 1 ? json({}, 500) : LISTA),
     })
@@ -313,7 +312,7 @@ describe('alumnos de la sección (ESP-05)', () => {
     '%s no ve la sección de alumnos ni la pide',
     async (rol) => {
       let pedidas = 0
-      await renderConSesion(rol, VISTA, {
+      await renderConSesion(rol, INTEGRANTES, {
         [RUTA]: () => ({ ...RESUMEN, rol }),
         [ALUMNOS]: () => {
           pedidas++
@@ -329,6 +328,147 @@ describe('alumnos de la sección (ESP-05)', () => {
         screen.queryByText('angela.mora@norte.cursus.test'),
       ).not.toBeInTheDocument()
       expect(pedidas).toBe(0)
+    },
+  )
+})
+
+describe('layout de curso (UIX-04)', () => {
+  const ANUNCIOS = '/api/espacio/secciones/seccion-1/anuncios'
+  const ALUMNOS = '/api/espacio/secciones/seccion-1/alumnos'
+  const rutas = (rol: Rol = 'PROFESOR') => ({
+    [RUTA]: () => ({ ...RESUMEN, rol }),
+    [ANUNCIOS]: () => [],
+    [ALUMNOS]: () => ({ total: 0, alumnos: [] }),
+  })
+  const pestana = async (nombre: string) =>
+    (await vista()).getByRole('tab', { name: nombre })
+
+  test('el Home es la vista por defecto: resumen con curso, período, rol, horario, equipo y accesos', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+    const v = await vista()
+
+    expect(v.getByText('Período 2026-2')).toBeInTheDocument()
+    expect(
+      v.getByRole('heading', { name: 'Introducción a la Programación' }),
+    ).toBeInTheDocument()
+    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'true')
+    expect(v.getByRole('tabpanel', { name: 'Home' })).toBeInTheDocument()
+    expect(
+      v.getByRole('heading', { name: 'Horario y sala' }),
+    ).toBeInTheDocument()
+    expect(
+      v.getByRole('heading', { name: 'Equipo docente' }),
+    ).toBeInTheDocument()
+    const accesos = within(v.getByRole('region', { name: 'Accesos' }))
+    expect(accesos.getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'AnunciosAvisos de la sección',
+      'MaterialArchivos y documentos',
+      'EntregasTrabajos e informes',
+      'NotasEvaluaciones y calificaciones',
+      'AsistenciaClases y asistencia',
+    ])
+  })
+
+  test('elegir una sección cambia el contenido y la URL (?vista=), y Home la quita', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+
+    fireEvent.click(await pestana('Anuncios'))
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
+    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'false')
+    expect(
+      await screen.findByRole('tabpanel', { name: 'Anuncios' }),
+    ).toBeInTheDocument()
+    // El resumen ya no está: cada sección se muestra sola.
+    expect(screen.queryByRole('heading', { name: 'Horario y sala' })).toBeNull()
+
+    fireEvent.click(await pestana('Home'))
+    expect(
+      await screen.findByRole('heading', { name: 'Horario y sala' }),
+    ).toBeInTheDocument()
+  })
+
+  test('un acceso del Home abre esa sección', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+    const v = await vista()
+    fireEvent.click(
+      within(v.getByRole('region', { name: 'Accesos' })).getByRole('link', {
+        name: /^Anuncios/,
+      }),
+    )
+    expect(
+      await screen.findByRole('tabpanel', { name: 'Anuncios' }),
+    ).toBeInTheDocument()
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('un enlace con ?vista= abre directo esa sección; un valor desconocido cae en el Home', async () => {
+    await renderConSesion('PROFESOR', `${VISTA}?vista=anuncios`, rutas())
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('un ?vista= desconocido muestra el Home', async () => {
+    await renderConSesion('PROFESOR', `${VISTA}?vista=otra-cosa`, rutas())
+    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  test('Integrantes muestra el equipo docente a todos y los alumnos solo al profesor', async () => {
+    await renderConSesion(
+      'ALUMNO',
+      `${VISTA}?vista=integrantes`,
+      rutas('ALUMNO'),
+    )
+    const panel = within(
+      await screen.findByRole('tabpanel', { name: 'Integrantes' }),
+    )
+    expect(panel.getByText('Diego Muñoz')).toBeInTheDocument()
+    expect(panel.queryByRole('region', { name: /^Alumnos/ })).toBeNull()
+  })
+
+  test('Material lleva el sílabo vigente arriba', async () => {
+    await renderConSesion('ALUMNO', `${VISTA}?vista=material`, {
+      ...rutas('ALUMNO'),
+      '/api/espacio/secciones/seccion-1/materiales': () => [],
+      '/api/espacio/secciones/seccion-1/silabo': () => [],
+    })
+    const panel = within(
+      await screen.findByRole('tabpanel', { name: 'Material' }),
+    )
+    expect(
+      await panel.findByRole('region', { name: 'Sílabo del curso' }),
+    ).toBeInTheDocument()
+  })
+
+  test('un curso cerrado lo avisa con una alerta informativa', async () => {
+    await renderConSesion('PROFESOR', VISTA, {
+      ...rutas(),
+      [RUTA]: () => ({ ...RESUMEN, rol: 'PROFESOR', cursoCerrado: true }),
+    })
+    const v = await vista()
+    expect(v.getByText('Curso cerrado')).toBeInTheDocument()
+    expect(
+      v.getByText('Las notas, evaluaciones y asistencia son de solo lectura.'),
+    ).toBeInTheDocument()
+    expect(
+      v.getByText('Curso cerrado').closest('[data-slot=alert]'),
+    ).toHaveAttribute('data-variant', 'info')
+  })
+
+  test.each<Rol>(['PROFESOR', 'AYUDANTE', 'ALUMNO'])(
+    'la navegación de la sección es la misma para %s',
+    async (rol) => {
+      await renderConSesion(rol, VISTA, rutas(rol))
+      const nombres = (await vista())
+        .getAllByRole('tab')
+        .map((t) => t.textContent)
+      expect(nombres).toEqual([
+        'Home',
+        'Anuncios',
+        'Material',
+        'Entregas',
+        'Notas',
+        'Asistencia',
+        'Integrantes',
+      ])
     },
   )
 })
