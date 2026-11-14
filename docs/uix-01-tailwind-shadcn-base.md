@@ -1,16 +1,18 @@
 # UIX-01: Tailwind v4, shadcn y tokens (fundación de UI)
 
-Tarjeta: UIX-01. Es la base para los componentes de shadcn (UIX-02) y la migración de las páginas. Esta tarjeta no migra ninguna página ni agrega componentes: ninguna página cambia.
+Tarjeta: UIX-01 (incluye la antigua UIX-02, los componentes base). Es la base para migrar las páginas: Tailwind v4, shadcn, los tokens, 21 componentes y el `Alert` suave. Esta tarjeta no migra ninguna página: ninguna página cambia.
 
 ## Qué cambia
 
-- **Dependencias del frontend.** En `dependencies`: `class-variance-authority`, `clsx`, `tailwind-merge` y `lucide-react`. En `devDependencies`: `tailwindcss`, `@tailwindcss/vite` y `tw-animate-css` (se usan al compilar). El plugin va registrado en `vite.config.ts`.
-- **Alias `@/` hacia `src/`.** En `vite.config.ts` (que también lee Vitest) y en `tsconfig.app.json` (editor y `tsc`).
+- **Dependencias del frontend.** En `dependencies`: `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`, `radix-ui` y `sonner`. En `devDependencies`: `tailwindcss`, `@tailwindcss/vite` y `tw-animate-css` (se usan al compilar). El plugin va registrado en `vite.config.ts`.
+- **Alias `@/` hacia `src/`.** En `vite.config.ts` (que también lee Vitest), en `tsconfig.app.json` (editor y `tsc`) y en `tsconfig.json` (lo lee el CLI de shadcn).
 - **`components.json`** de shadcn: estilo `new-york`, variables CSS, `@/components`, `@/lib`, íconos de lucide, y `src/styles/tailwind.css` como archivo de estilos. **`src/lib/utils.ts`** con `cn()`.
 - **Tres archivos de estilos nuevos**, importados desde `index.css` después de `tokens.css`:
   - `styles/tailwind.css`: las capas de Tailwind (sin preflight), el mapeo de utilidades y los radios y sombras.
   - `styles/shadcn.css`: las variables de shadcn apuntando a los tokens existentes.
   - `styles/alertas.css`: los tokens de las alertas suaves.
+
+- **21 componentes de shadcn** en `src/components/ui/` (ver más abajo), el `Alert` con las cinco variantes y los polyfills de Vitest para Radix.
 
 `tokens.css`, `TemaUniversidad`, `navigation.ts`, `AppShell` y el CSS de cada página no cambian.
 
@@ -88,6 +90,55 @@ Variables: `--alert-<estado>`, `--alert-<estado>-border` y `--alert-<estado>-for
 
 ![Tokens con la universidad Sur: --primary sigue al color de la universidad](evidencias/uix-01-tokens-sur.png)
 
+## Componentes
+
+`button`, `input`, `label`, `textarea`, `card`, `badge`, `alert`, `dialog`, `sheet`, `dropdown-menu`, `tabs`, `table`, `skeleton`, `sonner`, `native-select`, `tooltip`, `avatar`, `separator`, `breadcrumb`, `checkbox` y `switch`, estilo `new-york`, agregados con `npx shadcn@latest add … --yes` desde `frontend/` (el CLI aceptó `components.json` sin cambios). Quedaron en el formato de código del repo (Prettier). Nadie más modifica `components/ui/`.
+
+Lo que se ajustó respecto de lo que genera el CLI:
+
+- **Alias.** El CLI lee `tsconfig.json` (el archivo raíz de referencias), que no tenía `paths`: dejó los archivos en una carpeta literal `@/` y escribió `import { cn } from "cn"` (un paquete de npm que no es el nuestro) y agregó ese paquete. Se agregó `paths` a `tsconfig.json` y se reescribieron los imports a `@/lib/utils`. **Al agregar más componentes con el CLI, hay que repetir ese cambio de import y quitar `cn` de `package.json`.**
+- **`sonner`.** El original usa `next-themes`, que no está en el proyecto: el tema es siempre el claro y se quitó la dependencia.
+- **`radix-ui`.** Es el paquete único que usa hoy el CLI (en vez de un `@radix-ui/react-*` por componente). El lock agrega 74 paquetes y no quita ninguno; el build solo incluye las primitivas que se importan. Cambiar a paquetes sueltos implica reescribir 13 imports.
+- **Textos en español.** Los `sr-only` del diálogo, del panel y del breadcrumb («Cerrar», «Más»).
+- **`NativeSelect`.** Se usa en lugar del `Select` de Radix para conservar el `<select>` nativo: los tests siguen usando `combobox`, `selectOptions` y `fireEvent.change`.
+- **ESLint.** `react-refresh/only-export-components` está apagada solo en `src/components/ui/`, porque cada componente exporta junto su función de variantes (`buttonVariants`…).
+- **`TooltipProvider`.** `Tooltip` lo necesita en un ancestro; se monta junto con el AppShell (UIX-04).
+
+### Estilos de los componentes sin preflight
+
+Los componentes de shadcn suponen el reset global de preflight. Para que se vean bien sin él, `tailwind.css` agrega en la capa `base` un mini-reset **solo sobre el elemento que lleva `data-slot`, nunca sobre sus hijos**: borde en 0, márgenes y relleno en 0, `font: inherit` y fondo transparente en botones y campos, enlaces sin color ni subrayado propios, títulos y listas sin estilo, tablas colapsadas y `resize: vertical` en el textarea. Una página legacy montada dentro de un componente (por ejemplo, en un `TabsContent`) conserva sus estilos. Cualquier utilidad o regla legacy lo supera. Se retira en UIX-24, cuando se activa preflight.
+
+Otros dos ajustes de `tailwind.css`:
+
+- **`@custom-variant dark (&:is(.dark *))`.** Los componentes traen variantes `dark:`. CURSUS no tiene modo oscuro: atadas a una clase `.dark` que nadie pone, no se activan en el navegador de quien use el tema oscuro del sistema.
+- **Mínimo táctil de 44 px** en botones, campos, `NativeSelect` y pestañas, solo con puntero grueso (`@media (pointer: coarse)`). En escritorio conservan su tamaño (36 px de alto por defecto).
+
+### Alert
+
+Variantes `default` (neutra), `success`, `danger`, `warning`, `info` y `accent`, con los tokens de alertas: fondo claro, borde de intensidad media, texto oscuro del mismo tono y enlace interno en negrita y subrayado (`alert-link`, aplicado a todo `<a>` dentro de la alerta). `danger` y `warning` llevan `role="alert"` (interrumpen al lector de pantalla); las demás, `role="status"`. Cada estado debe ir con un ícono o con texto que lo diga: el color solo no basta.
+
+```tsx
+<Alert variant="danger">
+  <OctagonX />
+  <AlertTitle>No pudimos guardar el curso</AlertTitle>
+  <AlertDescription>
+    Revisa el código del curso. <a href="#codigo">Ir al campo</a>
+  </AlertDescription>
+</Alert>
+```
+
+![Componentes con la universidad Norte](evidencias/uix-01-componentes-norte-1280.png)
+
+![Componentes con la universidad Sur](evidencias/uix-01-componentes-sur-1280.png)
+
+![Componentes a 375 px](evidencias/uix-01-componentes-norte-375.png)
+
+![Diálogo](evidencias/uix-01-componentes-dialogo-1280.png)
+
+![Panel lateral a 375 px](evidencias/uix-01-componentes-panel-375.png)
+
+Las capturas salen de una página de prueba local que no está en el repositorio, con los colores de Norte (`#1b4f72`) y Sur (`#0a5c36`) aplicados con `coloresDelTema`, como hace `TemaUniversidad`.
+
 ## Cómo verificar
 
 ```sh
@@ -98,7 +149,8 @@ npm run build -w frontend
 ```
 
 - `src/lib/utils.test.ts`: el alias `@/` llega a Vitest y `cn()` resuelve conflictos de Tailwind.
-- `src/styles/estilos.test.ts`: `--primary` y `--ring` siguen a `--color-primary` y `TemaUniversidad` lo cambia por universidad; las variables de shadcn no duplican `tokens.css`; el texto blanco sobre `--primary` tiene contraste en toda universidad aceptada; las alertas cumplen AA y se registran como colores de Tailwind; Tailwind no importa preflight (y `tailwind.css` explica por qué y cuándo se activa).
+- `src/components/ui/ui.test.tsx`: cada componente se monta y se usa (clic, cambio, abrir, elegir) sin que React ni Radix escriban un warning o un error en la consola; las cinco variantes del `Alert` (tokens, rol y enlace); `NativeSelect` sigue siendo un `combobox`.
+- `src/styles/estilos.test.ts`: `--primary` y `--ring` siguen a `--color-primary` y `TemaUniversidad` lo cambia por universidad; las variables de shadcn no duplican `tokens.css`; el texto blanco sobre `--primary` tiene contraste en toda universidad aceptada; las alertas cumplen AA y se registran como colores de Tailwind; Tailwind no importa preflight (y `tailwind.css` explica por qué y cuándo se activa); el mini-reset es solo sobre `[data-slot]`, la variante `dark` depende de una clase y el mínimo táctil es solo para puntero grueso.
 
 ### Antes y después (Chromium, 1280 y 375 px)
 
@@ -135,7 +187,8 @@ Se incluyen las del login, el dashboard y la vista de sección en los dos tamañ
 
 ![Vista de sección 375](evidencias/uix-01-curso-375.png)
 
-## Para UIX-02
+## Al agregar más componentes
 
-- `components.json` apunta a `src/styles/tailwind.css`. Al agregar un componente, el CLI de shadcn puede escribir variables o una regla `@layer base` global en ese archivo: hay que revisar el diff y mantener la regla acotada a `[data-slot]`. El CLI no se probó en esta tarjeta.
+- `components.json` apunta a `src/styles/tailwind.css`. El CLI puede escribir variables o una regla `@layer base` global en ese archivo: hay que revisar el diff y mantener las reglas acotadas a `[data-slot]`.
+- Reescribir `from "cn"` a `from "@/lib/utils"`, quitar `cn` (y `next-themes`, si apareciera) de `package.json` y pasar Prettier.
 - Los componentes se mezclan con `cn()` de `@/lib/utils`.
