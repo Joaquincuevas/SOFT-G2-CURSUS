@@ -24,6 +24,9 @@ const REFRESH = 'q3Vw8kLz0aXb2Nn5Rt7Yc1Hd4Fg6Js9Mp-Ae_Ou8Wi'
 const PASSWORD = 'Contraseña-Segura-123'
 const RUT = '12.345.678-5'
 const CORREO = 'ana.perez@norte.cursus.test'
+// Un dato sensible sin etiqueta ni formato reconocible: solo la regla de no
+// escribir el texto de los errores lo mantiene fuera del log.
+const SINTETICO = 'zeta-valor-sintetico-91827'
 const USUARIO = '3f2b8c1e-5d4a-4e6f-9a7b-1c2d3e4f5a6b'
 
 @Controller('prueba')
@@ -44,8 +47,15 @@ class PruebaController {
   falla() {
     // Un error de verdad: el mensaje y el stack traen datos sensibles.
     throw new Error(
-      `fallo con password=${PASSWORD}, ${JWT}, rut ${RUT}, ${CORREO} y refresh=${REFRESH}`,
+      `fallo con password=${PASSWORD}, ${JWT}, rut ${RUT}, ${CORREO} y refresh=${REFRESH}\n${SINTETICO}`,
     )
+  }
+  @Get('falla-sin-etiqueta')
+  fallaSinEtiqueta() {
+    // El valor está en el mensaje y, por tanto, en la primera línea del stack.
+    throw Object.assign(new Error(`valor de la columna: ${SINTETICO}`), {
+      code: '23505',
+    })
   }
   @Get('no-disponible')
   noDisponible() {
@@ -209,49 +219,48 @@ describe('línea de acceso', () => {
 })
 
 describe('requestId', () => {
-  it('respeta un X-Request-Id válido y lo devuelve y lo registra', async () => {
-    const respuesta = await request(app.getHttpServer())
-      .get('/api/prueba/salida')
-      .set('X-Request-Id', 'abc-12345-def')
-      .expect(200)
-    expect(respuesta.headers['x-request-id']).toBe('abc-12345-def')
-    expect(accesos()[0].requestId).toBe('abc-12345-def')
-  })
+  const UUID =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
-  it('genera uno cuando no viene y lo devuelve en la cabecera', async () => {
+  it('lo genera la API y lo devuelve en la cabecera y en los logs', async () => {
     const respuesta = await request(app.getHttpServer()).get(
       '/api/prueba/salida',
     )
-    expect(respuesta.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/)
-    expect(accesos()[0].requestId).toBe(respuesta.headers['x-request-id'])
+    const id = respuesta.headers['x-request-id']
+    expect(id).toMatch(UUID)
+    expect(accesos()[0].requestId).toBe(id)
+  })
+
+  it('cada solicitud tiene el suyo', async () => {
+    const a = await request(app.getHttpServer()).get('/api/prueba/salida')
+    const b = await request(app.getHttpServer()).get('/api/prueba/salida')
+    expect(a.headers['x-request-id']).not.toBe(b.headers['x-request-id'])
   })
 
   it.each([
-    ['con espacios y comillas', 'abc 123"; level=error'],
+    ['un id con formato inocuo', 'abc-12345-def'],
+    ['un RUT sin puntos que cabe en el formato', '12345678-5'],
+    [
+      'un token que cabe en el formato',
+      'q3Vw8kLz0aXb2Nn5Rt7Yc1Hd4Fg6Js9Mp-Ae_Ou8Wi',
+    ],
+    ['un valor sintético', SINTETICO],
+    ['con comillas y espacios', 'abc 123"; level=error'],
     ['muy largo', 'a'.repeat(200)],
-    ['con caracteres raros', 'ñandú<script>x'],
-    ['con una línea JSON falsa', '{"level":"error"}'],
-    ['demasiado corto', 'x'],
-  ])('reemplaza uno inválido (%s)', async (_caso, id) => {
-    const respuesta = await request(app.getHttpServer())
-      .get('/api/prueba/salida')
-      .set('X-Request-Id', id)
-    const devuelto = respuesta.headers['x-request-id']
-    expect(devuelto).toMatch(/^[0-9a-f-]{36}$/)
-    expect(accesos()[0].requestId).toBe(devuelto)
-    expect(devuelto).not.toBe(id)
-    expect(lineas.join('\n')).not.toContain(
-      JSON.stringify(id).slice(1, -1) + '"',
-    )
-  })
-
-  it('un salto de línea en la cabecera no parte el log', async () => {
-    await request(app.getHttpServer())
-      .get('/api/prueba/salida')
-      .set('X-Request-Id', 'abc12345\\n{"level":"error","message":"falso"}')
-    expect(lineas).toHaveLength(1)
-    expect(registros()[0].message).toBe('solicitud atendida')
-  })
+    ['una línea JSON falsa', '{"level":"error"}'],
+  ])(
+    'ignora el X-Request-Id del cliente (%s): no llega al log ni a la respuesta',
+    async (_caso, id) => {
+      const respuesta = await request(app.getHttpServer())
+        .get('/api/prueba/salida')
+        .set('X-Request-Id', id)
+      const devuelto = respuesta.headers['x-request-id']
+      expect(devuelto).toMatch(UUID)
+      expect(devuelto).not.toBe(id)
+      expect(accesos()[0].requestId).toBe(devuelto)
+      expect(lineas.join('\n')).not.toContain(id)
+    },
+  )
 })
 
 describe('/health', () => {
@@ -307,16 +316,17 @@ describe('errores 5xx', () => {
       .get('/api/prueba/falla')
       .set('X-Request-Id', 'busca-este-id-1')
       .expect(500)
+    const id = respuesta.headers['x-request-id']
     // Igual que el 500 por defecto de Nest; el id va en la cabecera.
     expect(respuesta.body).toEqual({
       statusCode: 500,
       message: 'Internal server error',
     })
-    expect(respuesta.headers['x-request-id']).toBe('busca-este-id-1')
+    expect(id).toMatch(/^[0-9a-f-]{36}$/)
     const error = registros().find((r) => r.message === 'error del servidor')
     expect(error).toMatchObject({
       level: 'error',
-      requestId: 'busca-este-id-1',
+      requestId: id,
       method: 'GET',
       route: '/api/prueba/falla',
       status: 500,
@@ -326,8 +336,22 @@ describe('errores 5xx', () => {
     expect(detalle.name).toBe('Error')
     expect(detalle.stack).toContain('at ')
     const texto = lineas.join('\n')
-    for (const x of [PASSWORD, JWT, RUT, CORREO, REFRESH])
+    for (const x of [PASSWORD, JWT, RUT, CORREO, REFRESH, SINTETICO])
       expect(texto).not.toContain(x)
+  })
+
+  it('un valor sensible sin etiqueta en el mensaje y en el stack no llega al log', async () => {
+    await request(app.getHttpServer())
+      .get('/api/prueba/falla-sin-etiqueta')
+      .expect(500)
+    const texto = lineas.join('\n')
+    // Ningún patrón reconoce ese valor: lo mantiene fuera el no escribir el
+    // texto del error. Sí quedan el tipo, el código y los frames.
+    expect(texto).not.toContain(SINTETICO)
+    const error = registros().find((r) => r.message === 'error del servidor')
+    expect(error?.error).toMatchObject({ name: 'Error', code: '23505' })
+    expect((error?.error as { stack: string }).stack).toMatch(/^\s+at /)
+    expect((error?.error as { stack: string }).stack).not.toContain('Error:')
   })
 
   it('un HttpException 5xx conserva su respuesta y se registra redactado', async () => {
@@ -338,7 +362,9 @@ describe('errores 5xx', () => {
       statusCode: 500,
       message: expect.stringContaining('Falló algo') as string,
     })
+    // El texto de la excepción no se escribe, ni siquiera el de una HttpException.
     expect(lineas.join('\n')).not.toContain(REFRESH)
+    expect(lineas.join('\n')).not.toContain('Falló algo')
     expect(registros().some((r) => r.message === 'error del servidor')).toBe(
       true,
     )

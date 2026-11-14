@@ -58,8 +58,8 @@ Es el patrón de la ruta (`/api/espacio/secciones/:id`), nunca la URL real: no l
 
 ## requestId
 
-- Se lee `X-Request-Id` de la solicitud **solo** si cumple `^[A-Za-z0-9._-]{8,64}$`. Cualquier otra cosa (espacios, comillas, saltos de línea, muy corto o muy largo, varios valores) se descarta y se genera un UUID. Así un cliente no puede inyectar líneas ni texto arbitrario en los logs.
-- Se devuelve siempre en la cabecera `X-Request-Id` de la respuesta, también en los 5xx, y se propaga a todos los logs de esa solicitud con `AsyncLocalStorage`.
+- Lo genera **siempre la API**: un UUID por solicitud. El `X-Request-Id` que manda el cliente se ignora, porque un valor con un formato "inocuo" igual podría ser un dato sensible (un token, un RUT sin puntos) y quedaría escrito en CloudWatch. Si algún día hay un proxy propio que fije el id, habrá que aceptarlo solo de ese proxy verificado (como el secreto de origen) y no del cliente.
+- Se devuelve siempre en la cabecera `X-Request-Id` de la respuesta, también en los 5xx, y se propaga a todos los logs de esa solicitud con `AsyncLocalStorage`. Para buscar una solicitud basta el id de esa cabecera.
 - En los 5xx el id va **solo en la cabecera**, no en el cuerpo: el cuerpo de un 500 es el de siempre (`{"statusCode":500,"message":"Internal server error"}`) y el de `/api/health/db` es un contrato que usa el workflow de deploy.
 
 ## Redacción
@@ -68,7 +68,7 @@ Es el patrón de la ruta (`/api/espacio/secciones/:id`), nunca la URL real: no l
 
 - **Por clave** (en cualquier nivel de un objeto): password, contraseña, token, authorization, cookie, secret/secreto, desafio, codigo, credencial, clave, llave, hash, refresh, correo/email, y `rut`, `otp`, `totp`, `jwt`, `code` como palabra completa (así `route` no se toca).
 - **Por patrón en cualquier texto**: JWT (`eyJ…`), `Bearer …`, `clave=valor` y `"clave":"valor"` de las palabras anteriores, «código TOTP 123456», el fragmento `#token` de un enlace de recuperación, correos, RUT (con y sin puntos o guion, y con el dígito verificador pegado) y cualquier texto opaco de 32 o más caracteres que no sea un uuid (refresh tokens, hashes).
-- **Errores**: solo `name`, `message` y `stack`, redactados.
+- **Errores**: no se escribe su texto (ver Errores).
 
 Es deliberadamente conservadora: prefiere redactar de más. Efecto conocido: un campo llamado `codigo` (por ejemplo, el de un curso) se redacta si alguien lo agrega a un log.
 
@@ -76,7 +76,11 @@ Además, lo que **no se escribe nunca**: cuerpos de solicitud o respuesta, cabec
 
 ## Errores
 
-`FiltroExcepciones` (global) registra los 5xx con `requestId`, `method`, `route`, `status` y el error redactado, y deja que Nest responda como siempre: un error que no es `HttpException` sigue respondiendo 500 `Internal server error`. Los 4xx esperados no pasan por aquí: su línea de acceso (`warn`) basta.
+`FiltroExcepciones` (global) registra los 5xx con mensaje fijo (`error del servidor`), `requestId`, `method`, `route`, `status` y el error reducido a lo que sirve para diagnosticar y no lleva datos: el tipo (`name`), un código corto (`code`, como el SQLSTATE `23505` o `ECONNREFUSED`) y los frames del stack, es decir, dónde ocurrió. **El mensaje de la excepción no se escribe**, ni siquiera redactado, ni la primera línea del stack (que lo repite): lo escribe el driver o una dependencia y puede traer un dato sin etiqueta reconocible (un valor de una columna, un RUT sin puntos) que ningún patrón atraparía. Tampoco el mensaje de una `HttpException` 5xx. Lo mismo vale para un `Error` o un stack que algún servicio pase al logger.
+
+La respuesta al cliente no cambia: un error que no es `HttpException` sigue respondiendo 500 `Internal server error`. Los 4xx esperados no pasan por aquí: su línea de acceso (`warn`) basta.
+
+Límite: el texto que un servicio escribe con `this.logger.error("… ${algo}")` es de ese servicio y solo pasa por la redacción por patrones. Para depurar un 5xx, el `requestId`, la ruta, el código y los frames dicen dónde buscar.
 
 ## Cómo buscar en CloudWatch Logs Insights
 
@@ -121,9 +125,9 @@ Un requestId que le reporta un usuario (la cabecera `X-Request-Id` de la respues
 ## Pruebas
 
 - `src/observabilidad/redaccion.spec.ts`: contraseña, JWT, refresh token, enlace de recuperación, código TOTP, Authorization, Cookie, desafío MFA, correo y RUT (con y sin puntos o guion) en texto, objeto, error y stack nunca salen.
-- `src/observabilidad/logger-json.spec.ts`: línea JSON con `timestamp` ISO, `level`, `environment`, `requestId`; una sola línea ante saltos de línea; un campo del llamador no pisa los fijos; `LOG_LEVEL`; saneo del requestId.
-- `test/observabilidad/logs.e2e-spec.ts`: línea de acceso con método, ruta (patrón, sin query), status y duración; requestId entrante válido respetado e inválido reemplazado, y la cabecera en la respuesta; `/health` sin ruido; 4xx en `warn` sin stack; un 500 real registrado con requestId y sin datos sensibles, con la respuesta intacta.
-- Se revirtieron, y su prueba falla: la redacción del logger, `redactarTexto`, la redacción por clave, el saneo del requestId, el patrón de ruta (query string) y el silencio de `/health`.
+- `src/observabilidad/logger-json.spec.ts`: línea JSON con `timestamp` ISO, `level`, `environment`, `requestId`; una sola línea ante saltos de línea; un campo del llamador no pisa los fijos; `LOG_LEVEL`; un `Error` o un stack sin su mensaje; el requestId es un UUID generado.
+- `test/observabilidad/logs.e2e-spec.ts`: línea de acceso con método, ruta (patrón, sin query), status y duración; el `X-Request-Id` del cliente se ignora (aunque sea un RUT o un token con formato válido) y la API genera un UUID que sale en la cabecera; `/health` sin ruido; 4xx en `warn` sin stack; un 500 real registrado con requestId y sin datos sensibles, y un valor sintético sin etiqueta en el mensaje y en el stack que no llega al log; la respuesta queda intacta.
+- Se revirtieron, y su prueba falla: la redacción del logger, `redactarTexto`, la redacción por clave, aceptar el `X-Request-Id` del cliente, escribir el stack con su primera línea, el patrón de ruta (query string) y el silencio de `/health`.
 
 ## Qué falta verificar con AWS real
 
