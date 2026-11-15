@@ -15,6 +15,12 @@ import {
   type SubidaArchivo,
   type VersionMaterial,
 } from '@cursus/shared'
+import { Download, FileText, FolderOpen } from 'lucide-react'
+import { EmptyState, ErrorState } from '@/components/shared'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
@@ -34,6 +40,12 @@ const fechaMaterial = new Intl.DateTimeFormat('es-CL', {
 
 const fechaSubida = (material: Material) =>
   material.archivo.subidoEn ?? material.creadoEn
+
+function etiquetaTipo({ archivo }: Material) {
+  return tipoDeArchivo(archivo.nombre)
+    ? archivo.nombre.slice(archivo.nombre.lastIndexOf('.') + 1).toUpperCase()
+    : archivo.tipo
+}
 
 // Pasos del flujo de subida (MAT-01 y MAT-04), para mostrarlos mientras
 // corren.
@@ -163,6 +175,21 @@ export function PestanaMaterial({
     }
   }
 
+  if (rol === 'ALUMNO') {
+    return (
+      <div className="grid min-w-0 gap-6">
+        <MaterialAlumno
+          materiales={materiales === null ? null : ordenados}
+          recargar={recargar}
+          descargando={descargando}
+          errorDescarga={errorDescarga}
+          descargar={(material) => void descargar(material)}
+        />
+        <AdministrarSilabo ruta={ruta} puedePublicar={false} vistaAlumno />
+      </div>
+    )
+  }
+
   return (
     <section className="material" aria-label="Materiales del curso">
       <AdministrarSilabo
@@ -215,14 +242,7 @@ export function PestanaMaterial({
                             {material.archivo.nombre} ·{' '}
                             {tamanoLegible(material.archivo.tamano)}
                             {' · '}
-                            {tipoDeArchivo(material.archivo.nombre)
-                              ? material.archivo.nombre
-                                  .slice(
-                                    material.archivo.nombre.lastIndexOf('.') +
-                                      1,
-                                  )
-                                  .toUpperCase()
-                              : material.archivo.tipo}
+                            {etiquetaTipo(material)}
                             {' · '}
                             <time dateTime={fechaSubida(material)}>
                               {fechaMaterial.format(
@@ -262,6 +282,127 @@ export function PestanaMaterial({
             )
           })}
         </div>
+      )}
+    </section>
+  )
+}
+
+function MaterialAlumno({
+  materiales,
+  recargar,
+  descargando,
+  errorDescarga,
+  descargar,
+}: {
+  materiales: Material[] | null | undefined
+  recargar: () => void
+  descargando: string | null
+  errorDescarga: string | null
+  descargar: (material: Material) => void
+}) {
+  return (
+    <section aria-label="Materiales del curso" className="grid min-w-0 gap-4">
+      <h3 className="m-0 text-lg font-semibold text-foreground">
+        Materiales del curso
+      </h3>
+      {errorDescarga && (
+        <p className="m-0 text-sm text-destructive" role="alert">
+          {errorDescarga}
+        </p>
+      )}
+      {materiales === undefined ? (
+        <div role="status" className="grid gap-2">
+          <span className="sr-only">Cargando materiales…</span>
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+        </div>
+      ) : materiales === null ? (
+        <ErrorState
+          mensaje="No pudimos cargar los materiales."
+          onReintentar={recargar}
+        />
+      ) : materiales.length === 0 ? (
+        <Card className="py-0">
+          <EmptyState
+            icono={FolderOpen}
+            titulo="Aún no hay materiales del curso"
+            mensaje="Los archivos publicados por el equipo docente aparecerán aquí."
+          />
+        </Card>
+      ) : (
+        CATEGORIAS_MATERIAL.map((categoria) => {
+          const grupo = materiales.filter(
+            (material) => material.categoria === categoria,
+          )
+          if (grupo.length === 0) return null
+          const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
+          return (
+            <section key={categoria} className="grid gap-2">
+              <h4 className="m-0 text-sm font-semibold text-foreground">
+                {etiqueta}
+              </h4>
+              <ul
+                aria-label={etiqueta}
+                className="m-0 grid list-none gap-2 p-0"
+              >
+                {grupo.map((material) => (
+                  <li key={material.id}>
+                    <article aria-label={material.titulo}>
+                      <Card className="py-4">
+                        <CardContent className="flex flex-wrap items-center gap-3 px-4">
+                          <FileText
+                            aria-hidden="true"
+                            className="size-5 shrink-0 text-primary"
+                          />
+                          <div className="min-w-0 flex-1 basis-44 space-y-1 break-words">
+                            <h5 className="m-0 text-sm font-semibold">
+                              {material.titulo}
+                            </h5>
+                            {material.descripcion && (
+                              <p className="m-0 text-sm whitespace-pre-wrap text-muted-foreground">
+                                {material.descripcion}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">
+                                {etiquetaTipo(material)}
+                              </Badge>
+                              <span>
+                                {material.archivo.nombre} ·{' '}
+                                {tamanoLegible(material.archivo.tamano)}
+                              </span>
+                              <time dateTime={fechaSubida(material)}>
+                                {fechaMaterial.format(
+                                  new Date(fechaSubida(material)),
+                                )}
+                              </time>
+                            </div>
+                            <p className="m-0 text-xs text-muted-foreground">
+                              Versión {material.version}, del{' '}
+                              {fechaHora(material.versionEn)} · Publicado el{' '}
+                              {fechaHora(material.creadoEn)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            aria-label={`Descargar ${material.titulo}`}
+                            disabled={descargando === material.id}
+                            onClick={() => descargar(material)}
+                          >
+                            <Download aria-hidden="true" />
+                            {descargando === material.id
+                              ? 'Descargando…'
+                              : 'Descargar'}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </article>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })
       )}
     </section>
   )

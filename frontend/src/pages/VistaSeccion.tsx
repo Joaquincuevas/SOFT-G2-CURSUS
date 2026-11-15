@@ -32,6 +32,7 @@ import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
 import { SilaboDelCurso } from './SilaboDelCurso'
+import { IntegrantesAlumno } from './IntegrantesAlumno'
 import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
 
@@ -270,7 +271,11 @@ export function VistaSeccion() {
             )
           })}
           <TabsContent value="integrantes" className="grid gap-6">
-            <EquipoDocente seccion={seccion} />
+            {rol === 'ALUMNO' ? (
+              <IntegrantesAlumno seccion={seccion} />
+            ) : (
+              <EquipoDocente seccion={seccion} />
+            )}
             {/* key: al cambiar de sección la lista vuelve a cargar, sin
                 mostrar la de la sección anterior. */}
             {rol === 'PROFESOR' && (

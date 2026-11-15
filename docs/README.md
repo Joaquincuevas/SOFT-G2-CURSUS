@@ -40,6 +40,7 @@ Documentación del proyecto:
 - [UIX-01: Tailwind v4, shadcn y tokens (fundación de UI)](uix-01-tailwind-shadcn-base.md)
 - [UIX-04: AppShell y layout de curso](uix-04-appshell-layout-curso.md)
 - [UI/UX-03: primitivas compartidas de UI](ui-03-primitivas-compartidas.md)
+- [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
 - [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
