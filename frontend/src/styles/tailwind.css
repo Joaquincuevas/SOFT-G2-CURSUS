@@ -1,0 +1,197 @@
+/*
+ * Tailwind v4 + shadcn, SIN preflight.
+ *
+ * Por qué sin preflight: preflight es un reset global (márgenes a cero, títulos
+ * y listas sin estilo, imágenes en bloque, bordes y botones sin apariencia).
+ * Las páginas que todavía no se migraron dependen de los estilos por defecto
+ * del navegador y de sus propios .css, que no están en capas: las reglas sin
+ * capa ganan siempre a cualquier regla en capa, así que el CSS legacy no se
+ * ve afectado por lo que se declare aquí. Importar `tailwindcss` entero
+ * (que trae preflight) cambiaría el aspecto de todas ellas a la vez.
+ *
+ * Por eso solo se importan dos capas: theme (variables) y utilities (clases).
+ *
+ * Qué implica para los componentes nuevos (UIX-02 en adelante):
+ *  - Una utilidad pierde contra una regla legacy sobre el mismo elemento (por
+ *    ejemplo `p { margin: 0 }` de index.css gana a `mb-4`). Los componentes
+ *    de shadcn usan clases propias y no chocan con ellas.
+ *  - Sin preflight no hay color de borde por defecto. shadcn lo pone con un
+ *    `*` global; aquí se acota a `[data-slot]` (ver el final de este archivo)
+ *    para no tocar las páginas legacy.
+ *
+ * Cuándo se activa: en UIX-24, cuando no quede ninguna página legacy. Ahí se
+ * reemplazan las dos importaciones de capas por `@import 'tailwindcss';`, se
+ * retiran de index.css las reglas que preflight ya cubre y se puede volver a
+ * la regla global de shadcn.
+ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import 'tw-animate-css';
+
+/* Los componentes de shadcn traen variantes dark:. CURSUS no tiene modo oscuro:
+   `dark` se ata a una clase .dark que nadie pone, en vez de a la preferencia del
+   sistema, que las activaría en el navegador de quien use el tema oscuro. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * `inline`: las utilidades usan el valor de cada variable de shadcn en vez de
+ * una variable propia de Tailwind. Así `--color-primary` sigue siendo la del
+ * tema (tokens.css y TemaUniversidad) y Tailwind no define otra con el mismo
+ * nombre. Los nombres de radio (--radius-sm/md/lg) también existen en
+ * tokens.css con otros valores: las utilidades de shadcn usan la escala de
+ * aquí y el CSS legacy sigue usando la suya.
+ */
+@theme inline {
+  --font-sans: var(--font-family);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Alertas suaves (alertas.css): bg-alert-success, border-alert-success-border,
+     text-alert-success-foreground, y lo mismo para danger, warning, info y accent. */
+  --color-alert-success: var(--alert-success);
+  --color-alert-success-border: var(--alert-success-border);
+  --color-alert-success-foreground: var(--alert-success-foreground);
+  --color-alert-danger: var(--alert-danger);
+  --color-alert-danger-border: var(--alert-danger-border);
+  --color-alert-danger-foreground: var(--alert-danger-foreground);
+  --color-alert-warning: var(--alert-warning);
+  --color-alert-warning-border: var(--alert-warning-border);
+  --color-alert-warning-foreground: var(--alert-warning-foreground);
+  --color-alert-info: var(--alert-info);
+  --color-alert-info-border: var(--alert-info-border);
+  --color-alert-info-foreground: var(--alert-info-foreground);
+  --color-alert-accent: var(--alert-accent);
+  --color-alert-accent-border: var(--alert-accent-border);
+  --color-alert-accent-foreground: var(--alert-accent-foreground);
+
+  /* Escala de radios: sm para controles pequeños, md para botones e inputs, lg
+     para menús y xl para tarjetas (12 px, como las tarjetas del dashboard). */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Sombras: teñidas con el azul oscuro de la universidad (primary-dark) en vez
+     de un gris neutro, y bajas: la jerarquía la dan el borde y el espacio. */
+  --shadow-xs: 0 1px 2px 0
+    color-mix(in srgb, var(--color-primary-dark) 8%, transparent);
+  --shadow-sm:
+    0 1px 3px 0 color-mix(in srgb, var(--color-primary-dark) 12%, transparent),
+    0 1px 2px -1px
+      color-mix(in srgb, var(--color-primary-dark) 10%, transparent);
+  --shadow-md:
+    0 4px 8px -2px
+      color-mix(in srgb, var(--color-primary-dark) 12%, transparent),
+    0 2px 4px -2px color-mix(in srgb, var(--color-primary-dark) 8%, transparent);
+  --shadow-lg:
+    0 12px 24px -6px
+      color-mix(in srgb, var(--color-primary-dark) 16%, transparent),
+    0 4px 8px -4px color-mix(in srgb, var(--color-primary-dark) 8%, transparent);
+}
+
+/* Enlace dentro de una alerta: en negrita y subrayado, del mismo tono que el
+   texto de la alerta (el color se hereda). */
+@utility alert-link {
+  color: inherit;
+  font-weight: 700;
+  text-decoration-line: underline;
+  text-underline-offset: 2px;
+  &:hover {
+    text-decoration-thickness: 2px;
+  }
+}
+
+@layer base {
+  /*
+   * Mini-reset de los componentes de shadcn. Sus clases suponen el reset global
+   * de preflight (botones, campos y enlaces sin la apariencia del navegador,
+   * títulos y listas sin márgenes, bordes en 0). Sin preflight, un <button>
+   * mostraría su borde biselado y un <textarea> su fuente monoespaciada.
+   *
+   * Va solo sobre el elemento que lleva data-slot, nunca sobre sus hijos: una
+   * página legacy montada dentro de un componente (por ejemplo, en un TabsContent)
+   * conserva sus estilos. Está en la capa base, así que cualquier utilidad
+   * (`border`, `px-3`, `text-sm`…) y cualquier regla legacy lo supera. Se retira
+   * en UIX-24, cuando se activa preflight.
+   */
+  [data-slot] {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+
+  :is(button, input, select, optgroup, textarea)[data-slot] {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background-color: transparent;
+    border-radius: 0;
+  }
+
+  button[data-slot] {
+    background-image: none;
+    cursor: pointer;
+  }
+
+  button[data-slot]:disabled {
+    cursor: default;
+  }
+
+  textarea[data-slot] {
+    resize: vertical;
+  }
+
+  a[data-slot] {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  :is(h1, h2, h3, h4, h5, h6)[data-slot] {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :is(ol, ul, li)[data-slot] {
+    list-style: none;
+  }
+
+  table[data-slot] {
+    border-collapse: collapse;
+    text-indent: 0;
+  }
+
+  /* Mínimo táctil de 44 px (WCAG 2.5.8 pide 24; Apple, 44) en los controles de
+     shadcn, solo con puntero grueso: en escritorio conservan su tamaño. */
+  @media (pointer: coarse) {
+    [data-slot='button'],
+    [data-slot='native-select'],
+    [data-slot='input'],
+    [data-slot='tabs-trigger'] {
+      min-height: 44px;
+    }
+    [data-slot='button']:where([data-size^='icon']) {
+      min-width: 44px;
+    }
+  }
+}
