@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, test, vi } from 'vitest'
 import { FileInput } from './FileInput'
 import { FormField } from './FormField'
@@ -184,5 +185,89 @@ describe('FileInput al restablecer el formulario', () => {
 
     elegir(entrada, [pdf('nuevo.pdf')])
     expect(screen.getByText('nuevo.pdf')).toBeInTheDocument()
+  })
+
+  // El onReset del formulario actualiza el estado del padre: el padre vuelve a
+  // renderizar, con un onChange nuevo, antes de que el temporizador lea el input.
+  // El listener tiene que sobrevivir a ese render.
+  // (Un <output> no sirve para mostrar el estado: el reset del formulario también lo restablece.)
+  function Padre() {
+    const [reinicios, setReinicios] = useState(0)
+    const [elegidos, setElegidos] = useState<string[]>([])
+    return (
+      <form aria-label="Entrega" onReset={() => setReinicios((n) => n + 1)}>
+        <FileInput
+          onChange={(archivos) => setElegidos(archivos.map((a) => a.name))}
+        />
+        <button type="reset">Limpiar</button>
+        <p>
+          reinicios: {reinicios}; elegidos: {elegidos.join(',') || 'ninguno'}
+        </p>
+      </form>
+    )
+  }
+
+  test('si el onReset actualiza el estado del padre y este vuelve a renderizar, igual se limpia', async () => {
+    render(<Padre />)
+    const entrada = screen.getByLabelText('Seleccionar archivo')
+    elegir(entrada, [pdf()])
+    expect(screen.getByText(/reinicios:/)).toHaveTextContent(
+      'reinicios: 0; elegidos: informe.pdf',
+    )
+    screen
+      .getByRole('form', { name: 'Entrega' })
+      .addEventListener('reset', () =>
+        Object.defineProperty(entrada, 'files', {
+          value: [],
+          configurable: true,
+        }),
+      )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
+
+    // El padre re-renderiza por el onReset (con un onChange nuevo) y, aun así, el
+    // nombre se limpia.
+    expect(
+      await screen.findByText('Ningún archivo seleccionado'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/reinicios:/)).toHaveTextContent('reinicios: 1')
+    expect(screen.queryByText('informe.pdf')).toBeNull()
+    // Y el aviso llegó al onChange vigente del padre.
+    expect(screen.getByText(/reinicios:/)).toHaveTextContent(
+      'reinicios: 1; elegidos: ninguno',
+    )
+  })
+
+  test('varios renders del padre antes de terminar el reset tampoco lo cancelan', async () => {
+    function PadreInquieto() {
+      const [, setVueltas] = useState(0)
+      return (
+        <form
+          aria-label="Entrega"
+          onReset={() => {
+            setVueltas((n) => n + 1)
+            queueMicrotask(() => setVueltas((n) => n + 1))
+          }}
+        >
+          <FileInput onChange={() => {}} />
+          <button type="reset">Limpiar</button>
+        </form>
+      )
+    }
+    render(<PadreInquieto />)
+    const entrada = screen.getByLabelText('Seleccionar archivo')
+    elegir(entrada, [pdf()])
+    screen
+      .getByRole('form', { name: 'Entrega' })
+      .addEventListener('reset', () =>
+        Object.defineProperty(entrada, 'files', {
+          value: [],
+          configurable: true,
+        }),
+      )
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar' }))
+    expect(
+      await screen.findByText('Ningún archivo seleccionado'),
+    ).toBeInTheDocument()
   })
 })

@@ -27,11 +27,19 @@ export function FileInput({
   const idNombre = `${id}-nombre`
   const [nombres, setNombres] = useState<string[]>([])
   const contenedor = useRef<HTMLDivElement>(null)
+  // Lo último que vio el componente, para que el listener del reset pueda ser
+  // estable y aun así lea lo vigente cuando se cumple su temporizador.
+  const vigente = useRef({ nombres, onChange })
+  useEffect(() => {
+    vigente.current = { nombres, onChange }
+  })
 
   // El reset nativo vacía el input pero no dispara `change`: sin esto la
   // pantalla seguiría mostrando un archivo que ya no se enviará. El navegador
   // lo vacía después del evento `reset` (y solo si nadie lo cancela), así que se
-  // lee cuando terminó, y solo se avisa si la selección cambió.
+  // lee cuando terminó, y solo se avisa si la selección cambió. El listener no
+  // depende de nada: si el onReset del formulario hace que el padre vuelva a
+  // renderizar (con un onChange nuevo), el temporizador no se cancela.
   useEffect(() => {
     const entrada = contenedor.current?.querySelector('input')
     const formulario = entrada?.form
@@ -39,13 +47,14 @@ export function FileInput({
     let espera: ReturnType<typeof setTimeout> | undefined
     const alRestablecer = () => {
       espera = setTimeout(() => {
+        const { nombres: mostrados, onChange: avisar } = vigente.current
         const archivos = Array.from(entrada.files ?? [])
         const igual =
-          archivos.length === nombres.length &&
-          archivos.every((archivo, i) => archivo.name === nombres[i])
+          archivos.length === mostrados.length &&
+          archivos.every((archivo, i) => archivo.name === mostrados[i])
         if (igual) return
         setNombres(archivos.map((archivo) => archivo.name))
-        onChange?.(archivos)
+        avisar?.(archivos)
       }, 0)
     }
     formulario.addEventListener('reset', alRestablecer)
@@ -53,7 +62,7 @@ export function FileInput({
       formulario.removeEventListener('reset', alRestablecer)
       clearTimeout(espera)
     }
-  }, [nombres, onChange])
+  }, [])
 
   return (
     <div
