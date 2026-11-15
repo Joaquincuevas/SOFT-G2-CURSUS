@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button'
 import { useState } from 'react'
 
 // Contraseña provisoria de una cuenta recién creada (GES-15 y GES-21), que se
@@ -31,37 +32,33 @@ export function PasswordProvisoria({
 
   return (
     <>
-      <p className="cursos__mensaje">
+      <p className="m-0 text-sm break-words text-muted-foreground">
         Se creó la cuenta de {nombre} ({correo}). Su contraseña provisoria es:
       </p>
-      <p className="cursos__password">
+      <p className="m-0 rounded-lg border border-border bg-muted p-3 text-center text-base font-semibold break-all select-all">
         <code>{password}</code>
       </p>
-      <p className="cursos__error">
+      <p className="m-0 text-sm text-destructive">
         <strong>No se volverá a mostrar.</strong> Cópiala y entrégasela{' '}
         {destinatario}.
       </p>
       {copiada && (
-        <p className="cursos__exito" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           Contraseña copiada.
         </p>
       )}
       {error && (
-        <p className="cursos__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
-      <div className="cursos__acciones">
-        <button
-          className="cursos__boton cursos__boton--secundario"
-          type="button"
-          onClick={() => void copiar()}
-        >
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" type="button" onClick={() => void copiar()}>
           Copiar
-        </button>
-        <button className="cursos__boton" type="button" onClick={onCerrar}>
+        </Button>
+        <Button className="w-fit" type="button" onClick={onCerrar}>
           Cerrar
-        </button>
+        </Button>
       </div>
     </>
   )

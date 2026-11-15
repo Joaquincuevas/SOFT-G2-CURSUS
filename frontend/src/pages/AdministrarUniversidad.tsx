@@ -1,3 +1,21 @@
+import { cn } from '@/lib/utils'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+} from '@/components/shared'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import {
   colorConContraste,
   type CrearUniversidad,
@@ -17,12 +35,7 @@ import {
   useParams,
 } from 'react-router'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
-import '../components/estados.css'
 import { pedirUsuario, useSession } from '../session/session'
-import './AdministrarUniversidad.css'
-import './Carreras.css'
 import { FormularioUniversidad } from './FormularioUniversidad'
 import { CuentasUniversidad } from './CuentasUniversidad'
 import {
@@ -44,10 +57,16 @@ export function AdministrarUniversidad() {
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
   const [aviso, setAviso] = useState<string | null>(null)
 
-  if (universidades === undefined) return <Cargando />
+  if (universidades === undefined)
+    return (
+      <div role="status">
+        <span className="sr-only">Cargando universidad…</span>
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    )
   if (universidades === null) {
     return (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudo cargar la universidad."
         onReintentar={recargar}
       />
@@ -56,12 +75,23 @@ export function AdministrarUniversidad() {
   const universidad = universidades.find((u) => u.id === id)
   if (!universidad) {
     return (
-      <section className="estado" role="status">
-        <h2 className="estado__titulo">Universidad no disponible</h2>
-        <p className="estado__texto">
+      <section
+        className="grid w-fit gap-3 rounded-xl border border-border bg-card p-4"
+        role="status"
+      >
+        <h2 className="m-0 text-base font-semibold">
+          Universidad no disponible
+        </h2>
+        <p className="m-0 text-sm text-muted-foreground">
           La universidad no existe o está archivada.
         </p>
-        <Link className="estado__boton" to="/">
+        <Link
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'border-border text-foreground no-underline',
+          )}
+          to="/"
+        >
           Volver al Dashboard
         </Link>
       </section>
@@ -91,34 +121,49 @@ export function AdministrarUniversidad() {
   }
 
   return (
-    <section className="carreras" aria-label="Administrar universidad">
-      <div className="carreras__intro">
+    <section
+      className="grid min-w-0 gap-5"
+      aria-label="Administrar universidad"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 [&_h2]:m-0 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:m-0 [&_p]:mt-1 [&_p]:text-sm [&_p]:text-muted-foreground">
         <div>
           <h2>{universidad.nombre}</h2>
           <p>
             Correos @{universidad.dominioCorreo}. Cada cambio queda registrado.
           </p>
         </div>
-        <div className="carreras__acciones">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
-            className="administrar-universidad__volver"
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'border-border text-foreground no-underline',
+            )}
             to={rutaCuentasUniversidad(universidad.id)}
           >
             Administrar cuentas
           </Link>
-          <Link className="administrar-universidad__volver" to="/">
+          <Link
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'border-border text-foreground no-underline',
+            )}
+            to="/"
+          >
             Volver al Dashboard
           </Link>
         </div>
       </div>
       {aviso && (
-        <p className="carreras__aviso" role="status">
+        <p
+          className="m-0 rounded-lg border border-alert-success-border bg-alert-success p-3 text-sm text-alert-success-foreground"
+          role="status"
+        >
           {aviso}
         </p>
       )}
       {!colorConContraste(universidad.color) && (
         <p
-          className="carreras__aviso"
+          className="m-0 rounded-lg border border-alert-success-border bg-alert-success p-3 text-sm text-alert-success-foreground"
           role="status"
           aria-label="Color institucional"
         >
@@ -127,7 +172,7 @@ export function AdministrarUniversidad() {
           oscuro en Datos de la universidad.
         </p>
       )}
-      <div className="carreras__columnas">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
         <Facultades
           universidad={universidad}
           onCambio={(mensaje) => {
@@ -135,7 +180,7 @@ export function AdministrarUniversidad() {
             recargar()
           }}
         />
-        <div>
+        <div className="grid min-w-0 gap-4">
           <FormularioUniversidad
             key={`${universidad.nombre}-${universidad.dominioCorreo}-${universidad.color}`}
             inicial={universidad}
@@ -202,82 +247,103 @@ function ArchivarUniversidad({
   }
 
   return (
-    <div className="carreras__panel">
+    <div className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-semibold">
       <h2>Archivar universidad</h2>
       <p>
         Deja de aparecer en las listas y sus usuarios ya no pueden iniciar
         sesión. Sus datos se conservan, pero no se puede deshacer desde CURSUS.
       </p>
       {!confirmando ? (
-        <button
+        <Button
           type="button"
-          className="carreras__secundario"
+          variant="outline"
           onClick={() => setConfirmando(true)}
         >
           Archivar universidad
-        </button>
+        </Button>
       ) : (
-        <form
-          className="carreras__formulario"
-          aria-label="Confirmar archivo"
-          onSubmit={(event) => void archivar(event)}
+        <Dialog
+          open
+          onOpenChange={(abierto) => {
+            if (!abierto && !archivando) cancelar()
+          }}
         >
-          {afectados === undefined && <p role="status">Contando usuarios…</p>}
-          {afectados === null && (
-            <p className="carreras__error" role="alert">
-              No se pudo contar a sus usuarios.{' '}
-              <button
-                type="button"
-                className="carreras__secundario"
-                onClick={recargarAfectados}
-              >
-                Reintentar
-              </button>
-            </p>
-          )}
-          {afectados && (
-            <p className="administrar-universidad__afectados" role="status">
-              {afectados.usuarios === 1
-                ? '1 usuario dejará de poder iniciar sesión.'
-                : `${afectados.usuarios} usuarios dejarán de poder iniciar sesión.`}
-            </p>
-          )}
-          <label htmlFor="archivar-motivo">Motivo</label>
-          <textarea
-            id="archivar-motivo"
-            className="administrar-universidad__motivo"
-            value={motivo}
-            onChange={(event) => setMotivo(event.target.value)}
-            maxLength={LARGO_MOTIVO_ARCHIVAR}
-            rows={3}
-            required
-            disabled={archivando}
-            placeholder="Por ejemplo: la universidad dejó el directorio"
-          />
-          <p>El motivo queda registrado con la fecha y tu nombre.</p>
-          {error && (
-            <p className="carreras__error" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="carreras__acciones">
-            <button
-              type="submit"
-              className="carreras__primario"
-              disabled={archivando || !afectados || !motivo.trim()}
+          <DialogContent
+            showCloseButton={false}
+            className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+          >
+            <DialogTitle>Archivar {universidad.nombre}</DialogTitle>
+            <DialogDescription>
+              Revisa a cuántos usuarios afecta antes de confirmar.
+            </DialogDescription>
+            <form
+              className="grid min-w-0 gap-3 [&_p]:m-0 [&_p]:text-sm"
+              aria-label="Confirmar archivo"
+              onSubmit={(event) => void archivar(event)}
             >
-              Sí, archivar {universidad.nombre}
-            </button>
-            <button
-              type="button"
-              className="carreras__secundario"
-              disabled={archivando}
-              onClick={cancelar}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
+              {afectados === undefined && (
+                <p role="status">Contando usuarios…</p>
+              )}
+              {afectados === null && (
+                <p className="m-0 text-sm text-destructive" role="alert">
+                  No se pudo contar a sus usuarios.{' '}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={recargarAfectados}
+                  >
+                    Reintentar
+                  </Button>
+                </p>
+              )}
+              {afectados && (
+                <p
+                  className="m-0 rounded-lg bg-accent p-3 text-sm font-medium"
+                  role="status"
+                >
+                  {afectados.usuarios === 1
+                    ? '1 usuario dejará de poder iniciar sesión.'
+                    : `${afectados.usuarios} usuarios dejarán de poder iniciar sesión.`}
+                </p>
+              )}
+              <Label htmlFor="archivar-motivo">Motivo</Label>
+              <Textarea
+                id="archivar-motivo"
+                className="min-h-20"
+                value={motivo}
+                onChange={(event) => setMotivo(event.target.value)}
+                maxLength={LARGO_MOTIVO_ARCHIVAR}
+                rows={3}
+                required
+                disabled={archivando}
+                placeholder="Por ejemplo: la universidad dejó el directorio"
+              />
+              <p>El motivo queda registrado con la fecha y tu nombre.</p>
+              {error && (
+                <p className="m-0 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={archivando || !afectados || !motivo.trim()}
+                >
+                  Sí, archivar {universidad.nombre}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={archivando}
+                  onClick={cancelar}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )
@@ -342,92 +408,85 @@ function Facultades({
   }
 
   return (
-    <div className="carreras__panel">
+    <div className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-semibold">
       <h2>Facultades</h2>
       {error && (
-        <p className="carreras__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
-      {universidad.facultades.length === 0 ? (
-        <p>Esta universidad todavía no tiene facultades.</p>
-      ) : (
-        <table className="carreras__tabla">
-          <caption>Facultades de {universidad.nombre}</caption>
-          <thead>
-            <tr>
-              <th scope="col">Nombre</th>
-              <th scope="col">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {universidad.facultades.map((facultad) => (
-              <tr key={facultad.id}>
-                <td>{facultad.nombre}</td>
-                <td>
-                  {porArchivar?.id === facultad.id ? (
-                    <div className="carreras__acciones">
-                      <button
-                        type="button"
-                        className="carreras__primario"
-                        disabled={guardando}
-                        onClick={() => void archivar(facultad)}
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        type="button"
-                        className="carreras__secundario"
-                        disabled={guardando}
-                        onClick={() => setPorArchivar(null)}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="carreras__acciones">
-                      <button
-                        type="button"
-                        className="carreras__secundario"
-                        disabled={guardando}
-                        aria-label={`Editar ${facultad.nombre}`}
-                        onClick={() => {
-                          setEditando(facultad)
-                          setNombre(facultad.nombre)
-                          setError(null)
-                        }}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="carreras__secundario"
-                        disabled={guardando}
-                        aria-label={`Archivar ${facultad.nombre}`}
-                        onClick={() => {
-                          setPorArchivar(facultad)
-                          setError(null)
-                        }}
-                      >
-                        Archivar
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <DataTable
+        etiqueta={`Facultades de ${universidad.nombre}`}
+        filas={universidad.facultades}
+        claveFila={(facultad) => facultad.id}
+        vacio={
+          <EmptyState mensaje="Esta universidad todavía no tiene facultades." />
+        }
+        columnas={[
+          {
+            clave: 'nombre',
+            encabezado: 'Nombre',
+            valor: (facultad) => facultad.nombre,
+            celda: (facultad) => facultad.nombre,
+            className: 'min-w-24 whitespace-normal',
+          },
+          {
+            clave: 'acciones',
+            encabezado: 'Acciones',
+            celda: (facultad) => (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={guardando}
+                  aria-label={`Editar ${facultad.nombre}`}
+                  onClick={() => {
+                    setEditando(facultad)
+                    setNombre(facultad.nombre)
+                    setError(null)
+                  }}
+                >
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={guardando}
+                  aria-label={`Archivar ${facultad.nombre}`}
+                  onClick={() => {
+                    setPorArchivar(facultad)
+                    setError(null)
+                  }}
+                >
+                  Archivar
+                </Button>
+              </div>
+            ),
+          },
+        ]}
+      />
+      {porArchivar && (
+        <ConfirmDialog
+          abierto
+          onAbiertoChange={(abierto) => {
+            if (!abierto) setPorArchivar(null)
+          }}
+          titulo="Archivar facultad"
+          descripcion={`¿Archivar ${porArchivar.nombre}?`}
+          destructivo
+          cargando={guardando}
+          onConfirmar={() => void archivar(porArchivar)}
+        />
       )}
       <form
-        className="carreras__formulario"
+        className="grid min-w-0 gap-3 [&_p]:m-0 [&_p]:text-sm"
         aria-label={editando ? 'Editar facultad' : 'Nueva facultad'}
         onSubmit={(event) => void guardar(event)}
       >
-        <label htmlFor="facultad-nombre">
+        <Label htmlFor="facultad-nombre">
           {editando ? 'Nuevo nombre de la facultad' : 'Nueva facultad'}
-        </label>
-        <input
+        </Label>
+        <Input
           id="facultad-nombre"
           value={nombre}
           onChange={(event) => setNombre(event.target.value)}
@@ -435,23 +494,19 @@ function Facultades({
           required
           disabled={guardando}
         />
-        <div className="carreras__acciones">
-          <button
-            className="carreras__primario"
-            type="submit"
-            disabled={guardando}
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" disabled={guardando}>
             {editando ? 'Guardar facultad' : 'Crear facultad'}
-          </button>
+          </Button>
           {editando && (
-            <button
-              className="carreras__secundario"
+            <Button
+              variant="outline"
               type="button"
               disabled={guardando}
               onClick={limpiar}
             >
               Cancelar edición
-            </button>
+            </Button>
           )}
         </div>
       </form>

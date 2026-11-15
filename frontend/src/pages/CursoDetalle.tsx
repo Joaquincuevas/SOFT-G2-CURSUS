@@ -11,7 +11,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { EditarHorarioDialogo } from './EditarHorario'
 import { GestionarCierreCurso } from './GestionarCierreCurso'
-import './Cursos.css'
+import './GestionAcademica.css'
 import { nombresProfesores } from './misSecciones'
 import { useDatos } from './useDatos'
 

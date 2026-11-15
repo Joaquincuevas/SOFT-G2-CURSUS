@@ -45,6 +45,7 @@ Documentación del proyecto:
 - [UI/UX-09: experiencia del Superadmin con shadcn](ui-09-superadmin.md)
 - [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
 - [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
+- [UI/UX-07: experiencia del Administrativo](uix-07-administrativo.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
 - [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)
