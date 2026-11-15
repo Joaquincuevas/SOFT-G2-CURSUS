@@ -1,4 +1,4 @@
-import { useId, useState, type ComponentProps } from 'react'
+import { useEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -12,7 +12,8 @@ interface Props extends Omit<
 // Selector de archivo en español: reemplaza al input nativo («Choose File» /
 // «No file chosen» según el idioma del navegador). El input nativo sigue siendo
 // el control (teclado, required, formulario y lector de pantalla); solo queda
-// oculto, y su etiqueta se dibuja como botón con el foco del input.
+// oculto, y su etiqueta se dibuja como botón con el foco del input. Si el
+// formulario se restablece, el nombre mostrado se sincroniza con el input.
 export function FileInput({
   id: idPropio,
   className,
@@ -25,9 +26,38 @@ export function FileInput({
   const id = idPropio ?? idAuto
   const idNombre = `${id}-nombre`
   const [nombres, setNombres] = useState<string[]>([])
+  const contenedor = useRef<HTMLDivElement>(null)
+
+  // El reset nativo vacía el input pero no dispara `change`: sin esto la
+  // pantalla seguiría mostrando un archivo que ya no se enviará. El navegador
+  // lo vacía después del evento `reset` (y solo si nadie lo cancela), así que se
+  // lee cuando terminó, y solo se avisa si la selección cambió.
+  useEffect(() => {
+    const entrada = contenedor.current?.querySelector('input')
+    const formulario = entrada?.form
+    if (!entrada || !formulario) return
+    let espera: ReturnType<typeof setTimeout> | undefined
+    const alRestablecer = () => {
+      espera = setTimeout(() => {
+        const archivos = Array.from(entrada.files ?? [])
+        const igual =
+          archivos.length === nombres.length &&
+          archivos.every((archivo, i) => archivo.name === nombres[i])
+        if (igual) return
+        setNombres(archivos.map((archivo) => archivo.name))
+        onChange?.(archivos)
+      }, 0)
+    }
+    formulario.addEventListener('reset', alRestablecer)
+    return () => {
+      formulario.removeEventListener('reset', alRestablecer)
+      clearTimeout(espera)
+    }
+  }, [nombres, onChange])
 
   return (
     <div
+      ref={contenedor}
       data-slot="file-input"
       className={cn('flex min-w-0 flex-wrap items-center gap-3', className)}
     >

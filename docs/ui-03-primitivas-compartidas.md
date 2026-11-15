@@ -185,7 +185,7 @@ const columnas: Columna<Curso>[] = [
 
 ## FileInput
 
-Reemplaza al input nativo («Choose File» / «No file chosen», según el idioma del navegador): botón **Seleccionar archivo** y el nombre del archivo, o **Ningún archivo seleccionado**. El control sigue siendo el `<input type="file">` nativo, solo que oculto: conserva el teclado (Tab para enfocarlo, Enter o Espacio para abrir el selector), `required`, `accept`, `multiple`, el envío del formulario y el lector de pantalla; su etiqueta se dibuja como botón y muestra el anillo de foco. El nombre del archivo describe al control y se anuncia sin interrumpir.
+Reemplaza al input nativo («Choose File» / «No file chosen», según el idioma del navegador): botón **Seleccionar archivo** y el nombre del archivo, o **Ningún archivo seleccionado**. El control sigue siendo el `<input type="file">` nativo, solo que oculto: conserva el teclado (Tab para enfocarlo, Enter o Espacio para abrir el selector), `required`, `accept`, `multiple`, el envío del formulario y el lector de pantalla; su etiqueta se dibuja como botón y muestra el anillo de foco. El nombre del archivo describe al control y se anuncia sin interrumpir. Si el formulario se restablece (`<button type="reset">` o `form.reset()`), el nombre vuelve a «Ningún archivo seleccionado» y se avisa con `onChange([])`: el reset nativo vacía el input pero no dispara `change`, y sin esto la pantalla seguiría mostrando un archivo que ya no se enviará. Si alguien cancela el restablecimiento, el archivo y el nombre se conservan.
 
 ```tsx
 <FormField etiqueta="Informe" ayuda="PDF o Word, hasta 10 MB." requerido>
