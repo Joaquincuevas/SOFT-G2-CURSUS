@@ -11,5 +11,5 @@ test('el panel de marca lleva el isotipo blanco junto al nombre', () => {
   expect(isotipo).toHaveClass('text-white')
   expect(isotipo).toHaveAttribute('aria-hidden', 'true')
   expect(screen.queryByRole('img')).toBeNull()
-  expect(container.querySelector('.login__logo')).toHaveTextContent('CURSUS')
+  expect(container.querySelector('aside p')).toHaveTextContent('CURSUS')
 })
