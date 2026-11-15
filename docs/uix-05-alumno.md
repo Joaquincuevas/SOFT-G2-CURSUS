@@ -18,7 +18,9 @@ Dentro del curso, Mis notas muestra la nota final o parcial y las evaluaciones e
 | Vista                                     | 1280 px                                              | 375 px                                           |
 | ----------------------------------------- | ---------------------------------------------------- | ------------------------------------------------ |
 | Dashboard de Antonia                      | [Escritorio](evidencias/uix-05-dashboard-1280.png)   | [Móvil](evidencias/uix-05-dashboard-375.png)     |
-| Notas                                     |                                                      | [Móvil](evidencias/uix-05-notas-375.png)         |
-| Material                                  |                                                      | [Móvil](evidencias/uix-05-material-375.png)      |
+| Notas                                     | [Escritorio](evidencias/uix-05-notas-1280.png)       | [Móvil](evidencias/uix-05-notas-375.png)         |
+| Material                                  | [Escritorio](evidencias/uix-05-material-1280.png)    | [Móvil](evidencias/uix-05-material-375.png)      |
 | Integrantes                               | [Escritorio](evidencias/uix-05-integrantes-1280.png) | [Móvil](evidencias/uix-05-integrantes-375.png)   |
 | Navegación de una cuenta egresada de demo | [Escritorio](evidencias/uix-05-egresado-1280.png)    | [Menú móvil](evidencias/uix-05-egresado-375.png) |
+
+Las capturas de Notas y Material a 1280 px muestran una evaluación y una guía de demo agregadas a la primera sección del seed de Antonia.

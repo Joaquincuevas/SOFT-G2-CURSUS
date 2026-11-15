@@ -1,3 +1,4 @@
+import { formatearFecha } from '@/lib/fechas'
 import type { MisNotasSeccion } from '@cursus/shared'
 import { ClipboardList } from 'lucide-react'
 import { EmptyState, ErrorState } from '@/components/shared'
@@ -97,7 +98,9 @@ export function RegistroMisNotas({ datos }: { datos: RespuestaMisNotas }) {
                   {evaluacion.nombre}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  <time dateTime={evaluacion.fecha}>{evaluacion.fecha}</time>
+                  <time dateTime={evaluacion.fecha}>
+                    {formatearFecha(evaluacion.fecha)}
+                  </time>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {evaluacion.ponderacion} %
