@@ -8,6 +8,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { ContextoSuperadmin } from './ContextoSuperadmin'
 import { Header } from './Header'
@@ -45,6 +46,19 @@ function useMenuColapsado() {
 export function AppShell() {
   const [menuAbierto, setMenuAbierto] = useState(false)
   const [colapsado, alternarColapsado] = useMenuColapsado()
+  // Desde 1024 px el riel está a la vista y no hay panel: si la ventana cruza
+  // ese ancho con el panel abierto, se cierra. Ocultar el contenido con
+  // lg:hidden no basta: el Sheet seguiría abierto y su capa modal, encima de la
+  // página, bloquearía el riel. Al volver a pantalla angosta sigue cerrado.
+  const esEscritorio = useMediaQuery('(min-width: 1024px)')
+  const panelAbierto = menuAbierto && !esEscritorio
+  // Se ajusta durante el render (no en un efecto) para que no haya un cuadro
+  // con el panel abierto sobre el escritorio.
+  const [eraEscritorio, setEraEscritorio] = useState(esEscritorio)
+  if (esEscritorio !== eraEscritorio) {
+    setEraEscritorio(esEscritorio)
+    if (esEscritorio) setMenuAbierto(false)
+  }
 
   return (
     <TooltipProvider>
@@ -60,7 +74,7 @@ export function AppShell() {
             <Sidebar colapsado={colapsado} onAlternar={alternarColapsado} />
           </aside>
 
-          <Sheet open={menuAbierto} onOpenChange={setMenuAbierto}>
+          <Sheet open={panelAbierto} onOpenChange={setMenuAbierto}>
             <SheetContent
               id="menu-movil"
               side="left"
@@ -78,7 +92,7 @@ export function AppShell() {
 
           <div className="flex min-w-0 flex-1 flex-col">
             <Header
-              menuAbierto={menuAbierto}
+              menuAbierto={panelAbierto}
               onAbrirMenu={() => setMenuAbierto(true)}
             />
             <main className="flex-1 p-4 sm:p-6 lg:p-8">

@@ -1,6 +1,13 @@
 import type { Rol, UsuarioSesion } from '@cursus/shared'
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { afterEach, describe, expect, test } from 'vitest'
 import { NAV_ITEMS } from '../navigation'
 import {
   cerrarSesionDesdeElMenu,
@@ -339,5 +346,113 @@ describe('panel del menú en pantalla angosta', () => {
     expect(panel.getAllByRole('link').map((l) => l.textContent)).toEqual([
       'Historial de notas',
     ])
+  })
+})
+
+// matchMedia de jsdom no cambia solo: este simula una ventana con un ancho que
+// el test puede mover, y avisa a quienes escuchan la consulta (min-width).
+const matchMediaOriginal = window.matchMedia
+function simularAncho(inicial: number) {
+  let ancho = inicial
+  const oyentes = new Set<() => void>()
+  const coincide = (consulta: string) => {
+    const minimo = /min-width:\s*(\d+)px/.exec(consulta)
+    return minimo ? ancho >= Number(minimo[1]) : false
+  }
+  window.matchMedia = ((consulta: string) => ({
+    get matches() {
+      return coincide(consulta)
+    },
+    media: consulta,
+    onchange: null,
+    addEventListener: (_: string, oyente: () => void) => oyentes.add(oyente),
+    removeEventListener: (_: string, oyente: () => void) =>
+      oyentes.delete(oyente),
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+  return {
+    mover(nuevo: number) {
+      ancho = nuevo
+      act(() => oyentes.forEach((oyente) => oyente()))
+    },
+  }
+}
+
+describe('panel del menú al cambiar el ancho de la ventana', () => {
+  afterEach(() => {
+    window.matchMedia = matchMediaOriginal
+  })
+
+  test('abierto en móvil, al pasar a escritorio se cierra y el menú lateral se usa de inmediato', async () => {
+    const ventana = simularAncho(800)
+    await renderApp('ALUMNO')
+    const boton = menu()
+    fireEvent.click(boton)
+    await screen.findByRole('dialog', { name: 'Menú' })
+    expect(boton).toHaveAttribute('aria-expanded', 'true')
+
+    ventana.mover(1280)
+
+    // Sin panel, sin la capa modal y sin bloquear la página.
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() =>
+      expect(document.querySelector('[data-slot="sheet-overlay"]')).toBeNull(),
+    )
+    expect(document.body.style.pointerEvents).not.toBe('none')
+    expect(boton).toHaveAttribute('aria-expanded', 'false')
+    // El riel está al alcance del lector de pantalla y funciona.
+    fireEvent.click(
+      within(principal()).getByRole('link', { name: 'Mis Cursos' }),
+    )
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
+    expect(
+      screen.getByRole('button', { name: 'Expandir menú' }),
+    ).toBeInTheDocument()
+  })
+
+  test('al volver a pantalla angosta el panel sigue cerrado y se abre de nuevo con normalidad', async () => {
+    const ventana = simularAncho(800)
+    await renderApp('ALUMNO')
+    const boton = menu()
+    fireEvent.click(boton)
+    await screen.findByRole('dialog', { name: 'Menú' })
+
+    ventana.mover(1280)
+    ventana.mover(800)
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.querySelector('[data-slot="sheet-overlay"]')).toBeNull()
+    expect(boton).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(boton)
+    expect(
+      await screen.findByRole('dialog', { name: 'Menú' }),
+    ).toBeInTheDocument()
+    expect(boton).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  test('cambiar de tamaño sin cruzar los 1024 px no cierra el panel', async () => {
+    const ventana = simularAncho(800)
+    await renderApp('ALUMNO')
+    fireEvent.click(menu())
+    await screen.findByRole('dialog', { name: 'Menú' })
+
+    ventana.mover(600)
+    ventana.mover(1000)
+
+    expect(screen.getByRole('dialog', { name: 'Menú' })).toBeInTheDocument()
+  })
+
+  test('una ventana que ya empieza en escritorio no muestra el panel ni la capa modal', async () => {
+    simularAncho(1280)
+    await renderApp('ALUMNO')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.querySelector('[data-slot="sheet-overlay"]')).toBeNull()
+    expect(principal()).toBeInTheDocument()
   })
 })
