@@ -41,6 +41,7 @@ Documentación del proyecto:
 - [UIX-04: AppShell y layout de curso](uix-04-appshell-layout-curso.md)
 - [UI/UX-03: primitivas compartidas de UI](ui-03-primitivas-compartidas.md)
 - [UI/UX-L: login y pantallas de acceso con shadcn](ui-l-login-landing.md)
+- [UI/UX-08: experiencia del Director con shadcn](ui-08-director.md)
 - [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
 - [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)

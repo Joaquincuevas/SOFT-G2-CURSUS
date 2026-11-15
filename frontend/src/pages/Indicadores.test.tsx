@@ -653,12 +653,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     })
     expect(histograma).toBeInTheDocument()
     expect(histograma).toHaveAccessibleName(/aprobación.*4,0/i)
-    // El histograma usa clases propias: las `indicadores__barra*` son de la
-    // comparación de MET-02 y su CSS no debe alcanzarlo (ni al revés).
+    // Una barra por rango de notas; las barras de la comparación (MET-02) son
+    // otro elemento.
     expect(
-      histograma.querySelectorAll('.indicadores__histograma-barra'),
+      histograma.querySelectorAll('[data-slot="histograma-barra"]'),
     ).toHaveLength(6)
-    expect(histograma.querySelector('[class*="indicadores__barra"]')).toBeNull()
+    expect(histograma.querySelector('[data-slot="barra-relleno"]')).toBeNull()
     // La línea de aprobación se rotula con la nota mínima de la API.
     expect(screen.getByText('Aprobación 4,0')).toBeInTheDocument()
     expect(
@@ -1082,13 +1082,14 @@ describe('comparación entre universidades (MET-02)', () => {
   const celdas = (nombre: string) =>
     within(screen.getByRole('row', { name: new RegExp(nombre) }))
       .getAllByRole('cell')
+      .slice(1) // la primera celda es el nombre de la universidad
       .map((c) => c.textContent)
 
   const relleno = (nombre: string) =>
     within(screen.getByRole('list', { name: /por universidad$/ }))
       .getByText(nombre)
       .closest('li')
-      ?.querySelector('.indicadores__barra-relleno')
+      ?.querySelector('[data-slot="barra-relleno"]')
 
   test('muestra los tres indicadores de cada universidad lado a lado en una tabla', async () => {
     await renderConSesion('DIRECTOR', COMPARAR, {
@@ -1138,6 +1139,7 @@ describe('comparación entre universidades (MET-02)', () => {
     await renderConSesion('DIRECTOR', COMPARAR, {
       [UNIVERSIDADES]: () => LISTA,
     })
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Gráfico' }))
     const selector = await screen.findByRole('combobox', {
       name: 'Indicador a graficar',
     })
@@ -1267,4 +1269,268 @@ describe('comparación entre universidades (MET-02)', () => {
       expect(pedida).not.toHaveBeenCalled()
     },
   )
+})
+
+// UI/UX-08: estados y estructura de las pantallas migradas a shadcn.
+describe('estados de carga, vacío y error', () => {
+  const nunca = () => new Promise(() => {})
+
+  test('mientras carga, cada nivel muestra esqueletos y lo anuncia', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: nunca,
+      [UNIVERSIDADES]: nunca,
+    })
+    expect(await screen.findByText('Cargando indicadores…')).toBeInTheDocument()
+    expect(screen.getByText('Cargando universidades…')).toBeInTheDocument()
+    expect(screen.getAllByRole('status').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByRole('list', { name: 'Indicadores' })).toBeNull()
+  })
+
+  test.each([
+    ['la comparación', '/indicadores/comparar', 'Cargando universidades…'],
+    [
+      'las facultades',
+      '/indicadores/universidades/u-norte',
+      'Cargando facultades…',
+    ],
+    [
+      'las carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      'Cargando carreras…',
+    ],
+    [
+      'los cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      'Cargando cursos…',
+    ],
+    [
+      'la distribución',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      'Cargando distribución…',
+    ],
+  ])('%s anuncia la carga', async (_nivel, ruta, texto) => {
+    await renderConSesion('DIRECTOR', ruta, {
+      [UNIVERSIDADES]: nunca,
+      [FACULTADES]: nunca,
+      [CARRERAS_RUTA]: nunca,
+      [CURSOS_RUTA]: nunca,
+      [DISTRIBUCION_RUTA]: nunca,
+    })
+    expect(await screen.findByText(texto)).toBeInTheDocument()
+  })
+
+  test.each([
+    [
+      'la universidad sin facultades',
+      '/indicadores/universidades/u-norte',
+      FACULTADES,
+      { ...DETALLE, facultades: [] },
+      'Esta universidad no tiene facultades.',
+    ],
+    [
+      'la facultad sin carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      CARRERAS_RUTA,
+      { ...CARRERAS, carreras: [] },
+      'Esta facultad no tiene carreras.',
+    ],
+    [
+      'la carrera sin cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      CURSOS_RUTA,
+      { ...CURSOS, cursos: [] },
+      'Esta carrera no tiene cursos.',
+    ],
+    [
+      'el curso sin notas',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      DISTRIBUCION_RUTA,
+      { ...DISTRIBUCION, totalEvaluados: 0 },
+      'Sin notas finales para este curso',
+    ],
+  ])('%s dice qué falta', async (_caso, ruta, api, datos, mensaje) => {
+    await renderConSesion('DIRECTOR', ruta, { [api]: () => datos })
+    expect(await screen.findByText(mensaje)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test.each([
+    ['las universidades', '/indicadores/comparar', UNIVERSIDADES, LISTA],
+    [
+      'las facultades',
+      '/indicadores/universidades/u-norte',
+      FACULTADES,
+      DETALLE,
+    ],
+    [
+      'las carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      CARRERAS_RUTA,
+      CARRERAS,
+    ],
+    [
+      'los cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      CURSOS_RUTA,
+      CURSOS,
+    ],
+    [
+      'la distribución',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      DISTRIBUCION_RUTA,
+      DISTRIBUCION,
+    ],
+  ])('si fallan %s, ofrece reintentar', async (_nivel, ruta, api, datos) => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', ruta, {
+      [api]: () => (intentos++ === 0 ? json({}, 500) : datos),
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Reintentar' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull(),
+    )
+    expect(intentos).toBe(2)
+  })
+
+  test('si los períodos fallan, el selector se cambia por un aviso con reintento', async () => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+      '/api/metricas/periodos': () =>
+        intentos++ === 0
+          ? json({}, 500)
+          : [{ anio: 2026, semestre: 2, activo: true }],
+    })
+    expect(
+      await screen.findByText('No pudimos cargar los períodos.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveAttribute('data-slot', 'alert')
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('combobox', { name: 'Período' }),
+    ).toBeInTheDocument()
+  })
+
+  test('el selector de período es un <select> con su etiqueta', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const selector = await screen.findByRole('combobox', { name: 'Período' })
+    expect(selector.tagName).toBe('SELECT')
+    expect(selector).toHaveAttribute('data-slot', 'native-select')
+    expect(selector).toHaveValue('')
+    expect(screen.getByLabelText('Período')).toBe(selector)
+  })
+})
+
+describe('pestañas de la comparación', () => {
+  const COMPARAR = '/indicadores/comparar'
+
+  test('abre en la tabla; el gráfico está en la otra pestaña', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('tab', { name: 'Tabla' })
+    const grafico = screen.getByRole('tab', { name: 'Gráfico' })
+    expect(tabla).toHaveAttribute('aria-selected', 'true')
+    expect(grafico).toHaveAttribute('aria-selected', 'false')
+    expect(
+      screen.getByRole('table', { name: 'Indicadores por universidad' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: 'Indicador a graficar' }),
+    ).toBeNull()
+
+    fireEvent.mouseDown(grafico)
+    expect(grafico).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByRole('combobox', { name: 'Indicador a graficar' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+
+    fireEvent.mouseDown(tabla)
+    expect(
+      screen.getByRole('table', { name: 'Indicadores por universidad' }),
+    ).toBeInTheDocument()
+  })
+
+  test('las flechas pasan de una pestaña a la otra', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('tab', { name: 'Tabla' })
+    tabla.focus()
+    fireEvent.keyDown(tabla, { key: 'ArrowRight' })
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Gráfico' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+  })
+
+  test('la tabla ordena por una columna al pulsar su encabezado', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('table', {
+      name: 'Indicadores por universidad',
+    })
+    const nombres = () =>
+      within(tabla)
+        .getAllByRole('row')
+        .slice(1)
+        .map((fila) => within(fila).getAllByRole('cell')[0].textContent)
+    expect(nombres()).toEqual([
+      'Universidad Demo Norte',
+      'Universidad Demo Sur',
+    ])
+    // Sur no tiene alumnos: con orden ascendente queda primero.
+    fireEvent.click(within(tabla).getByRole('button', { name: /Alumnos/ }))
+    expect(nombres()).toEqual([
+      'Universidad Demo Sur',
+      'Universidad Demo Norte',
+    ])
+  })
+})
+
+describe('tabla de cursos', () => {
+  test('los encabezados ordenables son botones y el orden queda en aria-sort', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      { [CURSOS_RUTA]: () => CURSOS },
+    )
+    const boton = await screen.findByRole('button', {
+      name: 'Ordenar por Promedio',
+    })
+    expect(boton).toHaveAttribute('data-slot', 'orden-columna')
+    const encabezado = boton.closest('th')!
+    expect(encabezado).toHaveAttribute('aria-sort', 'none')
+    fireEvent.click(boton)
+    expect(encabezado).toHaveAttribute('aria-sort', 'ascending')
+    fireEvent.click(boton)
+    expect(encabezado).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  test('cada curso es un enlace al detalle y la tabla se lleva su etiqueta', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
+      { [CURSOS_RUTA]: () => CURSOS },
+    )
+    const tabla = await screen.findByRole('table', {
+      name: 'Cursos de la carrera',
+    })
+    const enlaces = within(tabla).getAllByRole('link')
+    expect(enlaces.length).toBe(CURSOS.cursos.length)
+    expect(enlaces[0].getAttribute('href')).toMatch(
+      /\/cursos\/.+\?periodo=2026-1$/,
+    )
+  })
 })
