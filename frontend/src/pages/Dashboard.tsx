@@ -13,7 +13,6 @@ import {
   textoPendientes,
 } from './misSecciones'
 import { PanelSuperadmin } from './PanelSuperadmin'
-import { RUTA_HISTORIAL } from './HistorialAlumno'
 import { SeccionesAyudante } from './SeccionesAyudante'
 import { SeccionesAlumno } from './SeccionesAlumno'
 import { useDatos } from './useDatos'
@@ -24,16 +23,17 @@ import { useDatos } from './useDatos'
 // El superadmin (MT-04) ve las universidades y elige dónde trabajar.
 export function Dashboard() {
   const { user } = useSession()
+  if (user.rol === 'ALUMNO') {
+    return (
+      <section aria-label="Dashboard">
+        <SeccionesAlumno key={user.id} />
+      </section>
+    )
+  }
   return (
     <section aria-label="Dashboard" className="dashboard">
       {user.rol === 'PROFESOR' && <SeccionesProfesor />}
       {user.rol === 'AYUDANTE' && <SeccionesAyudante />}
-      {user.rol === 'ALUMNO' && (
-        <>
-          <Link to={RUTA_HISTORIAL}>Historial de notas</Link>
-          <SeccionesAlumno key={user.id} />
-        </>
-      )}
       {user.rol === 'SUPERADMIN' && <PanelSuperadmin />}
     </section>
   )
