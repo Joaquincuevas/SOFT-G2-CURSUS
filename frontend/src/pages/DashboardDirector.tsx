@@ -25,7 +25,11 @@ export function DashboardDirector() {
   const [metricas, recargar] = useDatos<MetricasConsolidadas>(
     '/api/metricas/consolidado',
   )
-  const n = metricas?.periodos.length ?? 0
+  // Una respuesta que no es el consolidado (por ejemplo, un `[]`) se trata como
+  // un error de carga, no como datos: así la pantalla no se cae.
+  const consolidado =
+    metricas && Array.isArray(metricas.periodos) ? metricas : null
+  const n = consolidado?.periodos.length ?? 0
   return (
     <div className="grid min-w-0 gap-8">
       <PageHeader
@@ -38,27 +42,27 @@ export function DashboardDirector() {
         </h2>
         {metricas === undefined ? (
           <CargandoEsqueleto texto="Cargando indicadores…" tarjetas={3} />
-        ) : metricas === null ? (
+        ) : consolidado === null ? (
           <ErrorState
             mensaje="No pudimos cargar los indicadores."
             onReintentar={recargar}
           />
         ) : (
           <TresIndicadores
-            datos={metricas}
+            datos={consolidado}
             className="xl:grid-cols-5"
             extra={
               <>
                 <TarjetaIndicador
                   titulo="Alumnos inscritos"
-                  valor={metricas.alumnos}
+                  valor={consolidado.alumnos}
                   unidad=""
                   decimales={0}
                   detalle="En el período activo"
                 />
                 <TarjetaIndicador
                   titulo="Cursos"
-                  valor={metricas.cursos}
+                  valor={consolidado.cursos}
                   unidad=""
                   decimales={0}
                   detalle={`${n} ${n === 1 ? 'universidad' : 'universidades'} con período activo`}
