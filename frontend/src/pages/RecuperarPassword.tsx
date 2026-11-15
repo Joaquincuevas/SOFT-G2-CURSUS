@@ -1,8 +1,15 @@
 import { LARGO_MAXIMO_PASSWORD, LARGO_MINIMO_PASSWORD } from '@cursus/shared'
+import { CircleCheck, Loader2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router'
-import { PanelMarca } from '../components/PanelMarca'
-import './Login.css'
+import { AlertaAcceso } from '@/components/AlertaAcceso'
+import { AuthLayout } from '@/components/AuthLayout'
+import { CampoPassword } from '@/components/CampoPassword'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 export function RecuperarPassword({
   restablecer = false,
@@ -13,6 +20,8 @@ export function RecuperarPassword({
   const [enviando, setEnviando] = useState(false)
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState<string>()
+  // Las contraseñas que no coinciden marcan la confirmación como inválida.
+  const [noCoincide, setNoCoincide] = useState(false)
   const invalido = restablecer && !/^[a-f0-9]{64}$/.test(token)
   const titulo = restablecer
     ? 'Define tu nueva contraseña'
@@ -23,9 +32,11 @@ export function RecuperarPassword({
     const datos = new FormData(event.currentTarget)
     const passwordNueva = datos.get('passwordNueva')
     if (restablecer && passwordNueva !== datos.get('confirmacion')) {
+      setNoCoincide(true)
       setError('Las contraseñas deben coincidir.')
       return
     }
+    setNoCoincide(false)
     setEnviando(true)
     setError(undefined)
     try {
@@ -62,85 +73,128 @@ export function RecuperarPassword({
   }
 
   return (
-    <div className="login">
-      <PanelMarca />
-      <main className="login__area">
-        <div className="login__wrapper">
-          <h1 className="login__title">{titulo}</h1>
-          {enviado ? (
-            <div className="login__card" role="status">
-              {restablecer
-                ? 'Contraseña actualizada. Ya puedes iniciar sesión.'
-                : 'Si existe una cuenta asociada a ese correo, recibirás un enlace de recuperación.'}
-            </div>
-          ) : invalido ? (
-            <p className="login__error" role="alert">
-              El enlace es inválido o expiró. Solicita uno nuevo.
-            </p>
-          ) : (
+    <AuthLayout
+      titulo={titulo}
+      descripcion={
+        restablecer
+          ? 'Elige una contraseña nueva para tu cuenta.'
+          : 'Ingresa tu correo institucional y te enviaremos un enlace para elegir una contraseña nueva.'
+      }
+      pie={
+        <div className="grid justify-items-start gap-1">
+          {restablecer && !enviado && (
+            <Button
+              asChild
+              variant="link"
+              className="h-auto p-0 font-medium underline"
+            >
+              <Link to="/recuperar-password">Solicitar un nuevo enlace</Link>
+            </Button>
+          )}
+          <Button
+            asChild
+            variant="link"
+            className="h-auto p-0 font-medium underline"
+          >
+            <Link to="/login">Volver al inicio de sesión</Link>
+          </Button>
+        </div>
+      }
+    >
+      {enviado ? (
+        <Alert variant="success">
+          <CircleCheck aria-hidden="true" />
+          <AlertDescription>
+            {restablecer
+              ? 'Contraseña actualizada. Ya puedes iniciar sesión.'
+              : 'Si existe una cuenta asociada a ese correo, recibirás un enlace de recuperación.'}
+          </AlertDescription>
+        </Alert>
+      ) : invalido ? (
+        <AlertaAcceso variante="danger">
+          El enlace es inválido o expiró. Solicita uno nuevo.
+        </AlertaAcceso>
+      ) : (
+        <Card className="gap-5 py-7 shadow-(--shadow-card)">
+          <CardContent className="px-5 sm:px-7">
             <form
-              className="login__card"
+              className="grid gap-5"
               onSubmit={(event) => void enviar(event)}
             >
               {error && (
-                <p className="login__error" role="alert">
+                <AlertaAcceso variante="danger" id="recuperar-error">
                   {error}
-                </p>
+                </AlertaAcceso>
               )}
               {restablecer ? (
                 <>
-                  <label className="login__field">
-                    Nueva contraseña
-                    <input
-                      className="login__input"
+                  <div className="grid gap-2">
+                    <Label htmlFor="restablecer-nueva">Nueva contraseña</Label>
+                    <CampoPassword
+                      id="restablecer-nueva"
+                      etiqueta="Nueva contraseña"
                       name="passwordNueva"
-                      type="password"
                       autoComplete="new-password"
                       minLength={LARGO_MINIMO_PASSWORD}
                       maxLength={LARGO_MAXIMO_PASSWORD}
+                      aria-describedby="restablecer-requisito"
                       required
                     />
-                  </label>
-                  <label className="login__field">
-                    Confirma la contraseña
-                    <input
-                      className="login__input"
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="restablecer-confirmacion">
+                      Confirma la contraseña
+                    </Label>
+                    <CampoPassword
+                      id="restablecer-confirmacion"
+                      etiqueta="Confirma la contraseña"
                       name="confirmacion"
-                      type="password"
                       autoComplete="new-password"
                       maxLength={LARGO_MAXIMO_PASSWORD}
+                      aria-invalid={noCoincide ? true : undefined}
+                      aria-describedby={error ? 'recuperar-error' : undefined}
                       required
                     />
-                  </label>
+                  </div>
+                  <p
+                    id="restablecer-requisito"
+                    className="m-0 text-xs text-muted-foreground"
+                  >
+                    Debe tener al menos {LARGO_MINIMO_PASSWORD} caracteres.
+                  </p>
                 </>
               ) : (
-                <label className="login__field">
-                  Correo institucional
-                  <input
-                    className="login__input"
+                <div className="grid gap-2">
+                  <Label htmlFor="recuperar-correo">Correo institucional</Label>
+                  <Input
+                    id="recuperar-correo"
                     name="correo"
                     type="email"
                     autoComplete="email"
                     maxLength={254}
+                    className="h-11.5 px-3.5"
+                    aria-describedby={error ? 'recuperar-error' : undefined}
                     required
                   />
-                </label>
+                </div>
               )}
-              <button
-                className="login__button"
+              <Button
                 type="submit"
                 disabled={enviando}
+                className="h-10.5 w-full"
               >
+                {enviando && (
+                  <Loader2
+                    aria-hidden="true"
+                    className="animate-spin motion-reduce:animate-none"
+                  />
+                )}
                 {restablecer ? 'Guardar contraseña' : 'Enviar enlace'}
-              </button>
+              </Button>
             </form>
-          )}
-          {restablecer && !enviado && (
-            <Link to="/recuperar-password">Solicitar un nuevo enlace</Link>
-          )}
-          <Link to="/login">Volver al inicio de sesión</Link>
-        </div>
-      </main>
-    </div>
+          </CardContent>
+        </Card>
+      )}
+    </AuthLayout>
   )
 }
