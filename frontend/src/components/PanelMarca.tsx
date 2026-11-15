@@ -1,3 +1,4 @@
+import { CursusLogo } from '@/components/brand/CursusLogo'
 import '../pages/Login.css'
 
 // Panel de marca del login del Figma (nodo 66:2). También lo usa la pantalla
@@ -6,7 +7,10 @@ export function PanelMarca() {
   return (
     <aside className="login__brand">
       <div className="login__brand-top">
-        <p className="login__logo">CURSUS</p>
+        <p className="login__logo flex items-center gap-3">
+          <CursusLogo size={40} decorativo className="shrink-0 text-white" />
+          CURSUS
+        </p>
         <span className="login__accent" aria-hidden="true" />
       </div>
       <div className="login__brand-message">

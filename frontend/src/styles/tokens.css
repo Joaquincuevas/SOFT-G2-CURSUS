@@ -12,6 +12,9 @@
   --color-primary-hover: rgb(27 79 114 / 50%);
   --color-background: #ffffff;
   --color-surface: #f4f8fb;
+  /* No está en el Figma: fondo del área de contenido, con un 5 % del color de
+     la universidad sobre blanco (cambia con TemaUniversidad). */
+  --color-fondo-pagina: color-mix(in srgb, var(--color-primary) 5%, #ffffff);
   --color-text-primary: #333333;
   --color-text-secondary: #666666;
   --color-border: #e0e0e0;

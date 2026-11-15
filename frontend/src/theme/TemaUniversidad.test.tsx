@@ -1,6 +1,11 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { expect, test } from 'vitest'
-import { renderApp, simularBackend, usuarioDePrueba } from '../test/sesion'
+import {
+  cerrarSesionDesdeElMenu,
+  renderApp,
+  simularBackend,
+  usuarioDePrueba,
+} from '../test/sesion'
 
 const principal = () =>
   document.documentElement.style.getPropertyValue('--color-primary')
@@ -38,7 +43,7 @@ test('al cerrar sesión vuelve a CURSUS y otro login toma su propio tema', async
   renderApp('/', 'token')
   await screen.findByRole('navigation')
   expect(principal()).toBe('#0a5c36')
-  fireEvent.click(screen.getByRole('button', { name: 'Cerrar Sesión' }))
+  await cerrarSesionDesdeElMenu()
   await screen.findByRole('button', { name: 'Ingresar' })
   expect(principal()).toBe('')
   usuario = { ...usuarioDePrueba('PROFESOR'), universidadColor: '#6b2d84' }

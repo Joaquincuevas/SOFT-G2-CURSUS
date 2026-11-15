@@ -73,8 +73,8 @@ describe('superadmin: Dashboard de universidades (MT-04)', () => {
     )
     // El encabezado muestra su rol.
     expect(
-      screen.getByRole('link', { name: 'Mi perfil: Superadmin, Superadmin' }),
-    ).toBeInTheDocument()
+      within(screen.getByRole('banner')).getAllByText('Superadmin'),
+    ).toHaveLength(2) // el nombre de la cuenta de prueba y su rol
   })
 
   test('sin elegir, las vistas del Administrativo avisan y llevan al Dashboard', async () => {
@@ -135,9 +135,11 @@ describe('superadmin: Dashboard de universidades (MT-04)', () => {
     expect(
       document.documentElement.style.getPropertyValue('--color-primary'),
     ).toBe('#0a5c36')
-    // El encabezado y la barra muestran la facultad elegida.
+    // El menú lateral y la barra muestran la facultad elegida.
     expect(
-      screen.getByText('Facultad de Ciencias de la Salud · Semestre 2026-2'),
+      within(document.getElementById('sidebar')!).getByText(
+        'Facultad de Ciencias de la Salud',
+      ),
     ).toBeInTheDocument()
     expect(contexto()).toHaveTextContent(
       'Trabajando en Facultad de Ciencias de la Salud, Universidad Demo Sur',
