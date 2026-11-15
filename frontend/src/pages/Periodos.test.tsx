@@ -1,7 +1,12 @@
 import type { Periodo, Rol } from '@cursus/shared'
 import { act, fireEvent, screen, within, waitFor } from '@testing-library/react'
 import { test, expect, vi } from 'vitest'
-import { json, renderApp, usuarioDePrueba } from '../test/sesion'
+import {
+  json,
+  renderApp,
+  simularBackend,
+  usuarioDePrueba,
+} from '../test/sesion'
 
 const INICIAL: Periodo = {
   id: 'inicial',
@@ -247,7 +252,8 @@ test('impide envíos y activaciones adicionales mientras guarda', async () => {
 test.each<Rol>(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
   '%s no ve la sección ni puede abrirla directamente',
   async (rol) => {
-    const fetch = preparar(() => Promise.resolve(json([])), rol)
+    const fetch = simularBackend(rol)
+    renderApp('/periodos', 'jwt-de-prueba')
     await screen.findByRole('navigation', { name: 'Navegación principal' })
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1 })).not.toHaveTextContent(
@@ -257,6 +263,11 @@ test.each<Rol>(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
     expect(
       screen.queryByRole('link', { name: 'Períodos' }),
     ).not.toBeInTheDocument()
+    if (rol === 'DIRECTOR') {
+      expect(
+        await screen.findByRole('list', { name: 'Indicadores' }),
+      ).toBeInTheDocument()
+    }
     expect(fetch.mock.calls.some(([ruta]) => ruta === '/api/periodos')).toBe(
       false,
     )
