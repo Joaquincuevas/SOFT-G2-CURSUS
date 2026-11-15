@@ -1,3 +1,4 @@
+import './Dashboard.css'
 import type {
   CrearUniversidad,
   ElegirContexto,

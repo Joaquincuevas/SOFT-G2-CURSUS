@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react'
-import { EmptyState, ErrorState } from '@/components/shared'
+import { EmptyState, ErrorState, FileInput } from '@/components/shared'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,7 +11,6 @@ import {
 } from '@cursus/shared'
 import { useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { subirAS3 } from './subirArchivo'
 import { useDatos } from './useDatos'
 
@@ -35,7 +34,7 @@ export function AdministrarSilabo({
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState('')
   const [aviso, setAviso] = useState('')
-  const input = useRef<HTMLInputElement>(null)
+  const [versionInput, setVersionInput] = useState(0)
   const confirmado = useRef<{ archivo: File; id: string } | null>(null)
   const enCurso = useRef(false)
 
@@ -91,7 +90,7 @@ export function AdministrarSilabo({
       )
       recargar()
       confirmado.current = null
-      if (input.current) input.current.value = ''
+      setVersionInput((version) => version + 1)
       setArchivo(null)
       setAviso('Sílabo publicado.')
       alPublicar?.()
@@ -180,71 +179,97 @@ export function AdministrarSilabo({
   }
 
   return (
-    <section className="material" aria-label="Versiones del sílabo">
-      <h3 className="vista-seccion__subtitulo">Versiones del sílabo</h3>
+    <section className="grid min-w-0 gap-4" aria-label="Versiones del sílabo">
+      <h3 className="m-0 text-base font-semibold">Versiones del sílabo</h3>
       {puedePublicar && (
         <form
-          className="material__formulario"
+          className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4"
           aria-label="Cargar sílabo"
           onSubmit={(evento) => void publicar(evento)}
         >
-          <label className="material__campo">
-            Sílabo (PDF, hasta 10 MiB)
-            <input
-              type="file"
-              ref={input}
+          <div className="grid min-w-0 gap-2 text-sm font-medium">
+            <span>Sílabo (PDF, hasta 10 MiB)</span>
+            <FileInput
+              key={versionInput}
+              aria-label="Sílabo (PDF, hasta 10 MiB)"
               accept="application/pdf,.pdf"
               disabled={ocupado}
-              onChange={(evento) => {
+              onChange={([elegido]) => {
                 confirmado.current = null
-                setArchivo(evento.target.files?.[0] ?? null)
+                setArchivo(elegido ?? null)
                 setError('')
                 setAviso('')
               }}
             />
-          </label>
-          <button
-            className="material__boton"
+          </div>
+          <Button
+            variant="outline"
+            className="justify-self-start"
             type="submit"
             disabled={!archivo || ocupado}
           >
             {ocupado ? 'Publicando…' : 'Publicar sílabo'}
-          </button>
+          </Button>
           {aviso && (
-            <p className="material__aviso" role="status">
+            <p
+              className="m-0 text-sm text-(color:--color-success)"
+              role="status"
+            >
               {aviso}
             </p>
           )}
         </form>
       )}
       {error && (
-        <p className="material__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
+      {historial === undefined && (
+        <div role="status">
+          <span className="sr-only">Cargando versiones del sílabo…</span>
+          <Skeleton className="h-16 rounded-xl" />
+        </div>
+      )}
       {historial === null && (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar las versiones del sílabo."
           onReintentar={recargar}
         />
       )}
       {historial?.length === 0 && (
-        <p className="dashboard__texto">Aún no hay un sílabo publicado.</p>
+        <EmptyState
+          icono={FileText}
+          titulo="Aún no hay un sílabo publicado."
+          mensaje={
+            puedePublicar
+              ? 'Sube un PDF para publicar la primera versión.'
+              : 'El profesor puede publicar el sílabo de esta sección.'
+          }
+          className="rounded-xl border border-border bg-card"
+        />
       )}
       {historial && historial.length > 0 && (
-        <ol className="material__lista" aria-label="Historial del sílabo">
+        <ol
+          className="m-0 grid list-none gap-2 p-0"
+          aria-label="Historial del sílabo"
+        >
           {historial.map((v) => (
-            <li key={v.version} className="material__item">
+            <li
+              key={v.version}
+              className="min-w-0 rounded-xl border border-border bg-card p-4 [&_summary]:cursor-pointer"
+            >
               <strong>Versión {v.version}</strong> · {v.responsable} ·{' '}
               <time dateTime={v.subidoEn}>{fechaVersion(v.subidoEn)}</time>{' '}
-              <button
-                className="material__boton"
+              <Button
+                variant="outline"
+                className="justify-self-start"
                 type="button"
                 aria-label={`Descargar versión ${v.version}`}
                 onClick={() => void descargar(v.version)}
               >
                 Descargar PDF
-              </button>
+              </Button>
             </li>
           ))}
         </ol>

@@ -1,4 +1,19 @@
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState, ErrorState } from '@/components/shared'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
   EVALUACION_CON_NOTAS,
   LARGO_NOMBRE_EVALUACION,
   PONDERACION_MAXIMA,
@@ -10,15 +25,13 @@ import {
 } from '@cursus/shared'
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { HistorialDeNota } from './HistorialDeNota'
 import { MisNotas } from './MisNotas'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
 import { NotasFinales } from './NotasFinales'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
-import './PestanaNotas.css'
+import { usePuede } from '../session/session'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
 
@@ -55,9 +68,12 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
   const [edicion, setEdicion] = useState<Evaluacion | null>(null)
   const [historial, setHistorial] = useState<string | null>(null)
   const [avisoEdicion, setAvisoEdicion] = useState(false)
-  const ingresaNotas = rol === 'AYUDANTE'
+  const puedeIngresar = usePuede('update', 'Nota')
+  const puedeEditarEvaluaciones = usePuede('update', 'Evaluacion')
+  const ingresaNotas = rol === 'AYUDANTE' && puedeIngresar
   const consultaNotas = ingresaNotas || rol === 'PROFESOR'
-  const editaEvaluaciones = rol === 'PROFESOR' && !cursoCerrado
+  const editaEvaluaciones =
+    rol === 'PROFESOR' && puedeEditarEvaluaciones && !cursoCerrado
   const veHistorial = rol === 'PROFESOR'
   const aviso =
     rol === 'PROFESOR' && datos
@@ -65,14 +81,24 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
       : null
 
   return (
-    <section className="notas" aria-label="Evaluaciones">
-      <h3 className="vista-seccion__subtitulo">Evaluaciones</h3>
+    <section className="grid min-w-0 gap-4" aria-label="Evaluaciones">
+      <h3 className="m-0 text-base font-semibold">Evaluaciones</h3>
+      {rol === 'AYUDANTE' && (
+        <Alert role="note" variant="info">
+          <AlertTitle>Evaluaciones de solo lectura</AlertTitle>
+          <AlertDescription>
+            Puedes ingresar borradores y enviar las notas a revisión cuando el
+            estado de la evaluación lo permita. El profesor gestiona las
+            evaluaciones y publica las notas.
+          </AlertDescription>
+        </Alert>
+      )}
       {editaEvaluaciones && (
         <FormularioEvaluacion ruta={ruta} alGuardar={recargarConNotasFinales} />
       )}
       {aviso && (
         <p
-          className="notas__ponderaciones"
+          className="rounded-xl border border-(color:--color-warning) bg-card p-3 text-sm font-semibold"
           role="status"
           aria-label="Aviso de ponderaciones"
         >
@@ -80,41 +106,57 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
         </p>
       )}
       {datos === undefined ? (
-        <Cargando texto="Cargando evaluaciones…" />
+        <div role="status">
+          <span className="sr-only">Cargando evaluaciones…</span>
+          <Skeleton className="h-32 rounded-xl" />
+        </div>
       ) : datos === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar las evaluaciones."
           onReintentar={recargar}
         />
       ) : datos.evaluaciones.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay evaluaciones</p>
+        <EmptyState
+          titulo="Aún no hay evaluaciones"
+          mensaje={
+            editaEvaluaciones
+              ? 'Crea la primera evaluación con el formulario de arriba.'
+              : 'Podrás consultar las evaluaciones cuando el profesor las cree.'
+          }
+          className="rounded-xl border border-border bg-card"
+        />
       ) : (
-        <div className="notas__listado">
-          <table className="notas__tabla">
-            <thead>
-              <tr>
-                <th scope="col">Evaluación</th>
-                <th scope="col">Fecha</th>
-                <th scope="col">Ponderación</th>
-                {ingresaNotas && <th scope="col">Estado del envío</th>}
-                {veHistorial && <th scope="col">Acciones</th>}
-                {consultaNotas && <th scope="col">Notas</th>}
-              </tr>
-            </thead>
-            <tbody>
+        <div className="min-w-0 rounded-xl border border-border bg-card">
+          <Table className="table-fixed text-xs sm:table-auto sm:text-sm [&_td]:px-1.5 [&_td]:break-words [&_td]:whitespace-normal [&_th]:px-1.5 [&_th]:break-words [&_th]:whitespace-normal">
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col" className="w-[25%] sm:w-auto">
+                  Evaluación
+                </TableHead>
+                <TableHead scope="col">Fecha</TableHead>
+                <TableHead scope="col">Ponderación</TableHead>
+                {ingresaNotas && (
+                  <TableHead scope="col">Estado del envío</TableHead>
+                )}
+                {veHistorial && <TableHead scope="col">Acciones</TableHead>}
+                {consultaNotas && <TableHead scope="col">Notas</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {datos.evaluaciones.map((evaluacion) => (
-                <tr key={evaluacion.id}>
-                  <td>{evaluacion.nombre}</td>
-                  <td>{evaluacion.fecha}</td>
-                  <td>{evaluacion.ponderacion} %</td>
+                <TableRow key={evaluacion.id}>
+                  <TableCell>{evaluacion.nombre}</TableCell>
+                  <TableCell>{evaluacion.fecha}</TableCell>
+                  <TableCell>{evaluacion.ponderacion} %</TableCell>
                   {veHistorial && (
-                    <td>
+                    <TableCell>
                       {editaEvaluaciones &&
                         (evaluacion.tieneNotas ? (
                           <span>{EVALUACION_CON_NOTAS}</span>
                         ) : (
-                          <button
-                            className="notas__enlace"
+                          <Button
+                            variant="link"
+                            className="h-auto justify-start px-0 py-1 text-xs break-all whitespace-normal text-left sm:text-sm"
                             type="button"
                             aria-label={`Editar ${evaluacion.nombre}`}
                             disabled={edicion !== null}
@@ -124,11 +166,12 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
                             }}
                           >
                             Editar
-                          </button>
+                          </Button>
                         ))}
                       <div>
-                        <button
-                          className="notas__enlace"
+                        <Button
+                          variant="link"
+                          className="h-auto justify-start px-0 py-1 text-xs break-all whitespace-normal text-left sm:text-sm"
                           type="button"
                           aria-label={`Historial de notas de ${evaluacion.nombre}`}
                           aria-expanded={historial === evaluacion.id}
@@ -143,32 +186,34 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
                           {historial === evaluacion.id
                             ? 'Ocultar historial'
                             : 'Ver historial'}
-                        </button>
+                        </Button>
                       </div>
-                    </td>
+                    </TableCell>
                   )}
                   {ingresaNotas && (
-                    <td>
-                      <span
-                        className="notas__estado-envio"
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className="max-w-full text-[0.65rem] whitespace-normal sm:text-xs"
                         data-estado={evaluacion.envio?.estado}
                       >
                         {evaluacion.envio
                           ? ESTADO_REVISION[evaluacion.envio.estado]
                           : 'Estado no disponible'}
-                      </span>
+                      </Badge>
                       {evaluacion.envio?.estado === 'DEVUELTA' && (
                         <ComentarioDevolucion
                           comentario={evaluacion.envio.comentarioDevolucion}
                         />
                       )}
-                    </td>
+                    </TableCell>
                   )}
                   {consultaNotas && (
-                    <td>
-                      <button
+                    <TableCell>
+                      <Button
                         type="button"
-                        className="notas__enlace"
+                        variant="link"
+                        className="h-auto justify-start px-0 py-1 text-xs break-all whitespace-normal text-left sm:text-sm"
                         aria-pressed={elegida === evaluacion.id}
                         aria-label={`Notas de ${evaluacion.nombre}`}
                         onClick={() =>
@@ -187,29 +232,29 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
                               : evaluacion.envio?.estado === 'DEVUELTA'
                                 ? 'Corregir notas'
                                 : 'Ingresar notas'}
-                      </button>
-                    </td>
+                      </Button>
+                    </TableCell>
                   )}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <th scope="row" colSpan={2}>
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableHead scope="row" colSpan={2}>
                   Suma de ponderaciones
-                </th>
-                <td>{datos.sumaPonderaciones} %</td>
-                {veHistorial && <td />}
+                </TableHead>
+                <TableCell>{datos.sumaPonderaciones} %</TableCell>
+                {veHistorial && <TableCell />}
                 {ingresaNotas && (
                   <>
-                    <td />
-                    <td />
+                    <TableCell />
+                    <TableCell />
                   </>
                 )}
-                {rol === 'PROFESOR' && <td />}
-              </tr>
-            </tfoot>
-          </table>
+                {rol === 'PROFESOR' && <TableCell />}
+              </TableRow>
+            </TableFooter>
+          </Table>
         </div>
       )}
       {editaEvaluaciones && edicion && (
@@ -230,7 +275,7 @@ function EvaluacionesDeSeccion({ seccionId, rol, cursoCerrado }: PropsPestana) {
         <HistorialDeNota key={historial} ruta={`${ruta}/${historial}/notas`} />
       )}
       {avisoEdicion && (
-        <p className="notas__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           Evaluación actualizada.
         </p>
       )}
@@ -359,15 +404,15 @@ function FormularioEvaluacion({
 
   return (
     <form
-      className="notas__formulario"
+      className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_auto] sm:items-end"
       aria-label={
         evaluacion ? `Editar ${evaluacion.nombre}` : 'Nueva evaluación'
       }
       onSubmit={(event) => void guardar(event)}
     >
-      <label className="notas__campo">
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         Nombre
-        <input
+        <Input
           autoFocus={Boolean(evaluacion)}
           disabled={guardando || bloqueada}
           value={campos.nombre}
@@ -376,9 +421,9 @@ function FormularioEvaluacion({
           required
         />
       </label>
-      <label className="notas__campo">
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         Fecha
-        <input
+        <Input
           disabled={guardando || bloqueada}
           type="date"
           value={campos.fecha}
@@ -386,9 +431,9 @@ function FormularioEvaluacion({
           required
         />
       </label>
-      <label className="notas__campo">
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         Ponderación (%)
-        <input
+        <Input
           disabled={guardando || bloqueada}
           type="number"
           value={campos.ponderacion}
@@ -399,30 +444,27 @@ function FormularioEvaluacion({
           required
         />
       </label>
-      <button
-        className="notas__boton"
-        type="submit"
-        disabled={guardando || bloqueada}
-      >
+      <Button type="submit" disabled={guardando || bloqueada}>
         {evaluacion ? 'Guardar cambios' : 'Crear evaluación'}
-      </button>
+      </Button>
       {alCancelar && (
-        <button
-          className="notas__enlace"
+        <Button
+          variant="link"
+          className="h-auto justify-start px-0 py-1 text-xs break-all whitespace-normal text-left sm:text-sm"
           type="button"
           disabled={guardando}
           onClick={alCancelar}
         >
           Cancelar
-        </button>
+        </Button>
       )}
       {error && (
-        <p className="notas__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
       {aviso && (
-        <p className="notas__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}

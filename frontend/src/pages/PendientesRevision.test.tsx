@@ -182,9 +182,8 @@ describe('contador de pendientes en el dashboard del profesor (NOT-10)', () => {
       },
     })
 
-    const aviso = await screen.findByText(
-      /3 evaluaciones pendientes de revisión/,
-    )
+    const aviso = await screen.findByRole('region', { name: 'Por revisar' })
+    expect(aviso).toHaveTextContent('3 evaluaciones pendientes de revisión')
     // Cada tarjeta con pendientes dice cuántas tiene.
     expect(
       screen.getByText('2 evaluaciones pendientes de revisión'),

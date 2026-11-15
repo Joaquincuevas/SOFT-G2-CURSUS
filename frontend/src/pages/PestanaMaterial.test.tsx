@@ -285,7 +285,9 @@ describe('pestaña Material (MAT-04)', () => {
     await abrirMaterial()
 
     const p = panel()
-    expect(p.getByLabelText('Archivo')).toBeInTheDocument()
+    expect(p.getByLabelText('Archivo')).toHaveAttribute('type', 'file')
+    expect(p.getAllByText('Seleccionar archivo')).toHaveLength(2)
+    expect(p.getAllByText('Ningún archivo seleccionado')).toHaveLength(2)
     expect(p.getByLabelText('Descripción (opcional)')).toBeInTheDocument()
     const categorias = within(p.getByLabelText('Categoría'))
       .getAllByRole('option')
@@ -313,6 +315,11 @@ describe('pestaña Material (MAT-04)', () => {
         await panel().findByRole('article', { name: 'Solemne 2025' }),
       ).toBeInTheDocument()
       expect(panel().queryByLabelText('Archivo')).toBeNull()
+      expect(panel().queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
+      expect(panel().queryByText('Subir nueva versión')).toBeNull()
+      if (rol === 'AYUDANTE') {
+        expect(panel().getByText('Material en solo lectura')).toBeVisible()
+      }
       expect(
         panel().queryByRole('button', { name: 'Subir material' }),
       ).toBeNull()

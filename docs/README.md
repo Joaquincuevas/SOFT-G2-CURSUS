@@ -43,6 +43,7 @@ Documentación del proyecto:
 - [UI/UX-L: login y pantallas de acceso con shadcn](ui-l-login-landing.md)
 - [UI/UX-08: experiencia del Director con shadcn](ui-08-director.md)
 - [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
+- [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
 - [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)

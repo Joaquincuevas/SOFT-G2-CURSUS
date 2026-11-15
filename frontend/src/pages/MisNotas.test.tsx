@@ -60,11 +60,16 @@ describe('NOT-13: el alumno ve sus notas publicadas', () => {
     const { panel } = await abrirNotas('ALUMNO', { [MIS_NOTAS]: () => NOTAS })
 
     expect(panel.getByRole('region', { name: 'Mis notas' })).toBeInTheDocument()
-    const filas = (await panel.findAllByRole('row')).map((f) => f.textContent)
-    expect(filas).toEqual([
+    const filas = await panel.findAllByRole('row')
+    expect(filas[1].querySelector('time')).toHaveAttribute(
+      'datetime',
+      '2026-09-01',
+    )
+    const textos = filas.map((f) => f.textContent)
+    expect(textos).toEqual([
       'EvaluaciónFechaPonderaciónNota',
-      'Control 12026-09-0120 %5,0',
-      'Solemne 12026-10-0530 %Sin publicar',
+      'Control 101-09-202620 %5,0',
+      'Solemne 105-10-202630 %Sin publicar',
     ])
   })
 
