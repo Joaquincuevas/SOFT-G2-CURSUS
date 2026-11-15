@@ -13,6 +13,7 @@ import {
   textoPendientes,
 } from './misSecciones'
 import { DashboardAdministrativo } from './DashboardAdministrativo'
+import { DashboardDirector } from './DashboardDirector'
 import { PanelSuperadmin } from './PanelSuperadmin'
 import { SeccionesAyudante } from './SeccionesAyudante'
 import { SeccionesAlumno } from './SeccionesAlumno'
@@ -22,13 +23,21 @@ import { useDatos } from './useDatos'
 // Dashboard de cada rol. El título del Figma ("Visión del Directorio" o
 // "Bienvenido/a, <nombre>") lo muestra el Header. El profesor (ESP-01) y el
 // ayudante (ESP-02) y el alumno (ESP-03) ven sus secciones del período activo.
-// El superadmin (MT-04) ve las universidades y elige dónde trabajar.
+// El Director (MET-01) ve el consolidado de las universidades. El superadmin
+// (MT-04) ve las universidades y elige dónde trabajar.
 export function Dashboard() {
   const { user } = useSession()
   if (user.rol === 'ALUMNO') {
     return (
       <section aria-label="Dashboard">
         <SeccionesAlumno key={user.id} />
+      </section>
+    )
+  }
+  if (user.rol === 'DIRECTOR') {
+    return (
+      <section aria-label="Dashboard">
+        <DashboardDirector />
       </section>
     )
   }

@@ -96,6 +96,16 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
     { anio: 2026, semestre: 2, activo: true },
     { anio: 2026, semestre: 1, activo: false },
   ],
+  // Dashboard del Director (UI/UX-08): el consolidado sin datos y sin universidades.
+  '/api/metricas/consolidado': () => ({
+    periodos: [],
+    aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+    promedio: { valor: null, alumnos: 0 },
+    asistencia: { valor: null, presentes: 0, registros: 0 },
+    alumnos: 0,
+    cursos: 0,
+  }),
+  '/api/metricas/universidades': () => [],
   '/api/cursos': () => [],
   '/api/dashboard/mis-secciones': () => [],
   '/api/dashboard/secciones-ayudante': () => [],
