@@ -1,3 +1,8 @@
+import { FileText } from 'lucide-react'
+import { EmptyState, ErrorState } from '@/components/shared'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   MAX_TAMANO_SILABO_BYTES,
   type DescargaArchivo,
@@ -15,10 +20,12 @@ import { useDatos } from './useDatos'
 export function AdministrarSilabo({
   ruta,
   puedePublicar,
+  vistaAlumno = false,
   alPublicar,
 }: {
   ruta: string
   puedePublicar: boolean
+  vistaAlumno?: boolean
   alPublicar?: () => void
 }) {
   const { fetchConSesion } = useAuth()
@@ -113,6 +120,65 @@ export function AdministrarSilabo({
     }
   }
 
+  if (vistaAlumno) {
+    return (
+      <section aria-label="Versiones del sílabo" className="grid min-w-0 gap-3">
+        <h3 className="m-0 text-base font-semibold">Versiones del sílabo</h3>
+        {error && (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {historial === undefined ? (
+          <div role="status">
+            <span className="sr-only">Cargando versiones del sílabo…</span>
+            <Skeleton className="h-16 rounded-xl" />
+          </div>
+        ) : historial === null ? (
+          <ErrorState
+            mensaje="No pudimos cargar las versiones del sílabo."
+            onReintentar={recargar}
+          />
+        ) : historial.length === 0 ? (
+          <Card className="py-0">
+            <EmptyState
+              icono={FileText}
+              titulo="Aún no hay un sílabo publicado."
+              mensaje="Aquí podrás descargarlo cuando el profesor lo publique."
+            />
+          </Card>
+        ) : (
+          <ol
+            className="m-0 grid list-none gap-2 p-0"
+            aria-label="Historial del sílabo"
+          >
+            {historial.map((v) => (
+              <li key={v.version}>
+                <Card className="py-3">
+                  <CardContent className="flex flex-wrap items-center justify-between gap-2 px-4 text-sm">
+                    <span className="min-w-0 break-words">
+                      <strong>Versión {v.version}</strong> · {v.responsable} ·{' '}
+                      <time dateTime={v.subidoEn}>
+                        {fechaVersion(v.subidoEn)}
+                      </time>
+                    </span>
+                    <Button
+                      variant="outline"
+                      aria-label={`Descargar versión ${v.version}`}
+                      onClick={() => void descargar(v.version)}
+                    >
+                      Descargar PDF
+                    </Button>
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+    )
+  }
+
   return (
     <section className="material" aria-label="Versiones del sílabo">
       <h3 className="vista-seccion__subtitulo">Versiones del sílabo</h3>
@@ -170,11 +236,7 @@ export function AdministrarSilabo({
           {historial.map((v) => (
             <li key={v.version} className="material__item">
               <strong>Versión {v.version}</strong> · {v.responsable} ·{' '}
-              <time dateTime={v.subidoEn}>
-                {new Date(v.subidoEn).toLocaleDateString('es-CL', {
-                  timeZone: 'America/Santiago',
-                })}
-              </time>{' '}
+              <time dateTime={v.subidoEn}>{fechaVersion(v.subidoEn)}</time>{' '}
               <button
                 className="material__boton"
                 type="button"
@@ -189,4 +251,10 @@ export function AdministrarSilabo({
       )}
     </section>
   )
+}
+
+function fechaVersion(fecha: string) {
+  return new Date(fecha).toLocaleDateString('es-CL', {
+    timeZone: 'America/Santiago',
+  })
 }
