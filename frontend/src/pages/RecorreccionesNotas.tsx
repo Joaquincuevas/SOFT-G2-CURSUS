@@ -1,4 +1,15 @@
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import {
   LARGO_MOTIVO_NOTA,
   MENSAJES_NOTA_INVALIDA,
   motivoNotaInvalida,
@@ -32,33 +43,41 @@ export function RecorreccionesNotas({
   const alumno = alumnos.find((a) => a.id === elegido)
   return (
     <>
-      <div className="notas__listado">
-        <table className="notas__tabla" aria-label="Notas publicadas">
-          <thead>
-            <tr>
-              <th scope="col">Alumno</th>
-              <th scope="col">Nota</th>
-              <th scope="col">Estado</th>
-              {editable && <th scope="col">Recorrección</th>}
-            </tr>
-          </thead>
-          <tbody>
+      <div className="min-w-0 rounded-xl border bg-card">
+        <Table
+          className="[&_td]:whitespace-normal [&_th]:whitespace-normal"
+          aria-label="Notas publicadas"
+        >
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Alumno</TableHead>
+              <TableHead scope="col">Nota</TableHead>
+              <TableHead scope="col">Estado</TableHead>
+              {editable && <TableHead scope="col">Recorrección</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {alumnos.map((a) => (
-              <tr key={a.id}>
-                <td>{a.nombre}</td>
-                <td>{a.nota === null ? 'Sin nota' : formato.format(a.nota)}</td>
-                <td>
+              <TableRow key={a.id}>
+                <TableCell>{a.nombre}</TableCell>
+                <TableCell>
+                  {a.nota === null ? 'Sin nota' : formato.format(a.nota)}
+                </TableCell>
+                <TableCell>
                   {a.estado === 'PUBLICADA' ? 'Publicada' : 'Sin publicar'}
                   {a.recorregida && (
-                    <span className="notas__recorregida">Recorregida</span>
+                    <span className="ml-2 inline-flex rounded-full border px-2 py-0.5 text-xs text-primary">
+                      Recorregida
+                    </span>
                   )}
-                </td>
+                </TableCell>
                 {editable && (
-                  <td>
+                  <TableCell>
                     {a.estado === 'PUBLICADA' && a.nota !== null && (
-                      <button
+                      <Button
                         type="button"
-                        className="notas__enlace"
+                        variant="link"
+                        className="h-auto justify-start px-0 py-1 whitespace-normal text-left"
                         aria-label={`Recorregir nota de ${a.nombre}`}
                         disabled={elegido !== null}
                         onClick={() => {
@@ -67,14 +86,14 @@ export function RecorreccionesNotas({
                         }}
                       >
                         Recorregir
-                      </button>
+                      </Button>
                     )}
-                  </td>
+                  </TableCell>
                 )}
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       {editable && alumno && alumno.nota !== null && (
         <FormularioRecorreccion
@@ -97,7 +116,7 @@ export function RecorreccionesNotas({
         />
       )}
       {aviso && (
-        <p className="notas__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}
@@ -186,27 +205,27 @@ function FormularioRecorreccion({
 
   return (
     <form
-      className="notas__recorreccion"
+      className="mt-4 grid gap-3 rounded-xl border bg-muted/50 p-4"
       aria-label={`Recorregir nota de ${alumno.nombre}`}
       onSubmit={(event) => void guardar(event)}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && !guardando) alCancelar()
       }}
     >
-      <h5 className="vista-seccion__subtitulo">
+      <h5 className="m-0 text-base font-semibold">
         Recorrección de {alumno.nombre}
       </h5>
       <p>
         Nota publicada: <strong>{formato.format(notaAnterior)}</strong>. La nota
         nueva será visible para el alumno.
       </p>
-      <label className="notas__campo">
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         Nota nueva
-        <input
+        <Input
           autoFocus
           type="text"
           inputMode="decimal"
-          className="notas__nota"
+          className="w-20 tabular-nums"
           value={nota}
           disabled={guardando || desactualizada}
           required
@@ -219,18 +238,18 @@ function FormularioRecorreccion({
         />
       </label>
       {motivoNota && (
-        <p id={`${id}-nota`} className="notas__error">
+        <p id={`${id}-nota`} className="m-0 text-sm text-destructive">
           {MENSAJES_NOTA_INVALIDA[motivoNota]}
         </p>
       )}
       {nota.trim() && !motivoNota && valor === notaAnterior && (
-        <p className="notas__error">
+        <p className="m-0 text-sm text-destructive">
           La nota nueva debe ser distinta de la publicada.
         </p>
       )}
-      <label className="notas__campo">
+      <label className="grid min-w-0 gap-1.5 text-sm font-medium">
         Motivo de la recorrección
-        <textarea
+        <Textarea
           value={motivo}
           required
           rows={3}
@@ -245,34 +264,39 @@ function FormularioRecorreccion({
       </label>
       <p
         id={`${id}-contador`}
-        className={excedido ? 'notas__error' : 'dashboard__texto'}
+        className={
+          excedido
+            ? 'm-0 text-sm text-destructive'
+            : 'm-0 text-sm text-muted-foreground'
+        }
       >
         {largo}/{LARGO_MOTIVO_NOTA} caracteres
       </p>
-      <div className="notas__acciones">
-        <button
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
           type="submit"
-          className="notas__boton"
+
           disabled={guardando || desactualizada || invalida}
         >
           {guardando ? 'Guardando…' : 'Guardar recorrección'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="notas__enlace"
+          variant="link"
+          className="h-auto justify-start px-0 py-1 whitespace-normal text-left"
           disabled={guardando}
           onClick={alCancelar}
         >
           Cancelar
-        </button>
+        </Button>
         {desactualizada && (
-          <button type="button" className="notas__boton" onClick={alRecargar}>
+          <Button type="button" onClick={alRecargar}>
             Recargar notas
-          </button>
+          </Button>
         )}
       </div>
       {error && (
-        <p className="notas__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}

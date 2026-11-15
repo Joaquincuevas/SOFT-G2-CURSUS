@@ -424,6 +424,20 @@ describe('layout de curso (UIX-04)', () => {
     expect(panel.queryByRole('region', { name: /^Alumnos/ })).toBeNull()
   })
 
+  test('el ayudante ve los integrantes en solo lectura y no recibe la nómina', async () => {
+    await renderConSesion(
+      'AYUDANTE',
+      `${VISTA}?vista=integrantes`,
+      rutas('AYUDANTE'),
+    )
+    const panel = within(
+      await screen.findByRole('tabpanel', { name: 'Integrantes' }),
+    )
+    expect(panel.getByText('Integrantes en solo lectura')).toBeVisible()
+    expect(panel.getByText('Diego Muñoz')).toBeVisible()
+    expect(panel.queryByRole('list', { name: 'Alumnos inscritos' })).toBeNull()
+  })
+
   test('Material lleva el sílabo vigente arriba', async () => {
     await renderConSesion('ALUMNO', `${VISTA}?vista=material`, {
       ...rutas('ALUMNO'),

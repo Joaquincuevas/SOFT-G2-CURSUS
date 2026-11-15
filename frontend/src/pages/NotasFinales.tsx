@@ -1,10 +1,18 @@
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import type { NotasFinalesSeccion } from '@cursus/shared'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { textoNotaFinal } from './nota-final'
-import './PestanaNotas.css'
 import { useDatos } from './useDatos'
 import { descargar } from './csvErrores'
 
@@ -46,17 +54,16 @@ export function NotasFinales({
   }, [version])
 
   return (
-    <section className="notas" aria-label="Notas finales">
-      <h3 className="vista-seccion__subtitulo">Notas finales</h3>
+    <section className="grid min-w-0 gap-4" aria-label="Notas finales">
+      <h3 className="m-0 text-base font-semibold">Notas finales</h3>
       <div>
-        <button
-          className="notas__boton"
+        <Button
           type="button"
           disabled={descargando}
           onClick={() => void exportar()}
         >
           {descargando ? 'Exportando…' : 'Exportar notas a CSV'}
-        </button>
+        </Button>
       </div>
       {errorCsv && (
         <p role="alert">No pudimos exportar las notas. Intenta nuevamente.</p>
@@ -69,30 +76,32 @@ export function NotasFinales({
           onReintentar={recargar}
         />
       ) : datos.alumnos.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay alumnos inscritos</p>
+        <p className="m-0 text-sm text-muted-foreground">
+          Aún no hay alumnos inscritos
+        </p>
       ) : (
-        <div className="notas__listado">
-          <table
-            className="notas__tabla"
+        <div className="min-w-0 rounded-xl border bg-card">
+          <Table
+            className="[&_td]:whitespace-normal [&_th]:whitespace-normal"
             aria-label="Nota final de cada alumno"
           >
-            <thead>
-              <tr>
-                <th scope="col">Alumno</th>
-                <th scope="col">Nota</th>
-              </tr>
-            </thead>
-            <tbody>
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col">Alumno</TableHead>
+                <TableHead scope="col">Nota</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {datos.alumnos.map((alumno) => (
-                <tr key={alumno.id}>
-                  <td>{alumno.nombre}</td>
-                  <td data-tipo={alumno.notaFinal.tipo}>
+                <TableRow key={alumno.id}>
+                  <TableCell>{alumno.nombre}</TableCell>
+                  <TableCell data-tipo={alumno.notaFinal.tipo}>
                     {textoNotaFinal(alumno.notaFinal)}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
     </section>
