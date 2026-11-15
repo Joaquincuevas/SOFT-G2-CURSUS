@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useSession } from '../session/session'
 import { MenuUsuario } from './MenuUsuario'
-import { useMigasDinamica } from './migas-contexto'
+import { useMigasDinamica, usePublicarMigaActual } from './migas-contexto'
 import { migasDe, type Miga } from './migas'
 import { SOBRE_COLOR } from './sobre-color'
 
@@ -31,6 +31,7 @@ export function Header({ onAbrirMenu, menuAbierto }: Props) {
   const { user } = useSession()
   const { pathname } = useLocation()
   const migas = migasDe(pathname, user, useMigasDinamica())
+  usePublicarMigaActual(migas[migas.length - 1].etiqueta)
   const { periodoActivo } = user
 
   return (

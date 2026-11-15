@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/shared'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useEtiquetaDeMiga } from '../layout/migas-contexto'
@@ -432,7 +433,7 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
           onReintentar={recargar}
         />
       ) : datos.alumnos.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay alumnos inscritos</p>
+        <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
       ) : (
         <ul className="vista-seccion__lista" aria-label="Alumnos inscritos">
           {datos.alumnos.map((alumno) => (

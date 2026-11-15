@@ -3,6 +3,10 @@ import { MigasContext } from './migas-contexto'
 
 export function MigasProvider({ children }: { children: ReactNode }) {
   const [dinamica, fijarDinamica] = useState<string | null>(null)
-  const valor = useMemo(() => ({ dinamica, fijarDinamica }), [dinamica])
+  const [actual, fijarActual] = useState<string | null>(null)
+  const valor = useMemo(
+    () => ({ dinamica, fijarDinamica, actual, fijarActual }),
+    [dinamica, actual],
+  )
   return <MigasContext value={valor}>{children}</MigasContext>
 }
