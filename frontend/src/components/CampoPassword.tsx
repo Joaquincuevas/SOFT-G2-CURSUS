@@ -19,19 +19,23 @@ export function CampoPassword({ etiqueta, className, ...props }: Props) {
       <Input
         {...props}
         type={visible ? 'text' : 'password'}
-        className={cn('h-11.5 px-3.5 pr-12', className)}
+        className={cn('h-14 px-4 pr-14 text-base md:text-base', className)}
       />
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="absolute top-1/2 right-1.5 size-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        className="absolute top-1/2 right-2 size-10 -translate-y-1/2 text-muted-foreground hover:text-foreground"
         aria-label={`${visible ? 'Ocultar' : 'Mostrar'} ${etiqueta.toLowerCase()}`}
         aria-pressed={visible}
         aria-controls={props.id}
         onClick={() => setVisible((actual) => !actual)}
       >
-        {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        {visible ? (
+          <EyeOff aria-hidden="true" className="size-5" />
+        ) : (
+          <Eye aria-hidden="true" className="size-5" />
+        )}
       </Button>
     </div>
   )

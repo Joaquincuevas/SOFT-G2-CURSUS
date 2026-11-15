@@ -17,19 +17,19 @@ interface Props {
 export function AuthLayout({ titulo, descripcion, children, pie }: Props) {
   return (
     <div className="min-h-svh bg-card">
-      <div className="grid min-h-svh lg:grid-cols-2">
-        <main className="flex items-center justify-center px-6 py-10 sm:px-12">
-          <div className="grid w-full max-w-110 gap-6">
-            <p className="m-0 inline-flex w-fit items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-sm font-bold tracking-[2px] text-(color:--color-primary-dark)">
-              <CursusLogo size={22} decorativo className="text-primary" />
+      <div className="grid min-h-svh lg:grid-cols-[5fr_7fr]">
+        <main className="flex items-center justify-center px-6 py-10 sm:px-12 xl:px-20">
+          <div className="grid w-full max-w-xl gap-8">
+            <p className="m-0 inline-flex w-fit items-center gap-2.5 rounded-full border border-border px-4 py-2 text-base font-bold tracking-[2px] text-(color:--color-primary-dark)">
+              <CursusLogo size={28} decorativo className="text-primary" />
               CURSUS
             </p>
-            <div className="grid gap-1.5">
-              <h1 className="m-0 text-[28px] leading-9 font-bold text-foreground">
+            <div className="grid gap-2">
+              <h1 className="m-0 text-4xl leading-tight font-bold text-foreground xl:text-[40px]">
                 {titulo}
               </h1>
               {descripcion && (
-                <p className="m-0 text-sm text-muted-foreground">
+                <p className="m-0 text-base text-muted-foreground">
                   {descripcion}
                 </p>
               )}

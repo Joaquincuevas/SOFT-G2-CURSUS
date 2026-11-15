@@ -55,7 +55,7 @@ export function CambioObligatorio() {
         <Button
           type="button"
           variant="link"
-          className="justify-self-center underline"
+          className="justify-self-center text-base underline"
           onClick={() => void cerrarSesion()}
         >
           Cerrar sesión
@@ -64,7 +64,7 @@ export function CambioObligatorio() {
     >
       <Card className="gap-0 border-0 bg-transparent py-0 shadow-none">
         <CardContent className="px-0">
-          <form onSubmit={handleSubmit} className="grid gap-5">
+          <form onSubmit={handleSubmit} className="grid gap-6">
             {error && (
               <AlertaAcceso
                 variante={bloqueado ? 'warning' : 'danger'}
@@ -99,11 +99,15 @@ export function CambioObligatorio() {
             ))}
             <p
               id="cambio-requisito"
-              className="m-0 text-xs text-muted-foreground"
+              className="m-0 text-sm text-muted-foreground"
             >
               Debe tener al menos {LARGO_MINIMO_PASSWORD} caracteres.
             </p>
-            <Button type="submit" disabled={enviando} className="h-10.5 w-full">
+            <Button
+              type="submit"
+              disabled={enviando}
+              className="h-14 w-full text-base"
+            >
               {enviando && (
                 <Loader2
                   aria-hidden="true"

@@ -17,21 +17,21 @@ export function PanelMarca() {
         aria-hidden="true"
         className="absolute inset-0 bg-linear-to-t from-(color:--color-primary-dark) via-(color:--color-primary-dark)/55 via-45% to-transparent"
       />
-      <div className="relative flex h-full flex-col justify-end gap-3.5 p-12">
+      <div className="relative flex h-full flex-col justify-end gap-3.5 p-12 xl:p-16">
         <span
           aria-hidden="true"
           className="h-1 w-[42px] rounded-xs bg-(color:--color-primary-light)"
         />
-        <p className="m-0 text-[28px] leading-9 font-bold text-white">
+        <p className="m-0 text-3xl leading-10 xl:text-4xl xl:leading-[1.2] font-bold text-white">
           Gestión académica,
           <br />
           en un solo lugar.
         </p>
-        <p className="m-0 max-w-97.5 text-sm leading-[22px] text-white">
+        <p className="m-0 max-w-md text-base leading-6 text-white">
           CURSUS centraliza cursos, materiales, notas y seguimiento académico
           para cada universidad.
         </p>
-        <p className="m-0 text-xs leading-[18px] text-white/85">
+        <p className="m-0 text-sm leading-5 text-white/85">
           Sistema de Gestión Académica
         </p>
       </div>

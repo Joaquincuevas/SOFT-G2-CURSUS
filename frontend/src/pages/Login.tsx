@@ -129,14 +129,14 @@ export function Login() {
       titulo="Bienvenido a CURSUS"
       descripcion="Ingresa con tus credenciales institucionales."
       pie={
-        <p className="m-0 text-xs text-muted-foreground">
+        <p className="m-0 text-sm text-muted-foreground">
           CURSUS · Plataforma web de gestión académica
         </p>
       }
     >
       <TarjetaAcceso>
-        <form onSubmit={handleSubmit} noValidate className="grid gap-5">
-          <p className="m-0 text-xs text-muted-foreground">
+        <form onSubmit={handleSubmit} noValidate className="grid gap-6">
+          <p className="m-0 text-sm text-muted-foreground">
             Usa el correo institucional asociado a tu universidad.
           </p>
           {mensaje && (
@@ -145,7 +145,9 @@ export function Login() {
             </AlertaAcceso>
           )}
           <div className="grid gap-2">
-            <Label htmlFor="login-correo">Correo institucional</Label>
+            <Label htmlFor="login-correo" className="text-base">
+              Correo institucional
+            </Label>
             <Input
               ref={correoRef}
               id="login-correo"
@@ -154,7 +156,7 @@ export function Login() {
               autoComplete="username"
               defaultValue={correo}
               placeholder="pedro.soto@universidad.cl"
-              className="h-11.5 px-3.5"
+              className="h-14 px-4 text-base md:text-base"
               aria-invalid={
                 Boolean(errores.correo) || credencialesInvalidas
                   ? true
@@ -172,14 +174,16 @@ export function Login() {
             {errores.correo && (
               <p
                 id="login-correo-error"
-                className="m-0 text-sm text-destructive"
+                className="m-0 text-base text-destructive"
               >
                 {errores.correo}
               </p>
             )}
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="login-password">Contraseña</Label>
+            <Label htmlFor="login-password" className="text-base">
+              Contraseña
+            </Label>
             <CampoPassword
               ref={passwordRef}
               id="login-password"
@@ -204,13 +208,17 @@ export function Login() {
             {errores.password && (
               <p
                 id="login-password-error"
-                className="m-0 text-sm text-destructive"
+                className="m-0 text-base text-destructive"
               >
                 {errores.password}
               </p>
             )}
           </div>
-          <Button type="submit" disabled={enviando} className="h-10.5 w-full">
+          <Button
+            type="submit"
+            disabled={enviando}
+            className="h-14 w-full text-base"
+          >
             {enviando && (
               <Loader2
                 aria-hidden="true"
@@ -222,11 +230,11 @@ export function Login() {
           <Button
             asChild
             variant="link"
-            className="h-auto justify-start p-0 font-medium underline"
+            className="h-auto justify-start p-0 text-base font-medium underline"
           >
             <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
           </Button>
-          <p className="m-0 flex items-center gap-2 text-xs text-muted-foreground">
+          <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
             <span
               aria-hidden="true"
               className="size-2 flex-none rounded-full bg-accent"
@@ -299,7 +307,7 @@ function VerificacionMfa({
       descripcion="Ingresa el código de 6 dígitos de tu app autenticadora."
     >
       <TarjetaAcceso>
-        <form onSubmit={handleSubmit} noValidate className="grid gap-5">
+        <form onSubmit={handleSubmit} noValidate className="grid gap-6">
           {mensaje && (
             <AlertaAcceso
               variante={bloqueado ? 'warning' : 'danger'}
@@ -309,7 +317,9 @@ function VerificacionMfa({
             </AlertaAcceso>
           )}
           <div className="grid gap-2">
-            <Label htmlFor="mfa-codigo">Código de verificación</Label>
+            <Label htmlFor="mfa-codigo" className="text-base">
+              Código de verificación
+            </Label>
             <Input
               ref={codigoRef}
               id="mfa-codigo"
@@ -321,7 +331,7 @@ function VerificacionMfa({
               maxLength={7}
               placeholder="123 456"
               disabled={bloqueado}
-              className="h-11.5 px-3.5 tracking-widest"
+              className="h-14 px-4 text-base tracking-widest md:text-base"
               aria-invalid={error ? true : undefined}
               aria-describedby={mensaje ? 'mfa-error' : undefined}
             />
@@ -329,7 +339,7 @@ function VerificacionMfa({
           <Button
             type="submit"
             disabled={enviando || bloqueado}
-            className="h-10.5 w-full"
+            className="h-14 w-full text-base"
           >
             {enviando && (
               <Loader2
@@ -342,7 +352,7 @@ function VerificacionMfa({
           <Button
             type="button"
             variant="outline"
-            className="h-10.5 w-full"
+            className="h-14 w-full text-base"
             onClick={() => volver(null)}
           >
             Volver al inicio de sesión

@@ -86,7 +86,7 @@ export function RecuperarPassword({
             <Button
               asChild
               variant="link"
-              className="h-auto p-0 font-medium underline"
+              className="h-auto p-0 text-base font-medium underline"
             >
               <Link to="/recuperar-password">Solicitar un nuevo enlace</Link>
             </Button>
@@ -94,7 +94,7 @@ export function RecuperarPassword({
           <Button
             asChild
             variant="link"
-            className="h-auto p-0 font-medium underline"
+            className="h-auto p-0 text-base font-medium underline"
           >
             <Link to="/login">Volver al inicio de sesión</Link>
           </Button>
@@ -118,7 +118,7 @@ export function RecuperarPassword({
         <Card className="gap-0 border-0 bg-transparent py-0 shadow-none">
           <CardContent className="px-0">
             <form
-              className="grid gap-5"
+              className="grid gap-6"
               onSubmit={(event) => void enviar(event)}
             >
               {error && (
@@ -129,7 +129,9 @@ export function RecuperarPassword({
               {restablecer ? (
                 <>
                   <div className="grid gap-2">
-                    <Label htmlFor="restablecer-nueva">Nueva contraseña</Label>
+                    <Label htmlFor="restablecer-nueva" className="text-base">
+                      Nueva contraseña
+                    </Label>
                     <CampoPassword
                       id="restablecer-nueva"
                       etiqueta="Nueva contraseña"
@@ -142,7 +144,10 @@ export function RecuperarPassword({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="restablecer-confirmacion">
+                    <Label
+                      htmlFor="restablecer-confirmacion"
+                      className="text-base"
+                    >
                       Confirma la contraseña
                     </Label>
                     <CampoPassword
@@ -158,21 +163,23 @@ export function RecuperarPassword({
                   </div>
                   <p
                     id="restablecer-requisito"
-                    className="m-0 text-xs text-muted-foreground"
+                    className="m-0 text-sm text-muted-foreground"
                   >
                     Debe tener al menos {LARGO_MINIMO_PASSWORD} caracteres.
                   </p>
                 </>
               ) : (
                 <div className="grid gap-2">
-                  <Label htmlFor="recuperar-correo">Correo institucional</Label>
+                  <Label htmlFor="recuperar-correo" className="text-base">
+                    Correo institucional
+                  </Label>
                   <Input
                     id="recuperar-correo"
                     name="correo"
                     type="email"
                     autoComplete="email"
                     maxLength={254}
-                    className="h-11.5 px-3.5"
+                    className="h-14 px-4 text-base md:text-base"
                     aria-describedby={error ? 'recuperar-error' : undefined}
                     required
                   />
@@ -181,7 +188,7 @@ export function RecuperarPassword({
               <Button
                 type="submit"
                 disabled={enviando}
-                className="h-10.5 w-full"
+                className="h-14 w-full text-base"
               >
                 {enviando && (
                   <Loader2
