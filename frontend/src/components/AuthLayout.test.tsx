@@ -22,21 +22,35 @@ describe('AuthLayout', () => {
     expect(screen.getByRole('main')).toBeInTheDocument()
   })
 
-  test('desde 1024 px lleva el panel de marca al lado; en pantalla angosta, solo el formulario', () => {
+  test('desde 1024 px el panel de marca con la foto va a la izquierda y el formulario a la derecha', () => {
     const { container } = render(
       <AuthLayout titulo="Acceso">
         <p>Contenido</p>
       </AuthLayout>,
     )
-    // El panel de marca existe y solo se ve desde lg.
+    const principal = screen.getByRole('main')
     const panel = screen.getByRole('complementary')
-    expect(panel).toHaveClass('hidden', 'lg:flex')
-    expect(panel).toHaveTextContent('Gestión académica,')
-    expect(panel).toHaveTextContent('en un solo lugar.')
-    // El isotipo de la columna del formulario solo se ve cuando no hay panel.
-    const isotipoMovil = container.querySelector('main svg')
-    expect(isotipoMovil?.closest('p')).toHaveClass('lg:hidden')
-    expect(isotipoMovil).toHaveAttribute('aria-hidden', 'true')
+    // En el documento el formulario va primero (en pantalla angosta, donde el
+    // panel está oculto, queda solo el formulario); desde lg el panel pasa a la
+    // izquierda.
+    expect(principal.nextElementSibling).toBe(panel)
+    expect(panel).toHaveClass('hidden', 'lg:block', 'lg:order-first')
+    expect(container.querySelector('main + aside img')).toHaveAttribute(
+      'alt',
+      '',
+    )
+  })
+
+  test('el isotipo con el nombre identifica la pantalla en todos los tamaños', () => {
+    const { container } = render(
+      <AuthLayout titulo="Acceso">
+        <p>Contenido</p>
+      </AuthLayout>,
+    )
+    const isotipo = container.querySelector('main svg')
+    expect(isotipo).toHaveAttribute('aria-hidden', 'true')
+    expect(isotipo?.closest('p')).toHaveTextContent('CURSUS')
+    expect(isotipo?.closest('p')).not.toHaveClass('lg:hidden')
   })
 
   test('sin descripción ni pie no dibuja bloques vacíos', () => {

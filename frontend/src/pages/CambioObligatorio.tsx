@@ -62,8 +62,8 @@ export function CambioObligatorio() {
         </Button>
       }
     >
-      <Card className="gap-5 py-7 shadow-(--shadow-card)">
-        <CardContent className="px-5 sm:px-7">
+      <Card className="gap-0 border-0 bg-transparent py-0 shadow-none">
+        <CardContent className="px-0">
           <form onSubmit={handleSubmit} className="grid gap-5">
             {error && (
               <AlertaAcceso

@@ -22,8 +22,8 @@ interface ErroresDeCampo {
 // Tarjeta de las pantallas de acceso, con el aspecto del Figma (nodo 66:2).
 function TarjetaAcceso({ children }: { children: React.ReactNode }) {
   return (
-    <Card className="gap-5 py-7 shadow-(--shadow-card)">
-      <CardContent className="px-5 sm:px-7">{children}</CardContent>
+    <Card className="gap-0 border-0 bg-transparent py-0 shadow-none">
+      <CardContent className="px-0">{children}</CardContent>
     </Card>
   )
 }

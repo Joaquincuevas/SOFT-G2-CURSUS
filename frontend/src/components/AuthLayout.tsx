@@ -11,31 +11,35 @@ interface Props {
 }
 
 // Estructura común de las pantallas de acceso (login, verificación en dos
-// pasos, recuperación y cambio obligatorio de contraseña): el panel de marca a
-// un lado desde 1024 px y, en pantallas angostas, solo el formulario.
+// pasos, recuperación y cambio obligatorio de contraseña): la página completa
+// dividida en dos, con el panel de marca con la foto a la izquierda desde 1024 px y el
+// formulario a la derecha. En pantallas angostas, solo el formulario.
 export function AuthLayout({ titulo, descripcion, children, pie }: Props) {
   return (
-    <div className="flex min-h-svh bg-(color:--color-surface)">
-      <PanelMarca />
-      <main className="flex flex-1 items-center justify-center p-4 lg:p-8">
-        <div className="grid w-full max-w-120 gap-6">
-          {/* Sin el panel de marca, el isotipo identifica la pantalla. */}
-          <p className="m-0 flex items-center gap-2.5 text-lg font-bold tracking-[2px] text-(color:--color-primary-dark) lg:hidden">
-            <CursusLogo size={32} decorativo className="text-primary" />
-            CURSUS
-          </p>
-          <div className="grid gap-1.5">
-            <h1 className="m-0 text-[28px] leading-9 font-bold text-foreground">
-              {titulo}
-            </h1>
-            {descripcion && (
-              <p className="m-0 text-sm text-muted-foreground">{descripcion}</p>
-            )}
+    <div className="min-h-svh bg-card">
+      <div className="grid min-h-svh lg:grid-cols-2">
+        <main className="flex items-center justify-center px-6 py-10 sm:px-12">
+          <div className="grid w-full max-w-110 gap-6">
+            <p className="m-0 inline-flex w-fit items-center gap-2 rounded-full border border-border px-3.5 py-1.5 text-sm font-bold tracking-[2px] text-(color:--color-primary-dark)">
+              <CursusLogo size={22} decorativo className="text-primary" />
+              CURSUS
+            </p>
+            <div className="grid gap-1.5">
+              <h1 className="m-0 text-[28px] leading-9 font-bold text-foreground">
+                {titulo}
+              </h1>
+              {descripcion && (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {descripcion}
+                </p>
+              )}
+            </div>
+            {children}
+            {pie}
           </div>
-          {children}
-          {pie}
-        </div>
-      </main>
+        </main>
+        <PanelMarca />
+      </div>
     </div>
   )
 }
