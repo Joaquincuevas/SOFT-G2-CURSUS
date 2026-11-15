@@ -12,7 +12,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
 
 const CAMPOS = ['codigo', 'nombre', 'carreraId', 'periodoId'] as const
 const ETIQUETAS = {

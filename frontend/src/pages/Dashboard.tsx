@@ -12,6 +12,7 @@ import {
   textoBloque,
   textoPendientes,
 } from './misSecciones'
+import { DashboardAdministrativo } from './DashboardAdministrativo'
 import { PanelSuperadmin } from './PanelSuperadmin'
 import { SeccionesAyudante } from './SeccionesAyudante'
 import { SeccionesAlumno } from './SeccionesAlumno'
@@ -33,6 +34,7 @@ export function Dashboard() {
   }
   return (
     <section aria-label="Dashboard" className="grid gap-4">
+      {user.rol === 'ADMINISTRATIVO' && <DashboardAdministrativo />}
       {user.rol === 'PROFESOR' && <SeccionesProfesor />}
       {user.rol === 'AYUDANTE' && <SeccionesAyudante />}
       {user.rol === 'SUPERADMIN' && <PanelSuperadmin />}

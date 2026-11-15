@@ -1,3 +1,16 @@
+import { cn } from '@/lib/utils'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  FormField,
+  type Columna,
+} from '@/components/shared'
+import { NativeSelect } from '@/components/ui/native-select'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import type {
   CrearCurso,
   CursoCreado,
@@ -15,14 +28,11 @@ import {
   useNavigate,
 } from 'react-router'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede, useSession } from '../session/session'
 import { EditarCurso } from './EditarCurso'
 import { CursoDetalle } from './CursoDetalle'
 import { CursosArchivados } from './CursosArchivados'
 import { useDatos } from './useDatos'
-import './Cursos.css'
 
 // Gestión de cursos del Figma: listado (nodo 97:102, GES-03), creación (nodo
 // 97:202, GES-05) y detalle con sus secciones (GES-08).
@@ -93,16 +103,16 @@ function Encabezado({ titulo }: { titulo: string }) {
     .filter(Boolean)
     .join(' · ')
   return (
-    <div className="cursos__encabezado">
-      <h2 className="cursos__titulo">{titulo}</h2>
-      <p className="cursos__subtitulo">{subtitulo}</p>
+    <div className="grid gap-1">
+      <h2 className="m-0 text-xl font-semibold">{titulo}</h2>
+      <p className="m-0 text-sm text-muted-foreground">{subtitulo}</p>
     </div>
   )
 }
 
 function BotonCrear() {
   return (
-    <Link className="cursos__boton" to="/cursos/nuevo">
+    <Link className={cn(buttonVariants(), 'no-underline')} to="/cursos/nuevo">
       Crear curso
     </Link>
   )
@@ -134,131 +144,186 @@ function InicioCursos({ opciones }: { opciones: Opciones }) {
   let contenido
   if (puedeCrear && (carreras === null || periodos === null)) {
     contenido = (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudieron cargar las carreras y los períodos."
         onReintentar={opciones.recargar}
       />
     )
   } else if (cursos === undefined) {
-    contenido = <Cargando texto="Cargando cursos…" />
+    contenido = (
+      <div role="status">
+        <span className="sr-only">Cargando cursos…</span>
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    )
   } else if (cursos === null) {
     contenido = (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudieron cargar los cursos."
         onReintentar={recargar}
       />
     )
-  } else if (cursos.length === 0 && conFiltros) {
-    contenido = (
-      <div className="cursos__tarjeta cursos__vacio">
-        <p className="cursos__mensaje">No hay cursos con estos filtros.</p>
-      </div>
-    )
   } else if (cursos.length === 0) {
     contenido = (
-      <div className="cursos__tarjeta cursos__vacio">
-        <p className="cursos__mensaje">Aún no hay cursos en tu facultad.</p>
-        {puedeCrear && <BotonCrear />}
-      </div>
+      <Card className="py-0">
+        <EmptyState
+          mensaje={
+            conFiltros
+              ? 'No hay cursos con estos filtros.'
+              : 'Aún no hay cursos en tu facultad.'
+          }
+          accion={!conFiltros && puedeCrear ? <BotonCrear /> : undefined}
+        />
+      </Card>
     )
   } else {
+    const columnas: Columna<CursoListado>[] = [
+      ...(conUniversidad
+        ? [
+            {
+              clave: 'universidad',
+              encabezado: 'Universidad',
+              celda: (curso: CursoListado) => curso.universidadNombre,
+            },
+          ]
+        : []),
+      {
+        clave: 'codigo',
+        encabezado: 'Código',
+        valor: (curso) => curso.codigo,
+        celda: (curso) => (
+          <Link
+            className="font-semibold text-primary underline-offset-4 hover:underline"
+            to={`/cursos/${curso.id}`}
+          >
+            {curso.codigo}
+          </Link>
+        ),
+      },
+      {
+        clave: 'curso',
+        encabezado: 'Curso',
+        valor: (curso) => curso.nombre,
+        celda: (curso) => (
+          <div className="grid gap-0.5">
+            <span>{curso.nombre}</span>
+            <span className="text-xs text-muted-foreground sm:hidden">
+              {curso.carreraNombre} · {curso.periodo.anio}-
+              {curso.periodo.semestre}
+            </span>
+          </div>
+        ),
+        className: 'whitespace-normal sm:min-w-40',
+      },
+      {
+        clave: 'carrera',
+        encabezado: 'Carrera',
+        valor: (curso) => curso.carreraNombre,
+        celda: (curso) => curso.carreraNombre,
+        className: 'hidden min-w-36 whitespace-normal sm:table-cell',
+      },
+      {
+        clave: 'periodo',
+        encabezado: 'Período',
+        className: 'hidden sm:table-cell',
+        celda: (curso) => `${curso.periodo.anio}-${curso.periodo.semestre}`,
+      },
+      {
+        clave: 'secciones',
+        encabezado: 'Secciones',
+        valor: (curso) => curso.secciones,
+        celda: (curso) => curso.secciones,
+      },
+    ]
     contenido = (
-      <div className="cursos__tarjeta cursos__tabla-contenedor">
-        <table className="cursos__tabla">
-          <thead>
-            <tr>
-              {conUniversidad && <th scope="col">Universidad</th>}
-              <th scope="col">Código</th>
-              <th scope="col">Curso</th>
-              <th scope="col">Carrera</th>
-              <th scope="col">Período</th>
-              <th scope="col">Secciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cursos.map((curso) => (
-              <tr key={curso.id}>
-                {conUniversidad && <td>{curso.universidadNombre}</td>}
-                <td>
-                  <Link className="cursos__enlace" to={`/cursos/${curso.id}`}>
-                    {curso.codigo}
-                  </Link>
-                </td>
-                <td>{curso.nombre}</td>
-                <td>{curso.carreraNombre}</td>
-                <td>
-                  {curso.periodo.anio}-{curso.periodo.semestre}
-                </td>
-                <td>{curso.secciones}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        etiqueta="Cursos"
+        columnas={columnas}
+        filas={cursos}
+        claveFila={(curso) => curso.id}
+      />
     )
   }
 
   return (
-    <section className="cursos" aria-label="Gestión de cursos">
+    <section className="grid min-w-0 gap-4" aria-label="Gestión de cursos">
       <Encabezado titulo="Gestión de cursos" />
       {puedeCrear && (
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Link
-            className="cursos__boton cursos__boton--secundario"
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'border-border text-foreground no-underline',
+            )}
             to="/cursos/archivados"
           >
             Archivados
           </Link>
+          {(!!cursos?.length || conFiltros) && <BotonCrear />}
         </div>
       )}
       {estado?.creado && (
-        <p className="cursos__exito" role="status">
+        <p
+          className="m-0 rounded-lg border border-alert-success-border bg-alert-success p-3 text-sm text-alert-success-foreground"
+          role="status"
+        >
           Curso {estado.creado} creado.
         </p>
       )}
       {estado?.archivado && (
-        <p className="cursos__exito" role="status">
+        <p
+          className="m-0 rounded-lg border border-alert-success-border bg-alert-success p-3 text-sm text-alert-success-foreground"
+          role="status"
+        >
           Curso {estado.archivado} archivado.
         </p>
       )}
-      {/* Con la lista vacía y sin filtros, el botón va solo en el estado vacío. */}
-      {puedeCrear && (!!cursos?.length || conFiltros) && (
-        <div>
-          <BotonCrear />
-        </div>
-      )}
       {puedeCrear && carreras && periodos && (
-        <div className="cursos__filtros" role="search" aria-label="Filtros">
-          <label className="cursos__campo">
-            Carrera
-            <select
-              className="cursos__input"
-              value={carreraId}
-              onChange={(event) => setCarreraId(event.target.value)}
-            >
-              <option value="">Todas</option>
-              {carreras.map((carrera) => (
-                <option key={carrera.id} value={carrera.id}>
-                  {carrera.nombre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="cursos__campo">
-            Período
-            <select
-              className="cursos__input"
-              value={periodoId}
-              onChange={(event) => setPeriodoElegido(event.target.value)}
-            >
-              <option value="">Todos</option>
-              {periodos.map((periodo) => (
-                <option key={periodo.id} value={periodo.id}>
-                  {periodo.anio}-{periodo.semestre}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div
+          className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2"
+          role="search"
+          aria-label="Filtros"
+        >
+          <FormField
+            className="min-w-0 [&_[data-slot=native-select-wrapper]]:w-full"
+            etiqueta="Carrera"
+          >
+            {(control) => (
+              <NativeSelect
+                {...control}
+                className="w-full"
+                value={carreraId}
+                onChange={(event) => setCarreraId(event.target.value)}
+              >
+                <option value="">Todas</option>
+                {carreras.map((carrera) => (
+                  <option key={carrera.id} value={carrera.id}>
+                    {carrera.nombre}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
+          <FormField
+            className="min-w-0 [&_[data-slot=native-select-wrapper]]:w-full"
+            etiqueta="Período"
+          >
+            {(control) => (
+              <NativeSelect
+                {...control}
+                className="w-full"
+                value={periodoId}
+                onChange={(event) => setPeriodoElegido(event.target.value)}
+              >
+                <option value="">Todos</option>
+                {periodos.map((periodo) => (
+                  <option key={periodo.id} value={periodo.id}>
+                    {periodo.anio}-{periodo.semestre}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
         </div>
       )}
       {contenido}
@@ -280,6 +345,7 @@ function NuevoCurso({ opciones }: { opciones: Opciones }) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (enviando) return
     const datos = new FormData(event.currentTarget)
     const curso: CrearCurso = {
       codigo: String(datos.get('codigo')),
@@ -318,10 +384,15 @@ function NuevoCurso({ opciones }: { opciones: Opciones }) {
 
   let contenido
   if (carreras === undefined || periodos === undefined) {
-    contenido = <Cargando texto="Cargando carreras y períodos…" />
+    contenido = (
+      <div role="status">
+        <span className="sr-only">Cargando carreras y períodos…</span>
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    )
   } else if (carreras === null || periodos === null) {
     contenido = (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudieron cargar las carreras y los períodos."
         onReintentar={opciones.recargar}
       />
@@ -330,76 +401,94 @@ function NuevoCurso({ opciones }: { opciones: Opciones }) {
     // La API devuelve el período activo primero.
     const activo = periodos.find((periodo) => periodo.activo)
     contenido = (
-      <form className="cursos__tarjeta" onSubmit={handleSubmit}>
-        <div className="cursos__campos">
-          <label className="cursos__campo">
-            Código
-            <input
-              className="cursos__input"
-              name="codigo"
-              maxLength={20}
-              placeholder="ICC4103"
-              required
-            />
-          </label>
-          <label className="cursos__campo">
-            Nombre del curso
-            <input
-              className="cursos__input"
-              name="nombre"
-              maxLength={200}
-              placeholder="Tecnologías Web"
-              required
-            />
-          </label>
-          <label className="cursos__campo">
-            Carrera
-            <select
-              className="cursos__input"
-              name="carreraId"
-              defaultValue=""
-              required
-            >
-              <option value="" disabled>
-                Selecciona una carrera
-              </option>
-              {carreras.map((carrera) => (
-                <option key={carrera.id} value={carrera.id}>
-                  {carrera.nombre}
+      <form
+        className="grid max-w-3xl gap-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+        onSubmit={handleSubmit}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField etiqueta="Código" requerido>
+            {(control) => (
+              <Input
+                {...control}
+                className="w-full"
+                name="codigo"
+                maxLength={20}
+                placeholder="ICC4103"
+              />
+            )}
+          </FormField>
+          <FormField etiqueta="Nombre del curso" requerido>
+            {(control) => (
+              <Input
+                {...control}
+                className="w-full"
+                name="nombre"
+                maxLength={200}
+                placeholder="Tecnologías Web"
+              />
+            )}
+          </FormField>
+          <FormField
+            className="min-w-0 [&_[data-slot=native-select-wrapper]]:w-full"
+            etiqueta="Carrera"
+            requerido
+          >
+            {(control) => (
+              <NativeSelect
+                {...control}
+                className="w-full"
+                name="carreraId"
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  Selecciona una carrera
                 </option>
-              ))}
-            </select>
-          </label>
-          <label className="cursos__campo">
-            Período académico
-            <select
-              className="cursos__input"
-              name="periodoId"
-              defaultValue={activo?.id ?? ''}
-              required
-            >
-              <option value="" disabled>
-                Selecciona un período
-              </option>
-              {periodos.map((periodo) => (
-                <option key={periodo.id} value={periodo.id}>
-                  {periodo.anio}-{periodo.semestre}
+                {carreras.map((carrera) => (
+                  <option key={carrera.id} value={carrera.id}>
+                    {carrera.nombre}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
+          <FormField
+            className="min-w-0 [&_[data-slot=native-select-wrapper]]:w-full"
+            etiqueta="Período académico"
+            requerido
+          >
+            {(control) => (
+              <NativeSelect
+                {...control}
+                className="w-full"
+                name="periodoId"
+                defaultValue={activo?.id ?? ''}
+              >
+                <option value="" disabled>
+                  Selecciona un período
                 </option>
-              ))}
-            </select>
-          </label>
+                {periodos.map((periodo) => (
+                  <option key={periodo.id} value={periodo.id}>
+                    {periodo.anio}-{periodo.semestre}
+                  </option>
+                ))}
+              </NativeSelect>
+            )}
+          </FormField>
         </div>
         {error && (
-          <p className="cursos__error" role="alert">
+          <p className="m-0 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
-        <div className="cursos__acciones">
-          <button className="cursos__boton" type="submit" disabled={enviando}>
+        <div className="flex flex-wrap gap-2">
+          <Button className="w-fit" type="submit" disabled={enviando}>
             Crear curso
-          </button>
+          </Button>
           <Link
-            className="cursos__boton cursos__boton--secundario"
+            className={cn(
+              buttonVariants({ variant: 'outline' }),
+              'border-border text-foreground no-underline',
+            )}
             to="/cursos"
           >
             Cancelar
@@ -410,9 +499,9 @@ function NuevoCurso({ opciones }: { opciones: Opciones }) {
   }
 
   return (
-    <section className="cursos" aria-label="Crear curso">
-      <div className="cursos__encabezado">
-        <h2 className="cursos__titulo">Información del curso</h2>
+    <section className="grid min-w-0 gap-4" aria-label="Crear curso">
+      <div className="grid gap-1">
+        <h2 className="m-0 text-xl font-semibold">Información del curso</h2>
       </div>
       {contenido}
     </section>
