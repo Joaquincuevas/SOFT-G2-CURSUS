@@ -6,18 +6,33 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
 
 const VACIO = { actual: '', nueva: '', repetida: '' }
+type Campo = keyof typeof VACIO
 
-// Primer error de los campos, o null si se puede enviar. El backend valida lo
-// mismo; esto evita una petición que sabemos que va a fallar.
-function errorDe({ actual, nueva, repetida }: typeof VACIO): string | null {
+// Primer error de los campos y el campo que lo causa, o null si se puede
+// enviar. El backend valida lo mismo; esto evita una petición que sabemos que
+// va a fallar.
+function errorDe({
+  actual,
+  nueva,
+  repetida,
+}: typeof VACIO): { campo: Campo; mensaje: string } | null {
   if (nueva.length < LARGO_MINIMO_PASSWORD) {
-    return `La contraseña nueva debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`
+    return {
+      campo: 'nueva',
+      mensaje: `La contraseña nueva debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`,
+    }
   }
   if (nueva !== repetida) {
-    return 'Las contraseñas nuevas no coinciden.'
+    return {
+      campo: 'repetida',
+      mensaje: 'Las contraseñas nuevas no coinciden.',
+    }
   }
   if (nueva === actual) {
-    return 'La contraseña nueva debe ser distinta de la actual.'
+    return {
+      campo: 'nueva',
+      mensaje: 'La contraseña nueva debe ser distinta de la actual.',
+    }
   }
   return null
 }
@@ -31,6 +46,8 @@ export function useCambiarPassword(alCambiar?: () => void) {
   const [enviando, setEnviando] = useState(false)
   const [guardado, setGuardado] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // El campo que causó el error de los campos, para marcarlo como inválido.
+  const [campoInvalido, setCampoInvalido] = useState<Campo | null>(null)
 
   const completo = campos.actual && campos.nueva && campos.repetida
 
@@ -43,7 +60,8 @@ export function useCambiarPassword(alCambiar?: () => void) {
     event.preventDefault()
     setGuardado(false)
     const invalido = errorDe(campos)
-    setError(invalido)
+    setError(invalido?.mensaje ?? null)
+    setCampoInvalido(invalido?.campo ?? null)
     if (invalido) return
 
     setEnviando(true)
@@ -85,5 +103,14 @@ export function useCambiarPassword(alCambiar?: () => void) {
     }
   }
 
-  return { campos, cambiar, completo, enviando, guardado, error, handleSubmit }
+  return {
+    campos,
+    cambiar,
+    completo,
+    enviando,
+    guardado,
+    error,
+    campoInvalido,
+    handleSubmit,
+  }
 }
