@@ -42,6 +42,7 @@ function Button({
   variant = 'default',
   size = 'default',
   asChild = false,
+  type,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
@@ -55,6 +56,11 @@ function Button({
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
+      // Dentro de un formulario, un <button> sin type envía el formulario:
+      // «Cancelar» o «Mostrar contraseña» lo enviarían si se omite el tipo. Por
+      // defecto es type="button"; un type explícito (submit, reset) se conserva.
+      // Con asChild el hijo suele ser un enlace, que no lleva type: no se agrega.
+      type={asChild ? type : (type ?? 'button')}
       {...props}
     />
   )

@@ -103,6 +103,7 @@ Lo que se ajustó respecto de lo que genera el CLI:
 - **`NativeSelect`.** Se usa en lugar del `Select` de Radix para conservar el `<select>` nativo: los tests siguen usando `combobox`, `selectOptions` y `fireEvent.change`.
 - **ESLint.** `react-refresh/only-export-components` está apagada solo en `src/components/ui/`, porque cada componente exporta junto su función de variantes (`buttonVariants`…).
 - **`TooltipProvider`.** `Tooltip` lo necesita en un ancestro; se monta junto con el AppShell (UIX-04).
+- **`Button` y `type`.** Sin `type`, un `<button>` dentro de un formulario lo envía, así que «Cancelar» o «Mostrar contraseña» lo enviarían si se omite. `Button` usa `type="button"` por defecto; un `type` explícito (`submit`, `reset`) se conserva, y con `asChild` no se agrega nada, porque el hijo suele ser un enlace. Cubierto en `button.test.tsx`.
 
 ### Estilos de los componentes sin preflight
 
