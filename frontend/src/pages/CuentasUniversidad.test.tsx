@@ -79,7 +79,10 @@ const filas = () =>
   within(screen.getByRole('table'))
     .getAllByRole('row')
     .slice(1)
-    .map((fila) => fila.children[0].textContent)
+    .map(
+      (fila) =>
+        fila.children[0].firstElementChild?.firstElementChild?.textContent,
+    )
 
 describe('lista de cuentas (GES-24)', () => {
   test('registra el egreso del alumno y conserva su cuenta en el listado', async () => {
@@ -204,7 +207,7 @@ describe('crear una cuenta', () => {
 
   test('la facultad se pide solo para un Administrativo', async () => {
     await abrir()
-    await screen.findByText('Ana Directora')
+    fireEvent.click(await screen.findByRole('button', { name: 'Nueva cuenta' }))
 
     expect(screen.queryByLabelText('Facultad')).toBeNull()
     escribir('Rol', 'ADMINISTRATIVO')
@@ -218,7 +221,7 @@ describe('crear una cuenta', () => {
       init?.method === 'POST' ? json(CREADA, 201) : CUENTAS,
     )
     await abrir({ [API]: ruta })
-    await screen.findByText('Ana Directora')
+    fireEvent.click(await screen.findByRole('button', { name: 'Nueva cuenta' }))
 
     escribir('Nombre', '  Nueva   Persona ')
     escribir('Correo institucional', ' nueva@norte.cursus.test ')
@@ -234,10 +237,11 @@ describe('crear una cuenta', () => {
       correo: 'nueva@norte.cursus.test',
       rol: 'DIRECTOR',
     })
-    expect(screen.getByLabelText('Nombre')).toHaveValue('')
 
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Cerrar' }))
     expect(screen.queryByText('ABCD2345EFGH6789')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva cuenta' }))
+    expect(screen.getByLabelText('Nombre')).toHaveValue('')
     expect(JSON.stringify({ ...localStorage })).not.toContain(
       'ABCD2345EFGH6789',
     )
@@ -248,7 +252,7 @@ describe('crear una cuenta', () => {
       init?.method === 'POST' ? json(CREADA, 201) : CUENTAS,
     )
     await abrir({ [API]: ruta })
-    await screen.findByText('Ana Directora')
+    fireEvent.click(await screen.findByRole('button', { name: 'Nueva cuenta' }))
 
     escribir('Nombre', 'Nueva Persona')
     escribir('Correo institucional', 'nueva@norte.cursus.test')
@@ -256,7 +260,7 @@ describe('crear una cuenta', () => {
     escribir('Facultad', INGENIERIA.id)
     fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta' }))
 
-    await screen.findByRole('dialog')
+    await screen.findByRole('dialog', { name: 'Cuenta de Director creada' })
     expect(pedidas.find((p) => p.metodo === 'POST')?.cuerpo).toMatchObject({
       rol: 'ADMINISTRATIVO',
       facultadId: INGENIERIA.id,
@@ -275,7 +279,9 @@ describe('crear una cuenta', () => {
             ? json({ statusCode: status, message }, status)
             : CUENTAS,
       })
-      await screen.findByText('Ana Directora')
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Nueva cuenta' }),
+      )
 
       escribir('Nombre', 'Nueva Persona')
       escribir('Correo institucional', 'nueva@otro.cl')
@@ -285,7 +291,7 @@ describe('crear una cuenta', () => {
       expect(screen.getByLabelText('Correo institucional')).toHaveValue(
         'nueva@otro.cl',
       )
-      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.getByRole('dialog', { name: 'Nueva cuenta' })).toBeVisible()
     },
   )
 })
@@ -329,7 +335,7 @@ describe('editar una cuenta', () => {
         },
       },
     ])
-    expect(screen.getByRole('form', { name: 'Nueva cuenta' })).toBeTruthy()
+    expect(screen.queryByRole('form', { name: 'Editar cuenta' })).toBeNull()
     expect(await screen.findByText('Beto Editado')).toBeInTheDocument()
   })
 
@@ -350,7 +356,7 @@ describe('editar una cuenta', () => {
     expect(screen.getByRole('form', { name: 'Editar cuenta' })).toBeTruthy()
   })
 
-  test('cancelar vuelve al formulario de cuenta nueva', async () => {
+  test('cancelar cierra la edición y una cuenta nueva empieza vacía', async () => {
     await abrir()
 
     fireEvent.click(
@@ -358,7 +364,8 @@ describe('editar una cuenta', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar edición' }))
 
-    expect(screen.getByRole('form', { name: 'Nueva cuenta' })).toBeTruthy()
+    expect(screen.queryByRole('form', { name: 'Editar cuenta' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Nueva cuenta' }))
     expect(screen.getByLabelText('Nombre')).toHaveValue('')
   })
 })

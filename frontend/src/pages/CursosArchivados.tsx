@@ -9,7 +9,7 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
 
 const API = '/api/cursos-archivados'
 const RUTA = '/cursos/archivados'

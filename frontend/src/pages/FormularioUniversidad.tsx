@@ -1,3 +1,6 @@
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   COLOR_CURSUS,
   colorConContraste,
@@ -18,8 +21,7 @@ interface Props {
   onCancelar?: () => void
 }
 
-// GES-23: nombre, dominio de correo y color de una universidad. Usa los
-// estilos de Carreras (la página que la contiene importa Carreras.css).
+// GES-23: nombre, dominio de correo y color de una universidad.
 export function FormularioUniversidad({
   inicial,
   titulo,
@@ -53,18 +55,18 @@ export function FormularioUniversidad({
 
   return (
     <form
-      className="carreras__panel carreras__formulario"
+      className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-semibold [&_p]:m-0 [&_p]:text-sm"
       aria-label={titulo}
       onSubmit={(event) => void guardar(event)}
     >
       <h2>{titulo}</h2>
       {error && (
-        <p className="carreras__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
-      <label htmlFor={`${id}-nombre`}>Nombre</label>
-      <input
+      <Label htmlFor={`${id}-nombre`}>Nombre</Label>
+      <Input
         id={`${id}-nombre`}
         value={nombre}
         onChange={(event) => setNombre(event.target.value)}
@@ -72,8 +74,8 @@ export function FormularioUniversidad({
         required
         disabled={guardando}
       />
-      <label htmlFor={`${id}-dominio`}>Dominio del correo</label>
-      <input
+      <Label htmlFor={`${id}-dominio`}>Dominio del correo</Label>
+      <Input
         id={`${id}-dominio`}
         value={dominio}
         onChange={(event) => setDominio(event.target.value)}
@@ -87,8 +89,8 @@ export function FormularioUniversidad({
         Los correos de sus usuarios terminan en @dominio. Solo se puede cambiar
         mientras la universidad no tenga usuarios.
       </p>
-      <label htmlFor={`${id}-color`}>Color</label>
-      <input
+      <Label htmlFor={`${id}-color`}>Color</Label>
+      <Input
         id={`${id}-color`}
         type="color"
         aria-describedby={`${id}-color-ayuda`}
@@ -100,23 +102,19 @@ export function FormularioUniversidad({
         Se usa en botones, menú y encabezado. Elige un tono oscuro para mantener
         el texto legible; el contraste mínimo es 4,5:1 (WCAG AA).
       </p>
-      <div className="carreras__acciones">
-        <button
-          className="carreras__primario"
-          type="submit"
-          disabled={guardando}
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" disabled={guardando}>
           {guardando ? 'Guardando…' : textoBoton}
-        </button>
+        </Button>
         {onCancelar && (
-          <button
-            className="carreras__secundario"
+          <Button
+            variant="outline"
             type="button"
             disabled={guardando}
             onClick={onCancelar}
           >
             Cancelar
-          </button>
+          </Button>
         )}
       </div>
     </form>

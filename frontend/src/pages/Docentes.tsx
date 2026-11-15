@@ -6,7 +6,7 @@ import {
 } from '@cursus/shared'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/auth'
-import './Cursos.css'
+import './GestionAcademica.css'
 import { PasswordProvisoria } from './PasswordProvisoria'
 
 const ROL_LABEL: Record<RolDocente, string> = {

@@ -1,3 +1,22 @@
+import { cn } from '@/lib/utils'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+} from '@/components/shared'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { NativeSelect } from '@/components/ui/native-select'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   type CuentaCreada,
   type CuentaUniversidad,
@@ -7,17 +26,10 @@ import {
   type RolCuenta,
   type UniversidadElegible,
 } from '@cursus/shared'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
-import '../components/estados.css'
 import { ROL_LABEL } from '../session/roles'
-import './AdministrarUniversidad.css'
-import './Carreras.css'
-import './CuentasUniversidad.css'
-import './Cursos.css'
 import { PasswordProvisoria } from './PasswordProvisoria'
 import {
   enviar,
@@ -34,10 +46,16 @@ export function CuentasUniversidad() {
   const [universidades, recargarUniversidades] =
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
 
-  if (universidades === undefined) return <Cargando />
+  if (universidades === undefined)
+    return (
+      <div role="status">
+        <span className="sr-only">Cargando universidad…</span>
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    )
   if (universidades === null) {
     return (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudo cargar la universidad."
         onReintentar={recargarUniversidades}
       />
@@ -46,12 +64,23 @@ export function CuentasUniversidad() {
   const universidad = universidades.find((u) => u.id === id)
   if (!universidad) {
     return (
-      <section className="estado" role="status">
-        <h2 className="estado__titulo">Universidad no disponible</h2>
-        <p className="estado__texto">
+      <section
+        className="grid w-fit gap-3 rounded-xl border border-border bg-card p-4"
+        role="status"
+      >
+        <h2 className="m-0 text-base font-semibold">
+          Universidad no disponible
+        </h2>
+        <p className="m-0 text-sm text-muted-foreground">
           La universidad no existe o está archivada.
         </p>
-        <Link className="estado__boton" to="/">
+        <Link
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'border-border text-foreground no-underline',
+          )}
+          to="/"
+        >
           Volver al Dashboard
         </Link>
       </section>
@@ -64,19 +93,19 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
   const { fetchConSesion } = useAuth()
   const ruta = `${RUTA_UNIVERSIDADES}/${universidad.id}/cuentas`
   const [cuentas, recargar] = useDatos<CuentaUniversidad[]>(ruta)
+  const [formularioAbierto, setFormularioAbierto] = useState(false)
   const [editando, setEditando] = useState<CuentaUniversidad | null>(null)
   const [cambio, setCambio] = useState<{
     cuenta: CuentaUniversidad
     accion: 'archivar' | 'egresar'
   } | null>(null)
+  const [guardandoCuenta, setGuardandoCuenta] = useState(false)
   const [archivando, setArchivando] = useState(false)
   const [creada, setCreada] = useState<CuentaCreada | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [buscar, setBuscar] = useState('')
   const [rol, setRol] = useState<RolCuenta | ''>('')
-  // Reinicia el formulario después de crear una cuenta.
-  const [formulario, setFormulario] = useState(0)
 
   async function guardar(datos: GuardarCuenta): Promise<string | null> {
     setAviso(null)
@@ -99,8 +128,8 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
       )
       if (!resultado.ok) return resultado.error
       setCreada(resultado.datos)
-      setFormulario((n) => n + 1)
     }
+    setFormularioAbierto(false)
     recargar()
     return null
   }
@@ -141,8 +170,11 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
   )
 
   return (
-    <section className="carreras" aria-label="Cuentas de la universidad">
-      <div className="carreras__intro">
+    <section
+      className="grid min-w-0 gap-5"
+      aria-label="Cuentas de la universidad"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3 [&_h2]:m-0 [&_h2]:text-xl [&_h2]:font-semibold [&_p]:m-0 [&_p]:mt-1 [&_p]:text-sm [&_p]:text-muted-foreground">
         <div>
           <h2>Cuentas de {universidad.nombre}</h2>
           <p>
@@ -150,38 +182,54 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
           </p>
         </div>
         <Link
-          className="administrar-universidad__volver"
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'border-border text-foreground no-underline',
+          )}
           to={rutaAdministrarUniversidad(universidad.id)}
         >
           Volver a la universidad
         </Link>
       </div>
       {aviso && (
-        <p className="carreras__aviso" role="status">
+        <p
+          className="m-0 rounded-lg border border-alert-success-border bg-alert-success p-3 text-sm text-alert-success-foreground"
+          role="status"
+        >
           {aviso}
         </p>
       )}
-      <div className="carreras__columnas">
-        <div className="carreras__panel">
-          <h2>Cuentas vigentes</h2>
+      <div className="min-w-0">
+        <div className="grid min-w-0 gap-4 rounded-xl border border-border bg-card p-4 [&_h2]:m-0 [&_h2]:text-base [&_h2]:font-semibold">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2>Cuentas vigentes</h2>
+            <Button
+              onClick={() => {
+                setEditando(null)
+                setFormularioAbierto(true)
+              }}
+            >
+              Nueva cuenta
+            </Button>
+          </div>
           {error && (
-            <p className="carreras__error" role="alert">
+            <p className="m-0 text-sm text-destructive" role="alert">
               {error}
             </p>
           )}
-          <div className="cuentas__filtros">
-            <label>
+          <div className="grid gap-3 sm:grid-cols-2 [&_label]:grid [&_label]:gap-2 [&_label]:text-sm [&_label]:font-medium">
+            <Label>
               Buscar
-              <input
+              <Input
                 type="search"
                 value={buscar}
                 onChange={(event) => setBuscar(event.target.value)}
                 placeholder="Nombre o correo"
               />
-            </label>
-            <label>
+            </Label>
+            <Label>
               Filtrar por rol
-              <select
+              <NativeSelect
                 value={rol}
                 onChange={(event) =>
                   setRol(event.target.value as RolCuenta | '')
@@ -193,130 +241,179 @@ function Cuentas({ universidad }: { universidad: UniversidadElegible }) {
                     {ROL_LABEL[opcion]}
                   </option>
                 ))}
-              </select>
-            </label>
+              </NativeSelect>
+            </Label>
           </div>
-          {cambio && (
-            <p className="administrar-universidad__afectados" role="status">
-              {cambio.accion === 'egresar'
-                ? `${cambio.cuenta.nombre} conservará el acceso a su historial de notas en solo lectura.`
-                : `${cambio.cuenta.nombre} dejará de poder iniciar sesión, y sus datos se conservan. Si tiene secciones a cargo, seguirán mostrándola hasta que se asigne a otra persona.`}
-            </p>
-          )}
-          {cuentas === undefined ? (
-            <Cargando texto="Cargando las cuentas…" />
-          ) : cuentas === null ? (
-            <ErrorEstado
+          {cuentas === null ? (
+            <ErrorState
               mensaje="No se pudieron cargar las cuentas."
               onReintentar={recargar}
             />
-          ) : visibles.length === 0 ? (
-            <p>
-              {cuentas.length === 0
-                ? 'Esta universidad todavía no tiene cuentas.'
-                : 'Ninguna cuenta coincide con la búsqueda.'}
-            </p>
           ) : (
-            <table className="carreras__tabla">
-              <caption>Cuentas de {universidad.nombre}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Correo</th>
-                  <th scope="col">Rol</th>
-                  <th scope="col">Facultad</th>
-                  <th scope="col">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibles.map((cuenta) => (
-                  <tr key={cuenta.id}>
-                    <td>{cuenta.nombre}</td>
-                    <td>{cuenta.correo}</td>
-                    <td>
+            <DataTable
+              etiqueta={`Cuentas de ${universidad.nombre}`}
+              filas={visibles}
+              claveFila={(cuenta) => cuenta.id}
+              cargando={cuentas === undefined}
+              vacio={
+                <EmptyState
+                  mensaje={
+                    cuentas?.length === 0
+                      ? 'Esta universidad todavía no tiene cuentas.'
+                      : 'Ninguna cuenta coincide con la búsqueda.'
+                  }
+                />
+              }
+              columnas={[
+                {
+                  clave: 'nombre',
+                  encabezado: 'Nombre',
+                  valor: (cuenta) => cuenta.nombre,
+                  celda: (cuenta) => (
+                    <div className="grid min-w-0 gap-1">
+                      <span className="font-medium">{cuenta.nombre}</span>
+                      <span className="break-all text-xs text-muted-foreground sm:hidden">
+                        {cuenta.correo}
+                      </span>
+                      <span className="text-xs text-muted-foreground sm:hidden">
+                        Rol:{' '}
+                        {cuenta.egresado ? 'Egresado' : ROL_LABEL[cuenta.rol]} ·{' '}
+                        {cuenta.facultad?.nombre ?? 'Sin facultad'}
+                      </span>
+                    </div>
+                  ),
+                  className: 'whitespace-normal',
+                },
+                {
+                  clave: 'correo',
+                  encabezado: 'Correo',
+                  valor: (cuenta) => cuenta.correo,
+                  celda: (cuenta) => cuenta.correo,
+                  className:
+                    'hidden min-w-36 whitespace-normal break-all sm:table-cell',
+                },
+                {
+                  clave: 'rol',
+                  encabezado: 'Rol',
+                  className: 'hidden sm:table-cell',
+                  valor: (cuenta) =>
+                    cuenta.egresado ? 'Egresado' : ROL_LABEL[cuenta.rol],
+                  celda: (cuenta) => (
+                    <Badge variant="secondary">
                       {cuenta.egresado ? 'Egresado' : ROL_LABEL[cuenta.rol]}
-                    </td>
-                    <td>{cuenta.facultad?.nombre ?? 'Sin facultad'}</td>
-                    <td>
-                      {cambio?.cuenta.id === cuenta.id ? (
-                        <div className="carreras__acciones">
-                          <button
-                            type="button"
-                            className="carreras__primario"
-                            disabled={archivando}
-                            onClick={() => void confirmarCambio()}
-                          >
-                            Confirmar
-                          </button>
-                          <button
-                            type="button"
-                            className="carreras__secundario"
-                            disabled={archivando}
-                            onClick={() => setCambio(null)}
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="carreras__acciones">
-                          {cuenta.rol === 'ALUMNO' && !cuenta.egresado && (
-                            <button
-                              type="button"
-                              className="carreras__secundario"
-                              disabled={archivando}
-                              aria-label={`Registrar egreso de ${cuenta.nombre}`}
-                              onClick={() => {
-                                setCambio({ cuenta, accion: 'egresar' })
-                                setError(null)
-                              }}
-                            >
-                              Registrar egreso
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="carreras__secundario"
-                            disabled={archivando}
-                            aria-label={`Editar ${cuenta.nombre}`}
-                            onClick={() => {
-                              setEditando(cuenta)
-                              setAviso(null)
-                            }}
-                          >
-                            Editar
-                          </button>
-                          {!cuenta.egresado && (
-                            <button
-                              type="button"
-                              className="carreras__secundario"
-                              disabled={archivando}
-                              aria-label={`Archivar ${cuenta.nombre}`}
-                              onClick={() => {
-                                setCambio({ cuenta, accion: 'archivar' })
-                                setError(null)
-                              }}
-                            >
-                              Archivar
-                            </button>
-                          )}
-                        </div>
+                    </Badge>
+                  ),
+                },
+                {
+                  clave: 'facultad',
+                  encabezado: 'Facultad',
+                  celda: (cuenta) => cuenta.facultad?.nombre ?? 'Sin facultad',
+                  className: 'hidden min-w-24 whitespace-normal sm:table-cell',
+                },
+                {
+                  clave: 'acciones',
+                  encabezado: 'Acciones',
+                  className: 'w-[6.5rem] sm:w-auto',
+                  celda: (cuenta) => (
+                    <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:flex-wrap">
+                      {cuenta.rol === 'ALUMNO' && !cuenta.egresado && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Registrar egreso de ${cuenta.nombre}`}
+                          onClick={() => {
+                            setCambio({ cuenta, accion: 'egresar' })
+                            setError(null)
+                          }}
+                        >
+                          Egresar
+                        </Button>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Editar ${cuenta.nombre}`}
+                        onClick={() => {
+                          setEditando(cuenta)
+                          setFormularioAbierto(true)
+                          setAviso(null)
+                        }}
+                      >
+                        Editar
+                      </Button>
+                      {!cuenta.egresado && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Archivar ${cuenta.nombre}`}
+                          onClick={() => {
+                            setCambio({ cuenta, accion: 'archivar' })
+                            setError(null)
+                          }}
+                        >
+                          Archivar
+                        </Button>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+            />
           )}
         </div>
-        <FormularioCuenta
-          // La key vuelve a los datos iniciales al cambiar de cuenta.
-          key={editando?.id ?? `nueva-${formulario}`}
-          universidad={universidad}
-          inicial={editando}
-          onGuardar={guardar}
-          onCancelar={() => setEditando(null)}
-        />
       </div>
+      {formularioAbierto && (
+        <Dialog
+          open
+          onOpenChange={(abierto) => {
+            if (!abierto && !guardandoCuenta) {
+              setFormularioAbierto(false)
+              setEditando(null)
+            }
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+          >
+            <DialogTitle>
+              {editando ? `Editar a ${editando.nombre}` : 'Nueva cuenta'}
+            </DialogTitle>
+            <DialogDescription>
+              Completa los datos de la cuenta institucional.
+            </DialogDescription>
+            <FormularioCuenta
+              universidad={universidad}
+              inicial={editando}
+              onGuardar={guardar}
+              onOcupar={setGuardandoCuenta}
+              onCancelar={() => {
+                setFormularioAbierto(false)
+                setEditando(null)
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+      {cambio && (
+        <ConfirmDialog
+          abierto
+          onAbiertoChange={(abierto) => {
+            if (!abierto) setCambio(null)
+          }}
+          titulo={
+            cambio.accion === 'egresar' ? 'Registrar egreso' : 'Archivar cuenta'
+          }
+          descripcion={
+            cambio.accion === 'egresar'
+              ? `${cambio.cuenta.nombre} conservará el acceso a su historial de notas en solo lectura.`
+              : `${cambio.cuenta.nombre} dejará de poder iniciar sesión, y sus datos se conservan. Si tiene secciones a cargo, seguirán mostrándola hasta que se asigne a otra persona.`
+          }
+          destructivo={cambio.accion === 'archivar'}
+          cargando={archivando}
+          onConfirmar={() => void confirmarCambio()}
+        />
+      )}
       {creada && (
         <DialogoCuentaCreada creada={creada} onCerrar={() => setCreada(null)} />
       )}
@@ -329,11 +426,13 @@ function FormularioCuenta({
   universidad,
   inicial,
   onGuardar,
+  onOcupar,
   onCancelar,
 }: {
   universidad: UniversidadElegible
   inicial: CuentaUniversidad | null
   onGuardar: (datos: GuardarCuenta) => Promise<string | null>
+  onOcupar: (ocupado: boolean) => void
   onCancelar: () => void
 }) {
   const [nombre, setNombre] = useState(inicial?.nombre ?? '')
@@ -346,7 +445,9 @@ function FormularioCuenta({
 
   async function guardar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (guardando) return
     setGuardando(true)
+    onOcupar(true)
     setError(null)
     const mensaje = await onGuardar({
       nombre: nombre.trim().replace(/\s+/gu, ' '),
@@ -354,20 +455,19 @@ function FormularioCuenta({
       rol,
       ...(esAdministrativo ? { facultadId } : {}),
     })
-    // Al guardar bien, la key del formulario lo reemplaza por uno nuevo.
+    onOcupar(false)
     setGuardando(false)
     setError(mensaje)
   }
 
   return (
     <form
-      className="carreras__panel carreras__formulario"
+      className="grid min-w-0 gap-3 [&_p]:m-0 [&_p]:text-sm"
       aria-label={inicial ? 'Editar cuenta' : 'Nueva cuenta'}
       onSubmit={(event) => void guardar(event)}
     >
-      <h2>{inicial ? `Editar a ${inicial.nombre}` : 'Nueva cuenta'}</h2>
-      <label htmlFor="cuenta-nombre">Nombre</label>
-      <input
+      <Label htmlFor="cuenta-nombre">Nombre</Label>
+      <Input
         id="cuenta-nombre"
         value={nombre}
         onChange={(event) => setNombre(event.target.value)}
@@ -376,8 +476,8 @@ function FormularioCuenta({
         disabled={guardando}
         autoComplete="off"
       />
-      <label htmlFor="cuenta-correo">Correo institucional</label>
-      <input
+      <Label htmlFor="cuenta-correo">Correo institucional</Label>
+      <Input
         id="cuenta-correo"
         type="email"
         value={correo}
@@ -387,10 +487,10 @@ function FormularioCuenta({
         disabled={guardando}
         autoComplete="off"
       />
-      <label htmlFor="cuenta-rol">Rol</label>
-      <select
+      <Label htmlFor="cuenta-rol">Rol</Label>
+      <NativeSelect
         id="cuenta-rol"
-        className="cuentas__select"
+        className="w-full"
         value={rol}
         onChange={(event) => setRol(event.target.value as RolCuenta)}
         disabled={guardando || inicial?.egresado}
@@ -400,13 +500,13 @@ function FormularioCuenta({
             {ROL_LABEL[opcion]}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       {esAdministrativo && (
         <>
-          <label htmlFor="cuenta-facultad">Facultad</label>
-          <select
+          <Label htmlFor="cuenta-facultad">Facultad</Label>
+          <NativeSelect
             id="cuenta-facultad"
-            className="cuentas__select"
+            className="w-full"
             value={facultadId}
             onChange={(event) => setFacultadId(event.target.value)}
             required
@@ -420,7 +520,7 @@ function FormularioCuenta({
                 {facultad.nombre}
               </option>
             ))}
-          </select>
+          </NativeSelect>
           {universidad.facultades.length === 0 && (
             <p>Primero crea una facultad en esta universidad.</p>
           )}
@@ -432,28 +532,22 @@ function FormularioCuenta({
           : 'Recibirá una contraseña provisoria, que deberá cambiar al entrar.'}
       </p>
       {error && (
-        <p className="carreras__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
-      <div className="carreras__acciones">
-        <button
-          className="carreras__primario"
-          type="submit"
-          disabled={guardando}
-        >
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" disabled={guardando}>
           {inicial ? 'Guardar cambios' : 'Crear cuenta'}
-        </button>
-        {inicial && (
-          <button
-            className="carreras__secundario"
-            type="button"
-            disabled={guardando}
-            onClick={onCancelar}
-          >
-            Cancelar edición
-          </button>
-        )}
+        </Button>
+        <Button
+          variant="outline"
+          type="button"
+          disabled={guardando}
+          onClick={onCancelar}
+        >
+          {inicial ? 'Cancelar edición' : 'Cancelar'}
+        </Button>
       </div>
     </form>
   )
@@ -468,31 +562,29 @@ function DialogoCuentaCreada({
   creada: CuentaCreada
   onCerrar: () => void
 }) {
-  const dialogo = useRef<HTMLDialogElement>(null)
   const { cuenta, passwordProvisoria } = creada
 
-  // Modal nativo: atrapa el foco y cierra con Escape (evento close).
-  useEffect(() => {
-    dialogo.current?.showModal()
-  }, [])
-
   return (
-    <dialog
-      ref={dialogo}
-      className="cursos__dialogo"
-      aria-labelledby="cuenta-universidad-creada"
-      onClose={onCerrar}
+    <Dialog
+      open
+      onOpenChange={(abierto) => {
+        if (!abierto) onCerrar()
+      }}
     >
-      <h3 id="cuenta-universidad-creada" className="cursos__titulo-dialogo">
-        Cuenta de {ROL_LABEL[cuenta.rol]} creada
-      </h3>
-      <PasswordProvisoria
-        nombre={cuenta.nombre}
-        correo={cuenta.correo}
-        password={passwordProvisoria}
-        destinatario="a esa persona"
-        onCerrar={onCerrar}
-      />
-    </dialog>
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
+        <DialogTitle>Cuenta de {ROL_LABEL[cuenta.rol]} creada</DialogTitle>
+        <PasswordProvisoria
+          nombre={cuenta.nombre}
+          correo={cuenta.correo}
+          password={passwordProvisoria}
+          destinatario="a esa persona"
+          onCerrar={onCerrar}
+        />
+      </DialogContent>
+    </Dialog>
   )
 }

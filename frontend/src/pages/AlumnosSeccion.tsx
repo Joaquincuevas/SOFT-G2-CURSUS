@@ -5,7 +5,7 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { IntegrantesSeccion } from './IntegrantesSeccion'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
 
 export function Secciones() {
   return (
