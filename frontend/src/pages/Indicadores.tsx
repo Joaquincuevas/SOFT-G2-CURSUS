@@ -119,7 +119,7 @@ export function ListaUniversidades({
       <h2 className={SUBTITULO}>Universidades</h2>
       {universidades === undefined ? (
         <CargandoEsqueleto texto="Cargando universidades…" filas={2} />
-      ) : universidades === null ? (
+      ) : universidades === null || !Array.isArray(universidades) ? (
         <ErrorState
           mensaje="No pudimos cargar las universidades."
           onReintentar={recargar}

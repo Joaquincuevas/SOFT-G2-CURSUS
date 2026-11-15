@@ -48,7 +48,7 @@ Recorrido de todas las pantallas del rol antes de migrar, con la aplicación loc
 9. Sin hallazgos de comportamiento: menú, encabezado, 404 y redirección de rutas de otro rol son correctos para el rol, a 1280 y 375 px.
 10. Observaciones de `navigation.ts`, que no se cambia: el ítem de `/cursos` se llama «Mis Cursos» para el Superadmin, aunque la página se titula «Gestión académica» y no tiene cursos propios; y el menú dice «Dashboard» (en inglés) para todos los roles, como en el Figma. `/secciones` no está en el menú y para el Superadmin muestra Gestión académica.
 
-**Páginas de UI/UX-07 (solo se verifican, no se tocan)**
+**Páginas de UI/UX-07 (solo se verifican, no se tocan; vistas antes de que se mergeara UI/UX-07)**
 
 11. Administrar universidad: el encabezado de la tarjeta de facultades se repite («Facultades» y «Facultades de Universidad Demo Norte»); el campo «Nueva facultad» no tiene texto de ayuda; hereda el selector de color de la observación 7.
 12. Cuentas de universidad: lista todas las cuentas en una sola página, sin paginación ni búsqueda (11 193 px de alto a 1280 px y 16 551 px a 375 px con las 70 cuentas del seed); tiene dos `<select>` nativos; la tabla de seis columnas queda muy apretada a 375 px.
@@ -84,7 +84,7 @@ Recorrido de todas las pantallas del rol antes de migrar, con la aplicación loc
 
 - **Tarjetas en vez de `DataTable`:** el Dashboard no es un listado para leer sino el lugar donde se elige en qué facultad trabajar; cada universidad es una tarjeta con sus facultades como acciones. Una tabla obligaría a esconder esas acciones en una celda.
 - **Sin `ConfirmDialog`:** las páginas exclusivas del Superadmin no tienen acciones destructivas. Archivar una universidad o una facultad vive en Administrar universidad (UI/UX-07), donde corresponde su confirmación.
-- **Editar una universidad, Administrar universidad y Cuentas** son de UI/UX-07 (aunque las use el Superadmin) y no se tocaron. Sus hallazgos están arriba (11 y 12). El único archivo compartido que sí se migró es `FormularioUniversidad.tsx`; UI/UX-07 puede encontrarlo ya migrado.
+- **Editar una universidad, Administrar universidad y Cuentas** son de UI/UX-07 (aunque las use el Superadmin) y no se tocaron. Sus hallazgos (11 a 13) son de antes de que se mergeara UI/UX-07; las capturas «después» de esas pantallas ya muestran su migración. El único archivo compartido que sí se migró aquí es `FormularioUniversidad.tsx`: UI/UX-07 también lo había migrado (con `Label` e `Input`) y, al sincronizar con `develop`, se conservó esta versión, que suma `FormField`, la alerta de peligro, `aria-invalid` en el color y el valor elegido, con las mismas props y textos.
 - **`Dashboard.css` y `Carreras.css` se conservan:** otras pantallas los siguen usando.
 - **Accesos directos a Carreras, Períodos y Profesores:** no se repiten en el Dashboard porque ya están en el menú lateral, que es la fuente única (`navigation.ts`).
 

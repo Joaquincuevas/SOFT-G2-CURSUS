@@ -171,6 +171,25 @@ describe('Dashboard del Director', () => {
     expect(await panel.findByText('72,4')).toBeInTheDocument()
   })
 
+  // Una respuesta que no es el consolidado (un `[]`, como devuelven algunos
+  // mocks de otras pantallas) se trata como error de carga y no rompe la página.
+  test('una respuesta que no es el consolidado se trata como error, sin romper la página', async () => {
+    await renderConSesion('DIRECTOR', '/', {
+      [CONSOLIDADO]: () => [],
+      [UNIVERSIDADES]: () => ({}),
+    })
+    const panel = within(await dashboard())
+    expect(
+      await panel.findByText('No pudimos cargar los indicadores.'),
+    ).toBeInTheDocument()
+    expect(
+      await panel.findByText('No pudimos cargar las universidades.'),
+    ).toBeInTheDocument()
+    expect(
+      panel.getByRole('region', { name: 'Accesos directos' }),
+    ).toBeInTheDocument()
+  })
+
   test('si las universidades fallan, ofrece reintentar', async () => {
     let intentos = 0
     await renderConSesion('DIRECTOR', '/', {
