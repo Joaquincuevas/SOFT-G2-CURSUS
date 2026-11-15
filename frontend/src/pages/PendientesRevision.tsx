@@ -1,10 +1,17 @@
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import type { PendienteRevision } from '@cursus/shared'
 import { Fragment, useState } from 'react'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { NotasDeEvaluacion } from './NotasDeEvaluacion'
-import './Dashboard.css'
-import './PestanaNotas.css'
 import { RUTA_PENDIENTES_REVISION, textoSinNota } from './misSecciones'
 import { useDatos } from './useDatos'
 
@@ -20,11 +27,13 @@ export function PendientesRevision() {
   const [aviso, setAviso] = useState<string | null>(null)
 
   return (
-    <section className="notas" aria-label="Pendientes de revisión">
-      <h2 className="dashboard__titulo">Evaluaciones pendientes de revisión</h2>
+    <section className="grid min-w-0 gap-4" aria-label="Pendientes de revisión">
+      <h2 className="m-0 text-xl font-semibold">
+        Evaluaciones pendientes de revisión
+      </h2>
       {/* Fuera de la lista: sigue visible cuando la recarga la saca. */}
       {aviso && (
-        <p className="notas__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}
@@ -33,7 +42,7 @@ export function PendientesRevision() {
       ) : pendientes === null && status === 403 ? (
         // La ruta está bajo Mis Cursos, que ven todos los roles: reintentar
         // no cambiaría el 403.
-        <p className="dashboard__texto">
+        <p className="m-0 text-sm text-muted-foreground">
           Solo el profesor ve las evaluaciones pendientes de revisión.
         </p>
       ) : pendientes === null ? (
@@ -42,51 +51,52 @@ export function PendientesRevision() {
           onReintentar={recargar}
         />
       ) : pendientes.length === 0 ? (
-        <p className="dashboard__texto">
+        <p className="m-0 text-sm text-muted-foreground">
           No tienes evaluaciones pendientes de revisión.
         </p>
       ) : (
-        <table className="notas__tabla">
-          <thead>
-            <tr>
-              <th scope="col">Curso</th>
-              <th scope="col">Sección</th>
-              <th scope="col">Evaluación</th>
-              <th scope="col">Ayudante</th>
-              <th scope="col">Enviada</th>
-              <th scope="col">Notas</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table className="[&_td]:whitespace-normal [&_th]:whitespace-normal">
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Curso</TableHead>
+              <TableHead scope="col">Sección</TableHead>
+              <TableHead scope="col">Evaluación</TableHead>
+              <TableHead scope="col">Ayudante</TableHead>
+              <TableHead scope="col">Enviada</TableHead>
+              <TableHead scope="col">Notas</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {pendientes.map((p) => {
               const esAbierta = abierta?.evaluacion.id === p.evaluacion.id
               return (
                 <Fragment key={p.evaluacion.id}>
-                  <tr>
-                    <td>
+                  <TableRow>
+                    <TableCell>
                       {p.curso.codigo} {p.curso.nombre}
-                    </td>
-                    <td>{p.seccion.numero}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell>{p.seccion.numero}</TableCell>
+                    <TableCell>
                       {p.evaluacion.nombre}
                       {/* NOT-08: alumnos inscritos después del envío. */}
                       {p.sinNota > 0 && (
                         <small> ({textoSinNota(p.sinNota)})</small>
                       )}
-                    </td>
-                    <td>{p.ayudante?.nombre ?? '—'}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell>{p.ayudante?.nombre ?? '—'}</TableCell>
+                    <TableCell>
                       {p.enviadaEl
                         ? new Date(p.enviadaEl).toLocaleString('es-CL', {
                             dateStyle: 'long',
                             timeStyle: 'short',
                           })
                         : '—'}
-                    </td>
-                    <td>
-                      <button
+                    </TableCell>
+                    <TableCell>
+                      <Button
                         type="button"
-                        className="notas__enlace"
+                        variant="link"
+                        className="h-auto justify-start px-0 py-1 whitespace-normal text-left"
                         aria-pressed={esAbierta}
                         aria-label={`Notas de ${p.evaluacion.nombre} (${p.curso.codigo}, sección ${p.seccion.numero})`}
                         onClick={() => {
@@ -95,13 +105,13 @@ export function PendientesRevision() {
                         }}
                       >
                         {esAbierta ? 'Ocultar' : 'Ver notas'}
-                      </button>
-                    </td>
-                  </tr>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                   {/* Las notas se abren bajo su fila, no al final de la lista. */}
                   {esAbierta && (
-                    <tr>
-                      <td colSpan={6}>
+                    <TableRow>
+                      <TableCell colSpan={6}>
                         <NotasDeEvaluacion
                           rol="PROFESOR"
                           seccionId={p.seccion.id}
@@ -114,14 +124,14 @@ export function PendientesRevision() {
                             recargar()
                           }}
                         />
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </Fragment>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </section>
   )

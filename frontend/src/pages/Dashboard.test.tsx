@@ -63,6 +63,23 @@ const tarjetas = async () =>
   ).findAllByRole('link')
 
 describe('dashboard del profesor (ESP-01)', () => {
+  test('destaca pendientes reales en el resumen y en la sección correspondiente', async () => {
+    await renderConSesion('PROFESOR', '/', {
+      [RUTA]: () => [{ ...SECCIONES[0], pendientesRevision: 2 }, SECCIONES[1]],
+    })
+    const lista = within(
+      await screen.findByRole('list', { name: 'Secciones del período activo' }),
+    )
+    const [primera, segunda] = lista.getAllByRole('link')
+    expect(
+      within(primera).getByText('2 evaluaciones pendientes de revisión'),
+    ).toHaveAttribute('data-slot', 'badge')
+    expect(within(segunda).queryByText(/pendientes de revisión/)).toBeNull()
+    expect(
+      screen.getByRole('link', { name: 'Ver pendientes' }),
+    ).toHaveAttribute('href', '/mis-cursos/pendientes-revision')
+  })
+
   test('muestra una tarjeta por sección con curso, sección, horario y alumnos', async () => {
     await renderConSesion('PROFESOR', '/', { [RUTA]: () => SECCIONES })
 

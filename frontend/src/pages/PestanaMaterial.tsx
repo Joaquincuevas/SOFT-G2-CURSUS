@@ -1,3 +1,8 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { NativeSelect } from '@/components/ui/native-select'
+import { usePuede } from '../session/session'
 import {
   CATEGORIA_MATERIAL_LABEL,
   CATEGORIAS_MATERIAL,
@@ -16,16 +21,13 @@ import {
   type VersionMaterial,
 } from '@cursus/shared'
 import { Download, FileText, FolderOpen } from 'lucide-react'
-import { EmptyState, ErrorState } from '@/components/shared'
+import { EmptyState, ErrorState, FileInput } from '@/components/shared'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
-import './PestanaMaterial.css'
 import { AdministrarSilabo } from './AdministrarSilabo'
 import { subirAS3, tamanoLegible } from './subirArchivo'
 import { useDatos } from './useDatos'
@@ -142,6 +144,8 @@ export function PestanaMaterial({
   alPublicarSilabo,
 }: PropsPestana) {
   const { fetchConSesion } = useAuth()
+  const puedePublicar = usePuede('create', 'Material')
+  const puedeVersionar = usePuede('create', 'MaterialVersion')
   const ruta = `/api/espacio/secciones/${seccionId}`
   const [materiales, recargar] = useDatos<Material[]>(`${ruta}/materiales`)
   const [descargando, setDescargando] = useState<string | null>(null)
@@ -191,32 +195,46 @@ export function PestanaMaterial({
   }
 
   return (
-    <section className="material" aria-label="Materiales del curso">
-      <AdministrarSilabo
-        ruta={ruta}
-        puedePublicar={rol === 'PROFESOR'}
-        alPublicar={alPublicarSilabo}
-      />
-      <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
-      {rol === 'PROFESOR' && (
-        <FormularioMaterial ruta={ruta} alSubir={recargar} />
+    <section className="grid min-w-0 gap-4" aria-label="Materiales del curso">
+      <h3 className="m-0 text-base font-semibold">Materiales del curso</h3>
+      {rol === 'AYUDANTE' && (
+        <Alert role="note" variant="info">
+          <AlertTitle>Material en solo lectura</AlertTitle>
+          <AlertDescription>
+            Puedes descargar los archivos publicados. Solo el profesor puede
+            subir materiales o nuevas versiones.
+          </AlertDescription>
+        </Alert>
       )}
+      {puedePublicar && <FormularioMaterial ruta={ruta} alSubir={recargar} />}
       {errorDescarga && (
-        <p className="material__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {errorDescarga}
         </p>
       )}
       {materiales === undefined ? (
-        <Cargando texto="Cargando materiales…" />
+        <div role="status">
+          <span className="sr-only">Cargando materiales…</span>
+          <Skeleton className="h-28 rounded-xl" />
+        </div>
       ) : materiales === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar los materiales."
           onReintentar={recargar}
         />
       ) : materiales.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay materiales del curso</p>
+        <EmptyState
+          icono={FolderOpen}
+          titulo="Aún no hay materiales del curso"
+          mensaje={
+            puedePublicar
+              ? 'Usa el formulario para subir el primer archivo.'
+              : 'Aquí aparecerán los archivos que publique el profesor.'
+          }
+          className="rounded-xl border border-border bg-card"
+        />
       ) : (
-        <div className="material__grupos">
+        <div className="grid min-w-0 gap-4">
           {CATEGORIAS_MATERIAL.map((categoria) => {
             const grupo =
               ordenados?.filter(
@@ -225,20 +243,28 @@ export function PestanaMaterial({
             if (grupo.length === 0) return null
             const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
             return (
-              <section key={categoria} className="material__grupo">
-                <h4 className="vista-seccion__subtitulo">{etiqueta}</h4>
-                <ul className="material__lista" aria-label={etiqueta}>
+              <section key={categoria} className="grid min-w-0 gap-2">
+                <h4 className="m-0 text-base font-semibold">{etiqueta}</h4>
+                <ul
+                  className="m-0 grid list-none gap-2 p-0"
+                  aria-label={etiqueta}
+                >
                   {grupo.map((material) => (
-                    <li key={material.id} className="material__item">
+                    <li
+                      key={material.id}
+                      className="min-w-0 rounded-xl border border-border bg-card p-4 [&_summary]:cursor-pointer"
+                    >
                       <article aria-label={material.titulo}>
-                        <h5 className="material__titulo">{material.titulo}</h5>
+                        <h5 className="m-0 mb-2 text-sm font-semibold break-words">
+                          {material.titulo}
+                        </h5>
                         {material.descripcion && (
-                          <p className="material__descripcion">
+                          <p className="m-0 mb-2 text-sm break-words whitespace-pre-wrap text-muted-foreground">
                             {material.descripcion}
                           </p>
                         )}
-                        <div className="material__pie">
-                          <p className="material__archivo">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                          <p className="m-0 text-xs leading-relaxed break-words text-muted-foreground">
                             {material.archivo.nombre} ·{' '}
                             {tamanoLegible(material.archivo.tamano)}
                             {' · '}
@@ -255,9 +281,9 @@ export function PestanaMaterial({
                             {fechaHora(material.versionEn)} · Publicado el{' '}
                             {fechaHora(material.creadoEn)}
                           </p>
-                          <button
+                          <Button
                             type="button"
-                            className="material__descargar"
+                            variant="outline"
                             aria-label={`Descargar ${material.titulo}`}
                             disabled={descargando === material.id}
                             onClick={() => void descargar(material)}
@@ -265,9 +291,9 @@ export function PestanaMaterial({
                             {descargando === material.id
                               ? 'Descargando…'
                               : 'Descargar'}
-                          </button>
+                          </Button>
                         </div>
-                        {rol === 'PROFESOR' && (
+                        {puedeVersionar && (
                           <VersionesMaterial
                             ruta={ruta}
                             material={material}
@@ -283,6 +309,11 @@ export function PestanaMaterial({
           })}
         </div>
       )}
+      <AdministrarSilabo
+        ruta={ruta}
+        puedePublicar={puedePublicar}
+        alPublicar={alPublicarSilabo}
+      />
     </section>
   )
 }
@@ -542,10 +573,10 @@ function FormularioMaterial({
     }
   }
 
-  function elegirArchivo(event: ChangeEvent<HTMLInputElement>) {
+  function elegirArchivo([elegido]: File[]) {
     setAviso(null)
     setError(null)
-    setArchivo(event.target.files?.[0] ?? null)
+    setArchivo(elegido ?? null)
   }
 
   const cambiar =
@@ -563,24 +594,24 @@ function FormularioMaterial({
 
   return (
     <form
-      className="material__formulario"
+      className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4"
       aria-label="Subir material"
       noValidate
       onSubmit={(event) => void enviar(event)}
     >
-      <label className="material__campo material__campo--ancho">
-        Archivo
-        <input
+      <div className="grid min-w-0 gap-2 text-sm font-medium">
+        <span>Archivo</span>
+        <FileInput
+          aria-label="Archivo"
           key={versionInput}
-          type="file"
           accept={ACEPTADAS}
           onChange={elegirArchivo}
           disabled={ocupado}
         />
-      </label>
-      <label className="material__campo">
+      </div>
+      <label className="grid min-w-0 gap-2 text-sm font-medium">
         Categoría
-        <select
+        <NativeSelect
           value={campos.categoria}
           onChange={cambiar('categoria')}
           disabled={ocupado}
@@ -591,20 +622,20 @@ function FormularioMaterial({
               {CATEGORIA_MATERIAL_LABEL[categoria]}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </label>
-      <label className="material__campo material__campo--crece">
+      <label className="grid min-w-0 gap-2 text-sm font-medium">
         Título
-        <input
+        <Input
           value={campos.titulo}
           onChange={cambiar('titulo')}
           maxLength={LARGO_TITULO_MATERIAL}
           disabled={ocupado}
         />
       </label>
-      <label className="material__campo material__campo--ancho">
+      <label className="grid min-w-0 gap-2 text-sm font-medium">
         Descripción (opcional)
-        <textarea
+        <Textarea
           value={campos.descripcion}
           onChange={cambiar('descripcion')}
           maxLength={LARGO_DESCRIPCION_MATERIAL}
@@ -612,15 +643,15 @@ function FormularioMaterial({
           disabled={ocupado}
         />
       </label>
-      <button className="material__boton" type="submit" disabled={ocupado}>
+      <Button className="justify-self-start" type="submit" disabled={ocupado}>
         Subir material
-      </button>
-      <p className="material__ayuda">
+      </Button>
+      <p className="m-0 text-xs text-muted-foreground">
         Hasta {tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}. Tipos:{' '}
         {EXTENSIONES.join(', ')}.
       </p>
       {etapa && (
-        <div className="material__progreso" role="status">
+        <div className="m-0 text-sm text-muted-foreground" role="status">
           <span>{TEXTO_ETAPA[etapa]}</span>
           {etapa === 'subiendo' && (
             <progress
@@ -632,12 +663,12 @@ function FormularioMaterial({
         </div>
       )}
       {error && (
-        <p className="material__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
       {aviso && (
-        <p className="material__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}
@@ -774,46 +805,46 @@ function VersionesMaterial({
   }
 
   return (
-    <div className="material__versiones">
+    <div className="mt-4 grid gap-3 border-t pt-3 text-sm">
       <form
-        className="material__version-nueva"
+        className="grid gap-3 rounded-lg bg-muted/50 p-3 sm:flex sm:flex-wrap sm:items-end"
         aria-label={`Subir nueva versión de ${material.titulo}`}
         noValidate
         onSubmit={(event) => void subirVersion(event)}
       >
-        <label className="material__campo">
-          Nueva versión
-          <input
+        <div className="grid min-w-0 gap-2 text-sm font-medium">
+          <span>Nueva versión</span>
+          <FileInput
+            aria-label="Nueva versión"
             key={versionInput}
-            type="file"
             accept={ACEPTADAS}
             disabled={etapa !== null}
-            onChange={(event) => {
+            onChange={([elegido]) => {
               setAviso(null)
               setError(null)
-              setArchivo(event.target.files?.[0] ?? null)
+              setArchivo(elegido ?? null)
             }}
           />
-        </label>
-        <button
-          className="material__boton"
+        </div>
+        <Button
+          className="justify-self-start"
           type="submit"
           disabled={etapa !== null}
         >
           Subir nueva versión
-        </button>
+        </Button>
         {etapa && (
-          <p className="material__progreso" role="status">
+          <p className="m-0 text-sm text-muted-foreground" role="status">
             {TEXTO_ETAPA[etapa]}
           </p>
         )}
         {error && (
-          <p className="material__error" role="alert">
+          <p className="m-0 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
         {aviso && (
-          <p className="material__aviso" role="status">
+          <p className="m-0 text-sm text-(color:--color-success)" role="status">
             {aviso}
           </p>
         )}
@@ -821,29 +852,35 @@ function VersionesMaterial({
       <details onToggle={(event) => setAbierto(event.currentTarget.open)}>
         <summary>Historial de versiones</summary>
         {!abierto ? null : historial === undefined ? (
-          <Cargando texto="Cargando versiones…" />
+          <div role="status">
+            <span className="sr-only">Cargando versiones…</span>
+            <Skeleton className="h-14 rounded-xl" />
+          </div>
         ) : historial === null ? (
-          <ErrorEstado
+          <ErrorState
             mensaje="No pudimos cargar las versiones."
             onReintentar={recargarHistorial}
           />
         ) : (
-          <ol className="material__historial" aria-label="Versiones">
+          <ol
+            className="m-0 grid list-none gap-2 p-0 pt-2"
+            aria-label="Versiones"
+          >
             {historial.map((v) => (
               <li key={v.version}>
                 <span>
                   Versión {v.version} · {fechaHora(v.subidoEn)} ·{' '}
                   {v.responsable} · {v.archivo.nombre}
                 </span>
-                <button
+                <Button
                   type="button"
-                  className="material__descargar"
+                  variant="outline"
                   aria-label={`Descargar versión ${v.version}`}
                   disabled={descargando === v.version}
                   onClick={() => void descargar(v.version)}
                 >
                   {descargando === v.version ? 'Descargando…' : 'Descargar'}
-                </button>
+                </Button>
               </li>
             ))}
           </ol>

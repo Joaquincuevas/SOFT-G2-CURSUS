@@ -13,6 +13,7 @@ import {
 import { useEffect, useId, useState, type ComponentType } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -276,6 +277,16 @@ export function VistaSeccion() {
             ) : (
               <EquipoDocente seccion={seccion} />
             )}
+            {rol === 'AYUDANTE' && (
+              <Alert variant="info" role="note">
+                <Users aria-hidden="true" />
+                <AlertTitle>Integrantes en solo lectura</AlertTitle>
+                <AlertDescription>
+                  Puedes consultar el equipo docente. La nómina de alumnos está
+                  disponible para el profesor.
+                </AlertDescription>
+              </Alert>
+            )}
             {/* key: al cambiar de sección la lista vuelve a cargar, sin
                 mostrar la de la sección anterior. */}
             {rol === 'PROFESOR' && (
@@ -426,12 +437,22 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
   const tituloId = useId()
 
   return (
-    <section className="vista-seccion__alumnos" aria-labelledby={tituloId}>
-      <h3 id={tituloId} className="vista-seccion__subtitulo">
+    <section
+      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4"
+      aria-labelledby={tituloId}
+    >
+      <h3
+        id={tituloId}
+        className="m-0 flex items-center gap-2 text-base font-semibold"
+      >
+        <Users aria-hidden="true" className="size-4 text-primary" />
         {datos ? `Alumnos (${datos.total})` : 'Alumnos'}
       </h3>
       {datos === undefined ? (
-        <Cargando texto="Cargando alumnos…" />
+        <div role="status">
+          <span className="sr-only">Cargando alumnos…</span>
+          <Skeleton className="h-24 rounded-lg" />
+        </div>
       ) : datos === null ? (
         <ErrorEstado
           mensaje="No pudimos cargar los alumnos."
@@ -440,11 +461,17 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
       ) : datos.alumnos.length === 0 ? (
         <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
       ) : (
-        <ul className="vista-seccion__lista" aria-label="Alumnos inscritos">
+        <ul
+          className="m-0 grid list-none divide-y p-0 text-sm"
+          aria-label="Alumnos inscritos"
+        >
           {datos.alumnos.map((alumno) => (
-            <li key={alumno.id}>
-              <span className="vista-seccion__nombre">{alumno.nombre}</span>
-              <span>{alumno.correo}</span>
+            <li
+              key={alumno.id}
+              className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2 break-all"
+            >
+              <span className="font-medium">{alumno.nombre}</span>
+              <span className="text-muted-foreground">{alumno.correo}</span>
             </li>
           ))}
         </ul>
