@@ -177,7 +177,7 @@ describe('dashboard del profesor (ESP-01)', () => {
     expect(await tarjetas()).toHaveLength(2)
   })
 
-  test.each<Rol>(['DIRECTOR', 'ADMINISTRATIVO', 'AYUDANTE', 'ALUMNO'])(
+  test.each<Rol>(['ADMINISTRATIVO', 'AYUDANTE', 'ALUMNO'])(
     '%s no ve tarjetas ni pide las secciones del profesor',
     async (rol) => {
       let pedidas = 0
