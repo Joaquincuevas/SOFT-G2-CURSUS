@@ -5,13 +5,29 @@ import {
   type CambioAnuncio,
   type EditarAnuncio,
 } from '@cursus/shared'
+import { CircleAlert, History, Pencil } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
+import { toast } from 'sonner'
+import { ErrorState, FormField } from '@/components/shared'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '../auth/auth'
 import { useDatos } from './useDatos'
 import { fechaAnuncio } from './anuncios'
-import { ErrorEstado } from '../components/ErrorEstado'
-import { Cargando } from '../components/Cargando'
 
+// ANU-05: el autor corrige su anuncio y consulta sus versiones anteriores.
+// Las dos acciones van a la derecha de la tarjeta y abren su diálogo.
 export function EdicionAnuncio({
   anuncio,
   ruta,
@@ -21,44 +37,62 @@ export function EdicionAnuncio({
   ruta: string
   recargar: () => void
 }) {
-  const [editando, setEditando] = useState(false)
-  const [historial, setHistorial] = useState(false)
-  const [aviso, setAviso] = useState(false)
+  const [dialogo, setDialogo] = useState<'editar' | 'historial' | null>(null)
+  const [guardando, setGuardando] = useState(false)
   const destino = `${ruta}/${anuncio.id}`
+  const cerrar = (abierto: boolean) => {
+    if (!abierto && !guardando) setDialogo(null)
+  }
   return (
-    <div className="anuncios__edicion">
-      {!editando ? (
-        <button
-          type="button"
-          onClick={() => {
-            setAviso(false)
-            setEditando(true)
-          }}
-        >
-          Editar anuncio
-        </button>
-      ) : (
-        <FormularioEdicion
-          anuncio={anuncio}
-          ruta={destino}
-          cancelar={() => setEditando(false)}
-          guardar={() => {
-            setEditando(false)
-            setHistorial(false)
-            setAviso(true)
-            recargar()
-          }}
-        />
-      )}
-      <button
+    <div className="flex shrink-0 items-center gap-1">
+      <Button
         type="button"
-        aria-expanded={historial}
-        onClick={() => setHistorial(!historial)}
+        variant="ghost"
+        size="sm"
+        onClick={() => setDialogo('editar')}
       >
-        {historial ? 'Ocultar historial' : 'Ver historial'}
-      </button>
-      {aviso && <p role="status">Anuncio guardado</p>}
-      {historial && <HistorialAnuncio ruta={`${destino}/historial`} />}
+        <Pencil aria-hidden="true" />
+        Editar anuncio
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setDialogo('historial')}
+      >
+        <History aria-hidden="true" />
+        Ver historial
+      </Button>
+      <Dialog open={dialogo === 'editar'} onOpenChange={cerrar}>
+        <DialogContent className="bg-card text-left sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar anuncio</DialogTitle>
+            <DialogDescription>
+              La versión actual queda en el historial del anuncio.
+            </DialogDescription>
+          </DialogHeader>
+          <FormularioEdicion
+            anuncio={anuncio}
+            ruta={destino}
+            alCambiarGuardando={setGuardando}
+            cancelar={() => setDialogo(null)}
+            guardar={() => {
+              setDialogo(null)
+              toast.success('Anuncio guardado')
+              recargar()
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={dialogo === 'historial'} onOpenChange={cerrar}>
+        <DialogContent className="max-h-[85svh] overflow-y-auto bg-card text-left sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Historial del anuncio</DialogTitle>
+            <DialogDescription>{anuncio.titulo}</DialogDescription>
+          </DialogHeader>
+          <HistorialAnuncio ruta={`${destino}/historial`} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -68,11 +102,13 @@ function FormularioEdicion({
   ruta,
   cancelar,
   guardar,
+  alCambiarGuardando,
 }: {
   anuncio: Anuncio
   ruta: string
   cancelar: () => void
   guardar: () => void
+  alCambiarGuardando: (guardando: boolean) => void
 }) {
   const { fetchConSesion } = useAuth()
   const [campos, setCampos] = useState<EditarAnuncio>({
@@ -85,6 +121,7 @@ function FormularioEdicion({
     event.preventDefault()
     if (guardando) return
     setGuardando(true)
+    alCambiarGuardando(true)
     setError(null)
     try {
       const respuesta = await fetchConSesion(ruta, {
@@ -115,42 +152,59 @@ function FormularioEdicion({
       )
     } finally {
       setGuardando(false)
+      alCambiarGuardando(false)
     }
   }
   return (
     <form
-      className="anuncios__formulario"
+      className="grid min-w-0 gap-4"
       aria-label="Editar anuncio"
       onSubmit={(event) => void enviar(event)}
     >
-      <label className="anuncios__campo">
-        Título del anuncio
-        <input
-          required
-          maxLength={LARGO_TITULO_ANUNCIO}
+      <FormField etiqueta="Título del anuncio">
+        {(control) => (
+          <Input
+            {...control}
+            required
+            maxLength={LARGO_TITULO_ANUNCIO}
+            disabled={guardando}
+            value={campos.titulo}
+            onChange={(e) => setCampos({ ...campos, titulo: e.target.value })}
+          />
+        )}
+      </FormField>
+      <FormField etiqueta="Cuerpo del anuncio">
+        {(control) => (
+          <Textarea
+            {...control}
+            required
+            rows={6}
+            maxLength={LARGO_CUERPO_ANUNCIO}
+            disabled={guardando}
+            value={campos.cuerpo}
+            onChange={(e) => setCampos({ ...campos, cuerpo: e.target.value })}
+          />
+        )}
+      </FormField>
+      {error && (
+        <Alert variant="danger">
+          <CircleAlert aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
           disabled={guardando}
-          value={campos.titulo}
-          onChange={(e) => setCampos({ ...campos, titulo: e.target.value })}
-        />
-      </label>
-      <label className="anuncios__campo">
-        Cuerpo del anuncio
-        <textarea
-          required
-          rows={4}
-          maxLength={LARGO_CUERPO_ANUNCIO}
-          disabled={guardando}
-          value={campos.cuerpo}
-          onChange={(e) => setCampos({ ...campos, cuerpo: e.target.value })}
-        />
-      </label>
-      <button type="submit" disabled={guardando}>
-        {guardando ? 'Guardando…' : 'Guardar cambios'}
-      </button>
-      <button type="button" disabled={guardando} onClick={cancelar}>
-        Cancelar edición
-      </button>
-      {error && <p role="alert">{error}</p>}
+          onClick={cancelar}
+        >
+          Cancelar edición
+        </Button>
+        <Button type="submit" disabled={guardando}>
+          {guardando ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+      </DialogFooter>
     </form>
   )
 }
@@ -158,37 +212,43 @@ function FormularioEdicion({
 function HistorialAnuncio({ ruta }: { ruta: string }) {
   const [versiones, recargar] = useDatos<CambioAnuncio[]>(ruta)
   return (
-    <section aria-label="Historial del anuncio">
-      <h5>Historial del anuncio</h5>
+    <section aria-label="Historial del anuncio" className="grid gap-3">
       {versiones === undefined ? (
-        <Cargando texto="Cargando historial…" />
+        <div role="status">
+          <span className="sr-only">Cargando historial…</span>
+          <Skeleton className="h-20 rounded-lg" />
+        </div>
       ) : versiones === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar el historial."
           onReintentar={recargar}
         />
       ) : !versiones.length ? (
-        <p>Este anuncio aún no tiene ediciones.</p>
+        <p className="m-0 text-sm text-muted-foreground">
+          Este anuncio aún no tiene ediciones.
+        </p>
       ) : (
-        <ol>
+        <ol className="m-0 grid list-none divide-y divide-border p-0">
           {versiones.map((version, indice) => (
-            <li key={version.id}>
-              <p>
-                <strong>
-                  {indice === 0
-                    ? 'Versión original'
-                    : `Versión anterior ${indice + 1}`}
-                </strong>
+            <li key={version.id} className="grid gap-1 py-3 text-sm">
+              <p className="m-0 font-semibold text-foreground">
+                {indice === 0
+                  ? 'Versión original'
+                  : `Versión anterior ${indice + 1}`}
               </p>
-              <p>
+              <p className="m-0 text-xs text-muted-foreground">
                 Reemplazada el{' '}
                 <time dateTime={version.fecha}>
                   {fechaAnuncio(version.fecha)}
                 </time>{' '}
                 por {version.responsable.nombre}
               </p>
-              <p>{version.titulo}</p>
-              <p className="anuncios__cuerpo">{version.cuerpo}</p>
+              <p className="m-0 font-medium break-words text-foreground">
+                {version.titulo}
+              </p>
+              <p className="m-0 break-words whitespace-pre-wrap text-muted-foreground">
+                {version.cuerpo}
+              </p>
             </li>
           ))}
         </ol>
