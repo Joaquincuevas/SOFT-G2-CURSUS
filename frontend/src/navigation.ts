@@ -22,6 +22,7 @@ import type { ComponentType } from 'react'
 import { Cursos } from './pages/Cursos'
 import { RutasIndicadores } from './pages/Indicadores'
 import { RegistroAccesos } from './pages/RegistroAccesos'
+import { Universidades } from './pages/Universidades'
 import { ReporteFacultad } from './pages/ReporteFacultad'
 import { Dashboard } from './pages/Dashboard'
 import { MisCursos } from './pages/MisCursos'
@@ -109,6 +110,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     label: 'Universidades',
     icon: Landmark,
     permiso: { accion: 'read', sujeto: 'PanelDirectorio' },
+    page: Universidades,
     title: () => 'Universidades',
   },
   {
