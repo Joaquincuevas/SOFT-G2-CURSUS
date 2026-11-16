@@ -32,6 +32,7 @@ export function usePeriodoDeLaUrl() {
 }
 
 // Enlace de texto de estas pantallas: la app no trae estilo de enlaces
-// (Tailwind sin preflight), así que va con el color de la marca y subrayado.
+// (Tailwind sin preflight). Color de la marca, sin subrayado fijo (solo al
+// pasar el mouse) y foco visible con el teclado.
 export const ENLACE =
-  'rounded-sm font-medium text-primary underline underline-offset-4 hover:text-(color:--color-primary-dark) focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+  'rounded-sm font-medium text-primary no-underline underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
