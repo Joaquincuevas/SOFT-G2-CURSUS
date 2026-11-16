@@ -41,7 +41,6 @@ import {
   Migas,
   NoEncontrado,
   PeriodoInvalido,
-  ResumenEnLinea,
   SelectorPeriodo,
   TresIndicadores,
 } from './indicadores-comunes'
@@ -51,6 +50,7 @@ import {
   usePeriodoDeLaUrl,
   valorIndicador,
 } from './indicadores-formato'
+import { TablaUniversidades } from './TablaUniversidades'
 import { useDatos } from './useDatos'
 
 const CONTENEDOR = 'grid min-w-0 gap-6'
@@ -114,39 +114,26 @@ export function ListaUniversidades({
   const [universidades, recargar] = useDatos<ResumenUniversidad[]>(
     `/api/metricas/universidades${consulta}`,
   )
+  const lista =
+    universidades && Array.isArray(universidades) ? universidades : null
   return (
     <section className="grid gap-3" aria-label="Universidades">
       <h2 className={SUBTITULO}>Universidades</h2>
-      {universidades === undefined ? (
-        <CargandoEsqueleto texto="Cargando universidades…" filas={2} />
-      ) : universidades === null || !Array.isArray(universidades) ? (
+      {universidades !== undefined && lista === null ? (
         <ErrorState
           mensaje="No pudimos cargar las universidades."
           onReintentar={recargar}
         />
-      ) : universidades.length === 0 ? (
+      ) : lista?.length === 0 ? (
         <Card className="py-0">
           <EmptyState icono={Building2} mensaje="No hay universidades." />
         </Card>
       ) : (
-        <Card className="gap-0 py-0">
-          <ul className="m-0 list-none divide-y divide-border p-0">
-            {universidades.map((u) => (
-              <li
-                key={u.id}
-                className="grid gap-1 px-5 py-4 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-center sm:gap-6"
-              >
-                <Link
-                  className={`${ENLACE} w-fit`}
-                  to={`/indicadores/universidades/${u.id}${sufijo}`}
-                >
-                  {u.nombre}
-                </Link>
-                <ResumenEnLinea indicadores={u} />
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <TablaUniversidades
+          universidades={lista ?? []}
+          sufijo={sufijo}
+          cargando={universidades === undefined}
+        />
       )}
     </section>
   )

@@ -1,11 +1,26 @@
 import type { EventoAcceso, PaginaEventos, Rol } from '@cursus/shared'
 import { cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import { formatearFechaHora } from '@/lib/fechas'
 import { json, renderConSesion } from '../test/sesion'
+
+// Abre el calendario de un campo de fecha y elige el día (por su nombre en
+// español, por ejemplo «1 de octubre de 2026»).
+async function elegirDia(campo: string, dia: string) {
+  fireEvent.click(screen.getByRole('button', { name: campo }))
+  const calendario = await screen.findByRole('dialog')
+  // El calendario abre en el mes actual (el reloj está fijo en octubre).
+  fireEvent.click(
+    within(calendario).getByRole('button', {
+      name: new RegExp(`(^|\\s)${dia}`),
+    }),
+  )
+}
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 const EVENTOS = '/api/auditoria/eventos'
@@ -86,7 +101,31 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     expect(fallido.getByText('Sin cuenta')).toBeInTheDocument()
     expect(within(filas[2]).getByText('Aprobación')).toBeInTheDocument()
     expect(within(filas[2]).getByText('Cambio de nota')).toBeInTheDocument()
-    expect(screen.getByText(/3 eventos · página 1 de 1/)).toBeInTheDocument()
+    expect(screen.getByText('3 eventos')).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 1')).toBeInTheDocument()
+  })
+
+  test('el resultado es una insignia y la fila fallida va con fondo tenue', async () => {
+    await renderConSesion('DIRECTOR', '/accesos', rutas())
+    const filas = within(await screen.findByRole('table'))
+      .getAllByRole('row')
+      .slice(1)
+    expect(within(filas[0]).getByText('Exitoso')).toHaveAttribute(
+      'data-slot',
+      'badge',
+    )
+    expect(filas[0]).not.toHaveClass('bg-destructive/5')
+    expect(within(filas[1]).getByText('Fallido')).toHaveClass(
+      'text-destructive',
+    )
+    expect(filas[1]).toHaveClass('bg-destructive/5')
+    // «Sin cuenta» en gris y el rol como texto secundario.
+    expect(within(filas[1]).getByText('Sin cuenta')).toHaveClass(
+      'text-muted-foreground',
+    )
+    expect(within(filas[0]).getByText('Alumno')).toHaveClass(
+      'text-muted-foreground',
+    )
   })
 
   test('el paso del código TOTP del login se muestra como verificación en dos pasos', async () => {
@@ -99,19 +138,23 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     expect(fila.getByText('Verificación en dos pasos')).toBeInTheDocument()
   })
 
-  test('las fechas llevan el instante y la zona horaria', async () => {
+  test('las fechas van en 24 horas y la zona horaria se dice una sola vez', async () => {
     await renderConSesion('DIRECTOR', '/accesos', rutas())
-    const [hora] = await screen.findAllByRole('time')
-    expect(hora).toHaveAttribute('dateTime', '2026-10-07T15:30:00.000Z')
-    // La zona del navegador (CLST, GMT-3, UTC…) va en la misma fecha.
-    const zona = new Intl.DateTimeFormat('es-CL', { timeZoneName: 'short' })
-      .formatToParts(new Date('2026-10-07T15:30:00.000Z'))
-      .find((p) => p.type === 'timeZoneName')?.value as string
-    expect(hora.textContent).toContain(zona)
-    expect(screen.getByText(/Fechas en tu zona horaria \(/)).toBeInTheDocument()
+    const horas = await screen.findAllByRole('time')
+    expect(horas[0]).toHaveAttribute('dateTime', '2026-10-07T15:30:00.000Z')
+    expect(horas[0]).toHaveTextContent(
+      formatearFechaHora('2026-10-07T15:30:00.000Z'),
+    )
+    expect(horas[0].textContent).toMatch(/^\d{2}-\d{2}-\d{4} \d{2}:\d{2}$/)
+    const zona = Intl.DateTimeFormat().resolvedOptions().timeZone
+    expect(
+      screen.getAllByText(new RegExp(`zona horaria \\(${zona}\\)`)),
+    ).toHaveLength(1)
   })
 
   test('los filtros llegan a la API y vuelven a la primera página', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T12:00:00'))
     const fetch = vi.fn()
     await renderConSesion('DIRECTOR', '/accesos?pagina=3', {
       [EVENTOS]: (_init, url) => {
@@ -130,12 +173,11 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     fireEvent.change(await screen.findByLabelText('Universidad'), {
       target: { value: OPCIONES[1].id },
     })
-    fireEvent.change(screen.getByLabelText('Desde'), {
-      target: { value: '2026-10-01' },
-    })
-    fireEvent.change(screen.getByLabelText('Hasta'), {
-      target: { value: '2026-10-31' },
-    })
+    await vi.waitFor(() =>
+      expect(screen.getByLabelText('Universidad')).not.toBeDisabled(),
+    )
+    await elegirDia('Desde', '1 de octubre de 2026')
+    await elegirDia('Hasta', '31 de octubre de 2026')
     await vi.waitFor(() => {
       const consulta = new URL(
         String(fetch.mock.calls.at(-1)?.[0]),
@@ -176,7 +218,9 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     )
     // El filtro queda visible, con el nombre, y se quita.
     fireEvent.click(
-      await screen.findByRole('button', { name: /Usuario: Profesor Norte/ }),
+      await screen.findByRole('button', {
+        name: 'Quitar Usuario: Profesor Norte',
+      }),
     )
     await vi.waitFor(() =>
       expect(String(fetch.mock.calls.at(-1)?.[0])).not.toContain('usuarioId'),
@@ -200,14 +244,13 @@ describe('Registro de accesos del Director (SEG-05)', () => {
       },
       [UNIVERSIDADES]: () => OPCIONES,
     })
-    expect(
-      await screen.findByText(/60 eventos · página 1 de 3/),
-    ).toBeInTheDocument()
+    expect(await screen.findByText('Página 1 de 3')).toBeInTheDocument()
+    expect(screen.getByText('60 eventos')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Anterior' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
-    expect(await screen.findByText(/página 2 de 3/)).toBeInTheDocument()
+    expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
-    expect(await screen.findByText(/página 3 de 3/)).toBeInTheDocument()
+    expect(await screen.findByText('Página 3 de 3')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled()
     expect(String(fetch.mock.calls.at(-1)?.[0])).toContain('pagina=3')
   })
@@ -331,6 +374,203 @@ describe('Registro de accesos del Director (SEG-05)', () => {
       'Los filtros de la dirección no son válidos.',
     )
     expect(eventos).not.toHaveBeenCalled()
+  })
+
+  test('los filtros viven en la URL: al recargar se leen y se marcan', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      `/accesos?tipo=CAMBIO_NOTA&universidad=${OPCIONES[0].id}&desde=2026-10-01&hasta=2026-10-31`,
+      rutas(() => LISTA),
+    )
+    await screen.findByRole('table')
+    expect(screen.getByLabelText('Tipo de evento')).toHaveValue('CAMBIO_NOTA')
+    await vi.waitFor(() =>
+      expect(screen.getByLabelText('Universidad')).toHaveValue(OPCIONES[0].id),
+    )
+    expect(screen.getByRole('button', { name: 'Desde' })).toHaveTextContent(
+      '01-10-2026',
+    )
+    expect(screen.getByRole('button', { name: 'Hasta' })).toHaveTextContent(
+      '31-10-2026',
+    )
+  })
+
+  test('los atajos piden las últimas 24 horas, 7 o 30 días y quedan en la URL', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-15T20:00:00.000Z'))
+    const fetch = vi.fn()
+    await renderConSesion('DIRECTOR', '/accesos?desde=2026-10-01', {
+      [EVENTOS]: (_init, url) => {
+        fetch(url)
+        return LISTA
+      },
+      [UNIVERSIDADES]: () => OPCIONES,
+    })
+    await screen.findByRole('table')
+    const consulta = () =>
+      new URL(String(fetch.mock.calls.at(-1)?.[0]), 'http://localhost')
+        .searchParams
+
+    fireEvent.click(screen.getByRole('button', { name: 'Últimas 24 horas' }))
+    await vi.waitFor(() =>
+      expect(consulta().get('desde')).toBe('2026-11-14T20:00:00.000Z'),
+    )
+    expect(consulta().has('hasta')).toBe(false)
+    expect(
+      screen.getByRole('button', { name: 'Últimas 24 horas' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    // El atajo reemplaza el día elegido.
+    expect(screen.getByRole('button', { name: 'Desde' })).toHaveTextContent(
+      'Elige un día',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '7 días' }))
+    await vi.waitFor(() =>
+      expect(consulta().get('desde')).toBe('2026-11-08T20:00:00.000Z'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '30 días' }))
+    await vi.waitFor(() =>
+      expect(consulta().get('desde')).toBe('2026-10-16T20:00:00.000Z'),
+    )
+  })
+
+  // `in` aceptaría propiedades heredadas («toString», «constructor»…), sin
+  // horas: toISOString lanzaría al dibujar la página.
+  test.each(['1h', 'toString', 'constructor', '__proto__', 'hasOwnProperty'])(
+    'un atajo inválido en la URL (%s) avisa y no consulta la API',
+    async (ultimas) => {
+      const eventos = vi.fn(() => LISTA)
+      await renderConSesion(
+        'DIRECTOR',
+        `/accesos?ultimas=${ultimas}`,
+        rutas(eventos),
+      )
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Los filtros de la dirección no son válidos.',
+      )
+      expect(eventos).not.toHaveBeenCalled()
+    },
+  )
+
+  test('«Limpiar filtros» quita todos los filtros de la URL', async () => {
+    const fetch = vi.fn()
+    await renderConSesion(
+      'DIRECTOR',
+      `/accesos?tipo=CAMBIO_NOTA&ultimas=7d&usuario=${PROFESOR_ID}`,
+      {
+        [EVENTOS]: (_init, url) => {
+          fetch(url)
+          return LISTA
+        },
+        [UNIVERSIDADES]: () => OPCIONES,
+      },
+    )
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }))
+    await vi.waitFor(() =>
+      expect(String(fetch.mock.calls.at(-1)?.[0])).toBe(EVENTOS),
+    )
+    expect(screen.getByLabelText('Tipo de evento')).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Limpiar filtros' })).toBeNull()
+  })
+
+  test('sin eventos con filtros, el estado vacío ofrece limpiarlos', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/accesos?tipo=CIERRE_CURSO',
+      rutas(() => pagina([])),
+    )
+    await screen.findByText('No hay eventos con estos filtros.')
+    expect(
+      screen.getAllByRole('button', { name: 'Limpiar filtros' }),
+    ).toHaveLength(2)
+  })
+
+  test('la búsqueda por texto y el filtro de resultado están deshabilitados: la API no los acepta', async () => {
+    await renderConSesion('DIRECTOR', '/accesos', rutas())
+    await screen.findByRole('table')
+    expect(screen.getByLabelText('Buscar usuario o IP')).toBeDisabled()
+    expect(
+      screen.getByLabelText('Buscar usuario o IP'),
+    ).toHaveAccessibleDescription(
+      'La búsqueda por usuario o IP y el filtro por resultado aún no están disponibles: el servidor no los permite.',
+    )
+    expect(screen.getByLabelText('Resultado')).toBeDisabled()
+    expect(screen.getByLabelText('Resultado')).toHaveAccessibleDescription(
+      /aún no están disponibles/,
+    )
+  })
+
+  test('exporta a CSV las filas de la página visible', async () => {
+    const crear = vi.fn((blob: Blob) => {
+      void blob
+      return 'blob:csv'
+    })
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: crear, revokeObjectURL: vi.fn() }),
+    )
+    const clic = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    await renderConSesion('DIRECTOR', '/accesos', rutas())
+    fireEvent.click(await screen.findByRole('button', { name: 'Exportar CSV' }))
+    expect(clic).toHaveBeenCalled()
+    const texto = await (crear.mock.calls[0][0] as Blob).text()
+    const lineas = texto.replace(/^\uFEFF/, '').split('\r\n')
+    expect(lineas).toHaveLength(4)
+    expect(lineas[0]).toBe(
+      '"Fecha";"Evento";"Resultado";"Usuario";"Rol";"Universidad";"IP";"Detalle"',
+    )
+    expect(lineas[2]).toContain('"Fallido";"Sin cuenta"')
+    clic.mockRestore()
+  })
+
+  test('el CSV exporta como texto literal lo que una planilla tomaría por fórmula', async () => {
+    const crear = vi.fn((blob: Blob) => {
+      void blob
+      return 'blob:csv'
+    })
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: crear, revokeObjectURL: vi.fn() }),
+    )
+    const clic = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    // Nombres sintéticos que una planilla ejecutaría como fórmula.
+    const conNombre = (id: string, nombre: string) =>
+      evento({ id, usuario: { id: ALUMNO_ID, nombre, rol: 'ALUMNO' } })
+    await renderConSesion(
+      'DIRECTOR',
+      '/accesos',
+      rutas(() =>
+        pagina([
+          conNombre('f1', '=HYPERLINK("http://ejemplo.test","clic")'),
+          conNombre('f2', '  +SUMA(1,2)'),
+          conNombre('f3', '-2+3'),
+          conNombre('f4', '@HOY()'),
+          conNombre('f5', '\tTabulado'),
+          conNombre('f6', 'Ana Pérez'),
+        ]),
+      ),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Exportar CSV' }))
+    const texto = await (crear.mock.calls[0][0] as Blob).text()
+    const usuarios = texto
+      .replace(/^\uFEFF/, '')
+      .split('\r\n')
+      .slice(1)
+      .map((linea) => linea.split(';')[3])
+    expect(usuarios).toEqual([
+      '"\'=HYPERLINK(""http://ejemplo.test"",""clic"")"',
+      '"\'  +SUMA(1,2)"',
+      '"\'-2+3"',
+      '"\'@HOY()"',
+      '"\'\tTabulado"',
+      '"Ana Pérez"',
+    ])
+    clic.mockRestore()
   })
 
   test('el Director ve la entrada en el menú', async () => {

@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -17,7 +18,7 @@ type Valor = string | number | Date | null | undefined
 
 export interface Columna<T> {
   clave: string
-  encabezado: string
+  encabezado: ReactNode
   celda: (fila: T) => ReactNode
   // Con `valor` la columna se puede ordenar por ese valor (texto, número o
   // fecha). Sin él, el encabezado es solo un título.
@@ -37,11 +38,17 @@ interface Props<T> {
   filas: readonly T[]
   claveFila: (fila: T) => string
   cargando?: boolean
-  // Filas de esqueleto mientras carga.
+  // Filas de esqueleto mientras carga, y lo que se anuncia.
   filasDeCarga?: number
+  textoDeCarga?: string
   // Lo que se muestra sin filas. Por defecto, un EmptyState genérico.
   vacio?: ReactNode
   ordenInicial?: Orden
+  // Filas por página. Sin esto se muestran todas. Las páginas se calculan
+  // después de ordenar, en el cliente.
+  porPagina?: number
+  // La cabecera queda fija al desplazar la tabla (con alto máximo propio).
+  cabeceraFija?: boolean
   className?: string
 }
 
@@ -60,8 +67,8 @@ function comparar(a: string | number, b: string | number) {
 
 // Tabla base sobre Table de shadcn: columnas tipadas, estado de carga con
 // esqueletos, estado vacío y orden simple por columna (un clic ordena de menor
-// a mayor, otro de mayor a menor y el tercero lo quita). Sin paginación: la
-// página entrega las filas que quiere mostrar.
+// a mayor, otro de mayor a menor y el tercero lo quita). Con `porPagina`,
+// pagina en el cliente con «Anterior» y «Siguiente».
 export function DataTable<T>({
   etiqueta,
   columnas,
@@ -69,11 +76,21 @@ export function DataTable<T>({
   claveFila,
   cargando = false,
   filasDeCarga = 5,
+  textoDeCarga = 'Cargando…',
   vacio,
   ordenInicial,
+  porPagina,
+  cabeceraFija = false,
   className,
 }: Props<T>) {
   const [orden, setOrden] = useState<Orden | null>(ordenInicial ?? null)
+  const [pagina, setPagina] = useState(1)
+  // Otras filas (por ejemplo, otro filtro) vuelven a la primera página.
+  const [filasPrevias, setFilasPrevias] = useState(filas)
+  if (filas !== filasPrevias) {
+    setFilasPrevias(filas)
+    setPagina(1)
+  }
 
   const ordenadas = useMemo(() => {
     const valor = columnas.find((c) => c.clave === orden?.clave)?.valor
@@ -88,7 +105,16 @@ export function DataTable<T>({
     })
   }, [columnas, filas, orden])
 
-  const alternar = (clave: string) =>
+  const paginas = porPagina
+    ? Math.max(1, Math.ceil(ordenadas.length / porPagina))
+    : 1
+  const actual = Math.min(pagina, paginas)
+  const visibles = porPagina
+    ? ordenadas.slice((actual - 1) * porPagina, actual * porPagina)
+    : ordenadas
+
+  const alternar = (clave: string) => {
+    setPagina(1)
     setOrden((actual) =>
       actual?.clave !== clave
         ? { clave, direccion: 'asc' }
@@ -96,23 +122,26 @@ export function DataTable<T>({
           ? { clave, direccion: 'desc' }
           : null,
     )
+  }
 
   return (
     <div
       data-slot="data-table"
       className={cn(
         'overflow-hidden rounded-lg border border-border bg-card',
+        cabeceraFija &&
+          'md:[&_[data-slot=table-container]]:max-h-[70vh] md:[&_[data-slot=table-container]]:overflow-y-auto md:[&_thead_th]:sticky md:[&_thead_th]:top-0 md:[&_thead_th]:z-10 md:[&_thead_th]:bg-muted',
         className,
       )}
     >
       {cargando && (
         <p role="status" className="sr-only">
-          Cargando…
+          {textoDeCarga}
         </p>
       )}
       <Table aria-busy={cargando || undefined}>
         <TableCaption className="sr-only">{etiqueta}</TableCaption>
-        <TableHeader>
+        <TableHeader className="bg-muted/60">
           <TableRow>
             {columnas.map((columna) => {
               const activa = orden?.clave === columna.clave
@@ -177,7 +206,7 @@ export function DataTable<T>({
               </TableCell>
             </TableRow>
           ) : (
-            ordenadas.map((fila) => (
+            visibles.map((fila) => (
               <TableRow key={claveFila(fila)}>
                 {columnas.map((columna) => (
                   <TableCell key={columna.clave} className={columna.className}>
@@ -189,6 +218,36 @@ export function DataTable<T>({
           )}
         </TableBody>
       </Table>
+      {porPagina && !cargando && paginas > 1 && (
+        <nav
+          aria-label="Paginación"
+          className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-sm text-muted-foreground"
+        >
+          <span>
+            Página {actual} de {paginas}
+          </span>
+          <span className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={actual <= 1}
+              onClick={() => setPagina(actual - 1)}
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={actual >= paginas}
+              onClick={() => setPagina(actual + 1)}
+            >
+              Siguiente
+            </Button>
+          </span>
+        </nav>
+      )}
     </div>
   )
 }

@@ -114,12 +114,14 @@ function ItemDelMenu({
       end={item.to === '/'}
       onClick={onNavigate}
       className={cn(
-        'flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors',
-        // Hover: un tinte suave del color de la universidad.
-        'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:outline-none',
-        // Estado activo: relleno sólido con el color de la universidad y texto
-        // e ícono blancos (colorConContraste asegura 4,5:1 con blanco).
-        'aria-[current=page]:bg-primary aria-[current=page]:font-semibold aria-[current=page]:text-primary-foreground aria-[current=page]:hover:bg-primary aria-[current=page]:hover:text-primary-foreground',
+        'relative flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground no-underline transition-colors',
+        // Hover: un tinte suave del color de la universidad. Foco: un anillo
+        // fino, solo con el teclado (focus-visible), sin contorno extra.
+        'hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none',
+        // Estado activo sobrio: fondo tenue del color de la universidad, texto
+        // en negrita y una barra fina del color a la izquierda.
+        'aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-accent-foreground',
+        'before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-primary before:opacity-0 aria-[current=page]:before:opacity-100',
         colapsado && 'justify-center px-0',
       )}
     >

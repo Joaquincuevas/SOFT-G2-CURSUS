@@ -32,6 +32,8 @@ import { usePuede, useSession } from '../session/session'
 import { EditarCurso } from './EditarCurso'
 import { CursoDetalle } from './CursoDetalle'
 import { CursosArchivados } from './CursosArchivados'
+import { CursosDirector } from './CursosDirector'
+import { ENLACE } from './indicadores-formato'
 import { useDatos } from './useDatos'
 
 // Gestión de cursos del Figma: listado (nodo 97:102, GES-03), creación (nodo
@@ -137,9 +139,10 @@ function InicioCursos({ opciones }: { opciones: Opciones }) {
       ? rutaCursos(carreraId, periodoId)
       : null
   const [cursos, recargar] = useDatos<CursoListado[]>(ruta)
-  // La API solo manda la universidad al Director, que ve todas.
-  const conUniversidad = !!cursos?.some((curso) => curso.universidadNombre)
   const conFiltros = carreraId !== '' || periodoId !== ''
+  // El Director ve los cursos de todas las universidades, en solo lectura y con
+  // su propia barra de búsqueda y filtros.
+  if (!puedeCrear) return <CursosDirector cursos={cursos} recargar={recargar} />
 
   let contenido
   if (puedeCrear && (carreras === null || periodos === null)) {
@@ -178,24 +181,12 @@ function InicioCursos({ opciones }: { opciones: Opciones }) {
     )
   } else {
     const columnas: Columna<CursoListado>[] = [
-      ...(conUniversidad
-        ? [
-            {
-              clave: 'universidad',
-              encabezado: 'Universidad',
-              celda: (curso: CursoListado) => curso.universidadNombre,
-            },
-          ]
-        : []),
       {
         clave: 'codigo',
         encabezado: 'Código',
         valor: (curso) => curso.codigo,
         celda: (curso) => (
-          <Link
-            className="font-semibold text-primary underline-offset-4 hover:underline"
-            to={`/cursos/${curso.id}`}
-          >
+          <Link className={ENLACE} to={`/cursos/${curso.id}`}>
             {curso.codigo}
           </Link>
         ),

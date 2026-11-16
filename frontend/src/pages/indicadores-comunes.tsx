@@ -17,7 +17,7 @@ import { Card } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { SIN_DATOS, plural, valorIndicador } from './indicadores-formato'
+import { SIN_DATOS, plural } from './indicadores-formato'
 import { useDatos } from './useDatos'
 
 // Piezas que comparten el Dashboard del Director y las pantallas de
@@ -305,20 +305,5 @@ export function TresIndicadores({
       />
       {extra}
     </ul>
-  )
-}
-
-// Aprobación, promedio y asistencia en una línea (listas de universidades).
-export function ResumenEnLinea({
-  indicadores: i,
-}: {
-  indicadores: Pick<ConIndicadores, 'aprobacion' | 'promedio' | 'asistencia'>
-}) {
-  return (
-    <p className="m-0 text-sm text-muted-foreground">
-      Aprobación: {valorIndicador(i.aprobacion.valor, 1, ' %')} · Promedio:{' '}
-      {valorIndicador(i.promedio.valor, 2)} · Asistencia:{' '}
-      {valorIndicador(i.asistencia.valor, 2, ' %')}
-    </p>
   )
 }

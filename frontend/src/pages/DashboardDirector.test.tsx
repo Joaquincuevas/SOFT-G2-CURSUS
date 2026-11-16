@@ -83,17 +83,23 @@ describe('Dashboard del Director', () => {
     expect(
       universidades.getByRole('link', { name: 'Universidad Demo Norte' }),
     ).toHaveAttribute('href', '/indicadores/universidades/u-norte')
+    // Una tabla: universidad, aprobación, promedio y asistencia.
+    const filas = universidades.getAllByRole('row').slice(1)
     expect(
-      universidades.getByText(
-        'Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %',
-      ),
-    ).toBeInTheDocument()
-    // Sur no tiene datos: se dice, no se muestra 0.
-    expect(
-      universidades.getByText(
-        'Aprobación: Sin datos suficientes · Promedio: Sin datos suficientes · Asistencia: Sin datos suficientes',
-      ),
-    ).toBeInTheDocument()
+      within(filas[0])
+        .getAllByRole('cell')
+        .slice(0, 4)
+        .map((c) => c.textContent),
+    ).toEqual(['Universidad Demo Norte', '50,0 %', '4,50', '66,67 %'])
+    // Sur no tiene datos: un guion que lo dice (no un 0 ni la frase repetida).
+    const sur = within(filas[1]).getAllByRole('cell').slice(1, 4)
+    for (const celda of sur) {
+      expect(celda).toHaveTextContent('—Sin datos suficientes')
+      expect(within(celda).getByText('—')).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      )
+    }
 
     const accesos = within(
       panel.getByRole('region', { name: 'Accesos directos' }),

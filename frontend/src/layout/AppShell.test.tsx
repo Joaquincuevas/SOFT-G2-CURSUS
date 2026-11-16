@@ -144,14 +144,18 @@ describe('isotipo de CURSUS', () => {
 })
 
 describe('color de la universidad en el menú', () => {
-  test('el ítem activo va con relleno sólido y texto blanco, y los demás con hover suave', async () => {
+  test('el ítem activo va con fondo tenue y barra lateral, y los demás con hover suave', async () => {
     await renderApp('PROFESOR')
     const activo = within(principal()).getByRole('link', { name: 'Dashboard' })
     expect(activo).toHaveAttribute('aria-current', 'page')
     expect(activo).toHaveClass(
-      'aria-[current=page]:bg-primary',
-      'aria-[current=page]:text-primary-foreground',
+      'aria-[current=page]:bg-accent',
+      'aria-[current=page]:before:opacity-100',
+      'before:bg-primary',
     )
+    // Foco fino y solo con el teclado: sin anillo con desplazamiento.
+    expect(activo).toHaveClass('focus-visible:ring-2')
+    expect(activo.className).not.toContain('ring-offset')
     const otro = within(principal()).getByRole('link', { name: 'Mis Cursos' })
     expect(otro).not.toHaveAttribute('aria-current')
     expect(otro).toHaveClass('hover:bg-accent')
