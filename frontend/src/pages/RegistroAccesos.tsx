@@ -137,24 +137,24 @@ export function RegistroAccesos() {
   const ultimas = valor('ultimas')
   const pagina = Math.max(1, Math.floor(Number(valor('pagina'))) || 1)
 
+  // Solo un atajo propio de ATAJOS: `in` también aceptaría «toString» o
+  // «constructor» (heredados), sin horas, y toISOString lanzaría.
+  const atajo = Object.hasOwn(ATAJOS, ultimas) ? ATAJOS[ultimas as Atajo] : null
   const filtrosValidos =
     (!tipo || (TIPOS_EVENTO as readonly string[]).includes(tipo)) &&
     (!universidadId || UUID.test(universidadId)) &&
     (!usuarioId || UUID.test(usuarioId)) &&
     (!desde || diaExiste(desde)) &&
     (!hasta || diaExiste(hasta)) &&
-    (!ultimas || ultimas in ATAJOS)
+    (!ultimas || atajo !== null)
   const rangoInvalido = Boolean(desde && hasta && desde > hasta)
 
   // El instante de referencia de los atajos, al minuto: al cargar la página y
   // al elegir un atajo (no en cada render, que pediría la API sin parar).
   const [ahora, setAhora] = useState(alMinuto)
-  const desdeDelAtajo =
-    ultimas in ATAJOS
-      ? new Date(
-          ahora - ATAJOS[ultimas as Atajo].horas * 3_600_000,
-        ).toISOString()
-      : null
+  const desdeDelAtajo = atajo
+    ? new Date(ahora - atajo.horas * 3_600_000).toISOString()
+    : null
 
   const consulta = new URLSearchParams()
   if (tipo) consulta.set('tipo', tipo)
@@ -654,8 +654,17 @@ function Fila({
 
 // CSV de la página visible (lo que la tabla muestra con los filtros), hecho en
 // el cliente. Separador «;» y BOM para que Excel en español lo abra bien.
+// Cada campo va como texto literal, con la misma protección que la exportación
+// de notas (backend/src/notas/notas-finales.service.ts): las planillas pueden
+// ejecutar fórmulas incluso en celdas entre comillas, así que un valor que
+// empieza con =, +, -, @ (tras espacios) o con tabulación o salto de línea
+// lleva un apóstrofo delante.
+const textoCsv = (valor: string) => {
+  const seguro = /^[\t\r\n]|^\s*[=+@-]/u.test(valor) ? `'${valor}` : valor
+  return `"${seguro.replaceAll('"', '""')}"`
+}
+
 function exportarCsv(pagina: PaginaEventos) {
-  const celda = (v: string) => `"${v.replace(/"/g, '""')}"`
   const filas = [
     [
       'Fecha',
@@ -678,7 +687,7 @@ function exportarCsv(pagina: PaginaEventos) {
       detalleDe(e),
     ]),
   ]
-  const texto = filas.map((fila) => fila.map(celda).join(';')).join('\r\n')
+  const texto = filas.map((fila) => fila.map(textoCsv).join(';')).join('\r\n')
   const url = URL.createObjectURL(
     new Blob(['﻿', texto], { type: 'text/csv;charset=utf-8' }),
   )
