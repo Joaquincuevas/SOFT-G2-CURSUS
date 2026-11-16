@@ -1,14 +1,8 @@
-/* MAT-08: actividades de entrega de la sección (pestaña Entregas). */
+/* MAT-08: actividades de entrega de la sección, solo en la vista del alumno
+   y su entrega (MiEntrega). Las del profesor y el ayudante usan Tailwind. */
 .entregas {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-.entregas__formulario {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
   gap: var(--space-3);
 }
 
@@ -18,10 +12,6 @@
   gap: var(--space-1);
   font: var(--font-caption);
   color: var(--color-text-secondary);
-}
-
-.entregas__campo--ancho {
-  flex-basis: 100%;
 }
 
 .entregas__campo input,
@@ -172,42 +162,4 @@
 .entregas__instrucciones {
   color: var(--color-text-primary);
   white-space: pre-line;
-}
-
-/* MAT-10: entregas de una actividad para el equipo docente. */
-.entregas__docente {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  overflow-x: auto;
-}
-
-.entregas__resumen {
-  margin: 0;
-  font: var(--font-caption);
-  color: var(--color-text-secondary);
-}
-
-.entregas__tabla {
-  width: 100%;
-  border-collapse: collapse;
-  font: var(--font-body);
-}
-
-.entregas__tabla th,
-.entregas__tabla td {
-  padding: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.entregas__tabla tbody th {
-  font-weight: normal;
-}
-
-.entregas__boton--secundario {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  border: 1px solid var(--color-border);
 }

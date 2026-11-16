@@ -100,6 +100,8 @@ export interface PropsPestana {
   rol: SeccionResumen['rol']
   cursoCerrado?: boolean
   alPublicarSilabo?: () => void
+  // Para replicar en el cliente la ventana de fechas del período (MAT-08).
+  periodo?: SeccionResumen['periodo']
 }
 
 // Contenido de cada sección ya implementada. Home e Integrantes se arman aquí
@@ -273,6 +275,7 @@ export function VistaSeccion() {
                   key={id}
                   seccionId={id}
                   numeroSeccion={numero}
+                  periodo={periodo}
                   rol={rol}
                   cursoCerrado={seccion.cursoCerrado}
                   alPublicarSilabo={() => setPublicaciones((n) => n + 1)}

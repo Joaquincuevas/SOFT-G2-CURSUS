@@ -55,12 +55,16 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          'size-(--cell-size) p-0 select-none aria-disabled:opacity-50',
+          // CURSUS no usa el preflight de Tailwind: los botones nativos del
+          // calendario no traen el borde del navegador.
+          'size-(--cell-size) border-0 bg-transparent p-0 select-none aria-disabled:opacity-50',
           defaultClassNames.button_previous,
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          'size-(--cell-size) p-0 select-none aria-disabled:opacity-50',
+          // CURSUS no usa el preflight de Tailwind: los botones nativos del
+          // calendario no traen el borde del navegador.
+          'size-(--cell-size) border-0 bg-transparent p-0 select-none aria-disabled:opacity-50',
           defaultClassNames.button_next,
         ),
         month_caption: cn(
