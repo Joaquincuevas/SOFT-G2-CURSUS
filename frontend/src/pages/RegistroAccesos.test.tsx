@@ -434,14 +434,23 @@ describe('Registro de accesos del Director (SEG-05)', () => {
     )
   })
 
-  test('un atajo desconocido en la URL no consulta', async () => {
-    const eventos = vi.fn(() => LISTA)
-    await renderConSesion('DIRECTOR', '/accesos?ultimas=1h', rutas(eventos))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Los filtros de la dirección no son válidos.',
-    )
-    expect(eventos).not.toHaveBeenCalled()
-  })
+  // `in` aceptaría propiedades heredadas («toString», «constructor»…), sin
+  // horas: toISOString lanzaría al dibujar la página.
+  test.each(['1h', 'toString', 'constructor', '__proto__', 'hasOwnProperty'])(
+    'un atajo inválido en la URL (%s) avisa y no consulta la API',
+    async (ultimas) => {
+      const eventos = vi.fn(() => LISTA)
+      await renderConSesion(
+        'DIRECTOR',
+        `/accesos?ultimas=${ultimas}`,
+        rutas(eventos),
+      )
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Los filtros de la dirección no son válidos.',
+      )
+      expect(eventos).not.toHaveBeenCalled()
+    },
+  )
 
   test('«Limpiar filtros» quita todos los filtros de la URL', async () => {
     const fetch = vi.fn()
@@ -514,6 +523,53 @@ describe('Registro de accesos del Director (SEG-05)', () => {
       '"Fecha";"Evento";"Resultado";"Usuario";"Rol";"Universidad";"IP";"Detalle"',
     )
     expect(lineas[2]).toContain('"Fallido";"Sin cuenta"')
+    clic.mockRestore()
+  })
+
+  test('el CSV exporta como texto literal lo que una planilla tomaría por fórmula', async () => {
+    const crear = vi.fn((blob: Blob) => {
+      void blob
+      return 'blob:csv'
+    })
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: crear, revokeObjectURL: vi.fn() }),
+    )
+    const clic = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {})
+    // Nombres sintéticos que una planilla ejecutaría como fórmula.
+    const conNombre = (id: string, nombre: string) =>
+      evento({ id, usuario: { id: ALUMNO_ID, nombre, rol: 'ALUMNO' } })
+    await renderConSesion(
+      'DIRECTOR',
+      '/accesos',
+      rutas(() =>
+        pagina([
+          conNombre('f1', '=HYPERLINK("http://ejemplo.test","clic")'),
+          conNombre('f2', '  +SUMA(1,2)'),
+          conNombre('f3', '-2+3'),
+          conNombre('f4', '@HOY()'),
+          conNombre('f5', '\tTabulado'),
+          conNombre('f6', 'Ana Pérez'),
+        ]),
+      ),
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Exportar CSV' }))
+    const texto = await (crear.mock.calls[0][0] as Blob).text()
+    const usuarios = texto
+      .replace(/^\uFEFF/, '')
+      .split('\r\n')
+      .slice(1)
+      .map((linea) => linea.split(';')[3])
+    expect(usuarios).toEqual([
+      '"\'=HYPERLINK(""http://ejemplo.test"",""clic"")"',
+      '"\'  +SUMA(1,2)"',
+      '"\'-2+3"',
+      '"\'@HOY()"',
+      '"\'\tTabulado"',
+      '"Ana Pérez"',
+    ])
     clic.mockRestore()
   })
 
