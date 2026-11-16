@@ -178,44 +178,47 @@ export function VistaSeccion() {
     })
 
   return (
-    <section
-      aria-label="Vista del curso"
-      className="mx-auto grid w-full max-w-6xl gap-6"
-    >
-      <div className="grid gap-3">
+    <section aria-label="Vista del curso" className="grid w-full min-w-0 gap-6">
+      {/* Cabecera compacta: chips, nombre del curso y con qué rol se entra. */}
+      <header className="grid gap-1.5 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{curso.codigo}</Badge>
           <Badge variant="outline">Sección {numero}</Badge>
           <Badge variant="outline">
             Período {periodo.anio}-{periodo.semestre}
           </Badge>
+          <span className="text-xs text-muted-foreground">
+            Entras como {ROL_LABEL[rol]}
+          </span>
         </div>
-        <h2 className="m-0 text-2xl leading-8 font-bold tracking-tight text-foreground">
+        <h2 className="m-0 text-2xl leading-8 font-semibold tracking-tight text-foreground">
           {curso.nombre}
         </h2>
-        <p className="m-0 text-sm text-muted-foreground">
-          Entras como {ROL_LABEL[rol]}
-        </p>
-        {seccion.cursoCerrado && (
-          <Alert variant="info">
-            <Lock />
-            <AlertTitle>Curso cerrado</AlertTitle>
-            <AlertDescription>
-              Las notas, evaluaciones y asistencia son de solo lectura.
-            </AlertDescription>
-          </Alert>
-        )}
-      </div>
+      </header>
+      {seccion.cursoCerrado && (
+        <Alert variant="info">
+          <Lock />
+          <AlertTitle>Curso cerrado</AlertTitle>
+          <AlertDescription>
+            Las notas, evaluaciones y asistencia son de solo lectura.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs
         value={vista}
         onValueChange={elegir}
         orientation={enEscritorio ? 'vertical' : 'horizontal'}
-        className="grid gap-6 lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:items-start"
+        className="grid gap-6 lg:grid-cols-[13.75rem_minmax(0,1fr)] lg:items-start xl:gap-10"
       >
         <TabsList
           aria-label="Pestañas de la sección"
-          className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 lg:sticky lg:top-24 lg:flex-col lg:items-stretch lg:overflow-visible"
+          className={cn(
+            'h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0',
+            // En pantallas angostas, una barra horizontal con una línea fina
+            // debajo; en escritorio, el riel fijo a la izquierda.
+            'border-b border-border lg:sticky lg:top-24 lg:flex-col lg:items-stretch lg:overflow-visible lg:border-b-0',
+          )}
         >
           {VISTAS.map(({ id: valor, etiqueta, icono: Icono }) => (
             <TabsTrigger
@@ -225,12 +228,17 @@ export function VistaSeccion() {
               // pantalla y los atajos activan el control con un clic.
               onClick={() => elegir(valor)}
               className={cn(
-                'h-10 flex-none justify-start gap-2.5 px-3 text-muted-foreground lg:w-full',
-                'data-[state=active]:bg-accent data-[state=active]:font-semibold data-[state=active]:text-accent-foreground',
+                'h-10 flex-none justify-start gap-2.5 rounded-md px-3 text-muted-foreground hover:bg-muted hover:text-foreground lg:w-full',
+                // Activo: texto y peso, y una barra del color de la
+                // universidad (debajo en la barra horizontal, a la izquierda
+                // en el riel). Sin fondo ni borde alrededor.
+                'data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground',
                 'group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none',
-                // Una pastilla de color en pantallas angostas; en el riel,
-                // además, la barra del color de la universidad a la izquierda.
-                'group-data-[orientation=horizontal]/tabs:after:hidden group-data-[orientation=vertical]/tabs:after:inset-y-2 group-data-[orientation=vertical]/tabs:after:right-auto group-data-[orientation=vertical]/tabs:after:left-0 group-data-[orientation=vertical]/tabs:after:w-[3px] group-data-[orientation=vertical]/tabs:after:rounded-full after:bg-primary data-[state=active]:after:opacity-100',
+                'after:bg-primary data-[state=active]:after:opacity-100',
+                'group-data-[orientation=horizontal]/tabs:rounded-b-none group-data-[orientation=horizontal]/tabs:after:bottom-[-1px] group-data-[orientation=horizontal]/tabs:after:inset-x-2',
+                'group-data-[orientation=vertical]/tabs:after:inset-y-2 group-data-[orientation=vertical]/tabs:after:right-auto group-data-[orientation=vertical]/tabs:after:left-0 group-data-[orientation=vertical]/tabs:after:w-[3px] group-data-[orientation=vertical]/tabs:after:rounded-full',
+                // Foco: un aro fino, sin el borde grueso del componente base.
+                'focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none',
               )}
             >
               <Icono aria-hidden="true" />
