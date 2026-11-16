@@ -256,9 +256,10 @@ describe('alumnos de la sección (ESP-05)', () => {
 
     const alumnos = await seccionAlumnos('Alumnos (3)')
     expect(
-      within(alumnos.getByRole('list', { name: 'Alumnos inscritos' }))
-        .getAllByRole('listitem')
-        .map((li) => li.textContent),
+      within(alumnos.getByRole('table', { name: 'Alumnos inscritos' }))
+        .getAllByRole('row')
+        .slice(1)
+        .map((fila) => fila.textContent),
     ).toEqual([
       'Ángela Moraangela.mora@norte.cursus.test',
       'Nadia Leónnadia.leon@norte.cursus.test',
@@ -435,7 +436,7 @@ describe('layout de curso (UIX-04)', () => {
     )
     expect(panel.getByText('Integrantes en solo lectura')).toBeVisible()
     expect(panel.getByText('Diego Muñoz')).toBeVisible()
-    expect(panel.queryByRole('list', { name: 'Alumnos inscritos' })).toBeNull()
+    expect(panel.queryByRole('table', { name: 'Alumnos inscritos' })).toBeNull()
   })
 
   test('Material lleva el sílabo vigente arriba', async () => {

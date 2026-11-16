@@ -5,14 +5,32 @@ import {
   type Anuncio,
   type PublicarAnuncio,
 } from '@cursus/shared'
+import { CircleAlert, Megaphone, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
+import { toast } from 'sonner'
+import { EmptyState, ErrorState, FormField } from '@/components/shared'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { NativeSelect } from '@/components/ui/native-select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '../auth/auth'
+import { iniciales } from '../layout/iniciales'
 import { useSession } from '../session/session'
 import { EdicionAnuncio } from './EdicionAnuncio'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { EVENTO_LECTURA_ANUNCIOS, fechaAnuncio } from './anuncios'
-import './PestanaAnuncios.css'
 import { useDatos } from './useDatos'
 import type { PropsPestana } from './VistaSeccion'
 
@@ -26,18 +44,34 @@ export function PestanaAnuncios({
   const ruta = `/api/espacio/secciones/${seccionId}/anuncios`
   const [anuncios, recargar] = useDatos<Anuncio[]>(ruta)
   const { user } = useSession()
+  const [publicando, setPublicando] = useState(false)
+  const nuevo = rol === 'PROFESOR' && (
+    <Button type="button" onClick={() => setPublicando(true)}>
+      <Plus aria-hidden="true" />
+      Nuevo anuncio
+    </Button>
+  )
 
   return (
-    <section className="anuncios" aria-label="Anuncios del curso">
-      <h3 className="vista-seccion__subtitulo">Anuncios del curso</h3>
-      {rol === 'ALUMNO' && (
-        <p className="anuncios__ayuda">
-          Anuncios de todo el curso y de tu sección, del más reciente al más
-          antiguo.
-        </p>
-      )}
+    <section className="grid min-w-0 gap-4" aria-label="Anuncios del curso">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-1">
+          <h3 className="m-0 text-lg font-semibold text-foreground">
+            Anuncios del curso
+          </h3>
+          {rol === 'ALUMNO' && (
+            <p className="m-0 text-sm text-muted-foreground">
+              Anuncios de todo el curso y de tu sección, del más reciente al más
+              antiguo.
+            </p>
+          )}
+        </div>
+        {nuevo}
+      </div>
       {rol === 'PROFESOR' && (
         <FormularioAnuncio
+          abierto={publicando}
+          cambiarAbierto={setPublicando}
           ruta={ruta}
           seccionId={seccionId}
           numeroSeccion={numeroSeccion}
@@ -48,58 +82,143 @@ export function PestanaAnuncios({
         <RegistrarLectura ruta={ruta} anuncios={anuncios} />
       )}
       {anuncios === undefined ? (
-        <Cargando texto="Cargando anuncios…" />
+        <div role="status" className="grid gap-3">
+          <span className="sr-only">Cargando anuncios…</span>
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+        </div>
       ) : anuncios === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar los anuncios."
           onReintentar={recargar}
         />
       ) : anuncios.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay anuncios</p>
+        <Card className="py-0">
+          <EmptyState
+            icono={Megaphone}
+            titulo="Aún no hay anuncios"
+            mensaje={
+              rol === 'PROFESOR'
+                ? 'Publica un aviso para todo el curso o solo para tu sección.'
+                : 'Los avisos del equipo docente aparecerán aquí.'
+            }
+          />
+        </Card>
       ) : (
-        <ol className="anuncios__lista" aria-label="Anuncios publicados">
+        <ol
+          className="m-0 grid min-w-0 list-none gap-3 p-0"
+          aria-label="Anuncios publicados"
+        >
           {anuncios.map((anuncio) => (
-            <li key={anuncio.id} className="anuncios__anuncio">
-              <article aria-labelledby={`anuncio-${anuncio.id}`}>
-                <h4 id={`anuncio-${anuncio.id}`} className="anuncios__titulo">
-                  {anuncio.titulo}
-                  {rol === 'ALUMNO' && anuncio.nuevo && (
-                    <span className="anuncios__nuevo">Nuevo</span>
-                  )}
-                </h4>
-                <p className="anuncios__meta">
-                  {anuncio.autor.nombre} ·{' '}
-                  <time dateTime={anuncio.publicadoEn}>
-                    {fechaAnuncio(anuncio.publicadoEn)}
-                  </time>
-                </p>
-                <p className="anuncios__destinatario">
-                  {anuncio.seccion
-                    ? `Sección ${anuncio.seccion.numero}`
-                    : 'Todo el curso'}
-                </p>
-                {anuncio.editadoEn && (
-                  <p className="anuncios__meta">
-                    Editado el{' '}
-                    <time dateTime={anuncio.editadoEn}>
-                      {fechaAnuncio(anuncio.editadoEn)}
-                    </time>
-                  </p>
-                )}
-                <p className="anuncios__cuerpo">{anuncio.cuerpo}</p>
-                {rol === 'PROFESOR' && anuncio.autor.id === user.id && (
-                  <EdicionAnuncio
-                    anuncio={anuncio}
-                    ruta={ruta}
-                    recargar={recargar}
-                  />
-                )}
-              </article>
+            <li key={anuncio.id} className="min-w-0">
+              <TarjetaAnuncio
+                anuncio={anuncio}
+                nuevo={rol === 'ALUMNO' && Boolean(anuncio.nuevo)}
+                acciones={
+                  rol === 'PROFESOR' &&
+                  anuncio.autor.id === user.id && (
+                    <EdicionAnuncio
+                      anuncio={anuncio}
+                      ruta={ruta}
+                      recargar={recargar}
+                    />
+                  )
+                }
+              />
             </li>
           ))}
         </ol>
       )}
     </section>
+  )
+}
+
+// Un mensaje largo se recorta a tres líneas; «Ver más» lo muestra entero.
+const LARGO_RECORTE = 280
+
+function TarjetaAnuncio({
+  anuncio,
+  nuevo,
+  acciones,
+}: {
+  anuncio: Anuncio
+  nuevo: boolean
+  acciones: React.ReactNode
+}) {
+  const [completo, setCompleto] = useState(false)
+  const largo =
+    anuncio.cuerpo.length > LARGO_RECORTE ||
+    anuncio.cuerpo.split('\n').length > 3
+  const idTitulo = `anuncio-${anuncio.id}`
+  const idCuerpo = `anuncio-${anuncio.id}-cuerpo`
+  return (
+    <Card className="min-w-0 gap-3 p-5">
+      <article aria-labelledby={idTitulo} className="grid min-w-0 gap-3">
+        <div className="flex min-w-0 flex-wrap items-start gap-3">
+          <Avatar className="size-9 shrink-0">
+            <AvatarFallback
+              aria-hidden="true"
+              className="bg-accent text-xs font-semibold text-accent-foreground"
+            >
+              {iniciales(anuncio.autor.nombre)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="grid min-w-0 flex-1 basis-40">
+            <span className="text-sm font-medium break-words text-foreground">
+              {anuncio.autor.nombre}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              <time dateTime={anuncio.publicadoEn}>
+                {fechaAnuncio(anuncio.publicadoEn)}
+              </time>
+            </span>
+          </div>
+          <Badge variant="outline" className="shrink-0">
+            {anuncio.seccion
+              ? `Sección ${anuncio.seccion.numero}`
+              : 'Todo el curso'}
+          </Badge>
+          {acciones}
+        </div>
+        <h4
+          id={idTitulo}
+          className="m-0 flex flex-wrap items-center gap-2 text-base font-semibold break-words text-foreground"
+        >
+          {anuncio.titulo}
+          {nuevo && <Badge>Nuevo</Badge>}
+        </h4>
+        {anuncio.editadoEn && (
+          <p className="m-0 text-xs text-muted-foreground">
+            Editado el{' '}
+            <time dateTime={anuncio.editadoEn}>
+              {fechaAnuncio(anuncio.editadoEn)}
+            </time>
+          </p>
+        )}
+        <p
+          id={idCuerpo}
+          className={
+            'm-0 text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground ' +
+            (largo && !completo ? 'line-clamp-3' : '')
+          }
+        >
+          {anuncio.cuerpo}
+        </p>
+        {largo && (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto justify-self-start p-0"
+            aria-expanded={completo}
+            aria-controls={idCuerpo}
+            onClick={() => setCompleto(!completo)}
+          >
+            {completo ? 'Ver menos' : 'Ver más'}
+          </Button>
+        )}
+      </article>
+    </Card>
   )
 }
 
@@ -150,19 +269,25 @@ function RegistrarLectura({
   }, [anuncios, fetchConSesion, ruta, intento])
   if (!fallo) return null
   return (
-    <div role="alert" className="anuncios__error">
-      <p>No pudimos actualizar los anuncios leídos.</p>
-      <button
-        type="button"
-        disabled={guardando}
-        onClick={() => {
-          setGuardando(true)
-          setIntento((actual) => actual + 1)
-        }}
-      >
-        Reintentar actualización
-      </button>
-    </div>
+    <Alert variant="warning">
+      <TriangleAlert aria-hidden="true" />
+      <AlertDescription className="gap-2">
+        <p className="m-0">No pudimos actualizar los anuncios leídos.</p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="bg-card text-foreground"
+          disabled={guardando}
+          onClick={() => {
+            setGuardando(true)
+            setIntento((actual) => actual + 1)
+          }}
+        >
+          Reintentar actualización
+        </Button>
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -179,11 +304,15 @@ function mensajeDe(cuerpo: { message?: unknown } | null): string | null {
 }
 
 function FormularioAnuncio({
+  abierto,
+  cambiarAbierto,
   ruta,
   seccionId,
   numeroSeccion,
   alPublicar,
 }: {
+  abierto: boolean
+  cambiarAbierto: (abierto: boolean) => void
   ruta: string
   seccionId: string
   numeroSeccion?: number
@@ -194,14 +323,12 @@ function FormularioAnuncio({
   const [soloSeccion, setSoloSeccion] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
 
   async function publicar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (guardando) return
     setGuardando(true)
     setError(null)
-    setAviso(null)
     try {
       const res = await fetchConSesion(ruta, {
         method: 'POST',
@@ -222,12 +349,13 @@ function FormularioAnuncio({
         return
       }
       setCampos(VACIO)
-      setAviso(
+      toast.success(
         soloSeccion
           ? `Anuncio publicado para la sección ${numeroSeccion ?? 'actual'}`
           : 'Anuncio publicado para todas las secciones del curso',
       )
       setSoloSeccion(false)
+      cambiarAbierto(false)
       alPublicar()
     } catch {
       setError(
@@ -239,72 +367,101 @@ function FormularioAnuncio({
   }
 
   const cambiar =
-    (campo: keyof PublicarAnuncio) =>
-    (event: { target: { value: string } }) => {
-      // El aviso de éxito se borra al empezar el siguiente anuncio.
-      setAviso(null)
+    (campo: keyof PublicarAnuncio) => (event: { target: { value: string } }) =>
       setCampos((actuales) => ({ ...actuales, [campo]: event.target.value }))
-    }
 
   return (
-    <form
-      className="anuncios__formulario"
-      aria-label="Nuevo anuncio"
-      onSubmit={(event) => void publicar(event)}
+    <Dialog
+      open={abierto}
+      onOpenChange={(siguiente) => {
+        if (guardando) return
+        if (!siguiente) setError(null)
+        cambiarAbierto(siguiente)
+      }}
     >
-      <label className="anuncios__campo">
-        Dirigido a
-        <select
-          value={soloSeccion ? seccionId : ''}
-          disabled={guardando}
-          onChange={(event) => {
-            setAviso(null)
-            setSoloSeccion(event.target.value === seccionId)
-          }}
+      <DialogContent className="bg-card text-left sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Nuevo anuncio</DialogTitle>
+          <DialogDescription>
+            Avisa a todo el curso o solo a esta sección.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid min-w-0 gap-4"
+          aria-label="Nuevo anuncio"
+          onSubmit={(event) => void publicar(event)}
         >
-          <option value="">Todo el curso</option>
-          <option value={seccionId}>Sección {numeroSeccion ?? 'actual'}</option>
-        </select>
-      </label>
-      <label className="anuncios__campo">
-        Título
-        <input
-          disabled={guardando}
-          value={campos.titulo}
-          onChange={cambiar('titulo')}
-          maxLength={LARGO_TITULO_ANUNCIO}
-          required
-        />
-      </label>
-      <label className="anuncios__campo">
-        Mensaje
-        <textarea
-          disabled={guardando}
-          value={campos.cuerpo}
-          onChange={cambiar('cuerpo')}
-          maxLength={LARGO_CUERPO_ANUNCIO}
-          rows={4}
-          required
-        />
-      </label>
-      <p className="anuncios__ayuda">
-        {soloSeccion
-          ? 'Lo verán solo los integrantes de esta sección.'
-          : 'Lo verán los alumnos y ayudantes de todas las secciones del curso.'}
-      </p>
-      <button className="anuncios__boton" type="submit" disabled={guardando}>
-        Publicar anuncio
-      </button>
-      {error && (
-        <p className="anuncios__error" role="alert">
-          {error}
-        </p>
-      )}
-      {aviso && (
-        <p className="anuncios__aviso" role="status">
-          {aviso}
-        </p>
-      )}
-    </form>
+          <FormField
+            etiqueta="Dirigido a"
+            ayuda={
+              soloSeccion
+                ? 'Lo verán solo los integrantes de esta sección.'
+                : 'Lo verán los alumnos y ayudantes de todas las secciones del curso.'
+            }
+          >
+            {(control) => (
+              <NativeSelect
+                {...control}
+                className="w-full"
+                value={soloSeccion ? seccionId : ''}
+                disabled={guardando}
+                onChange={(event) =>
+                  setSoloSeccion(event.target.value === seccionId)
+                }
+              >
+                <option value="">Todo el curso</option>
+                <option value={seccionId}>
+                  Sección {numeroSeccion ?? 'actual'}
+                </option>
+              </NativeSelect>
+            )}
+          </FormField>
+          <FormField etiqueta="Título">
+            {(control) => (
+              <Input
+                {...control}
+                disabled={guardando}
+                value={campos.titulo}
+                onChange={cambiar('titulo')}
+                maxLength={LARGO_TITULO_ANUNCIO}
+                required
+              />
+            )}
+          </FormField>
+          <FormField etiqueta="Mensaje">
+            {(control) => (
+              <Textarea
+                {...control}
+                disabled={guardando}
+                value={campos.cuerpo}
+                onChange={cambiar('cuerpo')}
+                maxLength={LARGO_CUERPO_ANUNCIO}
+                rows={6}
+                required
+              />
+            )}
+          </FormField>
+          {error && (
+            <Alert variant="danger">
+              <CircleAlert aria-hidden="true" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={guardando}
+              onClick={() => cambiarAbierto(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={guardando}>
+              Publicar anuncio
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

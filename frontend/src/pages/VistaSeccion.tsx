@@ -17,6 +17,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
@@ -100,6 +108,8 @@ export interface PropsPestana {
   rol: SeccionResumen['rol']
   cursoCerrado?: boolean
   alPublicarSilabo?: () => void
+  // Para replicar en el cliente la ventana de fechas del período (MAT-08).
+  periodo?: SeccionResumen['periodo']
 }
 
 // Contenido de cada sección ya implementada. Home e Integrantes se arman aquí
@@ -178,44 +188,47 @@ export function VistaSeccion() {
     })
 
   return (
-    <section
-      aria-label="Vista del curso"
-      className="mx-auto grid w-full max-w-6xl gap-6"
-    >
-      <div className="grid gap-3">
+    <section aria-label="Vista del curso" className="grid w-full min-w-0 gap-6">
+      {/* Cabecera compacta: chips, nombre del curso y con qué rol se entra. */}
+      <div className="grid gap-1.5 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{curso.codigo}</Badge>
           <Badge variant="outline">Sección {numero}</Badge>
           <Badge variant="outline">
             Período {periodo.anio}-{periodo.semestre}
           </Badge>
+          <span className="text-xs text-muted-foreground">
+            Entras como {ROL_LABEL[rol]}
+          </span>
         </div>
-        <h2 className="m-0 text-2xl leading-8 font-bold tracking-tight text-foreground">
+        <h2 className="m-0 text-2xl leading-8 font-semibold tracking-tight text-foreground">
           {curso.nombre}
         </h2>
-        <p className="m-0 text-sm text-muted-foreground">
-          Entras como {ROL_LABEL[rol]}
-        </p>
-        {seccion.cursoCerrado && (
-          <Alert variant="info">
-            <Lock />
-            <AlertTitle>Curso cerrado</AlertTitle>
-            <AlertDescription>
-              Las notas, evaluaciones y asistencia son de solo lectura.
-            </AlertDescription>
-          </Alert>
-        )}
       </div>
+      {seccion.cursoCerrado && (
+        <Alert variant="info">
+          <Lock />
+          <AlertTitle>Curso cerrado</AlertTitle>
+          <AlertDescription>
+            Las notas, evaluaciones y asistencia son de solo lectura.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Tabs
         value={vista}
         onValueChange={elegir}
         orientation={enEscritorio ? 'vertical' : 'horizontal'}
-        className="grid gap-6 lg:grid-cols-[12.5rem_minmax(0,1fr)] lg:items-start"
+        className="grid gap-6 lg:grid-cols-[13.75rem_minmax(0,1fr)] lg:items-start xl:gap-10"
       >
         <TabsList
           aria-label="Pestañas de la sección"
-          className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 lg:sticky lg:top-24 lg:flex-col lg:items-stretch lg:overflow-visible"
+          className={cn(
+            'h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0',
+            // En pantallas angostas, una barra horizontal con una línea fina
+            // debajo; en escritorio, el riel fijo a la izquierda.
+            'border-b border-border lg:sticky lg:top-24 lg:flex-col lg:items-stretch lg:overflow-visible lg:border-b-0',
+          )}
         >
           {VISTAS.map(({ id: valor, etiqueta, icono: Icono }) => (
             <TabsTrigger
@@ -225,12 +238,17 @@ export function VistaSeccion() {
               // pantalla y los atajos activan el control con un clic.
               onClick={() => elegir(valor)}
               className={cn(
-                'h-10 flex-none justify-start gap-2.5 px-3 text-muted-foreground lg:w-full',
-                'data-[state=active]:bg-accent data-[state=active]:font-semibold data-[state=active]:text-accent-foreground',
+                'h-10 flex-none justify-start gap-2.5 rounded-md px-3 text-muted-foreground hover:bg-muted hover:text-foreground lg:w-full',
+                // Activo: texto y peso, y una barra del color de la
+                // universidad (debajo en la barra horizontal, a la izquierda
+                // en el riel). Sin fondo ni borde alrededor.
+                'data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground',
                 'group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none',
-                // Una pastilla de color en pantallas angostas; en el riel,
-                // además, la barra del color de la universidad a la izquierda.
-                'group-data-[orientation=horizontal]/tabs:after:hidden group-data-[orientation=vertical]/tabs:after:inset-y-2 group-data-[orientation=vertical]/tabs:after:right-auto group-data-[orientation=vertical]/tabs:after:left-0 group-data-[orientation=vertical]/tabs:after:w-[3px] group-data-[orientation=vertical]/tabs:after:rounded-full after:bg-primary data-[state=active]:after:opacity-100',
+                'after:bg-primary data-[state=active]:after:opacity-100',
+                'group-data-[orientation=horizontal]/tabs:rounded-b-none group-data-[orientation=horizontal]/tabs:after:bottom-[-1px] group-data-[orientation=horizontal]/tabs:after:inset-x-2',
+                'group-data-[orientation=vertical]/tabs:after:inset-y-2 group-data-[orientation=vertical]/tabs:after:right-auto group-data-[orientation=vertical]/tabs:after:left-0 group-data-[orientation=vertical]/tabs:after:w-[3px] group-data-[orientation=vertical]/tabs:after:rounded-full',
+                // Foco: un aro fino, sin el borde grueso del componente base.
+                'focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none',
               )}
             >
               <Icono aria-hidden="true" />
@@ -252,9 +270,10 @@ export function VistaSeccion() {
             if (!Contenido) return null
             return (
               <TabsContent key={valor} value={valor} className="grid gap-6">
-                {/* El sílabo vigente va también junto al material, donde se
-                    publica y se descarga. */}
-                {valor === 'material' && veSilabo && (
+                {/* Al alumno, el sílabo vigente también junto al material. El
+                    profesor y el ayudante lo ven en la tarjeta del sílabo de
+                    la pestaña. */}
+                {valor === 'material' && veSilabo && rol === 'ALUMNO' && (
                   <SilaboDelCurso
                     key={`silabo:${id}:${publicaciones}`}
                     seccionId={id}
@@ -264,6 +283,7 @@ export function VistaSeccion() {
                   key={id}
                   seccionId={id}
                   numeroSeccion={numero}
+                  periodo={periodo}
                   rol={rol}
                   cursoCerrado={seccion.cursoCerrado}
                   alPublicarSilabo={() => setPublicaciones((n) => n + 1)}
@@ -275,7 +295,9 @@ export function VistaSeccion() {
             {rol === 'ALUMNO' ? (
               <IntegrantesAlumno seccion={seccion} />
             ) : (
-              <EquipoDocente seccion={seccion} />
+              <Card className="gap-3 p-5">
+                <EquipoDocente seccion={seccion} />
+              </Card>
             )}
             {rol === 'AYUDANTE' && (
               <Alert variant="info" role="note">
@@ -400,7 +422,9 @@ function EquipoDocente({
   return (
     <div className="grid gap-2">
       {!sinTitulo && (
-        <h3 className="vista-seccion__subtitulo">Equipo docente</h3>
+        <h3 className="m-0 text-base font-semibold text-foreground">
+          Equipo docente
+        </h3>
       )}
       <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm text-muted-foreground">
         {/* GES-25: todos los profesores vigentes. */}
@@ -437,13 +461,10 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
   const tituloId = useId()
 
   return (
-    <section
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4"
-      aria-labelledby={tituloId}
-    >
+    <section className="grid min-w-0 gap-3" aria-labelledby={tituloId}>
       <h3
         id={tituloId}
-        className="m-0 flex items-center gap-2 text-base font-semibold"
+        className="m-0 flex items-center gap-2 text-base font-semibold text-foreground"
       >
         <Users aria-hidden="true" className="size-4 text-primary" />
         {datos ? `Alumnos (${datos.total})` : 'Alumnos'}
@@ -459,22 +480,35 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
           onReintentar={recargar}
         />
       ) : datos.alumnos.length === 0 ? (
-        <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
+        <Card className="py-0">
+          <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
+        </Card>
       ) : (
-        <ul
-          className="m-0 grid list-none divide-y p-0 text-sm"
-          aria-label="Alumnos inscritos"
-        >
-          {datos.alumnos.map((alumno) => (
-            <li
-              key={alumno.id}
-              className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2 break-all"
-            >
-              <span className="font-medium">{alumno.nombre}</span>
-              <span className="text-muted-foreground">{alumno.correo}</span>
-            </li>
-          ))}
-        </ul>
+        <Card className="min-w-0 gap-0 py-0">
+          <Table aria-label="Alumnos inscritos">
+            <TableHeader className="bg-muted/60">
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Correo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {datos.alumnos.map((alumno) => (
+                <TableRow key={alumno.id}>
+                  <TableHead
+                    scope="row"
+                    className="font-medium text-foreground"
+                  >
+                    {alumno.nombre}
+                  </TableHead>
+                  <TableCell className="break-all whitespace-normal text-muted-foreground">
+                    {alumno.correo}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </section>
   )

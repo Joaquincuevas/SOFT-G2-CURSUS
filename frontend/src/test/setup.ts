@@ -1,11 +1,16 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
+import { toast } from 'sonner'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 beforeEach(() => localStorage.clear())
 
 // Sin `globals: true`, RTL no registra su cleanup automático
 afterEach(cleanup)
+// Los avisos (sonner) viven fuera del árbol de React: no pasan al test siguiente.
+afterEach(() => {
+  toast.dismiss()
+})
 // Quita el fetch simulado de cada test.
 afterEach(() => {
   vi.unstubAllGlobals()
