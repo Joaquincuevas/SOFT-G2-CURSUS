@@ -43,6 +43,7 @@ Documentación del proyecto:
 - [UI/UX-L: login y pantallas de acceso con shadcn](ui-l-login-landing.md)
 - [UI/UX-08: experiencia del Director con shadcn](ui-08-director.md)
 - [UI/UX-09: experiencia del Superadmin con shadcn](ui-09-superadmin.md)
+- [Entorno de curso del profesor: pulido estilo Canvas](ui-curso-profesor.md)
 - [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
 - [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
 - [UI/UX-07: experiencia del Administrativo](uix-07-administrativo.md)
