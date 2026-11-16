@@ -85,6 +85,44 @@ describe('Dropzone', () => {
     expect(entrada).not.toHaveAttribute('aria-invalid')
   })
 
+  test('tras un rechazo vacía el input, así el mismo archivo se vuelve a validar', () => {
+    const validar = vi.fn(soloPdf)
+    render(<Controlado validar={validar} />)
+    const entrada = screen.getByLabelText('Archivo') as HTMLInputElement
+    // jsdom no deja escribir un valor en un input de archivo: se simula el que
+    // deja el navegador al elegir uno.
+    let valor = ''
+    Object.defineProperty(entrada, 'value', {
+      configurable: true,
+      get: () => valor,
+      set: (nuevo: string) => {
+        valor = nuevo
+      },
+    })
+    const elegirFoto = () => {
+      valor = 'C:\\fakepath\\foto.png'
+      fireEvent.change(entrada, {
+        target: {
+          files: [new File(['x'], 'foto.png', { type: 'image/png' })],
+        },
+      })
+    }
+
+    elegirFoto()
+    expect(entrada.value).toBe('')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'El sílabo debe ser un PDF.',
+    )
+
+    elegirFoto()
+    expect(validar).toHaveBeenCalledTimes(2)
+    expect(entrada.value).toBe('')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'El sílabo debe ser un PDF.',
+    )
+    expect(entrada).toHaveAttribute('aria-invalid', 'true')
+  })
+
   test('acepta un archivo soltado sobre la zona', () => {
     const alCambiar = vi.fn()
     render(<Controlado alCambiar={alCambiar} />)

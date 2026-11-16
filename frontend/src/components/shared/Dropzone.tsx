@@ -70,11 +70,13 @@ export function Dropzone({
     if (!archivo && entrada.current) entrada.current.value = ''
   }, [archivo])
 
-  function elegir(elegido: File | undefined) {
-    if (!elegido) return
+  // Devuelve si el archivo se rechazó.
+  function elegir(elegido: File | undefined): boolean {
+    if (!elegido) return false
     const motivo = validar?.(elegido) ?? null
     setRechazo(motivo)
     onArchivoChange(motivo ? null : elegido)
+    return motivo !== null
   }
 
   function soltar(evento: DragEvent<HTMLDivElement>) {
@@ -103,7 +105,12 @@ export function Dropzone({
             .join(' ') || undefined
         }
         className="peer sr-only"
-        onChange={(evento) => elegir(evento.target.files?.[0])}
+        onChange={(evento) => {
+          // Un archivo rechazado deja `archivo` en null, así que el efecto de
+          // arriba no vuelve a correr: se vacía aquí para que elegir el mismo
+          // archivo otra vez dispare `change` y se vuelva a validar.
+          if (elegir(evento.target.files?.[0])) evento.target.value = ''
+        }}
       />
       {archivo ? (
         <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 peer-focus-visible:ring-2 peer-focus-visible:ring-ring/70">
