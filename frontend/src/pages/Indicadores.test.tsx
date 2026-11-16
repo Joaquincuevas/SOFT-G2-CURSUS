@@ -264,15 +264,19 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await screen.findByRole('region', { name: 'Universidades' }),
     )
     // La región aparece mientras carga: se espera a que lleguen los datos.
+    const norte = within(
+      (
+        await lista.findByRole('link', { name: 'Universidad Demo Norte' })
+      ).closest('tr')!,
+    )
     expect(
-      await lista.findByText(
-        /Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %/,
-      ),
-    ).toBeInTheDocument()
-    // Sur no tiene datos: se dice, no se muestra 0.
-    expect(
-      lista.getAllByText(/Aprobación: Sin datos suficientes/),
-    ).toHaveLength(1)
+      norte
+        .getAllByRole('cell')
+        .slice(1, 4)
+        .map((c) => c.textContent),
+    ).toEqual(['50,0 %', '4,50', '66,67 %'])
+    // Sur no tiene datos: un guion con el motivo, no un 0.
+    expect(lista.getAllByText('Sin datos suficientes')).toHaveLength(3)
     fireEvent.click(lista.getByRole('link', { name: 'Universidad Demo Norte' }))
 
     const facultades = within(

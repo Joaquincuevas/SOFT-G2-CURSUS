@@ -234,7 +234,7 @@ describe('listado de cursos', () => {
     await renderConSesion('DIRECTOR', '/cursos', { '/api/cursos': () => [] })
 
     expect(
-      await screen.findByText('Aún no hay cursos en tu facultad.'),
+      await screen.findByText('Aún no hay cursos en el Directorio.'),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Crear curso' }),
