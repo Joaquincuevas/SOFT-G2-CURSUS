@@ -260,9 +260,10 @@ export function VistaSeccion() {
             if (!Contenido) return null
             return (
               <TabsContent key={valor} value={valor} className="grid gap-6">
-                {/* El sílabo vigente va también junto al material, donde se
-                    publica y se descarga. */}
-                {valor === 'material' && veSilabo && (
+                {/* Al alumno, el sílabo vigente también junto al material. El
+                    profesor y el ayudante lo ven en la tarjeta del sílabo de
+                    la pestaña. */}
+                {valor === 'material' && veSilabo && rol === 'ALUMNO' && (
                   <SilaboDelCurso
                     key={`silabo:${id}:${publicaciones}`}
                     seccionId={id}

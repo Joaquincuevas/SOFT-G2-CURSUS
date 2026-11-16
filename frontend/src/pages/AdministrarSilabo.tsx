@@ -1,5 +1,33 @@
-import { FileText } from 'lucide-react'
-import { EmptyState, ErrorState, FileInput } from '@/components/shared'
+import {
+  ChevronRight,
+  CircleAlert,
+  Download,
+  FileText,
+  Loader2,
+  Upload,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  Dropzone,
+  EmptyState,
+  ErrorState,
+  FormField,
+} from '@/components/shared'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { formatearFecha } from '@/lib/fechas'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,22 +61,15 @@ export function AdministrarSilabo({
   const [archivo, setArchivo] = useState<File | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState('')
-  const [aviso, setAviso] = useState('')
-  const [versionInput, setVersionInput] = useState(0)
+  const [publicando, setPublicando] = useState(false)
   const confirmado = useRef<{ archivo: File; id: string } | null>(null)
   const enCurso = useRef(false)
 
   async function publicar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
     if (!archivo || enCurso.current) return
-    setAviso('')
-    if (
-      !archivo.name.toLowerCase().endsWith('.pdf') ||
-      archivo.type !== 'application/pdf' ||
-      archivo.size < 5 ||
-      archivo.size > MAX_TAMANO_SILABO_BYTES
-    ) {
-      setError('Selecciona un PDF válido de hasta 10 MiB.')
+    if (motivoSilabo(archivo)) {
+      setError(MENSAJE_SILABO)
       return
     }
     enCurso.current = true
@@ -90,9 +111,9 @@ export function AdministrarSilabo({
       )
       recargar()
       confirmado.current = null
-      setVersionInput((version) => version + 1)
       setArchivo(null)
-      setAviso('Sílabo publicado.')
+      setPublicando(false)
+      toast.success('Sílabo publicado.')
       alPublicar?.()
     } catch (falla) {
       setError(
@@ -178,108 +199,226 @@ export function AdministrarSilabo({
     )
   }
 
+  const vigente = historial?.[0]
+  const anteriores = historial?.slice(1) ?? []
+  const abrirPublicar = () => {
+    setError('')
+    setArchivo(null)
+    confirmado.current = null
+    setPublicando(true)
+  }
+
+  // Una sola tarjeta: la versión vigente con sus acciones y, debajo, el
+  // historial plegable.
   return (
-    <section className="grid min-w-0 gap-4" aria-label="Versiones del sílabo">
-      <h3 className="m-0 text-base font-semibold">Versiones del sílabo</h3>
-      {puedePublicar && (
-        <form
-          className="grid min-w-0 gap-3 rounded-xl border border-border bg-card p-4"
-          aria-label="Cargar sílabo"
-          onSubmit={(evento) => void publicar(evento)}
-        >
-          <div className="grid min-w-0 gap-2 text-sm font-medium">
-            <span>Sílabo (PDF, hasta 10 MiB)</span>
-            <FileInput
-              key={versionInput}
-              aria-label="Sílabo (PDF, hasta 10 MiB)"
-              accept="application/pdf,.pdf"
-              disabled={ocupado}
-              onChange={([elegido]) => {
-                confirmado.current = null
-                setArchivo(elegido ?? null)
-                setError('')
-                setAviso('')
-              }}
+    <section className="grid min-w-0 gap-3" aria-label="Sílabo del curso">
+      <Card className="min-w-0 gap-0 py-0">
+        <div className="flex flex-wrap items-center gap-4 p-5">
+          <span
+            aria-hidden="true"
+            className="grid size-11 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground"
+          >
+            <FileText className="size-5" />
+          </span>
+          <div className="grid min-w-0 flex-1 basis-56 gap-0.5">
+            <h3 className="m-0 text-base font-semibold text-foreground">
+              Sílabo del curso
+            </h3>
+            {historial === undefined ? (
+              <div role="status">
+                <span className="sr-only">Cargando versiones del sílabo…</span>
+                <Skeleton className="h-4 w-48" />
+              </div>
+            ) : historial === null ? null : vigente ? (
+              <p className="m-0 text-sm text-muted-foreground">
+                Versión {vigente.version} vigente · publicada el{' '}
+                <time dateTime={vigente.subidoEn}>
+                  {fechaVersion(vigente.subidoEn)}
+                </time>{' '}
+                por {vigente.responsable}
+              </p>
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">
+                {puedePublicar
+                  ? 'Aún no hay un sílabo publicado. Sube un PDF para publicar la primera versión.'
+                  : 'Aún no hay un sílabo publicado. El profesor puede publicarlo.'}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {vigente && (
+              <Button
+                type="button"
+                variant="outline"
+                aria-label={`Descargar versión ${vigente.version}`}
+                onClick={() => void descargar(vigente.version)}
+              >
+                <Download aria-hidden="true" />
+                Descargar
+              </Button>
+            )}
+            {puedePublicar && historial !== undefined && historial !== null && (
+              <Button type="button" onClick={abrirPublicar}>
+                <Upload aria-hidden="true" />
+                {vigente ? 'Subir nueva versión' : 'Subir sílabo'}
+              </Button>
+            )}
+          </div>
+        </div>
+        {historial === null && (
+          <div className="border-t border-border p-4">
+            <ErrorState
+              mensaje="No pudimos cargar las versiones del sílabo."
+              onReintentar={recargar}
             />
           </div>
-          <Button
-            variant="outline"
-            className="justify-self-start"
-            type="submit"
-            disabled={!archivo || ocupado}
-          >
-            {ocupado ? 'Publicando…' : 'Publicar sílabo'}
-          </Button>
-          {aviso && (
-            <p
-              className="m-0 text-sm text-(color:--color-success)"
-              role="status"
-            >
-              {aviso}
-            </p>
-          )}
-        </form>
-      )}
-      {error && (
-        <p className="m-0 text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      )}
-      {historial === undefined && (
-        <div role="status">
-          <span className="sr-only">Cargando versiones del sílabo…</span>
-          <Skeleton className="h-16 rounded-xl" />
-        </div>
-      )}
-      {historial === null && (
-        <ErrorState
-          mensaje="No pudimos cargar las versiones del sílabo."
-          onReintentar={recargar}
-        />
-      )}
-      {historial?.length === 0 && (
-        <EmptyState
-          icono={FileText}
-          titulo="Aún no hay un sílabo publicado."
-          mensaje={
-            puedePublicar
-              ? 'Sube un PDF para publicar la primera versión.'
-              : 'El profesor puede publicar el sílabo de esta sección.'
-          }
-          className="rounded-xl border border-border bg-card"
-        />
-      )}
-      {historial && historial.length > 0 && (
-        <ol
-          className="m-0 grid list-none gap-2 p-0"
-          aria-label="Historial del sílabo"
-        >
-          {historial.map((v) => (
-            <li
-              key={v.version}
-              className="min-w-0 rounded-xl border border-border bg-card p-4 [&_summary]:cursor-pointer"
-            >
-              <strong>Versión {v.version}</strong> · {v.responsable} ·{' '}
-              <time dateTime={v.subidoEn}>{fechaVersion(v.subidoEn)}</time>{' '}
-              <Button
-                variant="outline"
-                className="justify-self-start"
+        )}
+        {anteriores.length > 0 && (
+          <Collapsible className="border-t border-border">
+            <CollapsibleTrigger asChild>
+              <button
                 type="button"
-                aria-label={`Descargar versión ${v.version}`}
-                onClick={() => void descargar(v.version)}
+                data-slot="historial-silabo"
+                className="group flex w-full items-center gap-2 px-5 py-3 text-left text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none focus-visible:ring-inset"
               >
-                Descargar PDF
-              </Button>
-            </li>
-          ))}
-        </ol>
+                <ChevronRight
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
+                />
+                Historial de versiones ({anteriores.length}{' '}
+                {anteriores.length === 1 ? 'anterior' : 'anteriores'})
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ol
+                className="m-0 grid list-none divide-y divide-border border-t border-border p-0"
+                aria-label="Historial del sílabo"
+              >
+                {anteriores.map((v) => (
+                  <li
+                    key={v.version}
+                    className="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm"
+                  >
+                    <span className="min-w-0 break-words text-muted-foreground">
+                      <strong className="font-medium text-foreground">
+                        Versión {v.version}
+                      </strong>{' '}
+                      · {v.responsable} ·{' '}
+                      <time dateTime={v.subidoEn}>
+                        {fechaVersion(v.subidoEn)}
+                      </time>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      aria-label={`Descargar versión ${v.version}`}
+                      onClick={() => void descargar(v.version)}
+                    >
+                      <Download aria-hidden="true" />
+                      Descargar
+                    </Button>
+                  </li>
+                ))}
+              </ol>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </Card>
+      {error && !publicando && (
+        <Alert variant="danger">
+          <CircleAlert aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {puedePublicar && (
+        <Dialog
+          open={publicando}
+          onOpenChange={(abierto) => {
+            if (!ocupado) setPublicando(abierto)
+          }}
+        >
+          <DialogContent className="bg-card text-left sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {vigente ? 'Subir nueva versión del sílabo' : 'Subir sílabo'}
+              </DialogTitle>
+              <DialogDescription>
+                {vigente
+                  ? `Reemplaza la versión ${vigente.version}; la anterior queda en el historial.`
+                  : 'Los integrantes podrán descargarlo desde el curso.'}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="grid min-w-0 gap-4"
+              aria-label="Cargar sílabo"
+              noValidate
+              onSubmit={(evento) => void publicar(evento)}
+            >
+              <FormField etiqueta="Sílabo (PDF, hasta 10 MiB)">
+                {(control) => (
+                  <Dropzone
+                    {...control}
+                    archivo={archivo}
+                    accept="application/pdf,.pdf"
+                    validar={motivoSilabo}
+                    descripcion="Solo PDF, hasta 10 MiB"
+                    disabled={ocupado}
+                    onArchivoChange={(elegido) => {
+                      confirmado.current = null
+                      setArchivo(elegido)
+                      setError('')
+                    }}
+                  />
+                )}
+              </FormField>
+              {error && (
+                <Alert variant="danger">
+                  <CircleAlert aria-hidden="true" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={ocupado}
+                  onClick={() => setPublicando(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={!archivo || ocupado}>
+                  {ocupado && (
+                    <Loader2 aria-hidden="true" className="animate-spin" />
+                  )}
+                  {ocupado ? 'Publicando…' : 'Publicar sílabo'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </section>
   )
 }
 
+const MENSAJE_SILABO = 'Selecciona un PDF válido de hasta 10 MiB.'
+
+// Lo mismo que se revisa al publicar, para avisar apenas se elige.
+function motivoSilabo(archivo: File): string | null {
+  return !archivo.name.toLowerCase().endsWith('.pdf') ||
+    archivo.type !== 'application/pdf' ||
+    archivo.size < 5 ||
+    archivo.size > MAX_TAMANO_SILABO_BYTES
+    ? MENSAJE_SILABO
+    : null
+}
+
+// dd-mm-aaaa en la zona de la universidad.
 function fechaVersion(fecha: string) {
-  return new Date(fecha).toLocaleDateString('es-CL', {
-    timeZone: 'America/Santiago',
-  })
+  return formatearFecha(
+    new Date(fecha).toLocaleDateString('en-CA', {
+      timeZone: 'America/Santiago',
+    }),
+  )
 }
