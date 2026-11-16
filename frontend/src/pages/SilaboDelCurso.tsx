@@ -1,7 +1,10 @@
 import type { DescargaArchivo, SilaboVigente } from '@cursus/shared'
 import { useId, useState } from 'react'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
+import { Download, FileText } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 
@@ -32,41 +35,61 @@ export function SilaboDelCurso({ seccionId }: { seccionId: string }) {
   }
 
   return (
-    <section className="vista-seccion__silabo" aria-labelledby={titulo}>
-      <h3 id={titulo} className="vista-seccion__subtitulo">
-        Sílabo del curso
-      </h3>
-      {datos === undefined ? (
-        <Cargando texto="Cargando sílabo…" />
-      ) : datos === null ? (
-        <ErrorEstado
-          mensaje="No pudimos consultar el sílabo."
-          onReintentar={recargar}
-        />
-      ) : datos.silabo ? (
-        <>
-          <p className="dashboard__texto">
-            Versión vigente {datos.silabo.version} · PDF
-          </p>
-          <button
-            className="vista-seccion__silabo-descarga"
+    <section aria-labelledby={titulo}>
+      <Card className="flex-row flex-wrap items-center gap-4 p-5">
+        <span
+          aria-hidden="true"
+          className="grid size-11 shrink-0 place-items-center rounded-lg bg-accent text-accent-foreground"
+        >
+          <FileText className="size-5" />
+        </span>
+        <div className="grid min-w-0 flex-1 basis-48 gap-0.5">
+          <h3
+            id={titulo}
+            className="m-0 text-base font-semibold text-foreground"
+          >
+            Sílabo del curso
+          </h3>
+          {datos === undefined ? (
+            <div role="status">
+              <span className="sr-only">Cargando sílabo…</span>
+              <Skeleton className="h-4 w-40" />
+            </div>
+          ) : datos === null ? null : datos.silabo ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Versión vigente {datos.silabo.version} · PDF
+            </p>
+          ) : (
+            <p className="m-0 text-sm text-muted-foreground">
+              Aún no hay un sílabo publicado para este curso.
+            </p>
+          )}
+        </div>
+        {datos?.silabo && (
+          <Button
             type="button"
+            variant="outline"
             disabled={descargando}
             onClick={() => void descargar()}
           >
+            <Download aria-hidden="true" />
             {descargando ? 'Preparando descarga…' : 'Descargar sílabo'}
-          </button>
-          {error && (
-            <p className="vista-seccion__silabo-error" role="alert">
-              No pudimos descargar el sílabo. Inténtalo nuevamente.
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="dashboard__texto">
-          Aún no hay un sílabo publicado para este curso.
-        </p>
-      )}
+          </Button>
+        )}
+        {datos === null && (
+          <div className="basis-full">
+            <ErrorEstado
+              mensaje="No pudimos consultar el sílabo."
+              onReintentar={recargar}
+            />
+          </div>
+        )}
+        {error && (
+          <p className="m-0 basis-full text-sm text-destructive" role="alert">
+            No pudimos descargar el sílabo. Inténtalo nuevamente.
+          </p>
+        )}
+      </Card>
     </section>
   )
 }

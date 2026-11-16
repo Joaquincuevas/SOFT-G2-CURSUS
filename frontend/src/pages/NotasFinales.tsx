@@ -80,7 +80,7 @@ export function NotasFinales({
           Aún no hay alumnos inscritos
         </p>
       ) : (
-        <div className="min-w-0 rounded-xl border bg-card">
+        <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
           <Table
             className="[&_td]:whitespace-normal [&_th]:whitespace-normal"
             aria-label="Nota final de cada alumno"

@@ -17,6 +17,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
@@ -182,7 +190,7 @@ export function VistaSeccion() {
   return (
     <section aria-label="Vista del curso" className="grid w-full min-w-0 gap-6">
       {/* Cabecera compacta: chips, nombre del curso y con qué rol se entra. */}
-      <header className="grid gap-1.5 border-b border-border pb-4">
+      <div className="grid gap-1.5 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{curso.codigo}</Badge>
           <Badge variant="outline">Sección {numero}</Badge>
@@ -196,7 +204,7 @@ export function VistaSeccion() {
         <h2 className="m-0 text-2xl leading-8 font-semibold tracking-tight text-foreground">
           {curso.nombre}
         </h2>
-      </header>
+      </div>
       {seccion.cursoCerrado && (
         <Alert variant="info">
           <Lock />
@@ -287,7 +295,9 @@ export function VistaSeccion() {
             {rol === 'ALUMNO' ? (
               <IntegrantesAlumno seccion={seccion} />
             ) : (
-              <EquipoDocente seccion={seccion} />
+              <Card className="gap-3 p-5">
+                <EquipoDocente seccion={seccion} />
+              </Card>
             )}
             {rol === 'AYUDANTE' && (
               <Alert variant="info" role="note">
@@ -412,7 +422,9 @@ function EquipoDocente({
   return (
     <div className="grid gap-2">
       {!sinTitulo && (
-        <h3 className="vista-seccion__subtitulo">Equipo docente</h3>
+        <h3 className="m-0 text-base font-semibold text-foreground">
+          Equipo docente
+        </h3>
       )}
       <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm text-muted-foreground">
         {/* GES-25: todos los profesores vigentes. */}
@@ -449,13 +461,10 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
   const tituloId = useId()
 
   return (
-    <section
-      className="grid min-w-0 gap-3 rounded-xl border bg-card p-4"
-      aria-labelledby={tituloId}
-    >
+    <section className="grid min-w-0 gap-3" aria-labelledby={tituloId}>
       <h3
         id={tituloId}
-        className="m-0 flex items-center gap-2 text-base font-semibold"
+        className="m-0 flex items-center gap-2 text-base font-semibold text-foreground"
       >
         <Users aria-hidden="true" className="size-4 text-primary" />
         {datos ? `Alumnos (${datos.total})` : 'Alumnos'}
@@ -471,22 +480,35 @@ function AlumnosDeLaSeccion({ seccionId }: { seccionId: string }) {
           onReintentar={recargar}
         />
       ) : datos.alumnos.length === 0 ? (
-        <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
+        <Card className="py-0">
+          <EmptyState icono={Users} mensaje="Aún no hay alumnos inscritos" />
+        </Card>
       ) : (
-        <ul
-          className="m-0 grid list-none divide-y p-0 text-sm"
-          aria-label="Alumnos inscritos"
-        >
-          {datos.alumnos.map((alumno) => (
-            <li
-              key={alumno.id}
-              className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2 break-all"
-            >
-              <span className="font-medium">{alumno.nombre}</span>
-              <span className="text-muted-foreground">{alumno.correo}</span>
-            </li>
-          ))}
-        </ul>
+        <Card className="min-w-0 gap-0 py-0">
+          <Table aria-label="Alumnos inscritos">
+            <TableHeader className="bg-muted/60">
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Correo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {datos.alumnos.map((alumno) => (
+                <TableRow key={alumno.id}>
+                  <TableHead
+                    scope="row"
+                    className="font-medium text-foreground"
+                  >
+                    {alumno.nombre}
+                  </TableHead>
+                  <TableCell className="break-all whitespace-normal text-muted-foreground">
+                    {alumno.correo}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </section>
   )
