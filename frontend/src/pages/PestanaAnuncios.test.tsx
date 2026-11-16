@@ -72,7 +72,7 @@ async function abrirAnuncios(
         screen.getByRole('tabpanel', { name: 'Anuncios' }),
     )
   const panel = new Proxy({} as ReturnType<typeof within>, {
-    get: (_, clave) => zona()[clave as keyof ReturnType<typeof within>],
+    get: (_, clave) => Reflect.get(zona(), clave),
   })
   return { panel }
 }

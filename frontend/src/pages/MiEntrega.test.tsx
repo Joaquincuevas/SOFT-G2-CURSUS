@@ -77,7 +77,10 @@ async function abrir(
   })
   fireEvent.click(await screen.findByRole('tab', { name: 'Entregas' }))
   const panel = within(
-    await screen.findByRole('article', { name: 'Informe 1' }),
+    // El alumno ve una ficha por actividad; el equipo docente, una tabla.
+    await screen.findByRole(rol === 'ALUMNO' ? 'article' : 'row', {
+      name: 'Informe 1',
+    }),
   )
   if (rol === 'ALUMNO')
     await waitFor(() =>

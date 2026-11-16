@@ -87,7 +87,7 @@ async function abrirEntregas(
         screen.getByRole('tabpanel', { name: 'Entregas' }),
     )
   const panel = new Proxy({} as ReturnType<typeof within>, {
-    get: (_, clave) => zona()[clave as keyof ReturnType<typeof within>],
+    get: (_, clave) => Reflect.get(zona(), clave),
   })
   return { panel }
 }
