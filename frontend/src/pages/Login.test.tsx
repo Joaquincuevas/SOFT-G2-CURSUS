@@ -179,7 +179,9 @@ describe('AUTH-02: credenciales inválidas', () => {
           JSON.stringify(
             ruta === '/api/auth/login'
               ? { accessToken: 'jwt-de-prueba' }
-              : usuarioDePrueba('PROFESOR'),
+              : ruta === '/api/dashboard/mis-secciones'
+                ? []
+                : usuarioDePrueba('PROFESOR'),
           ),
         ),
       ),

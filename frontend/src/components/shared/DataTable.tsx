@@ -49,6 +49,10 @@ interface Props<T> {
   porPagina?: number
   // La cabecera queda fija al desplazar la tabla (con alto máximo propio).
   cabeceraFija?: boolean
+  // Hace clicable la fila entera (por ejemplo, para abrir su detalle). Un clic
+  // en un enlace o botón de la fila no lo dispara; el teclado usa esos
+  // controles, y la fila se resalta cuando uno tiene el foco.
+  alHacerClic?: (fila: T) => void
   className?: string
 }
 
@@ -81,6 +85,7 @@ export function DataTable<T>({
   ordenInicial,
   porPagina,
   cabeceraFija = false,
+  alHacerClic,
   className,
 }: Props<T>) {
   const [orden, setOrden] = useState<Orden | null>(ordenInicial ?? null)
@@ -207,7 +212,22 @@ export function DataTable<T>({
             </TableRow>
           ) : (
             visibles.map((fila) => (
-              <TableRow key={claveFila(fila)}>
+              <TableRow
+                key={claveFila(fila)}
+                onClick={
+                  alHacerClic
+                    ? (evento) => {
+                        if (!(evento.target as HTMLElement).closest('a,button'))
+                          alHacerClic(fila)
+                      }
+                    : undefined
+                }
+                className={
+                  alHacerClic
+                    ? 'cursor-pointer focus-within:bg-muted/50'
+                    : undefined
+                }
+              >
                 {columnas.map((columna) => (
                   <TableCell key={columna.clave} className={columna.className}>
                     {columna.celda(fila)}
