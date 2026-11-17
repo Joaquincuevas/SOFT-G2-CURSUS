@@ -7,7 +7,9 @@ import type { EntityManager } from 'typeorm'
 //
 // No es una función de la aplicación: la regla "nada académico se borra" vale
 // para lo que hacen los usuarios, y este reinicio solo corre sobre una base de
-// pruebas, con autorización explícita (verificarReinicio).
+// pruebas, con autorización explícita: SEED_RESET=true y el nombre de la base
+// en POSTGRES_DB, que debe ser la misma a la que está conectado el seed
+// (verificarBaseConectada).
 
 const TABLA_MIGRACIONES = 'migraciones'
 const BASE_PRODUCCION = 'cursus_production'
@@ -16,8 +18,34 @@ export function verificarReinicio(env: NodeJS.ProcessEnv = process.env) {
   if (env.SEED_RESET !== 'true') {
     throw new Error('El reinicio de la base requiere SEED_RESET=true')
   }
+  if (!env.POSTGRES_DB) {
+    throw new Error(
+      'El reinicio requiere POSTGRES_DB con el nombre de la base que se reinicia',
+    )
+  }
   if (env.POSTGRES_DB === BASE_PRODUCCION) {
     throw new Error('El reinicio nunca corre sobre la base de producción')
+  }
+}
+
+// La configuración no basta: el DataSource puede recibir el nombre de la base
+// por separado (opcionesDataSource(base)). Antes de borrar, se comprueba en la
+// misma conexión que la base conectada es la autorizada.
+export async function verificarBaseConectada(
+  m: Pick<EntityManager, 'query'>,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  verificarReinicio(env)
+  const [{ base }] = await m.query<{ base: string }[]>(
+    'SELECT current_database() AS base',
+  )
+  if (base === BASE_PRODUCCION) {
+    throw new Error('El reinicio nunca corre sobre la base de producción')
+  }
+  if (base !== env.POSTGRES_DB) {
+    throw new Error(
+      `La base conectada (${base}) no es la de POSTGRES_DB (${env.POSTGRES_DB}): no se reinicia`,
+    )
   }
 }
 
@@ -31,7 +59,7 @@ export async function reiniciarBase(
   m: EntityManager,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ResumenReinicio> {
-  verificarReinicio(env)
+  await verificarBaseConectada(m, env)
 
   // Superadmins y su MFA, si lo activaron. Las sesiones no se conservan:
   // vuelven a entrar con su contraseña actual.

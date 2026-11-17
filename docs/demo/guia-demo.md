@@ -62,4 +62,4 @@ bash infra/aws/seed.sh staging --reset    # vacía la base (salvo los superadmin
 - El seed se puede repetir: un período cerrado que ya existe no se toca, y una sección que ya tiene evaluaciones tampoco.
 - El reinicio borra todo lo que se haya creado a mano (cursos, cuentas, notas, sesiones) y conserva solo a los superadmins y su MFA. Quienes tenían sesión abierta tienen que volver a entrar.
 - Corre en una sola transacción: si la carga falla, la base queda como estaba.
-- Exige `SEED_RESET=true` (además de `SEED_ALLOW=true` en AWS) y se niega a correr sobre `cursus_production`. `seed.sh` ya se niega con `production`.
+- Exige `SEED_RESET=true` (además de `SEED_ALLOW=true` en AWS) y el nombre de la base en `POSTGRES_DB`. Antes de borrar, comprueba en la misma conexión que la base conectada es esa, y nunca corre sobre `cursus_production`. `seed.sh` ya se niega con `production`.
