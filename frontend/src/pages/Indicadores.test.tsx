@@ -1030,9 +1030,13 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await renderConSesion(rol, '/indicadores/universidades/u-norte', {
         [FACULTADES]: pedida,
       })
-      expect(
-        screen.queryByRole('navigation', { name: 'Breadcrumb' }),
-      ).toBeNull()
+      // La ruta redirige al Dashboard, que no lleva camino: hasta entonces el
+      // encabezado todavía muestra el de la URL escrita.
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('navigation', { name: 'Breadcrumb' }),
+        ).toBeNull(),
+      )
       expect(screen.queryByRole('list', { name: 'Facultades' })).toBeNull()
       expect(pedida).not.toHaveBeenCalled()
     },
