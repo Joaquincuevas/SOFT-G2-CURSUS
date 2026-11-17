@@ -8,17 +8,7 @@ import {
   type SeccionDashboard,
   type SeccionResumen,
 } from '@cursus/shared'
-import {
-  CalendarCheck,
-  CalendarDays,
-  ClipboardCheck,
-  ClipboardList,
-  FolderOpen,
-  Inbox,
-  Megaphone,
-  Users,
-  type LucideIcon,
-} from 'lucide-react'
+import { CalendarDays, ClipboardCheck, Inbox, Megaphone } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { EmptyState, ErrorState } from '@/components/shared'
@@ -27,17 +17,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { fechaAnuncio } from './anuncios'
 import { ENLACE } from './indicadores-formato'
 import {
   nombresProfesores,
-  RUTA_MIS_SECCIONES,
   RUTA_PAGINA_PENDIENTES,
   rutaSeccion,
   textoAlumnos,
@@ -45,9 +29,8 @@ import {
   textoPendientes,
   textoProfesores,
 } from './misSecciones'
-import { RUTA_SECCIONES_AYUDANTE } from './SeccionesAyudante'
-import { useDatos } from './useDatos'
 import { useDeSecciones } from './useDeSecciones'
+import { useMisSecciones } from '../layout/secciones-contexto'
 
 // Sección normalizada: el profesor trae horario y alumnos; el ayudante, solo
 // el curso (su horario sale del resumen de cada sección).
@@ -73,23 +56,15 @@ const fechaCorta = (iso: string) =>
     year: 'numeric',
   })
 
-const ACCESOS: { vista: string; etiqueta: string; icono: LucideIcon }[] = [
-  { vista: 'anuncios', etiqueta: 'Anuncios', icono: Megaphone },
-  { vista: 'material', etiqueta: 'Material', icono: FolderOpen },
-  { vista: 'entregas', etiqueta: 'Entregas', icono: Inbox },
-  { vista: 'notas', etiqueta: 'Notas', icono: ClipboardList },
-  { vista: 'asistencia', etiqueta: 'Asistencia', icono: CalendarCheck },
-  { vista: 'integrantes', etiqueta: 'Integrantes', icono: Users },
-]
-
 // Dashboard del Profesor (ESP-01) y del Ayudante (ESP-02): un panel de
 // trabajo con lo que sigue (por revisar, próximas fechas, horario de la
 // semana, actividad reciente) y las tarjetas de sus cursos con accesos a sus
 // pestañas. Cada bloque carga y falla por separado.
 export function DashboardDocente({ rol }: { rol: 'PROFESOR' | 'AYUDANTE' }) {
   const esProfesor = rol === 'PROFESOR'
-  const [datos, recargar] = useDatos<(SeccionDashboard | SeccionAyudante)[]>(
-    esProfesor ? RUTA_MIS_SECCIONES : RUTA_SECCIONES_AYUDANTE,
+  // Las mismas secciones que lista el menú lateral (una sola carga).
+  const [datos, recargar] = useMisSecciones<SeccionDashboard | SeccionAyudante>(
+    true,
   )
   const secciones = useMemo<Seccion[] | null | undefined>(
     () =>
@@ -269,14 +244,21 @@ function TarjetasCurso({
     >
       {secciones.map((s) => (
         <li key={s.id} className="min-w-0">
-          <Card className="h-full gap-0 overflow-hidden py-0">
+          {/* La tarjeta entera lleva al Home del curso: el enlace del nombre
+              se estira sobre toda la tarjeta (after:inset-0). El aviso de
+              pendientes es otro enlace, por encima. */}
+          <Card className="relative h-full gap-0 overflow-hidden py-0 transition-colors hover:border-primary/50 has-[a[data-tarjeta]:focus-visible]:ring-2 has-[a[data-tarjeta]:focus-visible]:ring-ring/70">
             <CardHeader className="gap-1 border-b bg-primary/10 px-5 py-4">
               <span className="text-xs font-semibold text-primary tabular-nums">
                 {s.curso.codigo} · Sección {s.numero}
               </span>
               <h3 className="m-0 text-base font-semibold break-words">
-                <Link to={rutaSeccion(s.id)} className={ENLACE}>
-                  <span className="text-foreground">{s.curso.nombre}</span>
+                <Link
+                  to={rutaSeccion(s.id)}
+                  data-tarjeta
+                  className="text-foreground no-underline after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+                >
+                  {s.curso.nombre}
                 </Link>
               </h3>
             </CardHeader>
@@ -306,38 +288,15 @@ function TarjetasCurso({
                 ))}
               {s.pendientesRevision > 0 && (
                 <Badge
+                  asChild
                   variant="secondary"
-                  className="max-w-full whitespace-normal"
+                  className="relative z-10 max-w-full whitespace-normal hover:bg-secondary/70"
                 >
-                  {textoPendientes(s.pendientesRevision)}
+                  <Link to={RUTA_PAGINA_PENDIENTES}>
+                    {textoPendientes(s.pendientesRevision)}
+                  </Link>
                 </Badge>
               )}
-              <div
-                role="group"
-                aria-label={`Accesos de ${s.curso.codigo}`}
-                className="flex flex-wrap gap-1.5 border-t border-border pt-3"
-              >
-                {ACCESOS.map(({ vista, etiqueta, icono: Icono }) => (
-                  <Tooltip key={vista}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="icon"
-                        className="size-9"
-                      >
-                        <Link
-                          to={rutaSeccion(s.id, vista)}
-                          aria-label={`${etiqueta} de ${s.curso.codigo}`}
-                        >
-                          <Icono aria-hidden="true" />
-                        </Link>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{etiqueta}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </li>
