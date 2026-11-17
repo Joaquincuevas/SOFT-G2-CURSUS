@@ -16,6 +16,7 @@ import {
   renovarToken,
   SESION_CERRADA,
   LoginLimitado,
+  usuarioDelToken,
 } from './auth'
 
 interface Props {
@@ -28,6 +29,10 @@ export function AuthProvider({ children, initialToken = null }: Props) {
   const [token, setToken] = useState<string | null>(initialToken)
   const [restaurando, setRestaurando] = useState(initialToken === null)
   const [aviso, setAviso] = useState<string | null>(null)
+  const [cierreVoluntario, setCierreVoluntario] = useState(false)
+  const [mismoUsuario, setMismoUsuario] = useState(true)
+  // Cuenta de la última sesión, para saber si quien entra es otra.
+  const ultimoUsuario = useRef(usuarioDelToken(initialToken))
   // JWT vigente, que cambia al renovar sin volver a renderizar.
   const vigente = useRef(initialToken)
   const generacion = useRef(0)
@@ -46,6 +51,12 @@ export function AuthProvider({ children, initialToken = null }: Props) {
     localStorage.removeItem(SESION_CERRADA)
     vigente.current = nuevo
     setAviso(null)
+    setCierreVoluntario(false)
+    const usuario = usuarioDelToken(nuevo)
+    setMismoUsuario(
+      !ultimoUsuario.current || !usuario || ultimoUsuario.current === usuario,
+    )
+    if (usuario) ultimoUsuario.current = usuario
     setToken(nuevo)
   }, [])
 
@@ -72,6 +83,7 @@ export function AuthProvider({ children, initialToken = null }: Props) {
     localStorage.setItem(SESION_CERRADA, '1')
     vigente.current = null
     setAviso(motivo ?? null)
+    setCierreVoluntario(!motivo)
     setToken(null)
     setRestaurando(false)
     navegar.current('/login', { replace: true })
@@ -87,6 +99,7 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       setToken(null)
       setRestaurando(false)
       setAviso(null)
+      setCierreVoluntario(true)
       navegar.current('/login', { replace: true })
     }
     window.addEventListener('storage', alCerrarEnOtraPestana)
@@ -128,6 +141,8 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       token,
       restaurando,
       aviso,
+      cierreVoluntario,
+      mismoUsuario,
       iniciarSesion: async (correo: string, password: string) => {
         await cierreEnCurso.current
         const version = ++generacion.current
@@ -165,7 +180,16 @@ export function AuthProvider({ children, initialToken = null }: Props) {
       cerrarSesion,
       fetchConSesion,
     }),
-    [token, restaurando, aviso, empezar, cerrarSesion, fetchConSesion],
+    [
+      token,
+      restaurando,
+      aviso,
+      cierreVoluntario,
+      mismoUsuario,
+      empezar,
+      cerrarSesion,
+      fetchConSesion,
+    ],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>
