@@ -126,7 +126,9 @@ describe('breadcrumb', () => {
       ).getByRole('link', { name: 'Mis Cursos' }),
     )
     expect(titulo()).toHaveTextContent('Mis Cursos')
-    const camino = within(screen.getByRole('navigation', { name: 'Ubicación' }))
+    const camino = within(
+      screen.getByRole('navigation', { name: 'Breadcrumb' }),
+    )
     expect(camino.getByRole('link', { name: 'Inicio' })).toHaveAttribute(
       'href',
       '/',
@@ -140,7 +142,7 @@ describe('breadcrumb', () => {
 
     fireEvent.click(camino.getByRole('link', { name: 'Inicio' }))
     expect(titulo()).toHaveTextContent('Bienvenido/a, Alumno Norte')
-    expect(screen.queryByRole('navigation', { name: 'Ubicación' })).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 
   test('el Administrativo ve Gestión académica', async () => {
