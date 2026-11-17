@@ -535,13 +535,23 @@ describe('layout de curso (UIX-04)', () => {
     ).toEqual(['ICC101 · Sección 1', 'ICC201 · Sección 2'])
     expect(selector).toHaveValue('seccion-1')
     fireEvent.change(selector, { target: { value: 'seccion-2' } })
+    // Con la máquina cargada (CI) el cambio de sección tarda más del segundo
+    // que espera Testing Library por defecto.
     expect(
-      await screen.findByRole('heading', {
-        level: 1,
-        name: 'ICC201 · Sección 2',
-      }),
+      await screen.findByRole(
+        'heading',
+        { level: 1, name: 'ICC201 · Sección 2' },
+        { timeout: 5000 },
+      ),
     ).toBeInTheDocument()
-    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
+    await waitFor(
+      async () =>
+        expect(await pestana('Anuncios')).toHaveAttribute(
+          'aria-current',
+          'page',
+        ),
+      { timeout: 5000 },
+    )
   })
 
   test('dentro de una sección «Mis Cursos» no se marca junto al ítem activo del curso', async () => {
