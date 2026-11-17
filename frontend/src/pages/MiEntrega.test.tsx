@@ -445,13 +445,16 @@ describe('ficha de la actividad (UI)', () => {
     expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
   })
 
-  test('al llegar el plazo, con la página abierta, pasa a cerrada sin recargar y vuelve a pedir el estado', async () => {
-    // El reloj avanza solo, para que los esperas de la prueba sigan andando, y
+  test('al llegar el plazo, con la página abierta, la cuenta regresiva avanza y el servidor decide el cierre', async () => {
+    // El reloj avanza solo, para que las esperas de la prueba sigan andando, y
     // se adelanta a mano al pasar el plazo.
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
+      let cerradaEnServidor = false
       const entregas = vi.fn((init?: RequestInit) =>
-        init?.method === 'PUT' ? CONFIRMADA : { entrega: null, cerrada: false },
+        init?.method === 'PUT'
+          ? CONFIRMADA
+          : { entrega: null, cerrada: cerradaEnServidor },
       )
       const panel = await abrir(
         { [ENTREGA]: entregas },
@@ -470,25 +473,58 @@ describe('ficha de la actividad (UI)', () => {
       expect(ficha.getByText('Vence en 1 minuto').className).toContain(
         'text-destructive',
       )
-      // Pasa el plazo: sin recargar, el formulario desaparece.
+      // Llega el plazo: vuelve a pedir el estado al servidor, que ya cerró, y
+      // sin recargar el formulario desaparece.
+      cerradaEnServidor = true
       await act(async () => {
         vi.advanceTimersByTime(91_000)
       })
+      await waitFor(() =>
+        expect(entregas.mock.calls.length).toBeGreaterThan(pedidasAntes),
+      )
       expect(await ficha.findByText('Cerrada')).toBeInTheDocument()
       expect(ficha.getByText(/Venció hace/)).toHaveClass('text-destructive')
       expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
       expect(
         panel.queryByRole('button', { name: /Entregar|Reemplazar/ }),
       ).toBeNull()
-      expect(
-        panel.getByText(
-          /No se aceptan nuevas entregas ni reemplazos|No entregaste tu informe/,
-        ),
-      ).toBeVisible()
-      // Y revalida el estado con el servidor.
-      await waitFor(() =>
-        expect(entregas.mock.calls.length).toBeGreaterThan(pedidasAntes),
+      expect(panel.getByText(/No entregaste tu informe/)).toBeVisible()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('con el reloj del navegador adelantado, el alumno puede entregar mientras el servidor diga que sigue abierta', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      // Para el servidor faltan 60 s; el navegador va 10 minutos adelantado.
+      const plazo = dentroDe(60_000)
+      vi.setSystemTime(Date.now() + 10 * 60_000)
+      const panel = await abrir(
+        {
+          [ENTREGA]: (init) =>
+            init?.method === 'PUT'
+              ? CONFIRMADA
+              : { entrega: null, cerrada: false },
+        },
+        { ...ACTIVIDAD, plazo },
       )
+      const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+      // Según el reloj local el plazo pasó, pero no se dice «venció» ni se
+      // cierra: manda el servidor.
+      expect(ficha.getByText('Abierta')).toBeInTheDocument()
+      expect(ficha.getByText('Vence ahora')).toBeInTheDocument()
+      expect(ficha.queryByText(/Venció hace/)).toBeNull()
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+
+      await act(async () => {
+        vi.advanceTimersByTime(35_000)
+      })
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+
+      elegir(panel)
+      fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
+      expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
