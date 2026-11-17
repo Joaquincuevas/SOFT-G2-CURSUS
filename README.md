@@ -171,6 +171,61 @@ npm run format:check   # solo verifica
 
 `shared` se compila automáticamente después de `npm install`. Si cambias algo en `shared/src`, recompílalo con `npm run build --workspace=shared` para que frontend y backend vean los cambios.
 
+## Tests y cobertura
+
+Los tests usan [Vitest](https://vitest.dev) y la cobertura se mide con su librería oficial, [`@vitest/coverage-v8`](https://vitest.dev/guide/coverage), que usa el contador de cobertura del motor de Node (V8).
+
+### Correr los tests
+
+Desde la raíz del repo, con las dependencias instaladas (`npm install`):
+
+```bash
+npm run test                            # unitarios de backend y frontend (no necesitan Docker)
+npm run test:e2e --workspace=backend    # end-to-end de la API: cabeceras, validación y permisos
+npm run test:db --workspace=backend     # contra PostgreSQL: schema, RLS, triggers y servicios
+```
+
+`test:db` necesita la base local levantada (`docker compose up -d`, ver "Base de datos local"). Crea y borra sus propias bases de prueba, así que no toca tus datos de desarrollo. El CI corre los tres en cada PR.
+
+### Obtener la cobertura
+
+```bash
+docker compose up -d     # la cobertura del backend incluye los tests de base de datos
+npm run test:cov
+```
+
+`test:cov` corre la cobertura de cada workspace (`npm run test:cov --workspace=backend` o `--workspace=frontend` para uno solo) y deja:
+
+- **En la terminal:** una tabla por archivo y un resumen. El dato a reportar es la fila **All files**.
+- **Un reporte HTML navegable** en `backend/coverage/index.html` y `frontend/coverage/index.html`, que marca en verde y rojo las líneas que se ejecutaron y las que no. La carpeta `coverage/` está en `.gitignore`.
+
+Cada workspace exige un mínimo de **95 % de líneas y de instrucciones** (`thresholds` en [backend/vitest.config.cov.ts](backend/vitest.config.cov.ts) y [frontend/vite.config.ts](frontend/vite.config.ts)): si la cobertura baja de eso, `test:cov` termina con error.
+
+**Qué mide cada número.** La tabla muestra cuatro métricas:
+
+| Métrica    | Qué cuenta                                                                 |
+| ---------- | -------------------------------------------------------------------------- |
+| Lines      | Líneas de código que se ejecutaron durante los tests                       |
+| Statements | Instrucciones ejecutadas (una línea puede tener varias)                    |
+| Functions  | Funciones que se llamaron al menos una vez                                 |
+| Branches   | Caminos de cada condición (`if`, `? :`, `&&`) que se probaron, uno por uno |
+
+La cobertura del proyecto se reporta como **líneas e instrucciones**, que es el criterio habitual. Branches es la métrica más exigente: una línea con un `if` cuenta como cubierta aunque solo se haya probado uno de sus caminos.
+
+**Qué se mide.**
+
+- **Backend:** todos sus tests juntos (unitarios, end-to-end y de base de datos), porque gran parte de la lógica se prueba contra PostgreSQL. Se excluyen `src/main.ts` y `src/database/ejecutar-*.ts`, los puntos de entrada que corren como procesos aparte (la API y los comandos `seed` y `superadmin`): la cobertura no puede verlos, y su lógica está en módulos que sí se miden.
+- **Frontend:** todo `src/`, salvo los tests, `src/test/` (utilidades de los tests), `src/components/ui/` (componentes generados por shadcn, código de la librería copiado al repo) y `src/main.tsx` (solo monta la aplicación).
+
+**Resultado actual:**
+
+| Workspace | Lines  | Statements | Functions | Branches |
+| --------- | ------ | ---------- | --------- | -------- |
+| backend   | 97,0 % | 95,9 %     | 99,1 %    | 85,9 %   |
+| frontend  | 96,5 % | 95,1 %     | 94,6 %    | 91,5 %   |
+
+En Windows, algunos tests del frontend pueden superar el tiempo límite por la lentitud del sistema de archivos. Si pasa, córrelos en WSL con el repo clonado dentro de Linux (no en `/mnt/c`).
+
 ## Entornos en AWS
 
 Hay dos entornos en AWS (región Ohio, `us-east-2`), cada uno con su propio stack, base de datos y secretos:
