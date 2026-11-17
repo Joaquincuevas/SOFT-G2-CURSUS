@@ -36,7 +36,7 @@ export default defineConfig({
         'src/main.tsx',
       ],
       reporter: ['text', 'text-summary', 'json-summary', 'json', 'html'],
-      thresholds: { lines: 95, statements: 95 },
+      thresholds: { lines: 95, statements: 95, functions: 95 },
     },
   },
 })

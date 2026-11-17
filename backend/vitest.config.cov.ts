@@ -26,7 +26,7 @@ export default defineConfig({
         'src/database/ejecutar-*.ts',
       ],
       reporter: ['text', 'text-summary', 'json-summary', 'html'],
-      thresholds: { lines: 95, statements: 95 },
+      thresholds: { lines: 95, statements: 95, functions: 95 },
     },
   },
 })
