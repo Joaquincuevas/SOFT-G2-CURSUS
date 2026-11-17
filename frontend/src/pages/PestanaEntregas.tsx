@@ -53,12 +53,9 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { formatearFecha } from '@/lib/fechas'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 // Lo usan las actividades del alumno y su entrega (MiEntrega).
-import './PestanaEntregas.css'
 import { useDatos } from './useDatos'
-import { MiEntrega } from './MiEntrega'
+import { TarjetaActividad } from './MiEntrega'
 import {
   fechasLegibles,
   horaMinima,
@@ -286,42 +283,46 @@ function ActividadesAlumno({
   actividades: Actividad[] | null | undefined
   recargar: () => void
 }) {
+  // Primero las abiertas, de la que vence antes a la que vence después; las
+  // cerradas al final, de la más reciente a la más antigua.
+  const ordenadas = actividades
+    ? [...actividades].sort((a, b) =>
+        a.cerrada !== b.cerrada
+          ? Number(a.cerrada) - Number(b.cerrada)
+          : a.cerrada
+            ? b.plazo.localeCompare(a.plazo)
+            : a.plazo.localeCompare(b.plazo),
+      )
+    : actividades
   return (
-    <section className="entregas" aria-label="Actividades de entrega">
-      <h3 className="vista-seccion__subtitulo">Actividades de entrega</h3>
-      {actividades === undefined ? (
-        <Cargando texto="Cargando actividades…" />
-      ) : actividades === null ? (
-        <ErrorEstado
+    <section className="grid min-w-0 gap-4" aria-label="Actividades de entrega">
+      <h3 className="m-0 text-lg font-semibold text-foreground">
+        Actividades de entrega
+      </h3>
+      {ordenadas === undefined ? (
+        <div role="status" className="grid gap-3">
+          <span className="sr-only">Cargando actividades…</span>
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+        </div>
+      ) : ordenadas === null ? (
+        <ErrorState
           mensaje="No pudimos cargar las actividades."
           onReintentar={recargar}
         />
-      ) : actividades.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay actividades de entrega</p>
+      ) : ordenadas.length === 0 ? (
+        <Card className="py-0">
+          <EmptyState
+            icono={Inbox}
+            mensaje="Aún no hay actividades de entrega"
+          />
+        </Card>
       ) : (
-        <ul className="entregas__lista" aria-label="Actividades">
-          {actividades.map((actividad) => (
-            <li key={actividad.id} className="entregas__actividad">
+        <ul className="m-0 grid list-none gap-4 p-0" aria-label="Actividades">
+          {ordenadas.map((actividad) => (
+            <li key={actividad.id} className="min-w-0">
               <article aria-label={actividad.titulo}>
-                <div className="entregas__encabezado">
-                  <h4 className="entregas__titulo">{actividad.titulo}</h4>
-                  <span
-                    className={`entregas__estado ${
-                      actividad.cerrada
-                        ? 'entregas__estado--cerrada'
-                        : 'entregas__estado--abierta'
-                    }`}
-                  >
-                    {actividad.cerrada ? 'Cerrada' : 'Abierta'}
-                  </span>
-                </div>
-                <p className="entregas__plazo">
-                  Plazo: {fechaHora(actividad.plazo)}
-                </p>
-                <p className="entregas__instrucciones">
-                  {actividad.instrucciones}
-                </p>
-                <MiEntrega
+                <TarjetaActividad
                   key={`${seccionId}-${actividad.id}`}
                   ruta={`${ruta}/${actividad.id}`}
                   actividad={actividad}
