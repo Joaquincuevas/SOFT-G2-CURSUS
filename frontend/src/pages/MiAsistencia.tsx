@@ -1,4 +1,7 @@
 import type { ResumenAsistenciaPropia } from '@cursus/shared'
+import { CalendarCheck } from 'lucide-react'
+import { EmptyState } from '@/components/shared'
+import { Card } from '@/components/ui/card'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
@@ -41,7 +44,12 @@ export function MiAsistencia({ seccionId }: { seccionId: string }) {
         Actualizar asistencia
       </button>
       {datos.clases.length === 0 ? (
-        <p>Aún no tienes marcas de asistencia registradas.</p>
+        <Card className="py-0">
+          <EmptyState
+            icono={CalendarCheck}
+            mensaje="Aún no tienes marcas de asistencia registradas."
+          />
+        </Card>
       ) : (
         <table
           className="asistencia__tabla"
