@@ -35,7 +35,7 @@ import { PestanaNotas } from './PestanaNotas'
 import { PestanaAnuncios } from './PestanaAnuncios'
 import { PestanaEntregas } from './PestanaEntregas'
 import { SilaboDelCurso } from './SilaboDelCurso'
-import { IntegrantesAlumno } from './IntegrantesAlumno'
+import { AcademicosSeccion } from './AcademicosSeccion'
 import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
 
@@ -151,7 +151,7 @@ export function VistaSeccion() {
 
       <div className="min-w-0">
         {vista === 'home' && (
-          <div role="region" aria-label={etiquetaDe(vista)}>
+          <div role="region" aria-label={etiquetaDe(vista, rol)}>
             <HomeDeLaSeccion
               seccion={seccion}
               seccionId={id}
@@ -162,7 +162,7 @@ export function VistaSeccion() {
         {Contenido && (
           <div
             role="region"
-            aria-label={etiquetaDe(vista)}
+            aria-label={etiquetaDe(vista, rol)}
             className="grid gap-6"
           >
             {/* Al alumno, el sílabo vigente también junto al material. El
@@ -188,20 +188,20 @@ export function VistaSeccion() {
         {vista === 'integrantes' && (
           <div
             role="region"
-            aria-label={etiquetaDe(vista)}
+            aria-label={etiquetaDe(vista, rol)}
             className="grid gap-6"
           >
-            {rol === 'ALUMNO' ? (
-              <IntegrantesAlumno seccion={seccion} />
-            ) : (
+            {rol === 'PROFESOR' ? (
               <Card className="gap-3 p-5">
                 <EquipoDocente seccion={seccion} />
               </Card>
+            ) : (
+              <AcademicosSeccion seccion={seccion} />
             )}
             {rol === 'AYUDANTE' && (
               <Alert variant="info" role="note">
                 <Users aria-hidden="true" />
-                <AlertTitle>Integrantes en solo lectura</AlertTitle>
+                <AlertTitle>Solo equipo docente</AlertTitle>
                 <AlertDescription>
                   Puedes consultar el equipo docente. La nómina de alumnos está
                   disponible para el profesor.
