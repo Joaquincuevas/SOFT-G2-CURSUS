@@ -64,7 +64,7 @@ describe('ESP-03: dashboard del alumno', () => {
       '/api/espacio/secciones/seccion-1/anuncios/lecturas': () => pendiente,
     })
     fireEvent.click((await tarjetas())[0])
-    fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Anuncios' }))
     await screen.findByText('Nuevo')
     fireEvent.click(
       within(screen.getByRole('banner')).getByRole('link', { name: 'Inicio' }),
@@ -110,7 +110,7 @@ describe('ESP-03: dashboard del alumno', () => {
     fireEvent.click((await tarjetas())[0])
     await screen.findByRole('region', { name: 'Vista del curso' })
     expect(marcas).toBe(0)
-    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Anuncios' }))
     await screen.findByText('Nuevo')
     await waitFor(() => expect(marcas).toBe(1))
     fireEvent.click(
@@ -118,7 +118,7 @@ describe('ESP-03: dashboard del alumno', () => {
     )
     expect((await tarjetas())[0]).toHaveTextContent('0 anuncios nuevos')
     fireEvent.click((await tarjetas())[0])
-    fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Anuncios' }))
     await screen.findByText('Nuevo aviso')
     expect(screen.queryByText('Nuevo', { exact: true })).toBeNull()
     expect(marcas).toBe(1)

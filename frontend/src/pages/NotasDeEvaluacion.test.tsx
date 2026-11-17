@@ -96,8 +96,8 @@ async function abrirNotas(
     [NOTAS]: notas,
     ...(envio && { [`${NOTAS}/envio`]: envio }),
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
-  const panel = within(screen.getByRole('tabpanel', { name: 'Notas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
+  const panel = within(screen.getByRole('region', { name: 'Notas' }))
   await panel.findByRole('table')
   return panel
 }

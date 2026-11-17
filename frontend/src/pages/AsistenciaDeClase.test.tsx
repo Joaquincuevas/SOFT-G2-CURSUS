@@ -68,8 +68,8 @@ async function abrir(
     [ASISTENCIA]: asistencia,
     ...extras,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
-  const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
+  const panel = within(screen.getByRole('region', { name: 'Asistencia' }))
   fireEvent.click(
     await panel.findByRole('button', {
       name: 'Asistencia del 2026-09-14 a las 08:30',
@@ -773,19 +773,19 @@ describe('ASI-04: corrección de marcas', () => {
         porcentaje: presente ? 100 : 0,
       }),
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
-    const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
+    const panel = within(screen.getByRole('region', { name: 'Asistencia' }))
     expect(await panel.findByText('Presente')).toBeInTheDocument()
     expect(panel.queryByText('Bruno Díaz')).not.toBeInTheDocument()
     expect(
       panel.queryByRole('button', { name: /Corregir/ }),
     ).not.toBeInTheDocument()
     presente = false
-    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Asistencia' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Anuncios' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Asistencia' }))
     expect(
       await within(
-        screen.getByRole('tabpanel', { name: 'Asistencia' }),
+        screen.getByRole('region', { name: 'Asistencia' }),
       ).findByText('Ausente'),
     ).toBeInTheDocument()
   })
@@ -805,7 +805,7 @@ describe('ASI-04: corrección de marcas', () => {
               porcentaje: null,
             },
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
     expect(
       await screen.findByText('No pudimos cargar tu asistencia.'),
     ).toBeInTheDocument()

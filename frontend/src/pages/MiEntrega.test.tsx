@@ -75,7 +75,7 @@ async function abrir(
     [S3]: () => new Response(null, { status: 204 }),
     ...rutas,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Entregas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Entregas' }))
   const panel = within(
     // El alumno ve una ficha por actividad; el equipo docente, una tabla.
     await screen.findByRole(rol === 'ALUMNO' ? 'article' : 'row', {

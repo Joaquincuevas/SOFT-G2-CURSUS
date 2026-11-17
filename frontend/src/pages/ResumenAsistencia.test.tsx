@@ -80,8 +80,8 @@ async function abrir(
     [MARCAS]: () => pendiente,
     ...extras,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
-  return within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
+  return within(screen.getByRole('region', { name: 'Asistencia' }))
 }
 const nombresDe = (tabla: HTMLElement) =>
   within(tabla)
@@ -343,9 +343,9 @@ describe('ASI-05: resumen de asistencia', () => {
     )
     fireEvent.click(panel.getByRole('button', { name: 'Guardar asistencia' }))
     await waitFor(() => expect(terminar).toBeTypeOf('function'))
-    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
-    fireEvent.click(screen.getByRole('tab', { name: 'Asistencia' }))
-    const actual = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Anuncios' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Asistencia' }))
+    const actual = within(screen.getByRole('region', { name: 'Asistencia' }))
     await actual.findByRole('table', { name: 'Porcentaje por alumno' })
     expect(actual.getAllByText('Sin registros')).toHaveLength(2)
     guardo = true

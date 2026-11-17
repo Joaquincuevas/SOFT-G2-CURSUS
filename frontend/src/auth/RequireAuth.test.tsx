@@ -39,7 +39,10 @@ describe('inicio de sesión', () => {
     enviarLogin('profesor@norte.cursus.test', 'cursus_demo')
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido/a, Profesor Norte',
+      }),
     ).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith(
       '/api/auth/login',

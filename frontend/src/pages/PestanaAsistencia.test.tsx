@@ -66,8 +66,8 @@ async function abrirAsistencia(
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, ...resumen, rol }),
     [CLASES]: clases,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
-  return within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
+  return within(screen.getByRole('region', { name: 'Asistencia' }))
 }
 
 const elegirFecha = (panel: ReturnType<typeof within>, fecha: string) =>
@@ -89,7 +89,7 @@ describe('pestaña Asistencia (ASI-01)', () => {
         alumnos: [{ id: 'a1', nombre: 'Ana', presente: true }],
       }),
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
     expect(screen.getByText(/Curso cerrado/)).toBeVisible()
     expect(screen.queryByRole('form', { name: 'Nueva clase' })).toBeNull()
     fireEvent.click(
@@ -221,8 +221,8 @@ describe('pestaña Asistencia (ASI-01)', () => {
         ++pedidos === 2 ? json({}, 500) : { ...RESUMEN, rol: 'PROFESOR' },
       [CLASES]: () => LISTA,
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
-    const panel = within(screen.getByRole('tabpanel', { name: 'Asistencia' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
+    const panel = within(screen.getByRole('region', { name: 'Asistencia' }))
 
     expect(
       await panel.findByText('No pudimos cargar el horario de la sección.'),

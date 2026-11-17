@@ -42,12 +42,12 @@ async function abrirNotas(
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     [EVALUACIONES]: evaluaciones,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
-  expect(screen.getByRole('tab', { name: 'Notas' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
+  expect(screen.getByRole('link', { name: 'Notas' })).toHaveAttribute(
+    'aria-current',
+    'page',
   )
-  return { panel: within(screen.getByRole('tabpanel', { name: 'Notas' })) }
+  return { panel: within(screen.getByRole('region', { name: 'Notas' })) }
 }
 
 describe('pestaña Notas (NOT-01)', () => {
@@ -62,7 +62,7 @@ describe('pestaña Notas (NOT-01)', () => {
         alumnos: [{ id: 'a1', nombre: 'Ana', nota: 5.5, estado: 'PUBLICADA' }],
       }),
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
     expect(screen.getByText(/Curso cerrado/)).toBeInTheDocument()
     expect(
       await screen.findByRole('button', {
@@ -289,7 +289,7 @@ describe('historial de una nota (NOT-16)', () => {
         return intentoBruno++ === 0 ? json({}, 503) : { eventos: [] }
       },
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
     const abrir = await screen.findByRole('button', {
       name: 'Historial de notas de Control 1',
     })
@@ -364,7 +364,7 @@ describe('NOT-03: edición de evaluaciones', () => {
       [EVALUACIONES]: listar,
       [EDICION]: guardar,
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
     fireEvent.click(
       await screen.findByRole('button', { name: 'Editar Control 1' }),
     )

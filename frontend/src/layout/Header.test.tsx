@@ -179,9 +179,13 @@ describe('breadcrumb', () => {
       }),
     })
     const header = within(screen.getByRole('banner'))
-    expect(await header.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'ICC101 · Sección 2',
-    )
+    // Espera el título final: antes de que llegue el resumen dice «Sección».
+    expect(
+      await header.findByRole('heading', {
+        level: 1,
+        name: 'ICC101 · Sección 2',
+      }),
+    ).toBeInTheDocument()
     expect(header.getByRole('link', { name: 'Inicio' })).toHaveAttribute(
       'href',
       '/',

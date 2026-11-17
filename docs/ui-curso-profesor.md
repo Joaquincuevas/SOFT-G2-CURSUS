@@ -137,6 +137,19 @@ El Dashboard pasa a ser un panel de trabajo (`DashboardDocente.tsx`), a dos colu
 
 Capturas en [`evidencias/`](evidencias/): `ui-dashboard-docente-<antes|despues>-<profesor|ayudante>-<1280|375>.png`.
 
+## Menú del curso en el menú lateral
+
+Fix de UI, sin tarjeta. En `/mis-cursos/secciones/:id` había dos menús: el lateral (solo «Dashboard») y uno propio del curso dentro del contenido. Ahora el menú lateral muestra, bajo «Dashboard», el bloque del curso y el contenido ocupa todo el ancho.
+
+- **Una sola lista:** `pages/vistasCurso.ts` (`VISTAS_CURSO`, `vistaDe`, `rutaVista`) la usan la vista de la sección (qué mostrar) y el `Sidebar` (los ítems). `navigation.ts` sigue siendo la fuente de la navegación global y no cambia.
+- **Bloque del curso** (`MenuDelCurso` en `Sidebar.tsx`): encabezado con código, nombre y sección, que vuelve al Dashboard, y los ítems Home, Anuncios, Material, Entregas, Notas, Asistencia e Integrantes. El activo sale de `?vista=` (Home sin él). Solo aparece en `/mis-cursos/secciones/:id` y sus subrutas.
+- **Datos del curso:** la vista de la sección registra el curso en un contexto del `AppShell` (`CursoProvider`, como los nombres del breadcrumb) y lo quita al salir.
+- **Contraído** («Contraer menú»): solo íconos, con nombre accesible y tooltip. **Móvil:** el bloque va dentro del panel del menú.
+- **Por rol:** Profesor, Ayudante y Alumno ven los mismos 7 ítems, como antes; el contenido de cada vista sigue según el rol. Sin cambios de permisos ni de `@cursus/shared`.
+- La vista de la sección ya no usa `Tabs`: muestra solo la vista elegida (las URLs `?vista=` no cambian). Cada vista queda como una región con su nombre.
+
+Capturas en [`evidencias/`](evidencias/): `ui-menu-curso-<antes|despues>-<profesor|ayudante|alumno>-<1280|1280-colapsado|375|375-menu>.png`.
+
 ## Evidencias
 
 Capturas antes y después en 1280, 1920 y 375 px de cada pestaña, y de los diálogos (subir material, sílabo, nuevo anuncio, crear actividad, calendario y período terminado), en [`evidencias/`](evidencias/) como `ui-curso-profesor-<antes|despues>-<estado>-<ancho>.png`. Los anuncios, materiales, versiones del sílabo y la actividad se crearon por la aplicación en la base local.
