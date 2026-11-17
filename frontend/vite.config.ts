@@ -20,5 +20,23 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    // Cobertura: npm run test:cov --workspace=frontend.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/*.d.ts',
+        // Utilidades de los tests, no código de la aplicación.
+        'src/test/**',
+        // Componentes generados por shadcn (components.json): son código de
+        // la librería copiado al repo, no lógica del proyecto.
+        'src/components/ui/**',
+        // Punto de entrada: solo monta la aplicación en el navegador.
+        'src/main.tsx',
+      ],
+      reporter: ['text', 'text-summary', 'json-summary', 'json', 'html'],
+      thresholds: { lines: 95, statements: 95, functions: 95 },
+    },
   },
 })

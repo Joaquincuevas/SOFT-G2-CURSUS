@@ -116,6 +116,22 @@ test('lista las fechas sin desfase y el formulario no está en la página', asyn
   ).toBeNull()
 })
 
+test.each([
+  ['Inicio', '01/08/2026'],
+  ['Término', '20/12/2026'],
+  ['Estado', 'Inactivo'],
+])('ordena el listado por %s', async (columna, primera) => {
+  preparar([NUEVO, INICIAL])
+  await screen.findByText('01/08/2026')
+  fireEvent.click(screen.getByRole('button', { name: columna }))
+  expect(screen.getByRole('columnheader', { name: columna })).toHaveAttribute(
+    'aria-sort',
+    'ascending',
+  )
+  const filas = within(screen.getByRole('table')).getAllByRole('row')
+  expect(filas[1]).toHaveTextContent(primera)
+})
+
 test('crea un período inactivo en el diálogo, que se cierra, refresca el listado y avisa', async () => {
   const fetch = preparar([INICIAL])
   await screen.findByText('2026-2')

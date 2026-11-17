@@ -13,6 +13,7 @@
     "dev:back": "npm run dev --workspace=backend",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:cov": "npm run test:cov --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "prepare": "node .husky/install.mjs",
     "format": "prettier --write .",
