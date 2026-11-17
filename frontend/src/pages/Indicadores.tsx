@@ -218,7 +218,7 @@ function FacultadesUniversidad() {
       <Migas
         pasos={[
           { texto: 'Indicadores', a: volver },
-          { texto: datos ? datos.universidad.nombre : 'Universidad' },
+          { texto: datos ? datos.universidad.nombre : null },
         ]}
       />
       <SelectorPeriodo periodo={periodo} />
@@ -471,10 +471,10 @@ function CarrerasFacultad() {
         pasos={[
           { texto: 'Indicadores', a: volverIndicadores },
           {
-            texto: datos ? datos.universidad.nombre : 'Universidad',
+            texto: datos ? datos.universidad.nombre : null,
             a: volverUniversidad,
           },
-          { texto: datos ? datos.facultad.nombre : 'Facultad' },
+          { texto: datos ? datos.facultad.nombre : null },
         ]}
       />
       <SelectorPeriodo periodo={periodo} />
@@ -563,11 +563,11 @@ function CursosCarrera() {
         pasos={[
           { texto: 'Indicadores', a: volverIndicadores },
           {
-            texto: datos?.universidad.nombre ?? 'Universidad',
+            texto: datos?.universidad.nombre ?? null,
             a: universidadRuta,
           },
-          { texto: datos?.facultad.nombre ?? 'Facultad', a: facultadRuta },
-          { texto: datos?.carrera.nombre ?? 'Carrera' },
+          { texto: datos?.facultad.nombre ?? null, a: facultadRuta },
+          { texto: datos?.carrera.nombre ?? null },
         ]}
       />
       <SelectorPeriodo periodo={periodo} />
@@ -643,12 +643,12 @@ function DistribucionCurso() {
         pasos={[
           { texto: 'Indicadores', a: volverIndicadores },
           {
-            texto: datos?.universidad.nombre ?? 'Universidad',
+            texto: datos?.universidad.nombre ?? null,
             a: `/indicadores/universidades/${universidadId}${sufijo}`,
           },
-          { texto: datos?.facultad.nombre ?? 'Facultad', a: facultadRuta },
-          { texto: datos?.carrera.nombre ?? 'Carrera', a: carreraRuta },
-          { texto: datos?.curso.codigo ?? 'Curso' },
+          { texto: datos?.facultad.nombre ?? null, a: facultadRuta },
+          { texto: datos?.carrera.nombre ?? null, a: carreraRuta },
+          { texto: datos?.curso.codigo ?? null },
         ]}
       />
       {datos === undefined ? (

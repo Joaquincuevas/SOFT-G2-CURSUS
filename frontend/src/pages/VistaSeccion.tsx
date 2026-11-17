@@ -19,7 +19,7 @@ import { EmptyState } from '@/components/shared'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useRegistrarCurso } from '../layout/curso-contexto'
-import { useEtiquetaDeMiga } from '../layout/migas-contexto'
+import { useMigas } from '../layout/migas-contexto'
 import {
   etiquetaDeVista as etiquetaDe,
   vistaDe,
@@ -77,9 +77,23 @@ export function VistaSeccion() {
   // para no mezclar su nombre con el id de la que se abrió.
   const seccion = resumen && resumen.id !== id ? undefined : resumen
   const vistaPedida = params.get('vista')
-  // El encabezado nombra la sección en su breadcrumb.
-  useEtiquetaDeMiga(
-    seccion ? `${seccion.curso.codigo} · Sección ${seccion.numero}` : null,
+  // El breadcrumb nombra la sección y, fuera del Home, la vista abierta.
+  const vistaAbierta = vistaDe(vistaPedida)
+  useMigas(
+    seccion
+      ? [
+          {
+            etiqueta: `${seccion.curso.codigo} · Sección ${seccion.numero}`,
+            to:
+              vistaAbierta !== 'home'
+                ? `/mis-cursos/secciones/${id}`
+                : undefined,
+          },
+          ...(vistaAbierta !== 'home'
+            ? [{ etiqueta: etiquetaDe(vistaAbierta) }]
+            : []),
+        ]
+      : null,
   )
   // El menú lateral arma con ella los ítems del curso.
   useRegistrarCurso(

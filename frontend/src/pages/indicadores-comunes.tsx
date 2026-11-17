@@ -1,23 +1,16 @@
 import type { PeriodoDisponible } from '@cursus/shared'
-import { Fragment, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { FormField } from '@/components/shared'
 import { CircleAlert } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb'
 import { Card } from '@/components/ui/card'
 import { NativeSelect } from '@/components/ui/native-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { SIN_DATOS, plural } from './indicadores-formato'
+import { useMigas } from '../layout/migas-contexto'
 import { useDatos } from './useDatos'
 
 // Piezas que comparten el Dashboard del Director y las pantallas de
@@ -149,34 +142,17 @@ export function NoEncontrado({
 }
 
 export interface Miga {
-  texto: string
+  // null mientras el nombre no llega: el encabezado muestra un esqueleto.
+  texto: string | null
   // Sin `a` es la página actual.
   a?: string
 }
 
 // Ruta de navegación dentro de Indicadores: cada paso del drill-down vuelve a
-// su nivel sin perder el período.
+// su nivel sin perder el período. Se muestra en el breadcrumb del encabezado.
 export function Migas({ pasos }: { pasos: Miga[] }) {
-  return (
-    <Breadcrumb aria-label="Ruta de navegación">
-      <BreadcrumbList>
-        {pasos.map((paso, i) => (
-          <Fragment key={`${i}-${paso.texto}`}>
-            {i > 0 && <BreadcrumbSeparator />}
-            <BreadcrumbItem>
-              {paso.a ? (
-                <BreadcrumbLink asChild>
-                  <Link to={paso.a}>{paso.texto}</Link>
-                </BreadcrumbLink>
-              ) : (
-                <BreadcrumbPage>{paso.texto}</BreadcrumbPage>
-              )}
-            </BreadcrumbItem>
-          </Fragment>
-        ))}
-      </BreadcrumbList>
-    </Breadcrumb>
-  )
+  useMigas(pasos.map((paso) => ({ etiqueta: paso.texto, to: paso.a })))
+  return null
 }
 
 // Carga con esqueletos; el texto lo anuncian los lectores de pantalla.
