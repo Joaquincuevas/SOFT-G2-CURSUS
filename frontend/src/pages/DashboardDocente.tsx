@@ -519,11 +519,13 @@ function HorarioSemana({
   return (
     <Card className="py-0">
       <ol className="m-0 grid list-none divide-y divide-border p-0">
-        {DIAS_SEMANA.slice(0, 6).map((nombre, i) => {
+        {DIAS_SEMANA.map((nombre, i) => {
           const dia = i + 1
           const delDia = bloques
             .filter((b) => b.dia === dia)
+            // El domingo solo aparece si tiene bloques.
             .sort((a, b) => a.inicio.localeCompare(b.inicio))
+          if (dia === 7 && delDia.length === 0) return null
           return (
             <li
               key={nombre}

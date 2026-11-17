@@ -254,6 +254,36 @@ describe('dashboard docente: horario de la semana', () => {
       hoy <= 6 ? 1 : 0,
     )
   })
+
+  test('el domingo aparece solo si tiene bloques, con su hora, sala y curso', async () => {
+    await abrir({})
+    const sin = await bloque('Horario de la semana')
+    await sin.findByText('Lunes')
+    expect(sin.queryByText('Domingo')).toBeNull()
+  })
+
+  test('muestra los bloques del domingo', async () => {
+    await abrir({
+      [RUTA]: () => [
+        {
+          ...PROFESOR[0],
+          horario: [
+            { dia: 7, inicio: '10:00', termino: '11:30', sala: 'Sala Dom-1' },
+          ],
+        },
+        PROFESOR[1],
+      ],
+    })
+    const horario = await bloque('Horario de la semana')
+    const domingo = (await horario.findByText('Domingo')).closest('li')!
+    expect(domingo).toHaveTextContent('10:00–11:30 · Sala Dom-1 · ICC101')
+    // Lunes a sábado siguen en su lugar, antes del domingo.
+    expect(
+      horario
+        .getAllByText(/^(Lunes|Sábado|Domingo)/)
+        .map((f) => f.textContent?.replace(' (hoy)', '')),
+    ).toEqual(['Lunes', 'Sábado', 'Domingo'])
+  })
 })
 
 describe('dashboard docente: actividad reciente', () => {

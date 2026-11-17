@@ -128,7 +128,7 @@ El Dashboard pasa a ser un panel de trabajo (`DashboardDocente.tsx`), a dos colu
 - **Por revisar** (solo Profesor): igual que antes, con el conteo y el enlace a `pendientes-revision`.
 - **Mis secciones del período**: tarjetas con alumnos (Profesor) o profesor a cargo (Ayudante), horario y seis accesos con tooltip a las pestañas Anuncios, Material, Entregas, Notas, Asistencia e Integrantes (`?vista=`).
 - **Próximas fechas**: entregas con plazo en los próximos 14 días (sin cerradas), de todas sus secciones, con curso, título, fecha `dd-mm-aaaa` y enlace a la pestaña Entregas.
-- **Horario de la semana**: grilla de lunes a sábado con los bloques de todas sus secciones y el día de hoy destacado.
+- **Horario de la semana**: grilla de lunes a sábado (y el domingo, si tiene bloques) con los bloques de todas sus secciones y el día de hoy destacado.
 - **Actividad reciente**: los últimos 3 anuncios de sus cursos (los de curso se cuentan una vez).
 
 **Datos.** Sin endpoints nuevos: `mis-secciones` / `secciones-ayudante` y, por sección (`useDeSecciones`, en paralelo), `actividades` y `anuncios`; para el horario del Ayudante, el `resumen` de cada sección. No hay endpoints que junten las de todas las secciones, así que son 2 consultas por sección (3 para el Ayudante).
