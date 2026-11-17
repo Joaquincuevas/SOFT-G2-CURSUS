@@ -5,7 +5,7 @@ import type {
   SeccionResumen,
   SubidaArchivo,
 } from '@cursus/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
@@ -443,5 +443,54 @@ describe('ficha de la actividad (UI)', () => {
       panel.getByText(/No se aceptan nuevas entregas ni reemplazos/),
     ).toBeVisible()
     expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+  })
+
+  test('al llegar el plazo, con la página abierta, pasa a cerrada sin recargar y vuelve a pedir el estado', async () => {
+    // El reloj avanza solo, para que los esperas de la prueba sigan andando, y
+    // se adelanta a mano al pasar el plazo.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const entregas = vi.fn((init?: RequestInit) =>
+        init?.method === 'PUT' ? CONFIRMADA : { entrega: null, cerrada: false },
+      )
+      const panel = await abrir(
+        { [ENTREGA]: entregas },
+        { ...ACTIVIDAD, plazo: dentroDe(150_000) },
+      )
+      const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+      expect(ficha.getByText('Abierta')).toBeInTheDocument()
+      expect(ficha.getByText('Vence en 2 minutos')).toBeInTheDocument()
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+      const pedidasAntes = entregas.mock.calls.length
+
+      // Pasa un minuto: la cuenta regresiva se actualiza sola.
+      await act(async () => {
+        vi.advanceTimersByTime(60_000)
+      })
+      expect(ficha.getByText('Vence en 1 minuto').className).toContain(
+        'text-destructive',
+      )
+      // Pasa el plazo: sin recargar, el formulario desaparece.
+      await act(async () => {
+        vi.advanceTimersByTime(91_000)
+      })
+      expect(await ficha.findByText('Cerrada')).toBeInTheDocument()
+      expect(ficha.getByText(/Venció hace/)).toHaveClass('text-destructive')
+      expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+      expect(
+        panel.queryByRole('button', { name: /Entregar|Reemplazar/ }),
+      ).toBeNull()
+      expect(
+        panel.getByText(
+          /No se aceptan nuevas entregas ni reemplazos|No entregaste tu informe/,
+        ),
+      ).toBeVisible()
+      // Y revalida el estado con el servidor.
+      await waitFor(() =>
+        expect(entregas.mock.calls.length).toBeGreaterThan(pedidasAntes),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
