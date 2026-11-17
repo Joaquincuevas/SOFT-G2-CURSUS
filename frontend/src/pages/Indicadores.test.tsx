@@ -1021,6 +1021,90 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toHaveAttribute('href', '/indicadores')
   })
 
+  // El esqueleto del breadcrumb es solo para la consulta pendiente: si falla o
+  // el período no vale, queda una etiqueta de respaldo y no «Cargando…».
+  const NIVELES = [
+    [
+      'universidad',
+      '/indicadores/universidades/u-norte',
+      ['Inicio', 'Indicadores', 'Universidad'],
+    ],
+    [
+      'facultad',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad'],
+    ],
+    [
+      'carrera',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad', 'Carrera'],
+    ],
+    [
+      'curso',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad', 'Carrera', 'Curso'],
+    ],
+  ] as const
+  // Pasos visibles y los del menú «…» si la ruta es larga.
+  const textoDelCamino = async () => {
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    const visibles = within(nav)
+      .getAllByRole('listitem')
+      // El «…» también es un ítem de la lista.
+      .filter((li) => !li.querySelector('button'))
+      .map((li) => li.textContent)
+    const ocultos = within(nav).queryByRole('button', {
+      name: 'Ver los pasos intermedios',
+    })
+    if (ocultos) {
+      fireEvent.keyDown(ocultos, { key: 'Enter' })
+      const menu = within(await screen.findByRole('menu'))
+      return [
+        visibles[0],
+        ...menu.getAllByRole('menuitem').map((m) => m.textContent),
+        ...visibles.slice(1),
+      ]
+    }
+    return visibles
+  }
+
+  test('mientras la consulta está pendiente el breadcrumb muestra un esqueleto', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [FACULTADES]: () => new Promise(() => {}),
+    })
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(nav).getByRole('status')).toHaveTextContent('Cargando…')
+  })
+
+  test.each(NIVELES)(
+    'si la consulta falla (%s), el breadcrumb usa la etiqueta de respaldo',
+    async (_nivel, ruta, camino) => {
+      await renderConSesion('DIRECTOR', ruta, {
+        [FACULTADES]: () => json({}, 500),
+        '/api/metricas/facultades/f-ing/carreras': () => json({}, 500),
+        '/api/metricas/carreras/c-ing/cursos': () => json({}, 500),
+        [DISTRIBUCION_RUTA]: () => json({}, 500),
+      })
+      await screen.findByRole('button', { name: 'Reintentar' })
+      const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+      await waitFor(() => expect(within(nav).queryByRole('status')).toBeNull())
+      expect(await textoDelCamino()).toEqual(camino)
+    },
+  )
+
+  test.each(NIVELES)(
+    'con un período inválido (%s), el breadcrumb usa la etiqueta de respaldo',
+    async (_nivel, ruta, camino) => {
+      await renderConSesion('DIRECTOR', `${ruta}?periodo=activo`, {})
+      expect(
+        await screen.findByText(/El período «activo» no es válido/),
+      ).toBeInTheDocument()
+      const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+      expect(within(nav).queryByRole('status')).toBeNull()
+      expect(await textoDelCamino()).toEqual(camino)
+    },
+  )
+
   // Solo el Director: otro rol que escribe la URL no llega a la vista ni la
   // pide a la API.
   test.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO'])(
