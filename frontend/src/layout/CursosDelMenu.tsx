@@ -154,6 +154,9 @@ export function CursosDelMenu({
                 onAlternar={() =>
                   setElegido(abierto === curso.id ? null : curso.id)
                 }
+                // El nombre lleva al Home y abre ese curso, aunque ya sea el
+                // de la ruta (y la ruta no cambie de sección).
+                onAbrir={() => setElegido(curso.id)}
                 vista={vista}
                 rol={user.rol}
                 onNavigate={onNavigate}
@@ -214,6 +217,7 @@ function CursoDelMenu({
   actual,
   abierto,
   onAlternar,
+  onAbrir,
   vista,
   rol,
   onNavigate,
@@ -222,6 +226,7 @@ function CursoDelMenu({
   actual: boolean
   abierto: boolean
   onAlternar: () => void
+  onAbrir: () => void
   vista: VistaId
   rol: string
   onNavigate?: () => void
@@ -237,7 +242,10 @@ function CursoDelMenu({
       >
         <Link
           to={rutaSeccion(curso.id)}
-          onClick={onNavigate}
+          onClick={() => {
+            onAbrir()
+            onNavigate?.()
+          }}
           // El nombre se corta si no cabe: completo al pasar el mouse.
           title={`${curso.codigo} · ${curso.nombre}`}
           className="grid min-w-0 flex-1 gap-0.5 rounded-md px-3 py-2 no-underline hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none"
