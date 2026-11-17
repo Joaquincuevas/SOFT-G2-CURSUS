@@ -1,7 +1,14 @@
 import type { SeccionDashboard, SeccionResumen } from '@cursus/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import {
+  fireEvent,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import { describe, expect, test, vi } from 'vitest'
 import { renderConSesion } from '../test/sesion'
+import { useMisSecciones } from './secciones-contexto'
 
 const seccion = (
   id: string,
@@ -211,7 +218,9 @@ describe('«Mis cursos» en el menú lateral', () => {
     expect(panel.getByRole('link', { name: 'Anuncios' })).toHaveAttribute(
       'href',
       '/mis-cursos/secciones/s2?vista=anuncios',
-    )
+    ) // Elegir una vista cierra el panel.
+    fireEvent.click(panel.getByRole('link', { name: 'Home' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   test.each(['AYUDANTE', 'ALUMNO'] as const)(
@@ -264,5 +273,15 @@ describe('«Mis cursos» en el menú lateral', () => {
     await cursos()
     await screen.findByRole('list', { name: 'Secciones del período activo' })
     expect(pedidas).toBe(1)
+  })
+})
+
+describe('useMisSecciones', () => {
+  test('fuera del AppShell avisa que falta su proveedor', () => {
+    const consola = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => renderHook(() => useMisSecciones())).toThrow(
+      'useMisSecciones debe usarse dentro de SeccionesProvider',
+    )
+    consola.mockRestore()
   })
 })

@@ -141,4 +141,45 @@ describe('Mis cursos del Alumno', () => {
     expect(buscar).toHaveValue('')
     expect(screen.getByText('2 cursos')).toBeInTheDocument()
   })
+
+  test('ordena por curso y por sección', async () => {
+    const pagina = await abrir(ALUMNO_RUTA, [ALUMNO[1], ALUMNO[0]])
+    await pagina.findByRole('table')
+    const primera = () =>
+      within(screen.getByRole('table')).getAllByRole('row')[1].textContent
+    fireEvent.click(screen.getByRole('button', { name: 'Curso' }))
+    expect(primera()).toContain('ICC101')
+    fireEvent.click(screen.getByRole('button', { name: 'Sección' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sección' }))
+    expect(primera()).toContain('ICC201')
+  })
+
+  test('la «X» del buscador lo vacía', async () => {
+    const pagina = await abrir(ALUMNO_RUTA, ALUMNO)
+    await pagina.findByRole('table')
+    const buscar = pagina.getByRole('searchbox', { name: 'Buscar' })
+    fireEvent.change(buscar, { target: { value: 'estructuras' } })
+    expect(screen.getByText('1 curso')).toBeInTheDocument()
+    fireEvent.click(pagina.getByRole('button', { name: 'Limpiar búsqueda' }))
+    expect(buscar).toHaveValue('')
+    expect(screen.getByText('2 cursos')).toBeInTheDocument()
+  })
+
+  test('un clic en la fila abre la sección', async () => {
+    await renderConSesion('ALUMNO', '/mis-cursos', {
+      [ALUMNO_RUTA]: () => ALUMNO,
+      '/api/espacio/secciones/s-201-2/resumen': () => ({
+        ...ALUMNO[1],
+        periodo: { id: 'p', anio: 2026, semestre: 2 },
+        rol: 'ALUMNO',
+        ayudantes: [],
+      }),
+    })
+    await screen.findByRole('table')
+    // Clic en una celda sin enlace: la fila entera abre la sección.
+    fireEvent.click(screen.getByText('Sin horario asignado'))
+    expect(
+      await screen.findByRole('region', { name: 'Vista del curso' }),
+    ).toBeInTheDocument()
+  })
 })
