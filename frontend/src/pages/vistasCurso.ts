@@ -76,5 +76,10 @@ export const vistaDe = (parametro: string | null): VistaId =>
 export const rutaVista = (seccionId: string, vista: VistaId) =>
   rutaSeccion(seccionId, vista === 'home' ? undefined : vista)
 
-export const etiquetaDeVista = (vista: VistaId) =>
-  VISTAS_CURSO.find((v) => v.id === vista)?.etiqueta ?? vista
+// Nombre de una vista para un rol. «Integrantes» muestra el equipo docente y,
+// solo al profesor, también la nómina de alumnos: el alumno y el ayudante ven
+// únicamente a los docentes, así que para ellos es «Académicos».
+export const etiquetaDeVista = (vista: VistaId, rol?: string) =>
+  vista === 'integrantes' && rol !== 'PROFESOR'
+    ? 'Académicos'
+    : (VISTAS_CURSO.find((v) => v.id === vista)?.etiqueta ?? vista)
