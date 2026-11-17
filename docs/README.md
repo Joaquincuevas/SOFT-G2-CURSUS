@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [Datos de demo y guía para presentar CURSUS](demo/guia-demo.md)
 - [OBS-02 · Alertas de salud y errores 5xx en producción](obs-02-alertas-produccion.md)
 - [EXP-02 · Descargar entregas de una actividad en ZIP](exp-02-entregas-zip.md)
 - [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
