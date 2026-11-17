@@ -213,4 +213,27 @@ describe('DataTable', () => {
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getByRole('table')).not.toHaveAttribute('aria-busy')
   })
+
+  test('alHacerClic abre la fila, pero no cuando se hace clic en un botón de la fila', () => {
+    const abiertas: string[] = []
+    render(
+      <DataTable
+        etiqueta="Alumnos"
+        columnas={[
+          ...COLUMNAS.slice(0, 1),
+          {
+            clave: 'accion',
+            encabezado: 'Acción',
+            celda: () => <button type="button">Otra acción</button>,
+          },
+        ]}
+        filas={ALUMNOS}
+        claveFila={(a) => a.id}
+        alHacerClic={(a) => abiertas.push(a.id)}
+      />,
+    )
+    fireEvent.click(screen.getByText('Ana Soto'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Otra acción' })[0])
+    expect(abiertas).toEqual(['b'])
+  })
 })
