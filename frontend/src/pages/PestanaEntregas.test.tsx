@@ -146,7 +146,9 @@ describe('pestaña Entregas (MAT-08)', () => {
     const { panel } = await abrirEntregas('ALUMNO')
     await panel.findByRole('article', { name: 'Informe 1' })
     expect(
-      panel.getAllByRole('article').map((a) => a.getAttribute('aria-label')),
+      panel
+        .getAllByRole('article')
+        .map((a: HTMLElement) => a.getAttribute('aria-label')),
     ).toEqual(['Informe 2', 'Informe 1'])
   })
 
