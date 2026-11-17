@@ -1,6 +1,6 @@
 import { ChevronLeft, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Fragment } from 'react'
-import { Link, NavLink, useLocation, useMatch } from 'react-router'
+import { Link, NavLink, useLocation, useMatch, useNavigate } from 'react-router'
 import { CursusLogo } from '@/components/brand/CursusLogo'
 import { Button } from '@/components/ui/button'
 import {
@@ -8,11 +8,22 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { NativeSelect } from '@/components/ui/native-select'
 import { cn } from '@/lib/utils'
-import { rutaVista, vistaDe, VISTAS_CURSO } from '../pages/vistasCurso'
+import {
+  etiquetaDeVista,
+  rutaVista,
+  vistaDe,
+  VISTAS_CURSO,
+  type VistaId,
+} from '../pages/vistasCurso'
 import { useCursoActual } from './curso-contexto'
 import { etiquetaDe, navItemsFor, type NavItem } from '../navigation'
 import { RUTA_HISTORIAL } from '../pages/HistorialAlumno'
+import { RUTA_MIS_SECCIONES } from '../pages/misSecciones'
+import { RUTA_SECCIONES_ALUMNO } from '../pages/SeccionesAlumno'
+import { RUTA_SECCIONES_AYUDANTE } from '../pages/SeccionesAyudante'
+import { useDatos } from '../pages/useDatos'
 import { useSession } from '../session/session'
 
 interface Props {
@@ -214,6 +225,7 @@ function MenuDelCurso({
   const enSeccion = useMatch('/mis-cursos/secciones/:id/*')
   const curso = useCursoActual()
   const { search } = useLocation()
+  const { user } = useSession()
   if (!enSeccion || !curso) return null
   const activa = vistaDe(new URLSearchParams(search).get('vista'))
   const titulo = `${curso.codigo} · ${curso.nombre}`
@@ -243,8 +255,16 @@ function MenuDelCurso({
           </span>
         </Link>
       )}
+      {!colapsado && (
+        <SelectorDeCurso
+          actual={curso.seccionId}
+          vista={activa}
+          onNavigate={onNavigate}
+        />
+      )}
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
-        {VISTAS_CURSO.map(({ id, etiqueta, icono: Icono }) => {
+        {VISTAS_CURSO.map(({ id, icono: Icono }) => {
+          const etiqueta = etiquetaDeVista(id, user.rol)
           const enlace = (
             <Link
               to={rutaVista(curso.seccionId, id)}
@@ -273,5 +293,48 @@ function MenuDelCurso({
         })}
       </ul>
     </li>
+  )
+}
+
+const RUTA_DE_SECCIONES: Record<string, string | undefined> = {
+  ALUMNO: RUTA_SECCIONES_ALUMNO,
+  PROFESOR: RUTA_MIS_SECCIONES,
+  AYUDANTE: RUTA_SECCIONES_AYUDANTE,
+}
+
+// Cambia de curso sin pasar por el Dashboard: lista las secciones del período
+// del usuario (las mismas del Dashboard) y abre la misma vista en la elegida.
+// Con un solo curso no hay a dónde cambiar.
+function SelectorDeCurso({
+  actual,
+  vista,
+  onNavigate,
+}: {
+  actual: string
+  vista: VistaId
+  onNavigate?: () => void
+}) {
+  const { user } = useSession()
+  const navegar = useNavigate()
+  const [secciones] = useDatos<
+    { id: string; numero: number; curso: { codigo: string; nombre: string } }[]
+  >(RUTA_DE_SECCIONES[user.rol] ?? null)
+  if (!secciones || secciones.length < 2) return null
+  return (
+    <NativeSelect
+      aria-label="Cambiar de curso"
+      className="mx-3 w-[calc(100%-1.5rem)]"
+      value={actual}
+      onChange={(evento) => {
+        void navegar(rutaVista(evento.target.value, vista))
+        onNavigate?.()
+      }}
+    >
+      {secciones.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.curso.codigo} · Sección {s.numero}
+        </option>
+      ))}
+    </NativeSelect>
   )
 }
