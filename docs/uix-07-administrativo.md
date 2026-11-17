@@ -30,3 +30,16 @@ Se midieron el texto y fondo del encabezado y del botón **Crear curso** en Chro
 | Administrar universidad | [Escritorio](evidencias/uix-07-universidad-1280.png)     | [Móvil](evidencias/uix-07-universidad-375.png)     |
 | Cuentas filtradas       | [Escritorio](evidencias/uix-07-cuentas-1280.png)         | [Móvil](evidencias/uix-07-cuentas-375.png)         |
 | Editar cuenta           | [Escritorio](evidencias/uix-07-editar-cuenta-1280.png)   | [Móvil](evidencias/uix-07-editar-cuenta-375.png)   |
+
+## Ajuste posterior: formularios en diálogo, panel Pendientes y menú
+
+Fix sobre UI/UX-07, sin tarjeta.
+
+- **`FormDialog`** (`components/shared/FormDialog.tsx`), sobre shadcn `Dialog`: título, campos, error del servidor dentro del diálogo, «Guardar» (con progreso) y «Cancelar». Escape, clic fuera, la X y Cancelar lo cierran; el foco parte en el primer campo; mientras guarda no se puede cerrar; con cambios sin guardar pide confirmar (`ConfirmDialog`). En pantallas angostas el contenido se desplaza dentro del diálogo (`max-h` de la altura visible).
+- **Carreras** y **Períodos** pasan del panel lateral a «Nueva carrera» / «Editar» y «Nuevo período» (en el `PageHeader`), con la tabla (`DataTable`) a todo el ancho. Tras guardar se cierra, se vuelve a pedir el listado y sale un aviso (`toast`). Se quitan «Actualizar listado» y los CSS de ambas páginas. En Períodos, «Activar» sigue en la fila (la API no edita períodos).
+- **Fuera de este cambio:** Profesores y ayudantes (`/docentes`) y Cursos (`/cursos/nuevo`, edición) no tienen panel lateral: son páginas de un solo formulario (el de cursos con secciones y horarios), así que siguen como están.
+- **Dashboard:** se quita «Accesos directos» (repetía el menú) y se agrega **Pendientes** con los endpoints existentes: el detalle de cada curso del período activo (`/api/cursos/:id`) y `/api/periodos`. Cuenta secciones sin profesor, sin horario y sin alumnos (con enlace a los primeros cursos afectados) y avisa el período activo que termina en 14 días o menos, que ya terminó, o la falta de uno. Sin pendientes: «Todo al día». Son una consulta por curso, porque no hay un endpoint que junte las secciones.
+- **Menú:** «Mis Cursos» pasa a **«Gestión de cursos»** para el Administrativo (el Director sigue con «Gestión académica»). «Carreras» y «Períodos» van bajo el encabezado **«Configuración»** (`grupo` en `navigation.ts` y un encabezado en `Sidebar.tsx`); «Profesores y ayudantes» pasa antes, para que el grupo quede al final.
+- Se borra `ProfesoresSeccion 3.bak`, un archivo huérfano.
+
+Capturas en [`evidencias/`](evidencias/): `ui-administrativo-<antes|despues>-<dashboard|carreras|menu>-<1280|375>.png` y, después, `carreras-modal-<editar|nueva>`.

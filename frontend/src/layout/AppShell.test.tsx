@@ -37,10 +37,10 @@ describe('navegación por rol', () => {
       [
         ['Dashboard', '/'],
         ['Reporte académico', '/reporte-facultad'],
-        ['Mis Cursos', '/cursos'],
+        ['Gestión de cursos', '/cursos'],
+        ['Profesores y ayudantes', '/docentes'],
         ['Carreras', '/carreras'],
         ['Períodos', '/periodos'],
-        ['Profesores y ayudantes', '/docentes'],
       ],
     ],
     [

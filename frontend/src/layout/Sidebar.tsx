@@ -1,4 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Fragment } from 'react'
 import { NavLink } from 'react-router'
 import { CursusLogo } from '@/components/brand/CursusLogo'
 import { Button } from '@/components/ui/button'
@@ -72,14 +73,28 @@ export function Sidebar({ colapsado = false, onAlternar, onNavigate }: Props) {
         className="min-h-0 flex-1 overflow-y-auto p-3"
       >
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
-          {items.map((item) => (
-            <li key={item.to}>
-              <ItemDelMenu
-                item={item}
-                colapsado={colapsado}
-                onNavigate={onNavigate}
-              />
-            </li>
+          {items.map((item, i) => (
+            <Fragment key={item.to}>
+              {item.grupo && item.grupo !== items[i - 1]?.grupo && (
+                <li
+                  role="presentation"
+                  className={
+                    colapsado
+                      ? 'mx-2 mt-2 border-t border-border'
+                      : 'mt-3 px-3 pb-1 text-xs font-medium text-muted-foreground'
+                  }
+                >
+                  {!colapsado && item.grupo}
+                </li>
+              )}
+              <li>
+                <ItemDelMenu
+                  item={item}
+                  colapsado={colapsado}
+                  onNavigate={onNavigate}
+                />
+              </li>
+            </Fragment>
           ))}
         </ul>
       </nav>

@@ -1,226 +1,173 @@
 import { LARGO_NOMBRE_CARRERA, type Carrera } from '@cursus/shared'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Milestone, Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  FormDialog,
+  FormField,
+  PageHeader,
+  type Columna,
+} from '@/components/shared'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { useAuth } from '../auth/auth'
-import './Carreras.css'
+import { useDatos } from './useDatos'
 
-const ordenar = (carreras: Carrera[]) =>
-  [...carreras].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+const limpiar = (texto: string) => texto.trim().replace(/\s+/gu, ' ')
 
+// «Nueva carrera» y «Editar» abren el mismo diálogo; la carrera editada llega
+// precargada. Tras guardar se vuelve a pedir el listado.
 export function Carreras() {
+  const [carreras, recargar] = useDatos<Carrera[]>('/api/carreras')
+  // undefined = cerrado; null = nueva carrera; una carrera = editarla.
+  const [dialogo, setDialogo] = useState<Carrera | null | undefined>(undefined)
+
+  const columnas = useMemo<Columna<Carrera>[]>(
+    () => [
+      {
+        clave: 'nombre',
+        encabezado: 'Nombre',
+        valor: (c) => c.nombre,
+        celda: (c) => <span className="font-medium">{c.nombre}</span>,
+      },
+      {
+        clave: 'acciones',
+        encabezado: <span className="sr-only">Acciones</span>,
+        className: 'w-px text-right',
+        celda: (c) => (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label={`Editar ${c.nombre}`}
+            onClick={() => setDialogo(c)}
+          >
+            Editar
+          </Button>
+        ),
+      },
+    ],
+    [],
+  )
+
+  return (
+    <section aria-label="Gestión de carreras" className="grid gap-4">
+      <PageHeader
+        titulo="Carreras"
+        descripcion="Crea y actualiza las carreras de tu facultad para organizar la gestión académica."
+        acciones={
+          <Button
+            type="button"
+            disabled={!carreras}
+            onClick={() => setDialogo(null)}
+          >
+            <Plus aria-hidden="true" />
+            Nueva carrera
+          </Button>
+        }
+      />
+      {carreras === null ? (
+        <ErrorState
+          mensaje="No pudimos cargar las carreras."
+          onReintentar={recargar}
+        />
+      ) : (
+        <DataTable
+          etiqueta="Listado de carreras"
+          columnas={columnas}
+          filas={carreras ?? []}
+          claveFila={(c) => c.id}
+          cargando={carreras === undefined}
+          textoDeCarga="Cargando carreras…"
+          ordenInicial={{ clave: 'nombre', direccion: 'asc' }}
+          vacio={
+            <EmptyState
+              icono={Milestone}
+              titulo="Aún no hay carreras en tu facultad."
+              mensaje="Crea la primera con «Nueva carrera»."
+            />
+          }
+        />
+      )}
+      {dialogo !== undefined && (
+        <DialogoCarrera
+          carrera={dialogo}
+          onCerrar={() => setDialogo(undefined)}
+          onGuardada={recargar}
+        />
+      )}
+    </section>
+  )
+}
+
+function DialogoCarrera({
+  carrera,
+  onCerrar,
+  onGuardada,
+}: {
+  carrera: Carrera | null
+  onCerrar: () => void
+  onGuardada: () => void
+}) {
   const { fetchConSesion } = useAuth()
-  const [carreras, setCarreras] = useState<Carrera[] | null>(null)
-  const [errorCarga, setErrorCarga] = useState<string | null>(null)
-  const [revision, setRevision] = useState(0)
-  const [nombre, setNombre] = useState('')
-  const [editando, setEditando] = useState<string | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  const input = useRef<HTMLInputElement>(null)
+  const [nombre, setNombre] = useState(carrera?.nombre ?? '')
+  const [vacio, setVacio] = useState(false)
+  const editando = carrera !== null
 
-  useEffect(() => {
-    let activa = true
-    async function cargar() {
-      setErrorCarga(null)
-      setCarreras(null)
-      try {
-        const respuesta = await fetchConSesion('/api/carreras')
-        if (!respuesta.ok) throw new Error('carga')
-        const filas = (await respuesta.json()) as Carrera[]
-        if (activa) setCarreras(ordenar(filas))
-      } catch {
-        if (activa)
-          setErrorCarga(
-            'No pudimos cargar las carreras. Intenta actualizar el listado.',
-          )
-      }
+  async function guardar(): Promise<string | null> {
+    const nuevo = limpiar(nombre)
+    if (!nuevo) {
+      setVacio(true)
+      return 'Ingresa el nombre de la carrera.'
     }
-    void cargar()
-    return () => {
-      activa = false
+    const respuesta = await fetchConSesion(
+      editando ? `/api/carreras/${carrera.id}` : '/api/carreras',
+      {
+        method: editando ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: nuevo }),
+      },
+    )
+    if (!respuesta.ok) {
+      return respuesta.status === 409
+        ? 'Ya existe una carrera con ese nombre en tu facultad.'
+        : respuesta.status === 404
+          ? 'La carrera ya no está disponible. Cierra este diálogo y actualiza el listado.'
+          : 'No pudimos guardar la carrera. Revisa el nombre e inténtalo nuevamente.'
     }
-  }, [fetchConSesion, revision])
-
-  function nueva() {
-    setNombre('')
-    setEditando(null)
-    setError(null)
-  }
-
-  async function guardar(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const limpio = nombre.trim().replace(/\s+/gu, ' ')
-    if (!limpio) {
-      setError('Ingresa el nombre de la carrera')
-      input.current?.focus()
-      return
-    }
-    setGuardando(true)
-    setError(null)
-    setAviso(null)
-    try {
-      const respuesta = await fetchConSesion(
-        editando ? `/api/carreras/${editando}` : '/api/carreras',
-        {
-          method: editando ? 'PATCH' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: limpio }),
-        },
-      )
-      if (!respuesta.ok) {
-        setError(
-          respuesta.status === 409
-            ? 'Ya existe una carrera con ese nombre en tu facultad'
-            : respuesta.status === 404
-              ? 'La carrera ya no está disponible. Actualiza el listado.'
-              : 'No pudimos guardar la carrera. Revisa el nombre e inténtalo nuevamente.',
-        )
-        return
-      }
-      const carrera = (await respuesta.json()) as Carrera
-      setCarreras((anteriores) =>
-        ordenar([
-          ...(anteriores ?? []).filter((c) => c.id !== carrera.id),
-          carrera,
-        ]),
-      )
-      setAviso(editando ? 'Cambios guardados' : 'Carrera creada')
-      nueva()
-    } catch {
-      setError(
-        'No pudimos guardar la carrera. Comprueba tu conexión e inténtalo nuevamente.',
-      )
-    } finally {
-      setGuardando(false)
-    }
+    toast.success(editando ? 'Cambios guardados' : 'Carrera creada')
+    onGuardada()
+    return null
   }
 
   return (
-    <section className="carreras" aria-label="Gestión de carreras">
-      <div className="carreras__intro">
-        <div>
-          <h2>Carreras de tu facultad</h2>
-          <p>
-            Crea y actualiza las carreras para organizar la gestión académica.
-          </p>
-        </div>
-        <button
-          type="button"
-          className="carreras__secundario"
-          disabled={guardando}
-          onClick={() => setRevision((n) => n + 1)}
-        >
-          Actualizar listado
-        </button>
-      </div>
-      {aviso && (
-        <p className="carreras__aviso" role="status">
-          {aviso}
-        </p>
-      )}
-      <div className="carreras__columnas">
-        <div className="carreras__panel">
-          {errorCarga ? (
-            <div>
-              <p className="carreras__error" role="alert">
-                {errorCarga}
-              </p>
-              <button
-                type="button"
-                className="carreras__secundario"
-                onClick={() => setRevision((n) => n + 1)}
-              >
-                Reintentar
-              </button>
-            </div>
-          ) : carreras === null ? (
-            <p role="status">Cargando carreras…</p>
-          ) : carreras.length === 0 ? (
-            <p>Aún no hay carreras en tu facultad. Crea la primera.</p>
-          ) : (
-            <table className="carreras__tabla">
-              <caption>Listado de carreras</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Nombre</th>
-                  <th scope="col">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {carreras.map((carrera) => (
-                  <tr key={carrera.id}>
-                    <td>{carrera.nombre}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="carreras__secundario"
-                        disabled={guardando}
-                        aria-label={`Editar ${carrera.nombre}`}
-                        onClick={() => {
-                          setEditando(carrera.id)
-                          setNombre(carrera.nombre)
-                          setError(null)
-                          setAviso(null)
-                          input.current?.focus()
-                        }}
-                      >
-                        Editar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        <form
-          className="carreras__panel carreras__formulario"
-          aria-label={editando ? 'Editar carrera' : 'Nueva carrera'}
-          onSubmit={(event) => void guardar(event)}
-        >
-          <h2>{editando ? 'Editar carrera' : 'Nueva carrera'}</h2>
-          <p>La carrera se guardará en tu facultad.</p>
-          {error && (
-            <p className="carreras__error" id="carrera-error" role="alert">
-              {error}
-            </p>
-          )}
-          <label htmlFor="carrera-nombre">Nombre de la carrera</label>
-          <input
-            ref={input}
-            id="carrera-nombre"
+    <FormDialog
+      abierto
+      onAbiertoChange={(abierto) => !abierto && onCerrar()}
+      titulo={editando ? 'Editar carrera' : 'Nueva carrera'}
+      descripcion="La carrera se guardará en tu facultad."
+      textoGuardar={editando ? 'Guardar cambios' : 'Crear carrera'}
+      sucio={nombre !== (carrera?.nombre ?? '')}
+      onGuardar={guardar}
+    >
+      <FormField
+        etiqueta="Nombre de la carrera"
+        requerido
+        error={vacio && !limpiar(nombre) ? 'Ingresa el nombre.' : undefined}
+      >
+        {(control) => (
+          <Input
+            {...control}
             value={nombre}
-            onChange={(event) => setNombre(event.target.value)}
             maxLength={LARGO_NOMBRE_CARRERA}
-            required
-            disabled={guardando}
-            aria-describedby={error ? 'carrera-error' : undefined}
+            autoComplete="off"
+            onChange={(e) => setNombre(e.target.value)}
           />
-          <div className="carreras__acciones">
-            <button
-              className="carreras__primario"
-              type="submit"
-              disabled={guardando || carreras === null}
-            >
-              {guardando
-                ? 'Guardando…'
-                : editando
-                  ? 'Guardar cambios'
-                  : 'Crear carrera'}
-            </button>
-            {editando && (
-              <button
-                className="carreras__secundario"
-                type="button"
-                disabled={guardando}
-                onClick={nueva}
-              >
-                Cancelar edición
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-    </section>
+        )}
+      </FormField>
+    </FormDialog>
   )
 }

@@ -51,6 +51,8 @@ export interface NavItem {
   // false para una ruta que no va en el menú lateral (por ejemplo, el perfil,
   // al que se llega desde el encabezado).
   enMenu?: boolean
+  // Encabezado del menú lateral bajo el que se agrupa (ítems seguidos).
+  grupo?: string
   // Título de la ruta: el h1 del encabezado y su último paso en el breadcrumb.
   title: (user: SessionUser) => string
 }
@@ -117,28 +119,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
     to: '/cursos',
     // El Director la ve en solo lectura junto a Universidades.
     label: (user) =>
-      user.rol === 'DIRECTOR' ? 'Gestión académica' : 'Mis Cursos',
+      user.rol === 'DIRECTOR' ? 'Gestión académica' : 'Gestión de cursos',
     icon: GraduationCap,
     permiso: { accion: 'read', sujeto: 'GestionAcademica' },
     page: Cursos,
     title: () => 'Gestión académica',
-  },
-  {
-    to: '/carreras',
-    label: 'Carreras',
-    icon: Milestone,
-    // GES-01 gestiona carreras de facultad; solo el administrativo las crea.
-    permiso: { accion: 'create', sujeto: 'Carrera' },
-    page: Carreras,
-    title: () => 'Carreras',
-  },
-  {
-    to: '/periodos',
-    label: 'Períodos',
-    icon: CalendarRange,
-    permiso: { accion: 'create', sujeto: 'Periodo' },
-    page: Periodos,
-    title: () => 'Períodos académicos',
   },
   {
     // GES-21: el administrativo crea cuentas de profesores y ayudantes.
@@ -148,6 +133,25 @@ export const NAV_ITEMS: readonly NavItem[] = [
     permiso: { accion: 'create', sujeto: 'Usuario' },
     page: Docentes,
     title: () => 'Profesores y ayudantes',
+  },
+  {
+    to: '/carreras',
+    label: 'Carreras',
+    grupo: 'Configuración',
+    icon: Milestone,
+    // GES-01 gestiona carreras de facultad; solo el administrativo las crea.
+    permiso: { accion: 'create', sujeto: 'Carrera' },
+    page: Carreras,
+    title: () => 'Carreras',
+  },
+  {
+    to: '/periodos',
+    label: 'Períodos',
+    grupo: 'Configuración',
+    icon: CalendarRange,
+    permiso: { accion: 'create', sujeto: 'Periodo' },
+    page: Periodos,
+    title: () => 'Períodos académicos',
   },
   {
     // Alumnos de una sección (GES-18), desde el detalle del curso.

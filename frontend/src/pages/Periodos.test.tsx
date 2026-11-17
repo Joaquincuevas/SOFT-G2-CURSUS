@@ -1,6 +1,6 @@
 import type { Periodo, Rol } from '@cursus/shared'
-import { act, fireEvent, screen, within, waitFor } from '@testing-library/react'
-import { test, expect, vi } from 'vitest'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { expect, test, vi } from 'vitest'
 import {
   json,
   renderApp,
@@ -24,73 +24,110 @@ const NUEVO: Periodo = {
   fechaTermino: '2027-07-15',
   activo: false,
 }
+
+// Backend simulado con el listado en memoria: tras guardar, el listado que se
+// vuelve a pedir ya trae el cambio. `escribir` responde a POST y PATCH.
 function preparar(
-  responder: (ruta: string, init?: RequestInit) => Promise<Response>,
+  inicial: Periodo[],
+  escribir: (
+    ruta: string,
+    init: RequestInit,
+    lista: Periodo[],
+  ) => Promise<Response> | Response = (ruta, init, lista) => {
+    const activo = init.body ? JSON.parse(init.body as string).activo : true
+    const creado: Periodo = ruta.endsWith('/activar')
+      ? { ...NUEVO, activo: true }
+      : { ...NUEVO, activo }
+    lista.splice(
+      0,
+      lista.length,
+      ...lista
+        .filter((p) => p.id !== creado.id)
+        .map((p) => (creado.activo ? { ...p, activo: false } : p)),
+      creado,
+    )
+    return json(creado, ruta.endsWith('/activar') ? 200 : 201)
+  },
   rol: Rol = 'ADMINISTRATIVO',
 ) {
-  const fetch = vi.fn((ruta: string, init?: RequestInit) =>
-    ruta === '/api/auth/yo'
-      ? Promise.resolve(json(usuarioDePrueba(rol)))
-      : responder(ruta, init),
-  )
+  const lista = [...inicial]
+  const fetch = vi.fn((ruta: string, init?: RequestInit) => {
+    if (ruta === '/api/auth/yo')
+      return Promise.resolve(json(usuarioDePrueba(rol)))
+    if (init?.method) return Promise.resolve(escribir(ruta, init, lista))
+    return Promise.resolve(json(lista))
+  })
   vi.stubGlobal('fetch', fetch)
   renderApp('/periodos', 'jwt-de-prueba')
   return fetch
 }
-function llenar() {
-  fireEvent.change(screen.getByLabelText('Año'), { target: { value: '2027' } })
-  fireEvent.change(screen.getByLabelText('Semestre'), {
-    target: { value: '1' },
-  })
-  fireEvent.change(screen.getByLabelText('Fecha de inicio'), {
+
+const abrirNuevo = async () => {
+  const boton = await screen.findByRole('button', { name: 'Nuevo período' })
+  // Deshabilitado hasta que llega el listado: un clic antes no abre nada.
+  await waitFor(() => expect(boton).toBeEnabled())
+  fireEvent.click(boton)
+  return within(await screen.findByRole('dialog', { name: 'Nuevo período' }))
+}
+const llenar = (d: ReturnType<typeof within>) => {
+  fireEvent.change(d.getByLabelText(/^Año/), { target: { value: '2027' } })
+  fireEvent.change(d.getByLabelText(/^Semestre/), { target: { value: '1' } })
+  fireEvent.change(d.getByLabelText(/^Fecha de inicio/), {
     target: { value: NUEVO.fechaInicio },
   })
-  fireEvent.change(screen.getByLabelText('Fecha de término'), {
+  fireEvent.change(d.getByLabelText(/^Fecha de término/), {
     target: { value: NUEVO.fechaTermino },
   })
 }
+const sinDialogo = () =>
+  waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
-test('muestra carga, estado vacío y campos obligatorios', async () => {
+test('muestra carga y estado vacío; «Nuevo período» espera al listado', async () => {
   let terminar!: (res: Response) => void
-  preparar(
-    () =>
-      new Promise((resolve) => {
-        terminar = resolve
-      }),
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((ruta: string) =>
+      ruta === '/api/auth/yo'
+        ? Promise.resolve(json(usuarioDePrueba('ADMINISTRATIVO')))
+        : new Promise<Response>((resolve) => {
+            terminar = resolve
+          }),
+    ),
   )
+  renderApp('/periodos', 'jwt-de-prueba')
   expect(await screen.findByText('Cargando períodos…')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Crear período' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Nuevo período' })).toBeDisabled()
   await waitFor(() => expect(terminar).toBeDefined())
   await act(async () => terminar(json([])))
   expect(
-    await screen.findByText(
-      'Aún no hay períodos en tu universidad. Crea el primero.',
-    ),
+    await screen.findByText('Aún no hay períodos en tu universidad.'),
   ).toBeInTheDocument()
-  for (const campo of [
-    'Año',
-    'Semestre',
-    'Fecha de inicio',
-    'Fecha de término',
-  ])
-    expect(screen.getByLabelText(campo)).toBeRequired()
-  expect(screen.getByRole('button', { name: 'Crear período' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Nuevo período' })).toBeEnabled()
 })
 
-test('lista fechas sin desfase y crea un período inactivo con el token de sesión', async () => {
-  const fetch = preparar((_ruta, init) =>
-    Promise.resolve(
-      init?.method === 'POST' ? json(NUEVO, 201) : json([INICIAL]),
-    ),
-  )
+test('lista las fechas sin desfase y el formulario no está en la página', async () => {
+  preparar([INICIAL])
   expect(await screen.findByText('01/08/2026')).toBeInTheDocument()
-  llenar()
-  fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
+  expect(screen.getByText('20/12/2026')).toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText(/^Año/)).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Actualizar listado' }),
+  ).toBeNull()
+})
+
+test('crea un período inactivo en el diálogo, que se cierra, refresca el listado y avisa', async () => {
+  const fetch = preparar([INICIAL])
+  await screen.findByText('2026-2')
+  const dialogo = await abrirNuevo()
+  expect(dialogo.getByLabelText(/^Año/)).toHaveFocus()
+  llenar(dialogo)
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
   expect(await screen.findByText('Período creado')).toBeInTheDocument()
-  const listado = screen.getByRole('table')
-  expect(within(listado).getByText('2027-1')).toBeInTheDocument()
+  await sinDialogo()
+  const listado = await screen.findByRole('table')
+  expect(await within(listado).findByText('2027-1')).toBeInTheDocument()
   expect(within(listado).getAllByText('Activo')).toHaveLength(1)
-  expect(screen.getByLabelText('Año')).toHaveValue(null)
   const peticion = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!
   expect(JSON.parse(peticion[1]!.body as string)).toEqual({
     anio: 2027,
@@ -107,18 +144,13 @@ test('lista fechas sin desfase y crea un período inactivo con el token de sesi�
 test.each(['crear', 'activar'])(
   '%s activo desactiva el anterior y actualiza el semestre del encabezado',
   async (accion) => {
-    const fetch = preparar((_ruta, init) =>
-      Promise.resolve(
-        init?.method
-          ? json({ ...NUEVO, activo: true }, accion === 'crear' ? 201 : 200)
-          : json([INICIAL, NUEVO]),
-      ),
-    )
+    const fetch = preparar([INICIAL, NUEVO])
     await screen.findByText('2027-1')
     if (accion === 'crear') {
-      llenar()
-      fireEvent.click(screen.getByLabelText('Marcar como activo'))
-      fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
+      const dialogo = await abrirNuevo()
+      llenar(dialogo)
+      fireEvent.click(dialogo.getByLabelText('Marcar como activo'))
+      fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
     } else
       fireEvent.click(
         screen.getByRole('button', { name: 'Activar período 2027-1' }),
@@ -131,10 +163,12 @@ test.each(['crear', 'activar'])(
     expect(
       within(screen.getByRole('banner')).getByText('Semestre 2027-1'),
     ).toBeInTheDocument()
-    const filas = within(screen.getByRole('table')).getAllByRole('row')
-    expect(within(filas[1]).getByText('2027-1')).toBeInTheDocument()
-    expect(within(filas[1]).getByText('Activo')).toBeInTheDocument()
-    expect(within(filas[2]).getByText('Inactivo')).toBeInTheDocument()
+    await waitFor(() => {
+      const filas = within(screen.getByRole('table')).getAllByRole('row')
+      expect(within(filas[1]).getByText('2027-1')).toBeInTheDocument()
+      expect(within(filas[1]).getByText('Activo')).toBeInTheDocument()
+      expect(within(filas[2]).getByText('Inactivo')).toBeInTheDocument()
+    })
     if (accion === 'activar')
       expect(fetch).toHaveBeenCalledWith(
         '/api/periodos/nuevo/activar',
@@ -144,16 +178,17 @@ test.each(['crear', 'activar'])(
 )
 
 test.each(['2027-03-01', '2027-02-28'])(
-  'rechaza fecha final %s sin enviar POST',
+  'rechaza fecha final %s dentro del diálogo, sin enviar POST',
   async (fin) => {
-    const fetch = preparar(() => Promise.resolve(json([INICIAL])))
+    const fetch = preparar([INICIAL])
     await screen.findByText('2026-2')
-    llenar()
-    fireEvent.change(screen.getByLabelText('Fecha de término'), {
+    const dialogo = await abrirNuevo()
+    llenar(dialogo)
+    fireEvent.change(dialogo.getByLabelText(/^Fecha de término/), {
       target: { value: fin },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
+    expect(await dialogo.findByRole('alert')).toHaveTextContent(
       'La fecha de término debe ser posterior a la de inicio',
     )
     expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(
@@ -163,90 +198,140 @@ test.each(['2027-03-01', '2027-02-28'])(
 )
 
 test.each([409, 400, 500])(
-  'un error %s conserva el formulario y no altera el activo',
-  async (estado) => {
-    preparar((_ruta, init) =>
-      Promise.resolve(
-        init?.method === 'POST' ? json({}, estado) : json([INICIAL]),
-      ),
-    )
+  'un %s al crear se avisa dentro del diálogo, que sigue abierto con lo escrito',
+  async (status) => {
+    preparar([INICIAL], () => json({}, status))
     await screen.findByText('2026-2')
-    llenar()
-    fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      estado === 409 ? 'Ya existe un período' : 'No pudimos guardar',
+    const dialogo = await abrirNuevo()
+    llenar(dialogo)
+    fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
+    expect(await dialogo.findByRole('alert')).toHaveTextContent(
+      status === 409 ? 'Ya existe un período' : 'No pudimos guardar el período',
     )
-    expect(screen.getByLabelText('Año')).toHaveValue(2027)
-    expect(screen.getByLabelText('Fecha de término')).toHaveValue(
+    expect(dialogo.getByLabelText(/^Año/)).toHaveValue(2027)
+    expect(dialogo.getByLabelText(/^Fecha de término/)).toHaveValue(
       NUEVO.fechaTermino,
     )
-    expect(
-      within(screen.getByRole('table')).getAllByText('Activo'),
-    ).toHaveLength(1)
     expect(screen.queryByText('Período creado')).not.toBeInTheDocument()
+    // El diálogo deja el resto de la página oculta para los lectores.
+    expect(
+      within(screen.getByRole('table', { hidden: true })).getAllByText(
+        'Activo',
+      ),
+    ).toHaveLength(1)
   },
 )
 
 test('un fallo de activación conserva el activo anterior y permite reintentar', async () => {
-  preparar((_ruta, init) =>
-    Promise.resolve(
-      init?.method === 'PATCH' ? json({}, 404) : json([INICIAL, NUEVO]),
-    ),
-  )
+  preparar([INICIAL, NUEVO], () => json({}, 500))
+  await screen.findByText('2027-1')
   fireEvent.click(
-    await screen.findByRole('button', { name: 'Activar período 2027-1' }),
+    screen.getByRole('button', { name: 'Activar período 2027-1' }),
   )
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'El período ya no está disponible',
+  expect(
+    await screen.findByText(
+      'No pudimos activar el período. Inténtalo nuevamente.',
+    ),
+  ).toBeInTheDocument()
+  expect(within(screen.getByRole('table')).getAllByText('Activo')).toHaveLength(
+    1,
   )
   expect(
     screen.getByRole('button', { name: 'Activar período 2027-1' }),
   ).toBeEnabled()
-  expect(
-    screen.queryByText('Período activo actualizado'),
-  ).not.toBeInTheDocument()
 })
 
-test('reintenta una carga fallida y muestra error de conexión al guardar', async () => {
-  let cargas = 0
-  preparar((_ruta, init) =>
-    init?.method
-      ? Promise.reject(new Error('sin red'))
-      : ++cargas === 1
-        ? Promise.resolve(json({}, 503))
-        : Promise.resolve(json([INICIAL])),
-  )
-  fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
-  await screen.findByText('2026-2')
-  llenar()
-  fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Comprueba tu conexión',
-  )
-  expect(screen.getByLabelText('Año')).toHaveValue(2027)
-})
-
-test('impide envíos y activaciones adicionales mientras guarda', async () => {
+test('mientras se activa un período, «Nuevo período» queda deshabilitado', async () => {
   let terminar!: (res: Response) => void
-  preparar((_ruta, init) =>
-    init?.method
-      ? new Promise((resolve) => {
-          terminar = resolve
-        })
-      : Promise.resolve(json([INICIAL, NUEVO])),
+  preparar(
+    [INICIAL, NUEVO],
+    () =>
+      new Promise<Response>((resolve) => {
+        terminar = resolve
+      }),
   )
   await screen.findByText('2027-1')
-  llenar()
-  fireEvent.click(screen.getByRole('button', { name: 'Crear período' }))
-  expect(screen.getByRole('button', { name: 'Guardando…' })).toBeDisabled()
-  expect(
+  const nuevo = screen.getByRole('button', { name: 'Nuevo período' })
+  expect(nuevo).toBeEnabled()
+  fireEvent.click(
     screen.getByRole('button', { name: 'Activar período 2027-1' }),
-  ).toBeDisabled()
+  )
+  await waitFor(() => expect(terminar).toBeDefined())
+  expect(nuevo).toBeDisabled()
+  fireEvent.click(nuevo)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  await act(async () => terminar(json({ ...NUEVO, activo: true })))
   expect(
-    screen.getByRole('button', { name: 'Actualizar listado' }),
-  ).toBeDisabled()
-  await act(async () => terminar(json(NUEVO, 201)))
+    await screen.findByText('Período activo actualizado'),
+  ).toBeInTheDocument()
+  await waitFor(() => expect(nuevo).toBeEnabled())
+})
+
+test('reintenta una carga fallida y avisa el error de conexión al guardar en el diálogo', async () => {
+  let intento = 0
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((ruta: string, init?: RequestInit) => {
+      if (ruta === '/api/auth/yo')
+        return Promise.resolve(json(usuarioDePrueba('ADMINISTRATIVO')))
+      if (init?.method) return Promise.reject(new TypeError('offline'))
+      return ++intento === 1
+        ? Promise.reject(new TypeError('offline'))
+        : Promise.resolve(json([INICIAL]))
+    }),
+  )
+  renderApp('/periodos', 'jwt-de-prueba')
+  expect(
+    await screen.findByText('No pudimos cargar los períodos.'),
+  ).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+  await screen.findByText('2026-2')
+  const dialogo = await abrirNuevo()
+  llenar(dialogo)
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
+  expect(await dialogo.findByRole('alert')).toHaveTextContent(
+    'Comprueba tu conexión',
+  )
+  expect(dialogo.getByLabelText(/^Año/)).toHaveValue(2027)
+})
+
+test('mientras guarda deshabilita el botón y no deja cerrar', async () => {
+  let terminar!: (res: Response) => void
+  preparar(
+    [INICIAL],
+    () =>
+      new Promise<Response>((resolve) => {
+        terminar = resolve
+      }),
+  )
+  await screen.findByText('2026-2')
+  const dialogo = await abrirNuevo()
+  llenar(dialogo)
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear período' }))
+  await waitFor(() => expect(terminar).toBeDefined())
+  expect(dialogo.getByRole('button', { name: 'Guardando…' })).toBeDisabled()
+  expect(dialogo.getByRole('button', { name: 'Cancelar' })).toBeDisabled()
+  await act(async () => terminar(json({ ...NUEVO }, 201)))
   expect(await screen.findByText('Período creado')).toBeInTheDocument()
+})
+
+test('con datos escritos, cerrar pide confirmar; sin ellos cierra directo', async () => {
+  preparar([INICIAL])
+  await screen.findByText('2026-2')
+  let dialogo = await abrirNuevo()
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cancelar' }))
+  await sinDialogo()
+  dialogo = await abrirNuevo()
+  fireEvent.change(dialogo.getByLabelText(/^Año/), {
+    target: { value: '2030' },
+  })
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cancelar' }))
+  fireEvent.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: 'Descartar',
+    }),
+  )
+  await sinDialogo()
 })
 
 test.each<Rol>(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
