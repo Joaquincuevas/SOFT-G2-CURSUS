@@ -113,15 +113,18 @@ describe('redirección tras iniciar sesión', () => {
     await enRuta('/')
   })
 
-  test.each(['//evil.com', 'https://evil.com/x', '/\\evil.com', 'mis-cursos'])(
-    'una ruta de retorno externa (%s) va a /',
-    async (from) => {
-      backend()
-      abrir({ pathname: '/login', state: { from } })
-      await ingresar('profesor@norte.cursus.test')
-      await enRuta('/')
-    },
-  )
+  test.each([
+    '//',
+    '//evil.com',
+    'https://evil.com/x',
+    '/\\evil.com',
+    'mis-cursos',
+  ])('una ruta de retorno externa (%s) va a /', async (from) => {
+    backend()
+    abrir({ pathname: '/login', state: { from } })
+    await ingresar('profesor@norte.cursus.test')
+    await enRuta('/')
+  })
 
   test('una sesión expirada vuelve a la ruta con la misma cuenta', async () => {
     const estado = backend()
@@ -156,6 +159,8 @@ describe('destinoTrasLogin', () => {
     ['/mis-cursos', true, '/mis-cursos'],
     ['/mis-cursos/123?x=1', true, '/mis-cursos/123?x=1'],
     ['/mis-cursos', false, '/'],
+    ['//', true, '/'],
+    ['///', true, '/'],
     ['//evil.com', true, '/'],
     ['/\\evil.com', true, '/'],
     ['/\t/evil.com', true, '/'],
