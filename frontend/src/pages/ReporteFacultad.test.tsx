@@ -119,8 +119,18 @@ test.each(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as const)(
   '%s no ve el reporte en la navegación',
   async (rol) => {
     await renderConSesion(rol, '/reporte-facultad')
+    // Sin permiso la ruta vuelve a su Dashboard. El del Director también tiene
+    // una tabla (sus universidades), así que se busca la del reporte por nombre.
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: rol === 'DIRECTOR' ? 'Visión del Directorio' : /^Bienvenido\/a/,
+      }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Reporte académico' })).toBeNull()
-    expect(screen.queryByRole('table')).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: /^Reporte académico/ }),
+    ).toBeNull()
   },
 )
 
