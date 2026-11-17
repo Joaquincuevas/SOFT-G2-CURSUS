@@ -412,6 +412,10 @@ describe('layout de curso (UIX-04)', () => {
       await screen.findByRole('region', { name: 'Académicos' }),
     )
     expect(panel.getByText('Diego Muñoz')).toBeInTheDocument()
+    // El breadcrumb también dice «Académicos» para el alumno.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Académicos' }),
+    ).toBeInTheDocument()
     expect(panel.queryByRole('region', { name: /^Alumnos/ })).toBeNull()
   })
 
@@ -535,23 +539,20 @@ describe('layout de curso (UIX-04)', () => {
     ).toEqual(['ICC101 · Sección 1', 'ICC201 · Sección 2'])
     expect(selector).toHaveValue('seccion-1')
     fireEvent.change(selector, { target: { value: 'seccion-2' } })
-    // Con la máquina cargada (CI) el cambio de sección tarda más del segundo
-    // que espera Testing Library por defecto.
+    // El breadcrumb termina en la vista abierta («Anuncios») y la sección
+    // nueva es el paso anterior; el menú pasa al curso nuevo.
     expect(
-      await screen.findByRole(
-        'heading',
-        { level: 1, name: 'ICC201 · Sección 2' },
-        { timeout: 5000 },
-      ),
+      await within(
+        screen.getByRole('navigation', { name: 'Breadcrumb' }),
+      ).findByRole('link', { name: 'ICC201 · Sección 2' }),
+    ).toHaveAttribute('href', '/mis-cursos/secciones/seccion-2')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Anuncios' }),
     ).toBeInTheDocument()
-    await waitFor(
-      async () =>
-        expect(await pestana('Anuncios')).toHaveAttribute(
-          'aria-current',
-          'page',
-        ),
-      { timeout: 5000 },
-    )
+    expect(
+      await screen.findByRole('listitem', { name: /Menú del curso ICC201/ }),
+    ).toBeInTheDocument()
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
   })
 
   test('dentro de una sección «Mis Cursos» no se marca junto al ítem activo del curso', async () => {
