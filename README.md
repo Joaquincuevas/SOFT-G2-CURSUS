@@ -185,7 +185,7 @@ npm run test:e2e --workspace=backend    # end-to-end de la API: cabeceras, valid
 npm run test:db --workspace=backend     # contra PostgreSQL: schema, RLS, triggers y servicios
 ```
 
-`test:db` necesita la base local levantada (`docker compose up -d`, ver "Base de datos local"). Crea y borra sus propias bases de prueba, así que no toca tus datos de desarrollo. El CI corre los tres en cada PR.
+`test:db` necesita la base local levantada (`docker compose up -d`, ver "Base de datos local"). Crea y borra sus propias bases de prueba, así que no toca tus datos de desarrollo.
 
 ### Obtener la cobertura
 
@@ -199,7 +199,9 @@ npm run test:cov
 - **En la terminal:** una tabla por archivo y un resumen. El dato a reportar es la fila **All files**.
 - **Un reporte HTML navegable** en `backend/coverage/index.html` y `frontend/coverage/index.html`, que marca en verde y rojo las líneas que se ejecutaron y las que no. La carpeta `coverage/` está en `.gitignore`.
 
-Cada workspace exige un mínimo de **95 % de líneas y de instrucciones** (`thresholds` en [backend/vitest.config.cov.ts](backend/vitest.config.cov.ts) y [frontend/vite.config.ts](frontend/vite.config.ts)): si la cobertura baja de eso, `test:cov` termina con error.
+Cada workspace exige un mínimo de **95 % de líneas, instrucciones y funciones** (`thresholds` en [backend/vitest.config.cov.ts](backend/vitest.config.cov.ts) y [frontend/vite.config.ts](frontend/vite.config.ts)): si la cobertura baja de eso, `test:cov` termina con error.
+
+**En el CI.** El job `test` de [ci.yml](.github/workflows/ci.yml) corre `npm run test:cov` en cada PR, con el mismo PostgreSQL de los tests: así corre todos los tests una sola vez (unitarios, end-to-end y de base de datos) y el PR queda en rojo si la cobertura baja del mínimo. El resumen de las cuatro métricas de cada workspace aparece en la página del workflow en GitHub Actions (pestaña **Summary**).
 
 **Qué mide cada número.** La tabla muestra cuatro métricas:
 
@@ -210,7 +212,7 @@ Cada workspace exige un mínimo de **95 % de líneas y de instrucciones** (`thre
 | Functions  | Funciones que se llamaron al menos una vez                                 |
 | Branches   | Caminos de cada condición (`if`, `? :`, `&&`) que se probaron, uno por uno |
 
-La cobertura del proyecto se reporta como **líneas e instrucciones**, que es el criterio habitual. Branches es la métrica más exigente: una línea con un `if` cuenta como cubierta aunque solo se haya probado uno de sus caminos.
+La cobertura del proyecto se reporta como **líneas, instrucciones y funciones**. Branches es la métrica más exigente: una línea con un `if` cuenta como cubierta aunque solo se haya probado uno de sus caminos.
 
 **Qué se mide.**
 
@@ -222,7 +224,7 @@ La cobertura del proyecto se reporta como **líneas e instrucciones**, que es el
 | Workspace | Lines  | Statements | Functions | Branches |
 | --------- | ------ | ---------- | --------- | -------- |
 | backend   | 97,0 % | 95,9 %     | 99,1 %    | 85,9 %   |
-| frontend  | 96,5 % | 95,1 %     | 94,6 %    | 91,5 %   |
+| frontend  | 96,7 % | 95,2 %     | 95,1 %    | 91,5 %   |
 
 En Windows, algunos tests del frontend pueden superar el tiempo límite por la lentitud del sistema de archivos. Si pasa, córrelos en WSL con el repo clonado dentro de Linux (no en `/mnt/c`).
 
