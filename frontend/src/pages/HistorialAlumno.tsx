@@ -13,6 +13,7 @@ import { RegistroMisNotas } from './MisNotas'
 import { textoNotaFinal } from './nota-final'
 import { useDatos } from './useDatos'
 import './Dashboard.css'
+import { useMigas } from '../layout/migas-contexto'
 
 export const RUTA_HISTORIAL = '/mis-cursos/historial'
 const API = '/api/mis-cursos/historial'
@@ -83,6 +84,17 @@ function PeriodosAnteriores() {
 function CursoAnterior({ id }: { id: string }) {
   const [detalle, recargar, estado] = useDatos<DetalleHistorialAlumno>(
     `${API}/${id}`,
+  )
+  useMigas(
+    detalle === undefined
+      ? null
+      : [
+          {
+            etiqueta: detalle
+              ? `${detalle.curso.codigo} · ${detalle.curso.nombre}`
+              : 'Curso anterior',
+          },
+        ],
   )
   return (
     <section className="dashboard" aria-label="Notas del curso anterior">

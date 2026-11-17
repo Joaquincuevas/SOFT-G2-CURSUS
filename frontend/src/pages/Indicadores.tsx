@@ -49,6 +49,7 @@ import {
   plural,
   usePeriodoDeLaUrl,
   valorIndicador,
+  nombrePaso,
 } from './indicadores-formato'
 import { TablaUniversidades } from './TablaUniversidades'
 import { useDatos } from './useDatos'
@@ -211,16 +212,28 @@ function FacultadesUniversidad() {
     valido ? `/api/metricas/universidades/${id}/facultades${consulta}` : null,
   )
   const volver = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volver },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+    },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
 
   return (
     <section className={CONTENEDOR} aria-label="Indicadores por facultad">
-      <Migas
-        pasos={[
-          { texto: 'Indicadores', a: volver },
-          { texto: datos ? datos.universidad.nombre : 'Universidad' },
-        ]}
-      />
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
         <CargandoEsqueleto texto="Cargando facultades…" filas={2} />
@@ -463,20 +476,30 @@ function CarrerasFacultad() {
   const universidadId = datos?.universidad.id ?? id
   const volverUniversidad = `/indicadores/universidades/${universidadId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: volverUniversidad,
+    },
+    { texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
 
   return (
     <section className={CONTENEDOR} aria-label="Indicadores por carrera">
-      <Migas
-        pasos={[
-          { texto: 'Indicadores', a: volverIndicadores },
-          {
-            texto: datos ? datos.universidad.nombre : 'Universidad',
-            a: volverUniversidad,
-          },
-          { texto: datos ? datos.facultad.nombre : 'Facultad' },
-        ]}
-      />
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
         <CargandoEsqueleto texto="Cargando carreras…" filas={2} />
@@ -541,6 +564,30 @@ function CursosCarrera() {
   const facultadRutaId = datos?.facultad.id ?? facultadId
   const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: universidadRuta,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre),
+      a: facultadRuta,
+    },
+    { texto: nombrePaso(datos, valido, 'Carrera', (d) => d.carrera.nombre) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
   const cambiarOrden = (nuevo: OrdenCurso) => {
     const siguiente = new URLSearchParams(params)
     siguiente.set('orden', nuevo)
@@ -550,7 +597,6 @@ function CursosCarrera() {
     )
     fijarParams(siguiente)
   }
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
 
   const cursos = datos
     ? [...datos.cursos].sort((a, b) =>
@@ -559,17 +605,7 @@ function CursosCarrera() {
     : []
   return (
     <section className={CONTENEDOR} aria-label="Indicadores por curso">
-      <Migas
-        pasos={[
-          { texto: 'Indicadores', a: volverIndicadores },
-          {
-            texto: datos?.universidad.nombre ?? 'Universidad',
-            a: universidadRuta,
-          },
-          { texto: datos?.facultad.nombre ?? 'Facultad', a: facultadRuta },
-          { texto: datos?.carrera.nombre ?? 'Carrera' },
-        ]}
-      />
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
         <CargandoEsqueleto texto="Cargando cursos…" filas={4} />
@@ -636,21 +672,37 @@ function DistribucionCurso() {
   const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
   const carreraRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}/carreras/${carreraRutaId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: `/indicadores/universidades/${universidadId}${sufijo}`,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre),
+      a: facultadRuta,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Carrera', (d) => d.carrera.nombre),
+      a: carreraRuta,
+    },
+    { texto: nombrePaso(datos, valido, 'Curso', (d) => d.curso.codigo) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
   return (
     <section className={CONTENEDOR} aria-label="Distribución de notas">
-      <Migas
-        pasos={[
-          { texto: 'Indicadores', a: volverIndicadores },
-          {
-            texto: datos?.universidad.nombre ?? 'Universidad',
-            a: `/indicadores/universidades/${universidadId}${sufijo}`,
-          },
-          { texto: datos?.facultad.nombre ?? 'Facultad', a: facultadRuta },
-          { texto: datos?.carrera.nombre ?? 'Carrera', a: carreraRuta },
-          { texto: datos?.curso.codigo ?? 'Curso' },
-        ]}
-      />
+      <Migas pasos={pasos} />
       {datos === undefined ? (
         <CargandoEsqueleto texto="Cargando distribución…" tarjetas={1} />
       ) : datos === null ? (
