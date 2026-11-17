@@ -127,7 +127,8 @@ export function Periodos() {
         acciones={
           <Button
             type="button"
-            disabled={!periodos}
+            // Mientras se activa otro, crear uno activo podría cruzar las respuestas.
+            disabled={!periodos || activando !== null}
             onClick={() => setCreando(true)}
           >
             <Plus aria-hidden="true" />

@@ -241,6 +241,32 @@ test('un fallo de activación conserva el activo anterior y permite reintentar',
   ).toBeEnabled()
 })
 
+test('mientras se activa un período, «Nuevo período» queda deshabilitado', async () => {
+  let terminar!: (res: Response) => void
+  preparar(
+    [INICIAL, NUEVO],
+    () =>
+      new Promise<Response>((resolve) => {
+        terminar = resolve
+      }),
+  )
+  await screen.findByText('2027-1')
+  const nuevo = screen.getByRole('button', { name: 'Nuevo período' })
+  expect(nuevo).toBeEnabled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Activar período 2027-1' }),
+  )
+  await waitFor(() => expect(terminar).toBeDefined())
+  expect(nuevo).toBeDisabled()
+  fireEvent.click(nuevo)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  await act(async () => terminar(json({ ...NUEVO, activo: true })))
+  expect(
+    await screen.findByText('Período activo actualizado'),
+  ).toBeInTheDocument()
+  await waitFor(() => expect(nuevo).toBeEnabled())
+})
+
 test('reintenta una carga fallida y avisa el error de conexión al guardar en el diálogo', async () => {
   let intento = 0
   vi.stubGlobal(
