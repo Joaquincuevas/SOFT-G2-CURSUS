@@ -544,6 +544,16 @@ describe('layout de curso (UIX-04)', () => {
     expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
   })
 
+  test('dentro de una sección «Mis Cursos» no se marca junto al ítem activo del curso', async () => {
+    await renderConSesion('ALUMNO', `${VISTA}?vista=anuncios`, rutas('ALUMNO'))
+    await menuDelCurso()
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    expect(
+      within(nav).getByRole('link', { name: 'Mis Cursos' }),
+    ).not.toHaveAttribute('aria-current')
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
+  })
+
   test('con un solo curso no hay selector', async () => {
     await renderConSesion('ALUMNO', VISTA, {
       ...rutas('ALUMNO'),
