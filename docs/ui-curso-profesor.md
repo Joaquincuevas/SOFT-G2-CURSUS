@@ -162,6 +162,17 @@ Fix de UI, sin tarjeta.
 
 Capturas en [`evidencias/`](evidencias/): `ui-alumno-<antes|despues>-<pantalla>-<1280|375>.png` (dashboard, mis-cursos, home, anuncios, material, entregas, notas, asistencia, integrantes, historial) y `entregas-estados` (con datos simulados para mostrar los cinco estados).
 
+## «Mis cursos» siempre en el menú lateral
+
+Fix de UI, sin tarjeta. Antes el menú del curso solo aparecía dentro de una sección, y las tarjetas del Dashboard tenían seis botones de ícono sin texto.
+
+- **Menú lateral** (Profesor, Ayudante y Alumno): bajo «Dashboard» va la lista «Mis cursos» con las secciones del período (código · nombre, sección), cada una como acordeón con sus vistas (`VISTAS_CURSO`: Home, Anuncios, Material, Entregas, Notas, Asistencia e Integrantes o Académicos según el rol). Solo una abierta a la vez: la del curso de la ruta (con su vista marcada) o la que se abra con el chevron; en el Dashboard, todas cerradas, salvo que haya un solo curso. El nombre lleva al Home del curso; el chevron solo abre y cierra. El alumno conserva su ítem «Mis Cursos» (lista completa e historial), que encabeza la lista; para el profesor y el ayudante va el título «Mis cursos».
+- Reemplaza el bloque del curso y el selector de curso anteriores. Con muchos cursos la lista se desplaza dentro del menú y el pie (universidad y «Contraer menú») queda fijo. Contraído: las iniciales del curso con su nombre en un tooltip y sus vistas en un panel. En móvil, todo va en el panel del menú.
+- **Una sola carga:** `SeccionesProvider` (en el AppShell) pide las secciones del rol una vez y las comparten el menú, el Dashboard y Mis Cursos (`useMisSecciones`). El Dashboard y Mis Cursos las vuelven a pedir al montarse si ya estaban cargadas, para refrescar contadores; leer anuncios también las refresca.
+- **Tarjetas del Dashboard** (Profesor y Ayudante): sin la fila de íconos; la tarjeta entera es un enlace al Home del curso (el nombre se estira sobre la tarjeta, con foco visible). El aviso «N evaluación(es) pendiente(s) de revisión» es su propio enlace a la página de pendientes. Las del Alumno ya eran un enlace completo.
+
+Capturas en [`evidencias/`](evidencias/): `ui-sidebar-cursos-<antes|despues>-<profesor|ayudante|alumno>-<dashboard|curso|contraido|contraido-panel|dashboard-menu|curso-menu>-<1280|375>.png`. Las del profesor usan 3 de sus secciones (el seed le da 10).
+
 ## Evidencias
 
 Capturas antes y después en 1280, 1920 y 375 px de cada pestaña, y de los diálogos (subir material, sílabo, nuevo anuncio, crear actividad, calendario y período terminado), en [`evidencias/`](evidencias/) como `ui-curso-profesor-<antes|despues>-<estado>-<ancho>.png`. Los anuncios, materiales, versiones del sílabo y la actividad se crearon por la aplicación en la base local.
