@@ -213,7 +213,14 @@ export async function sembrarFacultadCompleta(
           [
             universidad,
             seccion.id,
-            ayudantes.slice((numero - 1) * 2, numero * 2),
+            // Con los cuatro ayudantes de GES-22 son siempre los mismos dos
+            // por sección; con más (seed de demo), cada curso toma otro grupo.
+            [0, 1].map(
+              (j) =>
+                ayudantes[
+                  (indiceCurso * 4 + (numero - 1) * 2 + j) % ayudantes.length
+                ],
+            ),
           ],
         )
         const deLaCarrera = alumnos.filter((_, i) => i % 3 === indiceCarrera)
