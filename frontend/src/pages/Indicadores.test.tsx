@@ -153,6 +153,44 @@ const METRICAS: MetricasConsolidadas = {
   cursos: 4,
 }
 
+// Un paso del breadcrumb del encabezado: un enlace, o —si la ruta es larga y
+// quedó en el menú «…»— un ítem de ese menú.
+async function paso(nombre: string) {
+  // Hasta que llegan los nombres, el breadcrumb tiene un esqueleto.
+  await waitFor(() =>
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Breadcrumb', hidden: true }),
+      ).queryByRole('status', { hidden: true }),
+    ).toBeNull(),
+  )
+  // Con el menú «…» abierto el resto de la página queda oculto (hidden).
+  const abierto = screen.queryByRole('menu')
+  const enMenu = abierto
+    ? within(abierto).queryByRole('menuitem', { name: nombre })
+    : null
+  if (enMenu) return enMenu
+  const nav = screen.getByRole('navigation', {
+    name: 'Breadcrumb',
+    hidden: true,
+  })
+  const directo = within(nav).queryByRole('link', {
+    name: nombre,
+    hidden: true,
+  })
+  if (directo) return directo
+  fireEvent.keyDown(
+    within(nav).getByRole('button', {
+      name: 'Ver los pasos intermedios',
+      hidden: true,
+    }),
+    { key: 'Enter' },
+  )
+  return within(await screen.findByRole('menu')).getByRole('menuitem', {
+    name: nombre,
+  })
+}
+
 describe('Indicadores del Director (MET-01)', () => {
   test('muestra las tres tarjetas con valor, unidad y n', async () => {
     await renderConSesion('DIRECTOR', '/indicadores', {
@@ -318,16 +356,11 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(screen.getByText('Carrera sin datos')).toBeInTheDocument()
     expect(screen.getAllByText('Sin datos suficientes')).toHaveLength(3)
     expect(pedidas).toContain(`${CARRERAS_RUTA}?periodo=2026-1`)
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
-    expect(
-      migas.getByRole('link', { name: 'Universidad Demo Norte' }),
-    ).toHaveAttribute(
+    expect(await paso('Universidad Demo Norte')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte?periodo=2026-1',
     )
@@ -347,17 +380,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    const enlace = await migas.findByRole('link', {
-      name: 'Universidad Demo Sur',
-    })
+    const enlace = await waitFor(() => paso('Universidad Demo Sur'))
     expect(enlace).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
@@ -435,25 +463,16 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       within(tabla).getByRole('columnheader', { name: /Aprobación/ }),
     ).toHaveAttribute('aria-sort', 'ascending')
     expect(within(tabla).getAllByRole('row')[1]).toHaveTextContent('INF-101')
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Indicadores' }),
-    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Ingeniería' }),
-    ).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+    expect(await paso('Ingeniería')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte/facultades/f-ing?periodo=2026-1',
     )
     // Y vuelve también a la universidad, conservando el período.
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Universidad Demo Norte' }),
-    ).toHaveAttribute(
+    expect(await paso('Universidad Demo Norte')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte?periodo=2026-1',
     )
@@ -473,17 +492,13 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    expect(await paso('Universidad Demo Sur')).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(
-      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
-    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
     // La URL trae f-ing, pero la carrera es de otra facultad: el enlace usa la
     // de la API y conserva el período.
-    expect(
-      migas.getByRole('link', { name: 'Facultad de Sur' }),
-    ).toHaveAttribute(
+    expect(await paso('Facultad de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-otra?periodo=2026-1',
     )
@@ -672,19 +687,47 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toBeInTheDocument()
     expect(screen.getAllByText('1,0–1,9').length).toBeGreaterThan(0)
     expect(screen.getByText(/7\s+alumnos evaluados/)).toBeInTheDocument()
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
-    expect(
-      migas.getByRole('link', { name: 'Ingeniería Civil' }),
-    ).toHaveAttribute(
+    expect(await paso('Ingeniería Civil')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
     )
+  })
+
+  test('una ruta larga colapsa los pasos intermedios en «…»: quedan Inicio, el penúltimo y el último', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1?periodo=2026-1',
+      { [DISTRIBUCION_RUTA]: () => DISTRIBUCION },
+    )
+    await screen.findByRole('img', { name: /Distribución de notas/ })
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    await waitFor(() => expect(within(nav).queryByRole('status')).toBeNull())
+    const visibles = within(nav)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent)
+    // Inicio · … · Carrera · Curso (el último es el título).
+    expect(visibles[0]).toBe('Inicio')
+    expect(visibles.at(-2)).toBe('Ingeniería Civil')
+    expect(visibles).not.toContain('Indicadores')
+    expect(within(nav).getByRole('heading', { level: 1 })).toHaveAttribute(
+      'class',
+      expect.stringContaining('truncate'),
+    )
+    // El menú «…» trae los pasos de en medio, con sus enlaces.
+    fireEvent.keyDown(
+      within(nav).getByRole('button', { name: 'Ver los pasos intermedios' }),
+      { key: 'Enter' },
+    )
+    const menu = within(await screen.findByRole('menu'))
+    expect(menu.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Indicadores',
+      'Universidad Demo Norte',
+      'Ingeniería',
+    ])
   })
 
   // Un enlace directo puede combinar una facultad y una carrera que no son las
@@ -702,19 +745,15 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    expect(await paso('Universidad Demo Sur')).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(
-      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
-    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
-    expect(
-      migas.getByRole('link', { name: 'Facultad de Sur' }),
-    ).toHaveAttribute(
+    expect(await paso('Facultad de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-sur?periodo=2026-1',
     )
-    expect(migas.getByRole('link', { name: 'Carrera de Sur' })).toHaveAttribute(
+    expect(await paso('Carrera de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-sur/carreras/c-sur?periodo=2026-1',
     )
@@ -740,11 +779,10 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await screen.findByRole('img', { name: /Distribución de notas/ }),
     ).toBeInTheDocument()
     expect(pedidas).toEqual([DISTRIBUCION_RUTA])
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Indicadores' }),
-    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
+    expect(await paso('Indicadores')).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
   })
 
   test('distribución: vacío, error con reintento y curso inexistente', async () => {
@@ -845,18 +883,16 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         [FACULTADES]: registrar(FACULTADES, DETALLE),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
     await waitFor(() =>
-      expect(migas.getByText('Universidad Demo Norte')).toHaveAttribute(
-        'aria-current',
-        'page',
-      ),
+      expect(
+        within(
+          screen.getByRole('navigation', { name: 'Breadcrumb' }),
+        ).getByText('Universidad Demo Norte'),
+      ).toHaveAttribute('aria-current', 'page'),
     )
     // En el detalle todavía no se pidió el consolidado.
     expect(pedidas).not.toContain(`${RUTA}?periodo=2026-1`)
-    fireEvent.click(migas.getByRole('link', { name: 'Indicadores' }))
+    fireEvent.click(await paso('Indicadores'))
     expect(
       await screen.findByRole('list', { name: 'Indicadores' }),
     ).toBeInTheDocument()
@@ -881,15 +917,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     fireEvent.click(
       await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
     await screen.findByRole('list', { name: 'Facultades' })
     expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
     expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
     expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
     // El enlace de vuelta conserva el período.
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
@@ -998,7 +1031,7 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         [FACULTADES]: pedida,
       })
       expect(
-        screen.queryByRole('navigation', { name: 'Ruta de navegación' }),
+        screen.queryByRole('navigation', { name: 'Breadcrumb' }),
       ).toBeNull()
       expect(screen.queryByRole('list', { name: 'Facultades' })).toBeNull()
       expect(pedida).not.toHaveBeenCalled()
@@ -1195,10 +1228,7 @@ describe('comparación entre universidades (MET-02)', () => {
     expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
       '2026-1',
     )
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
