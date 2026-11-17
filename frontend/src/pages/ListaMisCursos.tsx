@@ -1,9 +1,4 @@
-import type {
-  BloqueHorario,
-  SeccionAlumno,
-  SeccionAyudante,
-  SeccionDashboard,
-} from '@cursus/shared'
+import type { BloqueHorario, SeccionAlumno } from '@cursus/shared'
 import { BookOpen, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -21,75 +16,43 @@ import { Input } from '@/components/ui/input'
 import { useSession } from '../session/session'
 import { RUTA_HISTORIAL } from './HistorialAlumno'
 import { RUTA_SECCIONES_ALUMNO } from './SeccionesAlumno'
-import { RUTA_SECCIONES_AYUDANTE } from './SeccionesAyudante'
 import { ENLACE } from './indicadores-formato'
-import {
-  nombresProfesores,
-  RUTA_MIS_SECCIONES,
-  RUTA_PAGINA_PENDIENTES,
-  rutaSeccion,
-  textoBloque,
-  textoPendientes,
-} from './misSecciones'
+import { nombresProfesores, rutaSeccion, textoBloque } from './misSecciones'
 import { useDatos } from './useDatos'
 
-// Una fila por sección del usuario. Los tres endpoints del Dashboard traen
-// campos distintos: el profesor, horario y alumnos; el ayudante, el profesor
-// a cargo; el alumno, horario y profesor.
-interface Fila {
-  id: string
-  codigo: string
-  nombre: string
-  numero: number
-  horario?: BloqueHorario[]
-  alumnos?: number
-  profesores?: string[]
-  pendientes: number
-}
-
-type Respuesta = SeccionDashboard | SeccionAyudante | SeccionAlumno
-
-const aFila = (s: Respuesta): Fila => ({
-  id: s.id,
-  codigo: s.curso.codigo,
-  nombre: s.curso.nombre,
-  numero: s.numero,
-  horario: 'horario' in s ? s.horario : undefined,
-  alumnos: 'alumnos' in s ? s.alumnos : undefined,
-  profesores: 'profesores' in s ? nombresProfesores(s) : undefined,
-  pendientes: 'pendientesRevision' in s ? s.pendientesRevision : 0,
-})
-
-// Sin tildes ni mayúsculas: «programacion» encuentra «Programación».
+// Una fila por inscripción activa del alumno en el período activo.
 const normalizar = (texto: string) =>
   texto
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
-
-const RUTA_POR_ROL = {
-  PROFESOR: RUTA_MIS_SECCIONES,
-  AYUDANTE: RUTA_SECCIONES_AYUDANTE,
-  ALUMNO: RUTA_SECCIONES_ALUMNO,
-} as const
-const ROL_EN_CURSO = {
-  PROFESOR: 'Profesor',
-  AYUDANTE: 'Ayudante',
-  ALUMNO: 'Alumno',
-} as const
 const NUMERO = 'text-right tabular-nums'
 
-// /mis-cursos: la lista completa de cursos del usuario, como «Todos los
-// cursos» de Canvas. El Dashboard los resume en tarjetas. Las tres respuestas
-// son del período activo: la API no entrega períodos anteriores.
-export function ListaMisCursos({
-  rol,
-}: {
-  rol: 'PROFESOR' | 'AYUDANTE' | 'ALUMNO'
-}) {
+interface Fila {
+  id: string
+  codigo: string
+  nombre: string
+  numero: number
+  horario: BloqueHorario[]
+  profesores: string[]
+}
+
+const aFila = (s: SeccionAlumno): Fila => ({
+  id: s.id,
+  codigo: s.curso.codigo,
+  nombre: s.curso.nombre,
+  numero: s.numero,
+  horario: s.horario,
+  profesores: nombresProfesores(s),
+})
+
+// /mis-cursos del alumno: la lista completa de sus cursos, como «Todos los
+// cursos» de Canvas. El Dashboard los resume en tarjetas. La API entrega solo
+// el período activo.
+export function ListaMisCursos() {
   const { user } = useSession()
   const navegar = useNavigate()
-  const [respuesta, recargar] = useDatos<Respuesta[]>(RUTA_POR_ROL[rol])
+  const [respuesta, recargar] = useDatos<SeccionAlumno[]>(RUTA_SECCIONES_ALUMNO)
   const [busqueda, setBusqueda] = useState('')
 
   const todas = useMemo(() => respuesta?.map(aFila), [respuesta])
@@ -104,7 +67,6 @@ export function ListaMisCursos({
   const periodo = user.periodoActivo
     ? `${user.periodoActivo.anio}-${user.periodoActivo.semestre}`
     : '—'
-  const pendientes = todas?.reduce((n, f) => n + f.pendientes, 0) ?? 0
 
   const columnas: Columna<Fila>[] = [
     {
@@ -130,56 +92,38 @@ export function ListaMisCursos({
       encabezado: 'Período',
       celda: () => periodo,
     },
-    ...(rol === 'AYUDANTE'
-      ? []
-      : [
-          {
-            clave: 'horario',
-            encabezado: 'Horario y sala',
-            celda: (f: Fila) =>
-              f.horario?.length ? (
-                <ul
-                  className="m-0 grid list-none gap-0.5 p-0"
-                  aria-label={`Horario de ${f.codigo}`}
-                >
-                  {f.horario.map((b) => (
-                    <li key={`${b.dia}-${b.inicio}`}>{textoBloque(b)}</li>
-                  ))}
-                </ul>
-              ) : (
-                <span className="text-muted-foreground">
-                  Sin horario asignado
-                </span>
-              ),
-          },
-        ]),
-    ...(rol === 'PROFESOR'
-      ? [
-          {
-            clave: 'alumnos',
-            encabezado: 'Alumnos',
-            valor: (f: Fila) => f.alumnos,
-            celda: (f: Fila) => f.alumnos ?? '—',
-            className: NUMERO,
-          },
-        ]
-      : [
-          {
-            clave: 'profesores',
-            encabezado: 'Profesores',
-            celda: (f: Fila) =>
-              f.profesores?.length ? (
-                f.profesores.join(', ')
-              ) : (
-                <span className="text-muted-foreground">Sin asignar</span>
-              ),
-          },
-          {
-            clave: 'inscrito',
-            encabezado: 'Inscrito como',
-            celda: () => <Badge variant="secondary">{ROL_EN_CURSO[rol]}</Badge>,
-          },
-        ]),
+    {
+      clave: 'horario',
+      encabezado: 'Horario y sala',
+      celda: (f) =>
+        f.horario.length ? (
+          <ul
+            className="m-0 grid list-none gap-0.5 p-0"
+            aria-label={`Horario de ${f.codigo}`}
+          >
+            {f.horario.map((b) => (
+              <li key={`${b.dia}-${b.inicio}`}>{textoBloque(b)}</li>
+            ))}
+          </ul>
+        ) : (
+          <span className="text-muted-foreground">Sin horario asignado</span>
+        ),
+    },
+    {
+      clave: 'profesores',
+      encabezado: 'Profesores',
+      celda: (f) =>
+        f.profesores.length ? (
+          f.profesores.join(', ')
+        ) : (
+          <span className="text-muted-foreground">Sin asignar</span>
+        ),
+    },
+    {
+      clave: 'inscrito',
+      encabezado: 'Inscrito como',
+      celda: () => <Badge variant="secondary">Alumno</Badge>,
+    },
   ]
 
   const cantidad = (n: number) => `${n} ${n === 1 ? 'curso' : 'cursos'}`
@@ -190,20 +134,9 @@ export function ListaMisCursos({
         titulo="Mis cursos"
         descripcion={`Período ${periodo}`}
         acciones={
-          <>
-            {rol === 'PROFESOR' && pendientes > 0 && (
-              <Link to={RUTA_PAGINA_PENDIENTES} className="no-underline">
-                <Badge variant="secondary" className="hover:bg-secondary/70">
-                  {textoPendientes(pendientes)}
-                </Badge>
-              </Link>
-            )}
-            {rol === 'ALUMNO' && (
-              <Button asChild variant="outline">
-                <Link to={RUTA_HISTORIAL}>Historial de notas</Link>
-              </Button>
-            )}
-          </>
+          <Button asChild variant="outline">
+            <Link to={RUTA_HISTORIAL}>Historial de notas</Link>
+          </Button>
         }
       />
       {respuesta === null ? (
@@ -280,13 +213,7 @@ export function ListaMisCursos({
               ) : (
                 <EmptyState
                   icono={BookOpen}
-                  titulo={
-                    rol === 'PROFESOR'
-                      ? 'No tienes secciones a tu cargo en el período activo.'
-                      : rol === 'AYUDANTE'
-                        ? 'No eres ayudante de ninguna sección en el período activo.'
-                        : 'No tienes inscripciones en el período activo.'
-                  }
+                  titulo="No tienes inscripciones en el período activo."
                   mensaje="Tus cursos aparecerán aquí cuando estén asignados."
                 />
               )

@@ -25,9 +25,15 @@ interface Props {
 // panel que se abre desde el encabezado en pantallas angostas.
 export function Sidebar({ colapsado = false, onAlternar, onNavigate }: Props) {
   const { user, ability } = useSession()
-  // El egresado solo ve su historial de notas (HIS-06).
+  // El egresado solo ve su historial de notas (HIS-06). Profesor y ayudante
+  // tienen pocos cursos y los ven en el Dashboard: «Mis Cursos» es del alumno.
   const items = navItemsFor(ability).filter(
-    (item) => !user.egresado || item.to === '/mis-cursos',
+    (item) =>
+      (!user.egresado || item.to === '/mis-cursos') &&
+      !(
+        item.to === '/mis-cursos' &&
+        (user.rol === 'PROFESOR' || user.rol === 'AYUDANTE')
+      ),
   )
 
   return (
