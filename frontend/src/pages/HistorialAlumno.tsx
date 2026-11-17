@@ -3,6 +3,9 @@ import type {
   PeriodoHistorialAlumno,
 } from '@cursus/shared'
 import { Link, Navigate, useParams } from 'react-router'
+import { History } from 'lucide-react'
+import { EmptyState } from '@/components/shared'
+import { Card } from '@/components/ui/card'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useSession } from '../session/session'
@@ -10,6 +13,7 @@ import { RegistroMisNotas } from './MisNotas'
 import { textoNotaFinal } from './nota-final'
 import { useDatos } from './useDatos'
 import './Dashboard.css'
+import { useMigas } from '../layout/migas-contexto'
 
 export const RUTA_HISTORIAL = '/mis-cursos/historial'
 const API = '/api/mis-cursos/historial'
@@ -38,10 +42,12 @@ function PeriodosAnteriores() {
           onReintentar={recargar}
         />
       ) : periodos.length === 0 ? (
-        <p className="dashboard__texto">
-          Aún no tienes notas publicadas de cursos cerrados de períodos
-          anteriores.
-        </p>
+        <Card className="py-0">
+          <EmptyState
+            icono={History}
+            mensaje="Aún no tienes notas publicadas de cursos cerrados de períodos anteriores."
+          />
+        </Card>
       ) : (
         periodos.map(({ periodo, cursos }) => (
           <section
@@ -78,6 +84,17 @@ function PeriodosAnteriores() {
 function CursoAnterior({ id }: { id: string }) {
   const [detalle, recargar, estado] = useDatos<DetalleHistorialAlumno>(
     `${API}/${id}`,
+  )
+  useMigas(
+    detalle === undefined
+      ? null
+      : [
+          {
+            etiqueta: detalle
+              ? `${detalle.curso.codigo} · ${detalle.curso.nombre}`
+              : 'Curso anterior',
+          },
+        ],
   )
   return (
     <section className="dashboard" aria-label="Notas del curso anterior">

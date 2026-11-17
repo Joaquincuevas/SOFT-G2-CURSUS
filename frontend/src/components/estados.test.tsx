@@ -15,9 +15,29 @@ describe('Cargando', () => {
     render(<Cargando texto="Cargando cursos…" pantallaCompleta />)
     expect(screen.getByRole('status')).toHaveTextContent('Cargando cursos…')
   })
+
+  test('la pantalla completa lleva el isotipo y la carga dentro de una página no', () => {
+    const { unmount } = render(<Cargando pantallaCompleta />)
+    expect(screen.getByRole('img', { name: 'CURSUS' })).toHaveClass(
+      'text-primary',
+    )
+    unmount()
+    render(<Cargando />)
+    expect(screen.queryByRole('img')).toBeNull()
+  })
 })
 
 describe('ErrorEstado', () => {
+  test('el error de pantalla completa lleva el isotipo y el de una página no', () => {
+    const { unmount } = render(
+      <ErrorEstado mensaje="Falló." onReintentar={vi.fn()} pantallaCompleta />,
+    )
+    expect(screen.getByRole('img', { name: 'CURSUS' })).toBeInTheDocument()
+    unmount()
+    render(<ErrorEstado mensaje="Falló." onReintentar={vi.fn()} />)
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
   test('muestra el mensaje con role="alert" y Reintentar llama a onReintentar', () => {
     const onReintentar = vi.fn()
     render(

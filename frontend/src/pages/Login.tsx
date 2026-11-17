@@ -1,37 +1,91 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Loader2 } from 'lucide-react'
+import { useContext, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
-import { useAuth, type ResultadoMfa } from '../auth/auth'
-import { PanelMarca } from '../components/PanelMarca'
-import './Login.css'
+import { AlertaAcceso } from '@/components/AlertaAcceso'
+import { AuthLayout } from '@/components/AuthLayout'
+import { CampoPassword } from '@/components/CampoPassword'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Cargando } from '../components/Cargando'
+import { AVISO_SESION_EXPIRADA, useAuth, type ResultadoMfa } from '../auth/auth'
+import { destinoTrasLogin } from '../auth/retorno'
+import { SessionContext } from '../session/session'
+
+const MENSAJE_EXPIRADO =
+  'La verificación expiró. Vuelve a ingresar tu correo y contraseña.'
+const FORMATO_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+interface ErroresDeCampo {
+  correo?: string
+  password?: string
+}
+
+// Tarjeta de las pantallas de acceso, con el aspecto del Figma (nodo 66:2).
+function TarjetaAcceso({ children }: { children: React.ReactNode }) {
+  return (
+    <Card className="gap-0 border-0 bg-transparent py-0 shadow-none">
+      <CardContent className="px-0">{children}</CardContent>
+    </Card>
+  )
+}
 
 // Pantalla de login del Figma (nodo 66:2).
 export function Login() {
-  const { token, aviso, iniciarSesion, completarMfa } = useAuth()
+  const { token, aviso, mismoUsuario, iniciarSesion, completarMfa } = useAuth()
+  const sesion = useContext(SessionContext)
   const location = useLocation()
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Un campo vacío o con un correo mal escrito se avisa junto al campo, sin
+  // pedirle nada a la API.
+  const [errores, setErrores] = useState<ErroresDeCampo>({})
   // SEG-02: el desafío del paso 1 cuando la cuenta tiene MFA. Con él se pide
   // el código; la contraseña no se guarda.
   const [desafio, setDesafio] = useState<string | null>(null)
   const [correo, setCorreo] = useState('')
+  const correoRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
 
-  // Al iniciar sesión vuelve a la ruta que pidió RequireAuth, o al Dashboard.
+  // Con la sesión lista vuelve a la ruta que pidió RequireAuth si corresponde
+  // (ver destinoTrasLogin); si no, al Dashboard.
   if (token) {
-    const destino = (location.state as { from?: string } | null)?.from ?? '/'
-    return <Navigate to={destino} replace />
+    if (!sesion) return <Cargando pantallaCompleta />
+    const { from } = (location.state as { from?: unknown } | null) ?? {}
+    return (
+      <Navigate
+        to={destinoTrasLogin(from, mismoUsuario, sesion.ability)}
+        replace
+      />
+    )
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const datos = new FormData(event.currentTarget)
+    const correoIngresado = String(datos.get('correo'))
+    const password = String(datos.get('password'))
+
+    const invalidos: ErroresDeCampo = {}
+    if (!correoIngresado.trim()) {
+      invalidos.correo = 'Ingresa tu correo institucional.'
+    } else if (!FORMATO_CORREO.test(correoIngresado.trim())) {
+      invalidos.correo =
+        'Ingresa un correo válido, por ejemplo pedro.soto@universidad.cl.'
+    }
+    if (!password) invalidos.password = 'Ingresa tu contraseña.'
+    setErrores(invalidos)
+    if (invalidos.correo || invalidos.password) {
+      setError(null)
+      if (invalidos.correo) correoRef.current?.focus()
+      else passwordRef.current?.focus()
+      return
+    }
+
     setEnviando(true)
     setError(null)
-    const correoIngresado = String(datos.get('correo'))
-    const ok = await iniciarSesion(
-      correoIngresado,
-      String(datos.get('password')),
-    )
+    const ok = await iniciarSesion(correoIngresado, password)
     if (typeof ok === 'object') {
       setCorreo(correoIngresado)
       setDesafio(ok.desafio)
@@ -53,93 +107,156 @@ export function Login() {
 
   if (desafio) {
     return (
-      <div className="login">
-        <PanelMarca />
-        <main className="login__area">
-          <VerificacionMfa
-            desafio={desafio}
-            completarMfa={completarMfa}
-            volver={(mensaje) => {
-              setDesafio(null)
-              setError(mensaje)
-              setEnviando(false)
-            }}
-            aviso={aviso}
-          />
-        </main>
-      </div>
+      <VerificacionMfa
+        desafio={desafio}
+        completarMfa={completarMfa}
+        volver={(mensaje) => {
+          setDesafio(null)
+          setError(mensaje)
+          setEnviando(false)
+        }}
+        aviso={aviso}
+      />
     )
   }
 
+  // Un aviso de la sesión (expiró) es informativo; cualquier otro, como el de
+  // demasiados intentos, es un bloqueo. Un mensaje de error es un error.
+  const mensaje = aviso || error
+  const variante: 'danger' | 'warning' | 'info' = aviso
+    ? aviso === AVISO_SESION_EXPIRADA
+      ? 'info'
+      : 'warning'
+    : error === MENSAJE_EXPIRADO
+      ? 'info'
+      : 'danger'
+  const idMensaje = mensaje ? 'login-error' : undefined
+  const credencialesInvalidas = variante === 'danger' && error !== null
+  const descritoPor = (idCampo: string | undefined) =>
+    [idCampo, idMensaje].filter(Boolean).join(' ') || undefined
+
   return (
-    <div className="login">
-      <PanelMarca />
-
-      <main className="login__area">
-        <div className="login__wrapper">
-          <div className="login__heading">
-            <h1 className="login__title">Bienvenido a CURSUS</h1>
-            <p className="login__subtitle">
-              Ingresa con tus credenciales institucionales.
-            </p>
-          </div>
-
-          <form className="login__card" onSubmit={handleSubmit}>
-            <p className="login__caption">
-              Usa el correo institucional asociado a tu universidad.
-            </p>
-            {(aviso || error) && (
-              <p className="login__error" id="login-error" role="alert">
-                {aviso || error}
+    <AuthLayout
+      titulo="Bienvenido a CURSUS"
+      descripcion="Ingresa con tus credenciales institucionales."
+      pie={
+        <p className="m-0 text-sm text-muted-foreground">
+          CURSUS · Plataforma web de gestión académica
+        </p>
+      }
+    >
+      <TarjetaAcceso>
+        <form onSubmit={handleSubmit} noValidate className="grid gap-6">
+          <p className="m-0 text-sm text-muted-foreground">
+            Usa el correo institucional asociado a tu universidad.
+          </p>
+          {mensaje && (
+            <AlertaAcceso variante={variante} id="login-error">
+              {mensaje}
+            </AlertaAcceso>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor="login-correo" className="text-base">
+              Correo institucional
+            </Label>
+            <Input
+              ref={correoRef}
+              id="login-correo"
+              name="correo"
+              type="email"
+              autoComplete="username"
+              defaultValue={correo}
+              placeholder="pedro.soto@universidad.cl"
+              className="h-14 px-4 text-base md:text-base"
+              aria-invalid={
+                Boolean(errores.correo) || credencialesInvalidas
+                  ? true
+                  : undefined
+              }
+              aria-describedby={descritoPor(
+                errores.correo ? 'login-correo-error' : undefined,
+              )}
+              onChange={() => {
+                if (errores.correo)
+                  setErrores((e) => ({ ...e, correo: undefined }))
+              }}
+              required
+            />
+            {errores.correo && (
+              <p
+                id="login-correo-error"
+                className="m-0 text-base text-destructive"
+              >
+                {errores.correo}
               </p>
             )}
-            <label className="login__field">
-              Correo institucional
-              <input
-                className="login__input"
-                name="correo"
-                type="email"
-                autoComplete="username"
-                defaultValue={correo}
-                placeholder="pedro.soto@universidad.cl"
-                aria-describedby={aviso || error ? 'login-error' : undefined}
-                required
-              />
-            </label>
-            <label className="login__field">
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="login-password" className="text-base">
               Contraseña
-              <input
-                ref={passwordRef}
-                className="login__input"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Ingresa tu contraseña"
-                aria-describedby={aviso || error ? 'login-error' : undefined}
-                required
+            </Label>
+            <CampoPassword
+              ref={passwordRef}
+              id="login-password"
+              etiqueta="Contraseña"
+              name="password"
+              autoComplete="current-password"
+              placeholder="Ingresa tu contraseña"
+              aria-invalid={
+                Boolean(errores.password) || credencialesInvalidas
+                  ? true
+                  : undefined
+              }
+              aria-describedby={descritoPor(
+                errores.password ? 'login-password-error' : undefined,
+              )}
+              onChange={() => {
+                if (errores.password)
+                  setErrores((e) => ({ ...e, password: undefined }))
+              }}
+              required
+            />
+            {errores.password && (
+              <p
+                id="login-password-error"
+                className="m-0 text-base text-destructive"
+              >
+                {errores.password}
+              </p>
+            )}
+          </div>
+          <Button
+            type="submit"
+            disabled={enviando}
+            className="h-14 w-full text-base"
+          >
+            {enviando && (
+              <Loader2
+                aria-hidden="true"
+                className="animate-spin motion-reduce:animate-none"
               />
-            </label>
-            <button className="login__button" type="submit" disabled={enviando}>
-              Ingresar
-            </button>
+            )}
+            Ingresar
+          </Button>
+          <Button
+            asChild
+            variant="link"
+            className="h-auto justify-start p-0 text-base font-medium underline"
+          >
             <Link to="/recuperar-password">¿Olvidaste tu contraseña?</Link>
-            <p className="login__caption login__note">
-              <span className="login__dot" aria-hidden="true" />
-              Acceso reservado a usuarios autorizados.
-            </p>
-          </form>
-
-          <p className="login__caption">
-            CURSUS · Plataforma web de gestión académica
+          </Button>
+          <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className="size-2 flex-none rounded-full bg-accent"
+            />
+            Acceso reservado a usuarios autorizados.
           </p>
-        </div>
-      </main>
-    </div>
+        </form>
+      </TarjetaAcceso>
+    </AuthLayout>
   )
 }
-
-const MENSAJE_EXPIRADO =
-  'La verificación expiró. Vuelve a ingresar tu correo y contraseña.'
 
 // SEG-02: segundo paso del login con MFA. El código tiene 6 dígitos (la app lo
 // muestra como «123 456»; los espacios se ignoran).
@@ -196,54 +313,63 @@ function VerificacionMfa({
 
   const mensaje = bloqueado ? aviso : error
   return (
-    <div className="login__wrapper">
-      <div className="login__heading">
-        <h1 className="login__title">Verificación en dos pasos</h1>
-        <p className="login__subtitle">
-          Ingresa el código de 6 dígitos de tu app autenticadora.
-        </p>
-      </div>
-
-      <form className="login__card" onSubmit={handleSubmit} noValidate>
-        <div role="alert" aria-live="assertive">
+    <AuthLayout
+      titulo="Verificación en dos pasos"
+      descripcion="Ingresa el código de 6 dígitos de tu app autenticadora."
+    >
+      <TarjetaAcceso>
+        <form onSubmit={handleSubmit} noValidate className="grid gap-6">
           {mensaje && (
-            <p className="login__error" id="mfa-error">
+            <AlertaAcceso
+              variante={bloqueado ? 'warning' : 'danger'}
+              id="mfa-error"
+            >
               {mensaje}
-            </p>
+            </AlertaAcceso>
           )}
-        </div>
-        <label className="login__field">
-          Código de verificación
-          <input
-            ref={codigoRef}
-            className="login__input"
-            name="codigo"
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9 ]*"
-            maxLength={7}
-            placeholder="123 456"
-            disabled={bloqueado}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={mensaje ? 'mfa-error' : undefined}
-          />
-        </label>
-        <button
-          className="login__button"
-          type="submit"
-          disabled={enviando || bloqueado}
-        >
-          {enviando ? 'Verificando…' : 'Verificar'}
-        </button>
-        <button
-          className="login__secondary"
-          type="button"
-          onClick={() => volver(null)}
-        >
-          Volver al inicio de sesión
-        </button>
-      </form>
-    </div>
+          <div className="grid gap-2">
+            <Label htmlFor="mfa-codigo" className="text-base">
+              Código de verificación
+            </Label>
+            <Input
+              ref={codigoRef}
+              id="mfa-codigo"
+              name="codigo"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9 ]*"
+              maxLength={7}
+              placeholder="123 456"
+              disabled={bloqueado}
+              className="h-14 px-4 text-base tracking-widest md:text-base"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={mensaje ? 'mfa-error' : undefined}
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={enviando || bloqueado}
+            className="h-14 w-full text-base"
+          >
+            {enviando && (
+              <Loader2
+                aria-hidden="true"
+                className="animate-spin motion-reduce:animate-none"
+              />
+            )}
+            {enviando ? 'Verificando…' : 'Verificar'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 w-full text-base"
+            onClick={() => volver(null)}
+          >
+            Volver al inicio de sesión
+          </Button>
+        </form>
+      </TarjetaAcceso>
+    </AuthLayout>
   )
 }

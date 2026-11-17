@@ -1,3 +1,16 @@
+import { EmptyState, ErrorState } from '@/components/shared'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
 import {
   LARGO_MOTIVO_ASIGNACION,
   type BusquedaIntegrantes,
@@ -8,14 +21,11 @@ import {
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
 import { CargarAlumnosCsvDialogo } from './CargarAlumnosCsv'
 import { useDatos } from './useDatos'
-import './Cursos.css'
-import './IntegrantesSeccion.css'
+import { useMigas } from '../layout/migas-contexto'
 
 const TIPOS: { rol: RolIntegrante; nombre: string }[] = [
   { rol: 'PROFESOR', nombre: 'Profesores' },
@@ -36,33 +46,58 @@ function Integrantes({ id }: { id: string }) {
   const [datos, recargar, status, fijar] = useDatos<DatosIntegrantes>(
     `/api/secciones/${id}/integrantes`,
   )
+  useMigas(
+    datos === undefined
+      ? null
+      : datos
+        ? [
+            {
+              etiqueta: `${datos.seccion.curso.codigo} · Sección ${datos.seccion.numero}`,
+              to: `/cursos/${datos.seccion.curso.id}`,
+            },
+            { etiqueta: 'Integrantes' },
+          ]
+        : [{ etiqueta: 'Integrantes' }],
+  )
   const [parametros, cambiarParametros] = useSearchParams()
   const rol =
     TIPOS.find((t) => t.rol === parametros.get('rol'))?.rol ?? 'PROFESOR'
   const [ocupado, setOcupado] = useState(false)
-  if (datos === undefined) return <Cargando texto="Cargando integrantes…" />
+  if (datos === undefined)
+    return (
+      <div role="status">
+        <span className="sr-only">Cargando integrantes…</span>
+        <Skeleton className="h-24 rounded-xl" />
+      </div>
+    )
   if (datos === null && (status === 404 || status === 400))
     return (
-      <section className="cursos">
-        <Link to="/cursos" className="cursos__enlace">
+      <section className="grid min-w-0 gap-5">
+        <Link
+          to="/cursos"
+          className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
           ← Volver a cursos
         </Link>
-        <h2 className="cursos__titulo">Sección no encontrada</h2>
+        <h2 className="m-0 text-xl font-semibold">Sección no encontrada</h2>
         <p>La sección no existe o no pertenece a tu facultad.</p>
       </section>
     )
   if (datos === null)
     return (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudieron cargar los integrantes."
         onReintentar={recargar}
       />
     )
   const { seccion, integrantes } = datos
   return (
-    <section className="cursos" aria-label="Integrantes de la sección">
+    <section
+      className="grid min-w-0 gap-5"
+      aria-label="Integrantes de la sección"
+    >
       <Link
-        className="cursos__enlace"
+        className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
         to={`/cursos/${seccion.curso.id}`}
         onClick={(e) => {
           if (ocupado) e.preventDefault()
@@ -70,31 +105,31 @@ function Integrantes({ id }: { id: string }) {
       >
         ← Volver al curso
       </Link>
-      <header className="cursos__encabezado">
-        <h2 className="cursos__titulo">
+      <header className="grid gap-1">
+        <h2 className="m-0 text-xl font-semibold">
           Integrantes · Sección {seccion.numero}
         </h2>
-        <p className="cursos__subtitulo">
+        <p className="m-0 text-sm text-muted-foreground">
           {seccion.curso.codigo} · {seccion.curso.nombre}
         </p>
       </header>
       <div
-        className="integrantes__tipos"
+        className="flex flex-wrap gap-2"
         role="group"
         aria-label="Tipo de integrante"
       >
         {TIPOS.map((tipo) => (
-          <button
+          <Button
             key={tipo.rol}
             type="button"
-            className={`cursos__boton ${rol === tipo.rol ? '' : 'cursos__boton--secundario'}`}
+            variant={rol === tipo.rol ? 'default' : 'outline'}
             aria-pressed={rol === tipo.rol}
             disabled={ocupado}
             onClick={() => cambiarParametros({ rol: tipo.rol })}
           >
             {tipo.nombre} (
             {integrantes.filter((p) => p.rol === tipo.rol).length})
-          </button>
+          </Button>
         ))}
       </div>
       <GrupoIntegrantes
@@ -187,10 +222,10 @@ function GrupoIntegrantes({
   const nombre = TIPOS.find((t) => t.rol === rol)!.nombre
   return (
     <>
-      <div className="cursos__tarjeta integrantes__panel">
-        <h3 className="cursos__titulo-dialogo">{nombre}</h3>
+      <div className="grid min-w-0 gap-4 rounded-xl border bg-card p-4">
+        <h3 className="m-0 text-base font-semibold">{nombre}</h3>
         <form
-          className="integrantes__buscar"
+          className="flex flex-wrap items-end gap-3 [&>label]:min-w-0 [&>label]:flex-[1_1_14rem]"
           aria-label="Buscar integrantes"
           onSubmit={(e) => {
             e.preventDefault()
@@ -201,10 +236,9 @@ function GrupoIntegrantes({
             }
           }}
         >
-          <label className="cursos__campo">
+          <label className="grid gap-1.5 text-sm font-medium">
             Buscar por correo o nombre
-            <input
-              className="cursos__input"
+            <Input
               type="search"
               value={busqueda}
               minLength={2}
@@ -218,13 +252,12 @@ function GrupoIntegrantes({
               placeholder="Escribe al menos dos caracteres"
             />
           </label>
-          <button
-            className="cursos__boton"
+          <Button
             type="submit"
             disabled={ocupado || busqueda.trim().length < 2}
           >
             Buscar
-          </button>
+          </Button>
         </form>
         {consulta !== null && (
           <Resultados
@@ -235,36 +268,39 @@ function GrupoIntegrantes({
           />
         )}
         {rol === 'ALUMNO' && (
-          <div className="cursos__acciones">
-            <button
+          <div className="flex flex-wrap gap-2">
+            <Button
               type="button"
-              className="cursos__boton cursos__boton--secundario"
+              variant="outline"
               disabled={ocupado}
               onClick={() => setNuevo(true)}
             >
               Crear alumno e inscribir
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="cursos__boton cursos__boton--secundario"
+              variant="outline"
               aria-label={`Cargar CSV en la sección ${seccion.numero}`}
               disabled={ocupado}
               onClick={() => setCsv(true)}
             >
               Cargar CSV
-            </button>
+            </Button>
           </div>
         )}
         {rol === 'ALUMNO' ? (
-          <p className="cursos__mensaje">
+          <p className="m-0 text-sm break-words text-muted-foreground">
             Busca una cuenta existente. Si el alumno aún no tiene cuenta, puedes
             crearla e inscribirlo o usar la carga CSV.
           </p>
         ) : (
-          <p className="cursos__mensaje">
+          <p className="m-0 text-sm break-words text-muted-foreground">
             Busca una cuenta existente de tu universidad. Si aún no existe,
             créala en{' '}
-            <Link className="cursos__enlace" to="/docentes">
+            <Link
+              className="w-fit text-sm font-medium text-primary underline-offset-4 hover:underline"
+              to="/docentes"
+            >
               Profesores y ayudantes
             </Link>
             .
@@ -272,38 +308,42 @@ function GrupoIntegrantes({
         )}
       </div>
       {error && (
-        <p className="cursos__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
       {aviso && (
-        <p className="cursos__exito" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}
-      <div className="cursos__tarjeta cursos__tabla-contenedor">
+      <div className="min-w-0 rounded-xl border bg-card">
         {personas.length === 0 ? (
-          <p className="cursos__mensaje">
-            No hay {nombre.toLowerCase()} en esta sección.
-          </p>
+          <EmptyState
+            titulo={`No hay ${nombre.toLowerCase()} en esta sección.`}
+            mensaje="Usa el buscador para agregar integrantes."
+          />
         ) : (
-          <table className="cursos__tabla" aria-label={nombre}>
-            <thead>
-              <tr>
-                <th scope="col">Nombre</th>
-                <th scope="col">Correo</th>
-                <th scope="col">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table
+            className="[&_td]:whitespace-normal [&_td]:break-all"
+            aria-label={nombre}
+          >
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col">Nombre</TableHead>
+                <TableHead scope="col">Correo</TableHead>
+                <TableHead scope="col">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {personas.map((persona) => (
-                <tr key={persona.id}>
-                  <td>{persona.nombre}</td>
-                  <td>{persona.correo}</td>
-                  <td>
-                    <button
+                <TableRow key={persona.id}>
+                  <TableCell>{persona.nombre}</TableCell>
+                  <TableCell>{persona.correo}</TableCell>
+                  <TableCell>
+                    <Button
                       type="button"
-                      className="cursos__boton cursos__boton--secundario"
+                      variant="outline"
                       disabled={ocupado || quitando !== null}
                       aria-label={`Quitar a ${persona.nombre}`}
                       onClick={() => {
@@ -313,12 +353,12 @@ function GrupoIntegrantes({
                       }}
                     >
                       Quitar
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </div>
       {quitando && (
@@ -366,16 +406,22 @@ function Resultados({
   alAgregar: (persona: PersonaIntegrante) => void
 }) {
   const [datos, recargar] = useDatos<BusquedaIntegrantes>(ruta)
-  if (datos === undefined) return <Cargando texto="Buscando personas…" />
+  if (datos === undefined)
+    return (
+      <div role="status">
+        <span className="sr-only">Buscando personas…</span>
+        <Skeleton className="h-24 rounded-xl" />
+      </div>
+    )
   if (datos === null)
     return (
-      <ErrorEstado
+      <ErrorState
         mensaje="No se pudo realizar la búsqueda."
         onReintentar={recargar}
       />
     )
   return (
-    <div className="integrantes__resultados">
+    <div className="[&_ul]:m-0 [&_ul]:list-none [&_ul]:p-0 [&_li]:flex [&_li]:flex-wrap [&_li]:items-center [&_li]:justify-between [&_li]:gap-2 [&_li]:border-b [&_li]:py-2">
       {datos.personas.length === 0 ? (
         <p role="status">
           No hay personas disponibles que coincidan con la búsqueda.
@@ -386,23 +432,24 @@ function Resultados({
             <li key={persona.id}>
               <span>
                 <strong>{persona.nombre}</strong>
-                <span className="integrantes__correo">{persona.correo}</span>
+                <span className="block text-xs break-all text-muted-foreground">
+                  {persona.correo}
+                </span>
               </span>
-              <button
-                className="cursos__boton"
+              <Button
                 type="button"
                 aria-label={`Agregar a ${persona.nombre}`}
                 disabled={ocupado}
                 onClick={() => alAgregar(persona)}
               >
                 Agregar
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
       )}
       {datos.hayMas && (
-        <p className="cursos__mensaje">
+        <p className="m-0 text-sm break-words text-muted-foreground">
           Hay más coincidencias. Escribe más caracteres para acotar la búsqueda.
         </p>
       )}
@@ -471,25 +518,27 @@ function RetirarIntegrante({
   return (
     <dialog
       ref={dialogo}
-      className="cursos__dialogo"
+      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-xl border bg-card p-5 text-card-foreground shadow-xl backdrop:bg-black/50 [&>*+*]:mt-3"
       aria-labelledby="retirar-integrante-titulo"
       onClose={alCerrar}
       onCancel={(e) => {
         if (ocupado) e.preventDefault()
       }}
     >
-      <h3 id="retirar-integrante-titulo" className="cursos__titulo-dialogo">
+      <h3
+        id="retirar-integrante-titulo"
+        className="m-0 text-base font-semibold"
+      >
         Quitar integrante
       </h3>
-      <p className="cursos__mensaje">
+      <p className="m-0 text-sm break-words text-muted-foreground">
         ¿Quitar a {persona.nombre} ({persona.correo}) de la sección {numero}? Su
         cuenta se conserva y el retiro queda registrado.
       </p>
-      <form className="cursos__formulario" onSubmit={(e) => void retirar(e)}>
-        <label className="cursos__campo">
+      <form className="grid gap-4" onSubmit={(e) => void retirar(e)}>
+        <label className="grid gap-1.5 text-sm font-medium">
           Motivo
-          <textarea
-            className="cursos__input"
+          <Textarea
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
             required
@@ -499,26 +548,26 @@ function RetirarIntegrante({
           />
         </label>
         {error && (
-          <p className="cursos__error" role="alert">
+          <p className="m-0 text-sm text-destructive" role="alert">
             {error}
           </p>
         )}
-        <div className="cursos__acciones">
-          <button
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
-            className="cursos__boton cursos__boton--secundario"
+            variant="outline"
             disabled={ocupado}
             onClick={alCerrar}
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
-            className="cursos__boton"
+
             disabled={ocupado || !motivo.trim()}
           >
             {ocupado ? 'Quitando…' : 'Quitar'}
-          </button>
+          </Button>
         </div>
       </form>
     </dialog>

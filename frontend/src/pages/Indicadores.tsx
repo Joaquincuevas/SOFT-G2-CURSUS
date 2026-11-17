@@ -1,13 +1,12 @@
 import type {
-  IndicadoresFacultad,
   DistribucionNotas,
   MetricasCarrera,
   MetricasConsolidadas,
   MetricasFacultad,
   MetricasUniversidad,
-  PeriodoDisponible,
   ResumenUniversidad,
 } from '@cursus/shared'
+import { ArrowDown, ArrowUp, ArrowUpDown, Building2 } from 'lucide-react'
 import { useState } from 'react'
 import {
   Link,
@@ -17,12 +16,46 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
-import './Indicadores.css'
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  FormField,
+  PageHeader,
+  type Columna,
+} from '@/components/shared'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { NativeSelect } from '@/components/ui/native-select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  CargandoEsqueleto,
+  Migas,
+  NoEncontrado,
+  PeriodoInvalido,
+  SelectorPeriodo,
+  TresIndicadores,
+} from './indicadores-comunes'
+import {
+  ENLACE,
+  plural,
+  usePeriodoDeLaUrl,
+  valorIndicador,
+  nombrePaso,
+} from './indicadores-formato'
+import { TablaUniversidades } from './TablaUniversidades'
 import { useDatos } from './useDatos'
 
-const SIN_DATOS = 'Sin datos suficientes'
+const CONTENEDOR = 'grid min-w-0 gap-6'
+const SUBTITULO = 'm-0 text-lg font-semibold text-foreground'
 
 // MET-01: tasa de aprobación, promedio y asistencia del período activo,
 // consolidados entre universidades. Solo el Director llega aquí (permiso
@@ -37,157 +70,42 @@ export function Indicadores() {
   if (!valido) return <PeriodoInvalido periodo={periodo} />
 
   return (
-    <section className="indicadores" aria-label="Indicadores consolidados">
+    <section className={CONTENEDOR} aria-label="Indicadores consolidados">
+      <PageHeader
+        titulo="Indicadores"
+        descripcion="Aprobación, promedio y asistencia consolidados entre universidades."
+        acciones={
+          <Button asChild variant="outline">
+            <Link to={`/indicadores/comparar${sufijo}`}>
+              Comparar universidades
+            </Link>
+          </Button>
+        }
+      />
       <SelectorPeriodo periodo={periodo} />
       {metricas === undefined ? (
-        <Cargando texto="Cargando indicadores…" />
+        <CargandoEsqueleto texto="Cargando indicadores…" tarjetas={3} />
       ) : metricas === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar los indicadores."
           onReintentar={recargar}
         />
       ) : (
         <>
-          <ul className="indicadores__tarjetas" aria-label="Indicadores">
-            <Tarjeta
-              titulo="Tasa de aprobación"
-              valor={metricas.aprobacion.valor}
-              unidad="%"
-              decimales={1}
-              detalle={`${metricas.aprobacion.aprobados} de ${plural(metricas.aprobacion.evaluados, 'alumno')} con nota final`}
-            />
-            <Tarjeta
-              titulo="Promedio"
-              valor={metricas.promedio.valor}
-              unidad=""
-              decimales={2}
-              detalle={`${plural(metricas.promedio.alumnos, 'alumno')} con nota final`}
-            />
-            <Tarjeta
-              titulo="Asistencia"
-              valor={metricas.asistencia.valor}
-              unidad="%"
-              decimales={2}
-              detalle={`${metricas.asistencia.presentes} presentes de ${plural(metricas.asistencia.registros, 'registro')}`}
-            />
-          </ul>
-          <p className="indicadores__alcance">
-            {plural(metricas.alumnos, 'alumno')} inscritos en{' '}
-            {plural(metricas.cursos, 'curso')} del período {periodo ?? 'activo'}
-            .
+          <TresIndicadores datos={metricas} />
+          <p className="m-0 text-sm text-muted-foreground">
+            {`${plural(metricas.alumnos, 'alumno')} inscritos en ${plural(metricas.cursos, 'curso')} del período ${periodo ?? 'activo'}.`}
           </p>
         </>
       )}
-      <Link
-        className="indicadores__enlace"
-        to={`/indicadores/comparar${sufijo}`}
-      >
-        Comparar universidades
-      </Link>
       <ListaUniversidades consulta={consulta} sufijo={sufijo} />
-    </section>
-  )
-}
-
-// MET-04: el período se conserva en la URL (?periodo=AAAA-S) y los tres
-// niveles (consolidado, universidades y facultades) piden el mismo. Sin él, es
-// el período activo. MET-03 agrega el selector que lo escribe. Un valor que no
-// tiene la forma AAAA-S no se envía: se avisa (valido = false).
-const FORMATO_PERIODO = /^\d{4}-[12]$/
-
-function usePeriodoDeLaUrl() {
-  const [params] = useSearchParams()
-  const periodo = params.get('periodo')
-  const consulta = periodo ? `?periodo=${encodeURIComponent(periodo)}` : ''
-  const valido = periodo === null || FORMATO_PERIODO.test(periodo)
-  return { periodo, valido, consulta, sufijo: consulta }
-}
-
-// Valor de una opción: el año va con cuatro dígitos (Gestión admite del 1 al
-// 9999), que es la forma que la API y esta pantalla aceptan en ?periodo=.
-const valorDelPeriodo = ({ anio, semestre }: PeriodoDisponible) =>
-  `${String(anio).padStart(4, '0')}-${semestre}`
-
-// La vista por defecto ("") es el período activo de cada universidad, que
-// puede ser distinto entre ellas; elegir un año y semestre filtra todas por
-// ese período. Volver a la opción por defecto quita ?periodo= de la URL.
-function SelectorPeriodo({ periodo }: { periodo: string | null }) {
-  const [periodosDisponibles, recargar] = useDatos<PeriodoDisponible[]>(
-    '/api/metricas/periodos',
-  )
-  const [params, fijarParams] = useSearchParams()
-  const valor = periodo ?? ''
-  // Solo cambia el período: el resto de la URL (por ejemplo, el orden de la
-  // tabla de cursos) se conserva para comparar semestres.
-  const cambiar = (valorNuevo: string) => {
-    const siguiente = new URLSearchParams(params)
-    if (valorNuevo) siguiente.set('periodo', valorNuevo)
-    else siguiente.delete('periodo')
-    fijarParams(siguiente)
-  }
-
-  if (periodosDisponibles === null) {
-    return (
-      <div className="indicadores__periodo" role="alert">
-        <span>No pudimos cargar los períodos.</span>{' '}
-        <button type="button" onClick={recargar}>
-          Reintentar
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <label className="indicadores__periodo">
-      Período
-      <select
-        aria-label="Período"
-        value={valor}
-        disabled={
-          periodosDisponibles === undefined || periodosDisponibles.length === 0
-        }
-        onChange={(e) => cambiar(e.target.value)}
-      >
-        {periodosDisponibles === undefined ? (
-          <option value="">Cargando períodos…</option>
-        ) : periodosDisponibles.length === 0 ? (
-          <option value="">No hay períodos disponibles</option>
-        ) : (
-          <>
-            <option value="">Período activo de cada universidad</option>
-            {periodosDisponibles.map((p) => (
-              <option key={valorDelPeriodo(p)} value={valorDelPeriodo(p)}>
-                {valorDelPeriodo(p)}
-              </option>
-            ))}
-          </>
-        )}
-      </select>
-    </label>
-  )
-}
-
-// El 400 del período no es "la universidad no existe": se dice qué falló y se
-// ofrece volver al período activo.
-function PeriodoInvalido({ periodo }: { periodo: string | null }) {
-  return (
-    <section className="indicadores" aria-label="Período inválido">
-      <div role="alert">
-        <p>
-          El período «{periodo}» no es válido. Usa el formato año-semestre, por
-          ejemplo 2026-1.
-        </p>
-        <Link className="estado__boton" to="/indicadores">
-          Ver el período activo
-        </Link>
-      </div>
     </section>
   )
 }
 
 // Primer nivel del drill-down: cada universidad con sus indicadores; al hacer
 // clic se abren sus facultades.
-function ListaUniversidades({
+export function ListaUniversidades({
   consulta,
   sufijo,
 }: {
@@ -197,55 +115,28 @@ function ListaUniversidades({
   const [universidades, recargar] = useDatos<ResumenUniversidad[]>(
     `/api/metricas/universidades${consulta}`,
   )
+  const lista =
+    universidades && Array.isArray(universidades) ? universidades : null
   return (
-    <section className="indicadores__nivel" aria-label="Universidades">
-      <h3 className="indicadores__subtitulo">Universidades</h3>
-      {universidades === undefined ? (
-        <Cargando texto="Cargando universidades…" />
-      ) : universidades === null ? (
-        <ErrorEstado
+    <section className="grid gap-3" aria-label="Universidades">
+      <h2 className={SUBTITULO}>Universidades</h2>
+      {universidades !== undefined && lista === null ? (
+        <ErrorState
           mensaje="No pudimos cargar las universidades."
           onReintentar={recargar}
         />
-      ) : universidades.length === 0 ? (
-        <p className="indicadores__alcance">No hay universidades.</p>
+      ) : lista?.length === 0 ? (
+        <Card className="py-0">
+          <EmptyState icono={Building2} mensaje="No hay universidades." />
+        </Card>
       ) : (
-        <ul className="indicadores__lista">
-          {universidades.map((u) => (
-            <li key={u.id} className="indicadores__fila">
-              <Link
-                className="indicadores__enlace"
-                to={`/indicadores/universidades/${u.id}${sufijo}`}
-              >
-                {u.nombre}
-              </Link>
-              <ResumenEnLinea indicadores={u} />
-            </li>
-          ))}
-        </ul>
+        <TablaUniversidades
+          universidades={lista ?? []}
+          sufijo={sufijo}
+          cargando={universidades === undefined}
+        />
       )}
     </section>
-  )
-}
-
-function ResumenEnLinea({
-  indicadores: i,
-}: {
-  indicadores: Pick<
-    IndicadoresFacultad,
-    'aprobacion' | 'promedio' | 'asistencia'
-  >
-}) {
-  const valor = (v: number | null, d: number, unidad = '') =>
-    v === null
-      ? SIN_DATOS
-      : `${v.toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d })}${unidad}`
-  return (
-    <p className="indicadores__resumen">
-      Aprobación: {valor(i.aprobacion.valor, 1, ' %')} · Promedio:{' '}
-      {valor(i.promedio.valor, 2)} · Asistencia:{' '}
-      {valor(i.asistencia.valor, 2, ' %')}
-    </p>
   )
 }
 
@@ -275,6 +166,43 @@ export function RutasIndicadores() {
   )
 }
 
+// Una facultad o carrera con sus tres indicadores, como tarjeta con título
+// enlazado al nivel siguiente.
+function ElementoConIndicadores({
+  nombre,
+  a,
+  datos,
+  alcance,
+  aprobadosEnPlural,
+}: {
+  nombre: string
+  a: string
+  datos: Parameters<typeof TresIndicadores>[0]['datos']
+  alcance?: string
+  aprobadosEnPlural?: boolean
+}) {
+  return (
+    <li>
+      <Card className="gap-4 py-5">
+        <article aria-label={nombre} className="grid gap-4 px-5">
+          <h3 className="m-0 text-base font-semibold">
+            <Link className={ENLACE} to={a}>
+              {nombre}
+            </Link>
+          </h3>
+          <TresIndicadores
+            datos={datos}
+            aprobadosEnPlural={aprobadosEnPlural}
+          />
+          {alcance && (
+            <p className="m-0 text-sm text-muted-foreground">{alcance}</p>
+          )}
+        </article>
+      </Card>
+    </li>
+  )
+}
+
 // MET-04: facultades de una universidad con los tres indicadores, y un
 // breadcrumb para volver al consolidado sin perder el período.
 function FacultadesUniversidad() {
@@ -284,83 +212,58 @@ function FacultadesUniversidad() {
     valido ? `/api/metricas/universidades/${id}/facultades${consulta}` : null,
   )
   const volver = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volver },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+    },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
 
   return (
-    <section className="indicadores" aria-label="Indicadores por facultad">
-      <nav className="indicadores__migas" aria-label="Ruta de navegación">
-        <ol>
-          <li>
-            <Link to={volver}>Indicadores</Link>
-          </li>
-          <li aria-current="page">
-            {datos ? datos.universidad.nombre : 'Universidad'}
-          </li>
-        </ol>
-      </nav>
+    <section className={CONTENEDOR} aria-label="Indicadores por facultad">
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
-        <Cargando texto="Cargando facultades…" />
+        <CargandoEsqueleto texto="Cargando facultades…" filas={2} />
       ) : datos === null ? (
         status === 404 || status === 400 ? (
-          <div role="alert">
-            <p>La universidad no existe.</p>
-            <Link className="estado__boton" to={volver}>
-              Volver a Indicadores
-            </Link>
-          </div>
+          <NoEncontrado
+            mensaje="La universidad no existe."
+            volverA={volver}
+            textoVolver="Volver a Indicadores"
+          />
         ) : (
-          <ErrorEstado
+          <ErrorState
             mensaje="No pudimos cargar las facultades."
             onReintentar={recargar}
           />
         )
       ) : datos.facultades.length === 0 ? (
-        <p className="indicadores__alcance">
-          Esta universidad no tiene facultades.
-        </p>
+        <Card className="py-0">
+          <EmptyState mensaje="Esta universidad no tiene facultades." />
+        </Card>
       ) : (
-        <ul className="indicadores__lista" aria-label="Facultades">
+        <ul className="m-0 grid list-none gap-4 p-0" aria-label="Facultades">
           {datos.facultades.map((f) => (
-            <li key={f.id} className="indicadores__facultad">
-              <article aria-label={f.nombre}>
-                <h3 className="indicadores__subtitulo">
-                  <Link
-                    className="indicadores__enlace"
-                    to={`/indicadores/universidades/${id}/facultades/${f.id}${sufijo}`}
-                  >
-                    {f.nombre}
-                  </Link>
-                </h3>
-                <ul className="indicadores__tarjetas" aria-label="Indicadores">
-                  <Tarjeta
-                    titulo="Tasa de aprobación"
-                    valor={f.aprobacion.valor}
-                    unidad="%"
-                    decimales={1}
-                    detalle={`${f.aprobacion.aprobados} de ${plural(f.aprobacion.evaluados, 'alumno')} con nota final`}
-                  />
-                  <Tarjeta
-                    titulo="Promedio"
-                    valor={f.promedio.valor}
-                    unidad=""
-                    decimales={2}
-                    detalle={`${plural(f.promedio.alumnos, 'alumno')} con nota final`}
-                  />
-                  <Tarjeta
-                    titulo="Asistencia"
-                    valor={f.asistencia.valor}
-                    unidad="%"
-                    decimales={2}
-                    detalle={`${f.asistencia.presentes} presentes de ${plural(f.asistencia.registros, 'registro')}`}
-                  />
-                </ul>
-                <p className="indicadores__alcance">
-                  {plural(f.alumnos, 'alumno')} inscritos en{' '}
-                  {plural(f.cursos, 'curso')}.
-                </p>
-              </article>
-            </li>
+            <ElementoConIndicadores
+              key={f.id}
+              nombre={f.nombre}
+              a={`/indicadores/universidades/${id}/facultades/${f.id}${sufijo}`}
+              datos={f}
+              alcance={`${plural(f.alumnos, 'alumno')} inscritos en ${plural(f.cursos, 'curso')}.`}
+            />
           ))}
         </ul>
       )}
@@ -389,16 +292,40 @@ function proporcion(indicador: IndicadorComparado, valor: number) {
 }
 
 const formatear = (indicador: IndicadorComparado, valor: number | null) => {
-  if (valor === null) return SIN_DATOS
   const { unidad, decimales } = INDICADORES[indicador]
-  return `${valor.toLocaleString('es-CL', {
-    minimumFractionDigits: decimales,
-    maximumFractionDigits: decimales,
-  })}${unidad}`
+  return valorIndicador(valor, decimales, unidad)
 }
 
 const nombreDelPeriodo = (periodo: ResumenUniversidad['periodo']) =>
   periodo ? `${periodo.anio}-${periodo.semestre}` : 'Sin período'
+
+const CLAVES = Object.keys(INDICADORES) as IndicadorComparado[]
+
+const COLUMNAS_COMPARACION: readonly Columna<ResumenUniversidad>[] = [
+  {
+    clave: 'universidad',
+    encabezado: 'Universidad',
+    celda: (u) => <span className="font-medium">{u.nombre}</span>,
+    valor: (u) => u.nombre,
+  },
+  {
+    clave: 'periodo',
+    encabezado: 'Período',
+    celda: (u) => nombreDelPeriodo(u.periodo),
+  },
+  ...CLAVES.map((clave): Columna<ResumenUniversidad> => ({
+    clave,
+    encabezado: INDICADORES[clave].titulo,
+    celda: (u) => formatear(clave, u[clave].valor),
+    valor: (u) => u[clave].valor,
+  })),
+  {
+    clave: 'alumnos',
+    encabezado: 'Alumnos',
+    celda: (u) => u.alumnos,
+    valor: (u) => u.alumnos,
+  },
+]
 
 function CompararUniversidades() {
   const { periodo, valido, consulta, sufijo } = usePeriodoDeLaUrl()
@@ -410,120 +337,127 @@ function CompararUniversidades() {
 
   return (
     <section
-      className="indicadores"
+      className={CONTENEDOR}
       aria-label="Comparación entre universidades"
     >
-      <nav className="indicadores__migas" aria-label="Ruta de navegación">
-        <ol>
-          <li>
-            <Link to={`/indicadores${sufijo}`}>Indicadores</Link>
-          </li>
-          <li aria-current="page">Comparar universidades</li>
-        </ol>
-      </nav>
+      <Migas
+        pasos={[
+          { texto: 'Indicadores', a: `/indicadores${sufijo}` },
+          { texto: 'Comparar universidades' },
+        ]}
+      />
       <SelectorPeriodo periodo={periodo} />
       {universidades === undefined ? (
-        <Cargando texto="Cargando universidades…" />
+        <CargandoEsqueleto texto="Cargando universidades…" filas={3} />
       ) : universidades === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar las universidades."
           onReintentar={recargar}
         />
       ) : universidades.length === 0 ? (
-        <p className="indicadores__alcance">No hay universidades.</p>
+        <Card className="py-0">
+          <EmptyState icono={Building2} mensaje="No hay universidades." />
+        </Card>
       ) : (
-        <>
-          <div className="indicadores__tabla">
-            <table>
-              <caption>Indicadores por universidad</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Universidad</th>
-                  <th scope="col">Período</th>
-                  {Object.values(INDICADORES).map(({ titulo }) => (
-                    <th key={titulo} scope="col">
-                      {titulo}
-                    </th>
-                  ))}
-                  <th scope="col">Alumnos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {universidades.map((u) => (
-                  <tr key={u.id}>
-                    <th scope="row">{u.nombre}</th>
-                    <td>{nombreDelPeriodo(u.periodo)}</td>
-                    {(Object.keys(INDICADORES) as IndicadorComparado[]).map(
-                      (clave) => (
-                        <td key={clave}>{formatear(clave, u[clave].valor)}</td>
-                      ),
-                    )}
-                    <td>{u.alumnos}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <section
-            className="indicadores__grafico"
-            aria-label="Gráfico comparativo"
-          >
-            <label className="indicadores__periodo">
-              Indicador a graficar
-              <select
-                aria-label="Indicador a graficar"
-                value={graficado}
-                onChange={(e) =>
-                  fijarGraficado(e.target.value as IndicadorComparado)
-                }
-              >
-                {(Object.keys(INDICADORES) as IndicadorComparado[]).map(
-                  (clave) => (
-                    <option key={clave} value={clave}>
-                      {INDICADORES[clave].titulo}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <ul
-              className="indicadores__barras"
-              aria-label={`${INDICADORES[graficado].titulo} por universidad`}
+        <Tabs defaultValue="tabla">
+          <TabsList>
+            <TabsTrigger value="tabla">Tabla</TabsTrigger>
+            <TabsTrigger value="grafico">Gráfico</TabsTrigger>
+          </TabsList>
+          <TabsContent value="tabla" className="mt-2">
+            <DataTable
+              etiqueta="Indicadores por universidad"
+              columnas={COLUMNAS_COMPARACION}
+              filas={universidades}
+              claveFila={(u) => u.id}
+            />
+          </TabsContent>
+          <TabsContent value="grafico" className="mt-2">
+            <Card
+              className="@container gap-4 px-5 py-5"
+              aria-label="Gráfico comparativo"
+              role="region"
             >
-              {universidades.map((u) => {
-                const valor = u[graficado].valor
-                return (
-                  <li key={u.id} className="indicadores__barra">
-                    <span className="indicadores__barra-nombre">
-                      {u.nombre}
-                    </span>
-                    <span className="indicadores__barra-pista" aria-hidden>
-                      {valor !== null && (
-                        <span
-                          className="indicadores__barra-relleno"
-                          style={{
-                            width: `${(proporcion(graficado, valor) * 100).toFixed(2)}%`,
-                          }}
-                        />
-                      )}
-                    </span>
-                    <span
-                      className={
-                        valor === null
-                          ? 'indicadores__barra-valor indicadores__barra-valor--sin-datos'
-                          : 'indicadores__barra-valor'
-                      }
-                    >
-                      {formatear(graficado, valor)}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        </>
+              <FormField etiqueta="Indicador a graficar" className="max-w-sm">
+                {(control) => (
+                  <NativeSelect
+                    {...control}
+                    className="h-10 text-base md:text-sm"
+                    value={graficado}
+                    onChange={(e) =>
+                      fijarGraficado(e.target.value as IndicadorComparado)
+                    }
+                  >
+                    {CLAVES.map((clave) => (
+                      <option key={clave} value={clave}>
+                        {INDICADORES[clave].titulo}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                )}
+              </FormField>
+              <ul
+                className="m-0 grid list-none gap-3 p-0"
+                aria-label={`${INDICADORES[graficado].titulo} por universidad`}
+              >
+                {universidades.map((u) => (
+                  <BarraUniversidad
+                    key={u.id}
+                    nombre={u.nombre}
+                    indicador={graficado}
+                    valor={u[graficado].valor}
+                  />
+                ))}
+              </ul>
+            </Card>
+          </TabsContent>
+        </Tabs>
       )}
     </section>
+  )
+}
+
+// En pantallas angostas, nombre y valor van en una fila y la barra debajo, a
+// todo el ancho. Con espacio suficiente, las tres partes van en una fila, con
+// la columna del valor fija para que todas las barras tengan el mismo largo.
+// Se mide el ancho del gráfico (no el de la ventana) porque el menú lateral
+// también lo reduce.
+function BarraUniversidad({
+  nombre,
+  indicador,
+  valor,
+}: {
+  nombre: string
+  indicador: IndicadorComparado
+  valor: number | null
+}) {
+  return (
+    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-sm @xl:grid-cols-[minmax(8rem,14rem)_minmax(0,1fr)_10rem] @xl:gap-y-0">
+      <span className="min-w-0 [overflow-wrap:anywhere]">{nombre}</span>
+      <span
+        aria-hidden
+        className="order-last col-span-2 h-4 overflow-hidden rounded-full bg-muted @xl:order-none @xl:col-span-1"
+      >
+        {valor !== null && (
+          <span
+            data-slot="barra-relleno"
+            className="block h-full rounded-full bg-primary"
+            style={{
+              width: `${(proporcion(indicador, valor) * 100).toFixed(2)}%`,
+            }}
+          />
+        )}
+      </span>
+      <span
+        className={
+          valor === null
+            ? 'text-right text-muted-foreground'
+            : 'text-right font-semibold whitespace-nowrap'
+        }
+      >
+        {formatear(indicador, valor)}
+      </span>
+    </li>
   )
 }
 
@@ -542,82 +476,60 @@ function CarrerasFacultad() {
   const universidadId = datos?.universidad.id ?? id
   const volverUniversidad = `/indicadores/universidades/${universidadId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: volverUniversidad,
+    },
+    { texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
 
   return (
-    <section className="indicadores" aria-label="Indicadores por carrera">
-      <nav className="indicadores__migas" aria-label="Ruta de navegación">
-        <ol>
-          <li>
-            <Link to={volverIndicadores}>Indicadores</Link>
-          </li>
-          <li>
-            <Link to={volverUniversidad}>
-              {datos ? datos.universidad.nombre : 'Universidad'}
-            </Link>
-          </li>
-          <li aria-current="page">
-            {datos ? datos.facultad.nombre : 'Facultad'}
-          </li>
-        </ol>
-      </nav>
+    <section className={CONTENEDOR} aria-label="Indicadores por carrera">
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
-        <Cargando texto="Cargando carreras…" />
+        <CargandoEsqueleto texto="Cargando carreras…" filas={2} />
       ) : datos === null ? (
         status === 404 ? (
-          <div role="alert">
-            <p>La facultad no existe.</p>
-            <Link className="estado__boton" to={volverUniversidad}>
-              Volver a la universidad
-            </Link>
-          </div>
+          <NoEncontrado
+            mensaje="La facultad no existe."
+            volverA={volverUniversidad}
+            textoVolver="Volver a la universidad"
+          />
         ) : (
-          <ErrorEstado
+          <ErrorState
             mensaje="No pudimos cargar las carreras."
             onReintentar={recargar}
           />
         )
       ) : datos.carreras.length === 0 ? (
-        <p className="indicadores__alcance">Esta facultad no tiene carreras.</p>
+        <Card className="py-0">
+          <EmptyState mensaje="Esta facultad no tiene carreras." />
+        </Card>
       ) : (
-        <ul className="indicadores__lista" aria-label="Carreras">
+        <ul className="m-0 grid list-none gap-4 p-0" aria-label="Carreras">
           {datos.carreras.map((carrera) => (
-            <li key={carrera.id} className="indicadores__facultad">
-              <article aria-label={carrera.nombre}>
-                <h3 className="indicadores__subtitulo">
-                  <Link
-                    className="indicadores__enlace"
-                    to={`/indicadores/universidades/${id}/facultades/${facultadId}/carreras/${carrera.id}${sufijo}`}
-                  >
-                    {carrera.nombre}
-                  </Link>
-                </h3>
-                <ul className="indicadores__tarjetas" aria-label="Indicadores">
-                  <Tarjeta
-                    titulo="Tasa de aprobación"
-                    valor={carrera.aprobacion.valor}
-                    unidad="%"
-                    decimales={1}
-                    detalle={`${plural(carrera.aprobacion.aprobados, 'aprobado')} de ${plural(carrera.aprobacion.evaluados, 'alumno')} con nota final`}
-                  />
-                  <Tarjeta
-                    titulo="Promedio"
-                    valor={carrera.promedio.valor}
-                    unidad=""
-                    decimales={2}
-                    detalle={`${plural(carrera.promedio.alumnos, 'alumno')} con nota final`}
-                  />
-                  <Tarjeta
-                    titulo="Asistencia"
-                    valor={carrera.asistencia.valor}
-                    unidad="%"
-                    decimales={2}
-                    detalle={`${carrera.asistencia.presentes} presentes de ${plural(carrera.asistencia.registros, 'registro')}`}
-                  />
-                </ul>
-              </article>
-            </li>
+            <ElementoConIndicadores
+              key={carrera.id}
+              nombre={carrera.nombre}
+              a={`/indicadores/universidades/${id}/facultades/${facultadId}/carreras/${carrera.id}${sufijo}`}
+              datos={carrera}
+              aprobadosEnPlural
+            />
           ))}
         </ul>
       )}
@@ -652,6 +564,30 @@ function CursosCarrera() {
   const facultadRutaId = datos?.facultad.id ?? facultadId
   const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: universidadRuta,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre),
+      a: facultadRuta,
+    },
+    { texto: nombrePaso(datos, valido, 'Carrera', (d) => d.carrera.nombre) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
   const cambiarOrden = (nuevo: OrdenCurso) => {
     const siguiente = new URLSearchParams(params)
     siguiente.set('orden', nuevo)
@@ -661,7 +597,6 @@ function CursosCarrera() {
     )
     fijarParams(siguiente)
   }
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
 
   const cursos = datos
     ? [...datos.cursos].sort((a, b) =>
@@ -669,44 +604,28 @@ function CursosCarrera() {
       )
     : []
   return (
-    <section className="indicadores" aria-label="Indicadores por curso">
-      <nav className="indicadores__migas" aria-label="Ruta de navegación">
-        <ol>
-          <li>
-            <Link to={volverIndicadores}>Indicadores</Link>
-          </li>
-          <li>
-            <Link to={universidadRuta}>
-              {datos?.universidad.nombre ?? 'Universidad'}
-            </Link>
-          </li>
-          <li>
-            <Link to={facultadRuta}>
-              {datos?.facultad.nombre ?? 'Facultad'}
-            </Link>
-          </li>
-          <li aria-current="page">{datos?.carrera.nombre ?? 'Carrera'}</li>
-        </ol>
-      </nav>
+    <section className={CONTENEDOR} aria-label="Indicadores por curso">
+      <Migas pasos={pasos} />
       <SelectorPeriodo periodo={periodo} />
       {datos === undefined ? (
-        <Cargando texto="Cargando cursos…" />
+        <CargandoEsqueleto texto="Cargando cursos…" filas={4} />
       ) : datos === null ? (
         status === 404 ? (
-          <div role="alert">
-            <p>La carrera no existe.</p>
-            <Link className="estado__boton" to={facultadRuta}>
-              Volver a la facultad
-            </Link>
-          </div>
+          <NoEncontrado
+            mensaje="La carrera no existe."
+            volverA={facultadRuta}
+            textoVolver="Volver a la facultad"
+          />
         ) : (
-          <ErrorEstado
+          <ErrorState
             mensaje="No pudimos cargar los cursos."
             onReintentar={recargar}
           />
         )
       ) : datos.cursos.length === 0 ? (
-        <p className="indicadores__alcance">Esta carrera no tiene cursos.</p>
+        <Card className="py-0">
+          <EmptyState mensaje="Esta carrera no tiene cursos." />
+        </Card>
       ) : (
         <TablaCursos
           cursos={cursos}
@@ -753,50 +672,56 @@ function DistribucionCurso() {
   const facultadRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}${sufijo}`
   const carreraRuta = `/indicadores/universidades/${universidadId}/facultades/${facultadRutaId}/carreras/${carreraRutaId}${sufijo}`
   const volverIndicadores = `/indicadores${sufijo}`
-  if (!valido) return <PeriodoInvalido periodo={periodo} />
+  const pasos = [
+    { texto: 'Indicadores', a: volverIndicadores },
+    {
+      texto: nombrePaso(
+        datos,
+        valido,
+        'Universidad',
+        (d) => d.universidad.nombre,
+      ),
+      a: `/indicadores/universidades/${universidadId}${sufijo}`,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Facultad', (d) => d.facultad.nombre),
+      a: facultadRuta,
+    },
+    {
+      texto: nombrePaso(datos, valido, 'Carrera', (d) => d.carrera.nombre),
+      a: carreraRuta,
+    },
+    { texto: nombrePaso(datos, valido, 'Curso', (d) => d.curso.codigo) },
+  ]
+  if (!valido)
+    return (
+      <>
+        <Migas pasos={pasos} />
+        <PeriodoInvalido periodo={periodo} />
+      </>
+    )
   return (
-    <section className="indicadores" aria-label="Distribución de notas">
-      <nav className="indicadores__migas" aria-label="Ruta de navegación">
-        <ol>
-          <li>
-            <Link to={volverIndicadores}>Indicadores</Link>
-          </li>
-          <li>
-            <Link to={`/indicadores/universidades/${universidadId}${sufijo}`}>
-              {datos?.universidad.nombre ?? 'Universidad'}
-            </Link>
-          </li>
-          <li>
-            <Link to={facultadRuta}>
-              {datos?.facultad.nombre ?? 'Facultad'}
-            </Link>
-          </li>
-          <li>
-            <Link to={carreraRuta}>{datos?.carrera.nombre ?? 'Carrera'}</Link>
-          </li>
-          <li aria-current="page">{datos?.curso.codigo ?? 'Curso'}</li>
-        </ol>
-      </nav>
+    <section className={CONTENEDOR} aria-label="Distribución de notas">
+      <Migas pasos={pasos} />
       {datos === undefined ? (
-        <Cargando texto="Cargando distribución…" />
+        <CargandoEsqueleto texto="Cargando distribución…" tarjetas={1} />
       ) : datos === null ? (
         status === 404 ? (
-          <div role="alert">
-            <p>El curso no existe.</p>
-            <Link className="estado__boton" to={carreraRuta}>
-              Volver a la carrera
-            </Link>
-          </div>
+          <NoEncontrado
+            mensaje="El curso no existe."
+            volverA={carreraRuta}
+            textoVolver="Volver a la carrera"
+          />
         ) : (
-          <ErrorEstado
+          <ErrorState
             mensaje="No pudimos cargar la distribución."
             onReintentar={recargar}
           />
         )
       ) : datos.totalEvaluados === 0 ? (
-        <p className="indicadores__alcance">
-          Sin notas finales para este curso
-        </p>
+        <Card className="py-0">
+          <EmptyState mensaje="Sin notas finales para este curso" />
+        </Card>
       ) : (
         <DistribucionNotasVista datos={datos} />
       )}
@@ -810,66 +735,83 @@ function etiquetaRango(minimo: number, maximo: number) {
   return `${etiquetaNota(minimo)}–${etiquetaNota(maximo)}`
 }
 
+// MET-07: histograma y tabla equivalente para quien no ve el gráfico. Las seis
+// columnas se encogen (minmax(0, 1fr)) y los rótulos pueden partirse tras el
+// guion, así que el gráfico cabe desde 320 px sin desbordarse. Se mide el
+// ancho del gráfico (no el de la ventana) porque el menú lateral también lo
+// reduce.
 function DistribucionNotasVista({ datos }: { datos: DistribucionNotas }) {
   const maximo = Math.max(...datos.rangos.map((r) => r.alumnos), 1)
+  const aprobacion = etiquetaNota(datos.notaMinimaAprobacion)
   const descripcion = datos.rangos
     .map((r) => `${etiquetaRango(r.minimo, r.maximo)}: ${r.alumnos} alumnos`)
     .join('; ')
   return (
     <>
-      <h2>
-        {datos.curso.codigo}: {datos.curso.nombre}
-      </h2>
-      <p className="indicadores__alcance">
-        {datos.totalEvaluados} alumnos evaluados · aprobación desde{' '}
-        {datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}
-      </p>
-      <div
-        className="indicadores__histograma"
+      <PageHeader
+        titulo={`${datos.curso.codigo}: ${datos.curso.nombre}`}
+        descripcion={`${datos.totalEvaluados} alumnos evaluados · aprobación desde ${aprobacion}`}
+      />
+      <Card
+        className="@container p-3"
         role="img"
-        aria-label={`Distribución de notas: ${descripcion}. La aprobación comienza en ${datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}.`}
+        aria-label={`Distribución de notas: ${descripcion}. La aprobación comienza en ${aprobacion}.`}
       >
-        <div className="indicadores__histograma-barras">
+        <div className="relative grid min-h-56 grid-cols-6 items-end gap-1 border-b border-border pt-7 @md:gap-2 @md:px-2">
           {datos.rangos.map((r) => (
-            <div className="indicadores__histograma-grupo" key={r.minimo}>
-              <span className="indicadores__histograma-valor">{r.alumnos}</span>
+            <div
+              className="grid h-full min-w-0 grid-rows-[1.5rem_1fr_auto] items-end gap-1 text-center text-[0.6875rem] @md:text-xs"
+              key={r.minimo}
+            >
+              <span className="font-bold text-foreground">{r.alumnos}</span>
               <div
-                className="indicadores__histograma-barra"
+                data-slot="histograma-barra"
+                className="min-h-0.5 w-full rounded-t-sm bg-primary"
                 style={{ height: `${(r.alumnos / maximo) * 100}%` }}
               />
               {/* El rótulo puede partirse tras el guion en pantallas
                   angostas; el texto sigue siendo «1,0–1,9». */}
-              <span className="indicadores__histograma-etiqueta">
+              <span className="leading-tight [overflow-wrap:anywhere] text-muted-foreground">
                 {etiquetaNota(r.minimo)}–<wbr />
                 {etiquetaNota(r.maximo)}
               </span>
             </div>
           ))}
-          <div className="indicadores__linea-aprobacion" aria-hidden="true">
-            <span>
-              Aprobación{' '}
-              {datos.notaMinimaAprobacion.toFixed(1).replace('.', ',')}
+          {/* La línea de aprobación cae en el centro del gráfico: entre la
+              tercera y la cuarta columna, que es donde empieza 4,0. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-2 bottom-6 left-1/2 -translate-x-px border-l-2 border-dashed border-destructive"
+          >
+            <span className="absolute -top-2 left-1.5 w-max text-[0.6875rem] font-semibold text-destructive @md:text-xs">
+              Aprobación {aprobacion}
             </span>
           </div>
         </div>
-      </div>
-      <table className="indicadores__tabla">
-        <caption>Tabla equivalente de distribución de notas</caption>
-        <thead>
-          <tr>
-            <th scope="col">Rango</th>
-            <th scope="col">Alumnos</th>
-          </tr>
-        </thead>
-        <tbody>
-          {datos.rangos.map((r) => (
-            <tr key={r.minimo}>
-              <th scope="row">{etiquetaRango(r.minimo, r.maximo)}</th>
-              <td>{r.alumnos}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      </Card>
+      <Card className="gap-0 py-0">
+        <Table>
+          <caption className="sr-only">
+            Tabla equivalente de distribución de notas
+          </caption>
+          <TableHeader className="bg-muted/60">
+            <TableRow>
+              <TableHead>Rango</TableHead>
+              <TableHead>Alumnos</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {datos.rangos.map((r) => (
+              <TableRow key={r.minimo}>
+                <TableHead scope="row" className="font-medium text-foreground">
+                  {etiquetaRango(r.minimo, r.maximo)}
+                </TableHead>
+                <TableCell>{r.alumnos}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
     </>
   )
 }
@@ -893,97 +835,73 @@ function TablaCursos({
   direccion: DireccionOrden
   cambiarOrden: (orden: OrdenCurso) => void
 }) {
-  const columna = (clave: OrdenCurso, nombre: string) => (
-    <th
-      scope="col"
-      aria-sort={
-        orden === clave
-          ? direccion === 'asc'
-            ? 'ascending'
-            : 'descending'
-          : 'none'
-      }
-    >
-      <button
-        type="button"
-        onClick={() => cambiarOrden(clave)}
-        aria-label={`Ordenar por ${nombre}`}
+  const columna = (clave: OrdenCurso, nombre: string) => {
+    const activa = orden === clave
+    const Icono = !activa
+      ? ArrowUpDown
+      : direccion === 'asc'
+        ? ArrowUp
+        : ArrowDown
+    return (
+      <TableHead
+        aria-sort={
+          activa ? (direccion === 'asc' ? 'ascending' : 'descending') : 'none'
+        }
       >
-        {nombre}
-      </button>
-    </th>
-  )
+        <button
+          type="button"
+          data-slot="orden-columna"
+          onClick={() => cambiarOrden(clave)}
+          aria-label={`Ordenar por ${nombre}`}
+          className="-mx-1 inline-flex items-center gap-1.5 rounded-sm px-1 font-medium hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {nombre}
+          <Icono
+            aria-hidden="true"
+            className={activa ? 'size-3.5' : 'size-3.5 text-muted-foreground'}
+          />
+        </button>
+      </TableHead>
+    )
+  }
   return (
-    <table className="indicadores__tabla">
-      <caption>Cursos de la carrera</caption>
-      <thead>
-        <tr>
-          <th scope="col">Curso</th>
-          {columna('aprobacion', 'Aprobación')}
-          {columna('promedio', 'Promedio')}
-          {columna('asistencia', 'Asistencia')}
-        </tr>
-      </thead>
-      <tbody>
-        {cursos.map((curso) => (
-          <tr key={curso.id}>
-            <th scope="row">
-              <Link
-                className="indicadores__enlace"
-                to={`/indicadores/universidades/${universidadId}/facultades/${facultadId}/carreras/${carreraId}/cursos/${curso.id}${sufijo}`}
+    <Card className="min-w-0 gap-0 py-0">
+      <Table>
+        <caption className="sr-only">Cursos de la carrera</caption>
+        <TableHeader className="bg-muted/60">
+          <TableRow>
+            <TableHead>Curso</TableHead>
+            {columna('aprobacion', 'Aprobación')}
+            {columna('promedio', 'Promedio')}
+            {columna('asistencia', 'Asistencia')}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {cursos.map((curso) => (
+            <TableRow key={curso.id}>
+              <TableHead
+                scope="row"
+                className="min-w-40 font-normal whitespace-normal text-foreground"
               >
-                <span>{curso.codigo}</span> {curso.nombre}
-              </Link>
-            </th>
-            <td>{valorIndicador(curso.aprobacion.valor, 1, '%')}</td>
-            <td>{valorIndicador(curso.promedio.valor, 2)}</td>
-            <td>{valorIndicador(curso.asistencia.valor, 2, '%')}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+                <Link
+                  className={ENLACE}
+                  to={`/indicadores/universidades/${universidadId}/facultades/${facultadId}/carreras/${carreraId}/cursos/${curso.id}${sufijo}`}
+                >
+                  <span className="font-semibold">{curso.codigo}</span>{' '}
+                  {curso.nombre}
+                </Link>
+              </TableHead>
+              <TableCell>
+                {valorIndicador(curso.aprobacion.valor, 1, '%')}
+              </TableCell>
+              <TableCell>{valorIndicador(curso.promedio.valor, 2)}</TableCell>
+              <TableCell>
+                {valorIndicador(curso.asistencia.valor, 2, '%')}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }
-
-function valorIndicador(valor: number | null, decimales: number, unidad = '') {
-  return valor === null
-    ? SIN_DATOS
-    : `${valor.toLocaleString('es-CL', { minimumFractionDigits: decimales, maximumFractionDigits: decimales })}${unidad}`
-}
-
-function Tarjeta({
-  titulo,
-  valor,
-  unidad,
-  decimales,
-  detalle,
-}: {
-  titulo: string
-  valor: number | null
-  unidad: string
-  decimales: number
-  detalle: string
-}) {
-  return (
-    <li className="indicadores__tarjeta">
-      <article aria-label={titulo}>
-        <h3 className="indicadores__titulo">{titulo}</h3>
-        {valor === null ? (
-          <p className="indicadores__sin-datos">{SIN_DATOS}</p>
-        ) : (
-          <p className="indicadores__valor">
-            {valor.toLocaleString('es-CL', {
-              minimumFractionDigits: decimales,
-              maximumFractionDigits: decimales,
-            })}
-            {unidad && <span className="indicadores__unidad">{unidad}</span>}
-          </p>
-        )}
-        <p className="indicadores__detalle">{detalle}</p>
-      </article>
-    </li>
-  )
-}
-
-const plural = (n: number, nombre: string) =>
-  `${n} ${nombre}${n === 1 ? '' : 's'}`

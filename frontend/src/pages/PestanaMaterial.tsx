@@ -1,3 +1,8 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { NativeSelect } from '@/components/ui/native-select'
+import { usePuede } from '../session/session'
 import {
   CATEGORIA_MATERIAL_LABEL,
   CATEGORIAS_MATERIAL,
@@ -15,11 +20,57 @@ import {
   type SubidaArchivo,
   type VersionMaterial,
 } from '@cursus/shared'
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  CircleAlert,
+  Download,
+  EllipsisVertical,
+  FileArchive,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FolderOpen,
+  History,
+  Loader2,
+  Presentation,
+  Upload,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  Dropzone,
+  EmptyState,
+  ErrorState,
+  FormField,
+} from '@/components/shared'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { formatearFecha } from '@/lib/fechas'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
-import './PestanaMaterial.css'
 import { AdministrarSilabo } from './AdministrarSilabo'
 import { subirAS3, tamanoLegible } from './subirArchivo'
 import { useDatos } from './useDatos'
@@ -34,6 +85,12 @@ const fechaMaterial = new Intl.DateTimeFormat('es-CL', {
 
 const fechaSubida = (material: Material) =>
   material.archivo.subidoEn ?? material.creadoEn
+
+function etiquetaTipo({ archivo }: Material) {
+  return tipoDeArchivo(archivo.nombre)
+    ? archivo.nombre.slice(archivo.nombre.lastIndexOf('.') + 1).toUpperCase()
+    : archivo.tipo
+}
 
 // Pasos del flujo de subida (MAT-01 y MAT-04), para mostrarlos mientras
 // corren.
@@ -130,10 +187,13 @@ export function PestanaMaterial({
   alPublicarSilabo,
 }: PropsPestana) {
   const { fetchConSesion } = useAuth()
+  const puedePublicar = usePuede('create', 'Material')
+  const puedeVersionar = usePuede('create', 'MaterialVersion')
   const ruta = `/api/espacio/secciones/${seccionId}`
   const [materiales, recargar] = useDatos<Material[]>(`${ruta}/materiales`)
   const [descargando, setDescargando] = useState<string | null>(null)
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
   const ordenados = materiales?.toSorted(
     (a, b) => Date.parse(fechaSubida(b)) - Date.parse(fechaSubida(a)),
   )
@@ -163,105 +223,409 @@ export function PestanaMaterial({
     }
   }
 
+  if (rol === 'ALUMNO') {
+    return (
+      <div className="grid min-w-0 gap-6">
+        <MaterialAlumno
+          materiales={materiales === null ? null : ordenados}
+          recargar={recargar}
+          descargando={descargando}
+          errorDescarga={errorDescarga}
+          descargar={(material) => void descargar(material)}
+        />
+        <AdministrarSilabo ruta={ruta} puedePublicar={false} vistaAlumno />
+      </div>
+    )
+  }
+
+  const botonSubir = puedePublicar && (
+    <Button type="button" onClick={() => setSubiendo(true)}>
+      <Upload aria-hidden="true" />
+      Subir material
+    </Button>
+  )
+
   return (
-    <section className="material" aria-label="Materiales del curso">
+    <div className="grid min-w-0 gap-8">
+      {/* El sílabo vigente va primero: es lo que más se busca del curso. */}
       <AdministrarSilabo
         ruta={ruta}
-        puedePublicar={rol === 'PROFESOR'}
+        puedePublicar={puedePublicar}
         alPublicar={alPublicarSilabo}
       />
-      <h3 className="vista-seccion__subtitulo">Materiales del curso</h3>
-      {rol === 'PROFESOR' && (
-        <FormularioMaterial ruta={ruta} alSubir={recargar} />
-      )}
+      <section className="grid min-w-0 gap-4" aria-label="Materiales del curso">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="m-0 text-lg font-semibold text-foreground">
+            Materiales del curso
+          </h3>
+          {/* Sin materiales, la acción va en el estado vacío. */}
+          {materiales?.length !== 0 && botonSubir}
+        </div>
+        {rol === 'AYUDANTE' && (
+          <Alert role="note" variant="info">
+            <AlertTitle>Material en solo lectura</AlertTitle>
+            <AlertDescription>
+              Puedes descargar los archivos publicados. Solo el profesor puede
+              subir materiales o nuevas versiones.
+            </AlertDescription>
+          </Alert>
+        )}
+        {puedePublicar && (
+          <Dialog open={subiendo} onOpenChange={setSubiendo}>
+            <DialogContent className="bg-card text-left sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Subir material</DialogTitle>
+                <DialogDescription>
+                  Lo verán el equipo docente y los alumnos de todas las
+                  secciones del curso.
+                </DialogDescription>
+              </DialogHeader>
+              <FormularioMaterial
+                ruta={ruta}
+                alSubir={() => {
+                  setSubiendo(false)
+                  toast.success('Material subido')
+                  recargar()
+                }}
+                alCancelar={() => setSubiendo(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
+        {errorDescarga && (
+          <Alert variant="danger">
+            <CircleAlert aria-hidden="true" />
+            <AlertDescription>{errorDescarga}</AlertDescription>
+          </Alert>
+        )}
+        {materiales === undefined ? (
+          <div role="status" className="grid gap-2">
+            <span className="sr-only">Cargando materiales…</span>
+            <Skeleton className="h-12 rounded-lg" />
+            <Skeleton className="h-12 rounded-lg" />
+          </div>
+        ) : materiales === null ? (
+          <ErrorState
+            mensaje="No pudimos cargar los materiales."
+            onReintentar={recargar}
+          />
+        ) : materiales.length === 0 ? (
+          <Card className="py-0">
+            <EmptyState
+              icono={FolderOpen}
+              titulo="Aún no hay materiales del curso"
+              mensaje={
+                puedePublicar
+                  ? 'Sube guías, presentaciones o lecturas para tus alumnos.'
+                  : 'Aquí aparecerán los archivos que publique el profesor.'
+              }
+              accion={botonSubir}
+            />
+          </Card>
+        ) : (
+          <div className="grid min-w-0 gap-6">
+            {CATEGORIAS_MATERIAL.map((categoria) => {
+              const grupo =
+                ordenados?.filter(
+                  (material) => material.categoria === categoria,
+                ) ?? []
+              if (grupo.length === 0) return null
+              const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
+              return (
+                <section key={categoria} className="grid min-w-0 gap-2">
+                  <h4 className="m-0 text-sm font-semibold text-foreground">
+                    {etiqueta}{' '}
+                    <span className="font-normal text-muted-foreground">
+                      ({grupo.length})
+                    </span>
+                  </h4>
+                  <Card className="min-w-0 gap-0 py-0">
+                    <Table aria-label={etiqueta} className="table-fixed">
+                      <TableHeader className="bg-muted/60">
+                        <TableRow>
+                          <TableHead className="w-auto">Título</TableHead>
+                          <TableHead className="hidden w-36 md:table-cell">
+                            Categoría
+                          </TableHead>
+                          <TableHead className="hidden w-24 sm:table-cell">
+                            Tamaño
+                          </TableHead>
+                          <TableHead className="hidden w-28 sm:table-cell">
+                            Fecha
+                          </TableHead>
+                          <TableHead className="w-44 text-right">
+                            <span className="sr-only">Acciones</span>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {grupo.map((material) => (
+                          <FilaMaterial
+                            key={material.id}
+                            ruta={ruta}
+                            material={material}
+                            puedeVersionar={puedeVersionar}
+                            descargando={descargando === material.id}
+                            descargar={() => void descargar(material)}
+                            alSubirVersion={recargar}
+                          />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </Card>
+                </section>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// Ícono según el tipo de archivo.
+function IconoArchivo({ nombre }: { nombre: string }) {
+  const extension = nombre.slice(nombre.lastIndexOf('.') + 1).toLowerCase()
+  const Icono =
+    extension === 'png' || extension === 'jpg' || extension === 'jpeg'
+      ? FileImage
+      : extension === 'xlsx'
+        ? FileSpreadsheet
+        : extension === 'zip'
+          ? FileArchive
+          : extension === 'ipynb'
+            ? FileCode
+            : extension === 'pptx'
+              ? Presentation
+              : FileText
+  return <Icono aria-hidden="true" className="size-5 shrink-0 text-primary" />
+}
+
+function FilaMaterial({
+  ruta,
+  material,
+  puedeVersionar,
+  descargando,
+  descargar,
+  alSubirVersion,
+}: {
+  ruta: string
+  material: Material
+  puedeVersionar: boolean
+  descargando: boolean
+  descargar: () => void
+  alSubirVersion: () => void
+}) {
+  const [dialogo, setDialogo] = useState<'version' | 'historial' | null>(null)
+  return (
+    <TableRow aria-label={material.titulo}>
+      <TableCell className="whitespace-normal">
+        <div className="flex min-w-0 items-start gap-3">
+          <IconoArchivo nombre={material.archivo.nombre} />
+          <div className="grid min-w-0 gap-0.5">
+            <span className="font-medium break-words text-foreground">
+              {material.titulo}
+            </span>
+            {material.descripcion && (
+              <span className="line-clamp-2 text-xs break-words whitespace-pre-wrap text-muted-foreground">
+                {material.descripcion}
+              </span>
+            )}
+            <span className="text-xs break-words text-muted-foreground">
+              {material.archivo.nombre} · {etiquetaTipo(material)}
+              <br />
+              {/* MAT-07: la fecha de la vigente y la del material. */}
+              Versión {material.version}, del {fechaHora(material.versionEn)} ·
+              Publicado el {fechaHora(material.creadoEn)}
+              <span className="sm:hidden">
+                {' · '}
+                {tamanoLegible(material.archivo.tamano)}
+              </span>
+            </span>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="hidden md:table-cell">
+        <Badge variant="outline">
+          {CATEGORIA_MATERIAL_LABEL[material.categoria]}
+        </Badge>
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
+        {tamanoLegible(material.archivo.tamano)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground tabular-nums sm:table-cell">
+        <time dateTime={fechaSubida(material)}>
+          {formatearFecha(fechaSubida(material))}
+        </time>
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label={`Descargar ${material.titulo}`}
+            disabled={descargando}
+            onClick={descargar}
+          >
+            <Download aria-hidden="true" />
+            {descargando ? 'Descargando…' : 'Descargar'}
+          </Button>
+          {puedeVersionar && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Más acciones de ${material.titulo}`}
+                  >
+                    <EllipsisVertical aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setDialogo('version')}>
+                    <Upload aria-hidden="true" />
+                    Subir nueva versión
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setDialogo('historial')}>
+                    <History aria-hidden="true" />
+                    Historial de versiones
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <VersionesMaterial
+                ruta={ruta}
+                material={material}
+                dialogo={dialogo}
+                cerrar={() => setDialogo(null)}
+                alSubir={alSubirVersion}
+              />
+            </>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function MaterialAlumno({
+  materiales,
+  recargar,
+  descargando,
+  errorDescarga,
+  descargar,
+}: {
+  materiales: Material[] | null | undefined
+  recargar: () => void
+  descargando: string | null
+  errorDescarga: string | null
+  descargar: (material: Material) => void
+}) {
+  return (
+    <section aria-label="Materiales del curso" className="grid min-w-0 gap-4">
+      <h3 className="m-0 text-lg font-semibold text-foreground">
+        Materiales del curso
+      </h3>
       {errorDescarga && (
-        <p className="material__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {errorDescarga}
         </p>
       )}
       {materiales === undefined ? (
-        <Cargando texto="Cargando materiales…" />
+        <div role="status" className="grid gap-2">
+          <span className="sr-only">Cargando materiales…</span>
+          <Skeleton className="h-24 rounded-xl" />
+          <Skeleton className="h-24 rounded-xl" />
+        </div>
       ) : materiales === null ? (
-        <ErrorEstado
+        <ErrorState
           mensaje="No pudimos cargar los materiales."
           onReintentar={recargar}
         />
       ) : materiales.length === 0 ? (
-        <p className="dashboard__texto">Aún no hay materiales del curso</p>
+        <Card className="py-0">
+          <EmptyState
+            icono={FolderOpen}
+            titulo="Aún no hay materiales del curso"
+            mensaje="Los archivos publicados por el equipo docente aparecerán aquí."
+          />
+        </Card>
       ) : (
-        <div className="material__grupos">
-          {CATEGORIAS_MATERIAL.map((categoria) => {
-            const grupo =
-              ordenados?.filter(
-                (material) => material.categoria === categoria,
-              ) ?? []
-            if (grupo.length === 0) return null
-            const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
-            return (
-              <section key={categoria} className="material__grupo">
-                <h4 className="vista-seccion__subtitulo">{etiqueta}</h4>
-                <ul className="material__lista" aria-label={etiqueta}>
-                  {grupo.map((material) => (
-                    <li key={material.id} className="material__item">
-                      <article aria-label={material.titulo}>
-                        <h5 className="material__titulo">{material.titulo}</h5>
-                        {material.descripcion && (
-                          <p className="material__descripcion">
-                            {material.descripcion}
-                          </p>
-                        )}
-                        <div className="material__pie">
-                          <p className="material__archivo">
-                            {material.archivo.nombre} ·{' '}
-                            {tamanoLegible(material.archivo.tamano)}
-                            {' · '}
-                            {tipoDeArchivo(material.archivo.nombre)
-                              ? material.archivo.nombre
-                                  .slice(
-                                    material.archivo.nombre.lastIndexOf('.') +
-                                      1,
-                                  )
-                                  .toUpperCase()
-                              : material.archivo.tipo}
-                            {' · '}
-                            <time dateTime={fechaSubida(material)}>
-                              {fechaMaterial.format(
-                                new Date(fechaSubida(material)),
-                              )}
-                            </time>
-                            <br />
-                            {/* MAT-07: la fecha de la vigente y la del material. */}
-                            Versión {material.version}, del{' '}
-                            {fechaHora(material.versionEn)} · Publicado el{' '}
-                            {fechaHora(material.creadoEn)}
-                          </p>
-                          <button
-                            type="button"
-                            className="material__descargar"
+        CATEGORIAS_MATERIAL.map((categoria) => {
+          const grupo = materiales.filter(
+            (material) => material.categoria === categoria,
+          )
+          if (grupo.length === 0) return null
+          const etiqueta = CATEGORIA_MATERIAL_LABEL[categoria]
+          return (
+            <section key={categoria} className="grid gap-2">
+              <h4 className="m-0 text-sm font-semibold text-foreground">
+                {etiqueta}
+              </h4>
+              <ul
+                aria-label={etiqueta}
+                className="m-0 grid list-none gap-2 p-0"
+              >
+                {grupo.map((material) => (
+                  <li key={material.id}>
+                    <article aria-label={material.titulo}>
+                      <Card className="py-4">
+                        <CardContent className="flex flex-wrap items-center gap-3 px-4">
+                          <FileText
+                            aria-hidden="true"
+                            className="size-5 shrink-0 text-primary"
+                          />
+                          <div className="min-w-0 flex-1 basis-44 space-y-1 break-words">
+                            <h5 className="m-0 text-sm font-semibold">
+                              {material.titulo}
+                            </h5>
+                            {material.descripcion && (
+                              <p className="m-0 text-sm whitespace-pre-wrap text-muted-foreground">
+                                {material.descripcion}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">
+                                {etiquetaTipo(material)}
+                              </Badge>
+                              <span>
+                                {material.archivo.nombre} ·{' '}
+                                {tamanoLegible(material.archivo.tamano)}
+                              </span>
+                              <time dateTime={fechaSubida(material)}>
+                                {fechaMaterial.format(
+                                  new Date(fechaSubida(material)),
+                                )}
+                              </time>
+                            </div>
+                            <p className="m-0 text-xs text-muted-foreground">
+                              Versión {material.version}, del{' '}
+                              {fechaHora(material.versionEn)} · Publicado el{' '}
+                              {fechaHora(material.creadoEn)}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
                             aria-label={`Descargar ${material.titulo}`}
                             disabled={descargando === material.id}
-                            onClick={() => void descargar(material)}
+                            onClick={() => descargar(material)}
                           >
+                            <Download aria-hidden="true" />
                             {descargando === material.id
                               ? 'Descargando…'
                               : 'Descargar'}
-                          </button>
-                        </div>
-                        {rol === 'PROFESOR' && (
-                          <VersionesMaterial
-                            ruta={ruta}
-                            material={material}
-                            alSubir={recargar}
-                          />
-                        )}
-                      </article>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
-        </div>
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    </article>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )
+        })
       )}
     </section>
   )
@@ -270,19 +634,23 @@ export function PestanaMaterial({
 function FormularioMaterial({
   ruta,
   alSubir,
+  alCancelar,
 }: {
   ruta: string
   alSubir: () => void
+  alCancelar: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const [archivo, setArchivo] = useState<File | null>(null)
   const [campos, setCampos] = useState(VACIO)
+  // El título se completa con el nombre del archivo mientras el profesor no
+  // lo haya escrito él.
+  const [tituloAutomatico, setTituloAutomatico] = useState(true)
   const [etapa, setEtapa] = useState<Etapa | null>(null)
   const [progreso, setProgreso] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  // Para reiniciar el input de archivo, que no se controla.
-  const [versionInput, setVersionInput] = useState(0)
+  // Sin archivo al enviar: el aviso va junto al campo, no abajo.
+  const [faltaArchivo, setFaltaArchivo] = useState(false)
   // Archivo que ya quedó subido y confirmado, pero cuyo registro falló: al
   // reintentar con el mismo archivo se registra ese, sin subirlo otra vez.
   const confirmado = useRef<{ archivo: File; id: string } | null>(null)
@@ -293,14 +661,9 @@ function FormularioMaterial({
 
   // Valida lo que el backend también valida, para avisar antes de subir.
   function validar(): string | null {
-    if (!archivo) return 'Elige un archivo'
-    if (!tipoDeArchivo(archivo.name)) {
-      return `El archivo debe ser de uno de estos tipos: ${EXTENSIONES.join(', ')}`
-    }
-    if (archivo.size === 0) return 'El archivo está vacío'
-    if (archivo.size > TAMANO_MAXIMO_ARCHIVO) {
-      return `El archivo pesa más de ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}`
-    }
+    if (!archivo) return null
+    const motivo = motivoArchivo(archivo)
+    if (motivo) return motivo
     if (!campos.categoria) return 'Elige una categoría'
     if (campos.titulo.trim() === '') return 'Ingresa el título del material'
     return null
@@ -368,10 +731,10 @@ function FormularioMaterial({
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (enCurso.current) return
-    setAviso(null)
+    setFaltaArchivo(!archivo)
     const motivo = validar()
     if (motivo || !archivo || !campos.categoria) {
-      setError(motivo)
+      setError(archivo ? motivo : null)
       return
     }
     setError(null)
@@ -383,10 +746,6 @@ function FormularioMaterial({
       confirmado.current = { archivo, id: archivoId }
       await registrar(archivoId, campos.categoria)
       confirmado.current = null
-      setArchivo(null)
-      setCampos(VACIO)
-      setVersionInput((n) => n + 1)
-      setAviso('Material subido')
       alSubir()
     } catch (falla) {
       setError(
@@ -401,15 +760,21 @@ function FormularioMaterial({
     }
   }
 
-  function elegirArchivo(event: ChangeEvent<HTMLInputElement>) {
-    setAviso(null)
+  function elegirArchivo(elegido: File | null) {
     setError(null)
-    setArchivo(event.target.files?.[0] ?? null)
+    setFaltaArchivo(false)
+    setArchivo(elegido)
+    if (elegido && tituloAutomatico) {
+      setCampos((actuales) => ({
+        ...actuales,
+        titulo: tituloDesdeNombre(elegido.name).slice(0, LARGO_TITULO_MATERIAL),
+      }))
+    }
   }
 
   const cambiar =
     (campo: keyof typeof VACIO) => (event: { target: { value: string } }) => {
-      setAviso(null)
+      if (campo === 'titulo') setTituloAutomatico(event.target.value === '')
       setCampos((actuales) => ({ ...actuales, [campo]: event.target.value }))
     }
 
@@ -422,67 +787,75 @@ function FormularioMaterial({
 
   return (
     <form
-      className="material__formulario"
+      className="grid min-w-0 gap-4"
       aria-label="Subir material"
       noValidate
       onSubmit={(event) => void enviar(event)}
     >
-      <label className="material__campo material__campo--ancho">
-        Archivo
-        <input
-          key={versionInput}
-          type="file"
-          accept={ACEPTADAS}
-          onChange={elegirArchivo}
-          disabled={ocupado}
-        />
-      </label>
-      <label className="material__campo">
-        Categoría
-        <select
-          value={campos.categoria}
-          onChange={cambiar('categoria')}
-          disabled={ocupado}
-        >
-          <option value="">Elige una categoría</option>
-          {CATEGORIAS_MATERIAL.map((categoria) => (
-            <option key={categoria} value={categoria}>
-              {CATEGORIA_MATERIAL_LABEL[categoria]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="material__campo material__campo--crece">
-        Título
-        <input
-          value={campos.titulo}
-          onChange={cambiar('titulo')}
-          maxLength={LARGO_TITULO_MATERIAL}
-          disabled={ocupado}
-        />
-      </label>
-      <label className="material__campo material__campo--ancho">
-        Descripción (opcional)
-        <textarea
-          value={campos.descripcion}
-          onChange={cambiar('descripcion')}
-          maxLength={LARGO_DESCRIPCION_MATERIAL}
-          rows={3}
-          disabled={ocupado}
-        />
-      </label>
-      <button className="material__boton" type="submit" disabled={ocupado}>
-        Subir material
-      </button>
-      <p className="material__ayuda">
-        Hasta {tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}. Tipos:{' '}
-        {EXTENSIONES.join(', ')}.
-      </p>
+      <FormField etiqueta="Archivo">
+        {(control) => (
+          <Dropzone
+            {...control}
+            archivo={archivo}
+            onArchivoChange={elegirArchivo}
+            error={faltaArchivo ? 'Elige un archivo' : null}
+            accept={ACEPTADAS}
+            validar={motivoArchivo}
+            descripcion={`Hasta ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}: ${EXTENSIONES.join(', ')}`}
+            disabled={ocupado}
+          />
+        )}
+      </FormField>
+      <FormField etiqueta="Título">
+        {(control) => (
+          <Input
+            {...control}
+            value={campos.titulo}
+            onChange={cambiar('titulo')}
+            maxLength={LARGO_TITULO_MATERIAL}
+            disabled={ocupado}
+          />
+        )}
+      </FormField>
+      <FormField etiqueta="Categoría">
+        {(control) => (
+          <NativeSelect
+            {...control}
+            className="w-full"
+            value={campos.categoria}
+            onChange={cambiar('categoria')}
+            disabled={ocupado}
+          >
+            <option value="">Elige una categoría</option>
+            {CATEGORIAS_MATERIAL.map((categoria) => (
+              <option key={categoria} value={categoria}>
+                {CATEGORIA_MATERIAL_LABEL[categoria]}
+              </option>
+            ))}
+          </NativeSelect>
+        )}
+      </FormField>
+      <FormField etiqueta="Descripción (opcional)">
+        {(control) => (
+          <Textarea
+            {...control}
+            value={campos.descripcion}
+            onChange={cambiar('descripcion')}
+            maxLength={LARGO_DESCRIPCION_MATERIAL}
+            rows={3}
+            disabled={ocupado}
+          />
+        )}
+      </FormField>
       {etapa && (
-        <div className="material__progreso" role="status">
+        <div
+          className="grid gap-1.5 text-sm text-muted-foreground"
+          role="status"
+        >
           <span>{TEXTO_ETAPA[etapa]}</span>
           {etapa === 'subiendo' && (
             <progress
+              className="h-2 w-full accent-(--color-primary)"
               value={progreso}
               max={100}
               aria-label="Progreso de la subida"
@@ -491,43 +864,75 @@ function FormularioMaterial({
         </div>
       )}
       {error && (
-        <p className="material__error" role="alert">
-          {error}
-        </p>
+        <Alert variant="danger">
+          <CircleAlert aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
-      {aviso && (
-        <p className="material__aviso" role="status">
-          {aviso}
-        </p>
-      )}
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={ocupado}
+          onClick={alCancelar}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={ocupado}>
+          {ocupado && <Loader2 aria-hidden="true" className="animate-spin" />}
+          Subir material
+        </Button>
+      </DialogFooter>
     </form>
   )
 }
 
+// El título sugerido: el nombre del archivo sin la extensión y con espacios.
+function tituloDesdeNombre(nombre: string) {
+  const punto = nombre.lastIndexOf('.')
+  return (punto > 0 ? nombre.slice(0, punto) : nombre)
+    .replace(/[_-]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+}
+
+// Lo que el backend también revisa del archivo: tipo y tamaño.
+function motivoArchivo(archivo: File): string | null {
+  if (!tipoDeArchivo(archivo.name)) {
+    return `El archivo debe ser de uno de estos tipos: ${EXTENSIONES.join(', ')}`
+  }
+  if (archivo.size === 0) return 'El archivo está vacío'
+  if (archivo.size > TAMANO_MAXIMO_ARCHIVO) {
+    return `El archivo pesa más de ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}`
+  }
+  return null
+}
+
 // MAT-07: solo el profesor. Sube una versión nueva del material (pedir la
 // subida, subir a S3, confirmar y registrar) y ve el historial con fecha,
-// responsable y descarga. El resto ve solo la vigente en el listado.
+// responsable y descarga, cada uno en su diálogo.
 function VersionesMaterial({
   ruta,
   material,
+  dialogo,
+  cerrar,
   alSubir,
 }: {
   ruta: string
   material: Material
+  dialogo: 'version' | 'historial' | null
+  cerrar: () => void
   alSubir: () => void
 }) {
   const { fetchConSesion } = useAuth()
   const rutaVersiones = `${ruta}/materiales/${material.id}/versiones`
-  const [abierto, setAbierto] = useState(false)
   const [historial, recargarHistorial] = useDatos<VersionMaterial[]>(
-    abierto ? rutaVersiones : null,
+    dialogo === 'historial' ? rutaVersiones : null,
   )
   const [archivo, setArchivo] = useState<File | null>(null)
   const [etapa, setEtapa] = useState<Etapa | null>(null)
   const [progreso, setProgreso] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  const [versionInput, setVersionInput] = useState(0)
   const [descargando, setDescargando] = useState<number | null>(null)
   // Archivo ya confirmado cuyo registro falló: al reintentar no se sube otra
   // vez (el POST es idempotente con el mismo archivo).
@@ -537,23 +942,13 @@ function VersionesMaterial({
   async function subirVersion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (enCurso.current) return
-    setAviso(null)
     if (!archivo) {
       setError('Elige un archivo')
       return
     }
-    if (!tipoDeArchivo(archivo.name)) {
-      setError(
-        `El archivo debe ser de uno de estos tipos: ${EXTENSIONES.join(', ')}`,
-      )
-      return
-    }
-    if (archivo.size === 0 || archivo.size > TAMANO_MAXIMO_ARCHIVO) {
-      setError(
-        archivo.size === 0
-          ? 'El archivo está vacío'
-          : `El archivo pesa más de ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}`,
-      )
+    const motivo = motivoArchivo(archivo)
+    if (motivo) {
+      setError(motivo)
       return
     }
     setError(null)
@@ -591,10 +986,9 @@ function VersionesMaterial({
       const { version } = (await res.json()) as VersionMaterial
       confirmado.current = null
       setArchivo(null)
-      setVersionInput((n) => n + 1)
-      setAviso(`Versión ${version} subida`)
+      toast.success(`Versión ${version} subida`)
+      cerrar()
       alSubir()
-      if (abierto) recargarHistorial()
     } catch (falla) {
       setError(
         falla instanceof ErrorDeFlujo
@@ -631,83 +1025,134 @@ function VersionesMaterial({
     confirmando: 'Confirmando el archivo…',
     registrando: 'Registrando la versión…',
   }
+  const ocupado = etapa !== null
+  const alCambiarAbierto = (abierto: boolean) => {
+    if (abierto || ocupado) return
+    setError(null)
+    setArchivo(null)
+    cerrar()
+  }
 
   return (
-    <div className="material__versiones">
-      <form
-        className="material__version-nueva"
-        aria-label={`Subir nueva versión de ${material.titulo}`}
-        noValidate
-        onSubmit={(event) => void subirVersion(event)}
-      >
-        <label className="material__campo">
-          Nueva versión
-          <input
-            key={versionInput}
-            type="file"
-            accept={ACEPTADAS}
-            disabled={etapa !== null}
-            onChange={(event) => {
-              setAviso(null)
-              setError(null)
-              setArchivo(event.target.files?.[0] ?? null)
-            }}
-          />
-        </label>
-        <button
-          className="material__boton"
-          type="submit"
-          disabled={etapa !== null}
-        >
-          Subir nueva versión
-        </button>
-        {etapa && (
-          <p className="material__progreso" role="status">
-            {TEXTO_ETAPA[etapa]}
-          </p>
-        )}
-        {error && (
-          <p className="material__error" role="alert">
-            {error}
-          </p>
-        )}
-        {aviso && (
-          <p className="material__aviso" role="status">
-            {aviso}
-          </p>
-        )}
-      </form>
-      <details onToggle={(event) => setAbierto(event.currentTarget.open)}>
-        <summary>Historial de versiones</summary>
-        {!abierto ? null : historial === undefined ? (
-          <Cargando texto="Cargando versiones…" />
-        ) : historial === null ? (
-          <ErrorEstado
-            mensaje="No pudimos cargar las versiones."
-            onReintentar={recargarHistorial}
-          />
-        ) : (
-          <ol className="material__historial" aria-label="Versiones">
-            {historial.map((v) => (
-              <li key={v.version}>
-                <span>
-                  Versión {v.version} · {fechaHora(v.subidoEn)} ·{' '}
-                  {v.responsable} · {v.archivo.nombre}
-                </span>
-                <button
-                  type="button"
-                  className="material__descargar"
-                  aria-label={`Descargar versión ${v.version}`}
-                  disabled={descargando === v.version}
-                  onClick={() => void descargar(v.version)}
+    <>
+      <Dialog open={dialogo === 'version'} onOpenChange={alCambiarAbierto}>
+        <DialogContent className="bg-card text-left sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Subir nueva versión</DialogTitle>
+            <DialogDescription>
+              Reemplaza el archivo de «{material.titulo}». La versión anterior
+              queda en el historial.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-4"
+            aria-label={`Subir nueva versión de ${material.titulo}`}
+            noValidate
+            onSubmit={(event) => void subirVersion(event)}
+          >
+            <FormField etiqueta="Nueva versión">
+              {(control) => (
+                <Dropzone
+                  {...control}
+                  archivo={archivo}
+                  onArchivoChange={(elegido) => {
+                    setError(null)
+                    setArchivo(elegido)
+                  }}
+                  accept={ACEPTADAS}
+                  validar={motivoArchivo}
+                  descripcion={`Hasta ${tamanoLegible(TAMANO_MAXIMO_ARCHIVO)}: ${EXTENSIONES.join(', ')}`}
+                  disabled={ocupado}
+                />
+              )}
+            </FormField>
+            {etapa && (
+              <p className="m-0 text-sm text-muted-foreground" role="status">
+                {TEXTO_ETAPA[etapa]}
+              </p>
+            )}
+            {error && (
+              <Alert variant="danger">
+                <CircleAlert aria-hidden="true" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={ocupado}
+                onClick={() => alCambiarAbierto(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={ocupado}>
+                {ocupado && (
+                  <Loader2 aria-hidden="true" className="animate-spin" />
+                )}
+                Subir nueva versión
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={dialogo === 'historial'} onOpenChange={alCambiarAbierto}>
+        <DialogContent className="bg-card text-left sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Historial de versiones</DialogTitle>
+            <DialogDescription>{material.titulo}</DialogDescription>
+          </DialogHeader>
+          {error && (
+            <Alert variant="danger">
+              <CircleAlert aria-hidden="true" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {historial === undefined ? (
+            <div role="status">
+              <span className="sr-only">Cargando versiones…</span>
+              <Skeleton className="h-14 rounded-xl" />
+            </div>
+          ) : historial === null ? (
+            <ErrorState
+              mensaje="No pudimos cargar las versiones."
+              onReintentar={recargarHistorial}
+            />
+          ) : (
+            <ol
+              className="m-0 grid list-none divide-y divide-border p-0"
+              aria-label="Versiones"
+            >
+              {historial.map((v) => (
+                <li
+                  key={v.version}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm"
                 >
-                  {descargando === v.version ? 'Descargando…' : 'Descargar'}
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
-      </details>
-    </div>
+                  <span className="grid min-w-0">
+                    <span className="font-medium text-foreground">
+                      Versión {v.version}
+                    </span>
+                    <span className="text-xs break-all text-muted-foreground">
+                      {fechaHora(v.subidoEn)} · {v.responsable} ·{' '}
+                      {v.archivo.nombre}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Descargar versión ${v.version}`}
+                    disabled={descargando === v.version}
+                    onClick={() => void descargar(v.version)}
+                  >
+                    {descargando === v.version ? 'Descargando…' : 'Descargar'}
+                  </Button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

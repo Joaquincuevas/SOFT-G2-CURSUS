@@ -56,12 +56,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run test --workspaces --if-present
-      # CSP, cabeceras de helmet, validación de bodies y permisos por rol.
-      - name: Tests end-to-end
-        run: npm run test:e2e --workspace=backend
-      - name: Tests de base de datos
-        run: npm run test:db --workspace=backend
+      # Todos los tests, una sola vez y con cobertura. Backend: unitarios,
+      # end-to-end (CSP, cabeceras de helmet, validación de bodies y permisos
+      # por rol) y de base de datos. Frontend: sus tests. Falla si la cobertura
+      # baja del mínimo (thresholds en backend/vitest.config.cov.ts y
+      # frontend/vite.config.ts).
+      - name: Tests y cobertura
+        run: npm run test:cov
+      # También si falló el mínimo, para ver por cuánto.
+      - name: Resumen de cobertura
+        if: always()
+        run: node .github/scripts/resumen-cobertura.mjs >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: build

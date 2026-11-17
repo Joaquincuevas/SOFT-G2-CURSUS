@@ -12,6 +12,12 @@
   box-shadow: var(--shadow-card);
 }
 
+/* Con el isotipo arriba (error de la app y 404): la tarjeta va centrada. */
+.estado--centrado {
+  align-items: center;
+  text-align: center;
+}
+
 /* Variante de página completa: centrada en la ventana, sobre surface. */
 .estado-pagina {
   display: flex;

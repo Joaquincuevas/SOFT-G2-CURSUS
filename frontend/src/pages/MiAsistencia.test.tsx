@@ -39,7 +39,7 @@ async function abrir(respuesta: RutaSimulada) {
     [`${SECCION}/resumen`]: () => seccion,
     [URL]: respuesta,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Asistencia' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Asistencia' }))
   return vi.mocked(globalThis.fetch)
 }
 
@@ -172,9 +172,9 @@ describe('ASI-06: asistencia propia por curso', () => {
     let porcentaje = 66.67
     await abrir(() => ({ ...resumen, porcentaje }))
     await screen.findByText('66,67 %')
-    fireEvent.click(screen.getByRole('tab', { name: 'Anuncios' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Anuncios' }))
     porcentaje = 100
-    fireEvent.click(screen.getByRole('tab', { name: 'Asistencia' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Asistencia' }))
     expect(await screen.findByText('100 %')).toBeInTheDocument()
   })
 })

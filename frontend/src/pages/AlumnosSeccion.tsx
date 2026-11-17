@@ -5,7 +5,8 @@ import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { IntegrantesSeccion } from './IntegrantesSeccion'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
+import { useMigas } from '../layout/migas-contexto'
 
 export function Secciones() {
   return (
@@ -30,6 +31,19 @@ function AlumnosSeccion() {
 function ListaAlumnos({ id }: { id: string }) {
   const [datos, recargar, status] = useDatos<DatosAlumnos>(
     `/api/secciones/${id}/alumnos`,
+  )
+  useMigas(
+    datos === undefined
+      ? null
+      : datos
+        ? [
+            {
+              etiqueta: `${datos.seccion.curso.codigo} · Sección ${datos.seccion.numero}`,
+              to: `/cursos/${datos.seccion.curso.id}`,
+            },
+            { etiqueta: 'Alumnos' },
+          ]
+        : [{ etiqueta: 'Alumnos' }],
   )
   if (datos === undefined) return <Cargando texto="Cargando alumnos…" />
   if (datos === null && (status === 400 || status === 404))

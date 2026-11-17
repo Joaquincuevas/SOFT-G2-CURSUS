@@ -46,13 +46,13 @@ function rutas(crear: RutaSimulada): Record<string, RutaSimulada> {
 }
 
 async function llenarYEnviar() {
-  fireEvent.change(await screen.findByLabelText('Código'), {
+  fireEvent.change(await screen.findByLabelText(/^Código\s*\*?$/), {
     target: { value: 'icc101' },
   })
-  fireEvent.change(screen.getByLabelText('Nombre del curso'), {
+  fireEvent.change(screen.getByLabelText(/^Nombre del curso\s*\*?$/), {
     target: { value: 'Introducción a la Programación' },
   })
-  fireEvent.change(screen.getByLabelText('Carrera'), {
+  fireEvent.change(screen.getByLabelText(/^Carrera\s*\*?$/), {
     target: { value: 'carrera-1' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Crear curso' }))
@@ -72,12 +72,14 @@ describe('crear curso', () => {
       'Carrera',
       'Período académico',
     ]) {
-      expect(await screen.findByLabelText(campo)).toBeRequired()
+      expect(
+        await screen.findByLabelText(new RegExp(`^${campo}\\s*\\*?$`)),
+      ).toBeRequired()
     }
-    expect(screen.getByLabelText('Período académico')).toHaveValue(
+    expect(screen.getByLabelText(/^Período académico\s*\*?$/)).toHaveValue(
       'periodo-2026-2',
     )
-    expect(screen.getByLabelText('Carrera')).toHaveValue('')
+    expect(screen.getByLabelText(/^Carrera\s*\*?$/)).toHaveValue('')
   })
 
   test('al guardar vuelve a /cursos con el mensaje y el curso en el listado', async () => {
@@ -97,8 +99,8 @@ describe('crear curso', () => {
       'status',
     )
     expect(
-      await screen.findByRole('cell', {
-        name: 'Introducción a la Programación',
+      await screen.findByText('Introducción a la Programación', {
+        exact: true,
       }),
     ).toBeInTheDocument()
     expect(enviados).toEqual([
@@ -123,7 +125,7 @@ describe('crear curso', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(mensaje)
     // Sigue en el formulario, con lo que escribió.
-    expect(screen.getByLabelText('Código')).toHaveValue('icc101')
+    expect(screen.getByLabelText(/^Código\s*\*?$/)).toHaveValue('icc101')
     expect(screen.getByRole('button', { name: 'Crear curso' })).toBeEnabled()
   })
 
@@ -140,7 +142,7 @@ describe('crear curso', () => {
     )
     fallar = false
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
-    expect(await screen.findByLabelText('Carrera')).toBeInTheDocument()
+    expect(await screen.findByLabelText(/^Carrera\s*\*?$/)).toBeInTheDocument()
   })
 
   test('sin permiso para crear, vuelve a /cursos', async () => {
@@ -152,7 +154,7 @@ describe('crear curso', () => {
     expect(
       await screen.findByRole('region', { name: 'Gestión de cursos' }),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Código')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Código\s*\*?$/)).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Crear curso' }),
     ).not.toBeInTheDocument()
@@ -177,11 +179,19 @@ describe('listado de cursos', () => {
       'Período',
       'Secciones',
     ])
+    const fila = screen.getByRole('link', { name: 'ICC101' }).closest('tr')!
     expect(
-      screen.getByRole('row', {
-        name: 'ICC101 Introducción a la Programación Ingeniería Civil en Informática 2026-2 0',
+      within(fila).getByText('Introducción a la Programación', { exact: true }),
+    ).toBeVisible()
+    expect(
+      within(fila).getByText('Ingeniería Civil en Informática', {
+        exact: true,
       }),
     ).toBeInTheDocument()
+    expect(
+      within(fila).getByText('2026-2', { exact: true }),
+    ).toBeInTheDocument()
+    expect(within(fila).getByRole('cell', { name: '0' })).toBeInTheDocument()
     expect(
       screen.getByText('Facultad de Ingeniería · Período 2026-2'),
     ).toBeInTheDocument()
@@ -224,7 +234,7 @@ describe('listado de cursos', () => {
     await renderConSesion('DIRECTOR', '/cursos', { '/api/cursos': () => [] })
 
     expect(
-      await screen.findByText('Aún no hay cursos en tu facultad.'),
+      await screen.findByText('Aún no hay cursos en el Directorio.'),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Crear curso' }),
@@ -335,7 +345,7 @@ describe('filtros del listado (GES-04)', () => {
     await screen.findByRole('table')
 
     fireEvent.change(filtro('Carrera'), { target: { value: 'carrera-2' } })
-    await screen.findByRole('cell', { name: 'Optimización' })
+    await screen.findByText('Optimización', { exact: true })
     expect(codigos()).toEqual(['IND101'])
     expect(pedidos.at(-1)).toBe(
       '/api/cursos?carreraId=carrera-2&periodoId=periodo-2026-2',
@@ -343,7 +353,7 @@ describe('filtros del listado (GES-04)', () => {
 
     fireEvent.change(filtro('Período'), { target: { value: '' } })
     fireEvent.change(filtro('Carrera'), { target: { value: 'carrera-1' } })
-    await screen.findByRole('cell', { name: 'Curso anterior' })
+    await screen.findByText('Curso anterior', { exact: true })
     expect(codigos()).toEqual(['ICC101', 'ICC001'])
     expect(pedidos.at(-1)).toBe('/api/cursos?carreraId=carrera-1')
     // Sigue en la misma página, con el encabezado y los filtros.
@@ -382,9 +392,9 @@ describe('filtros del listado (GES-04)', () => {
     await screen.findByRole('table')
 
     fireEvent.click(screen.getByRole('link', { name: 'Crear curso' }))
-    expect(await screen.findByLabelText('Período académico')).toHaveValue(
-      'periodo-2026-2',
-    )
+    expect(
+      await screen.findByLabelText(/^Período académico\s*\*?$/),
+    ).toHaveValue('periodo-2026-2')
     const pedidosA = (ruta: string) =>
       fetch.mock.calls.filter(([url]) => String(url) === ruta).length
     expect(pedidosA('/api/carreras')).toBe(1)

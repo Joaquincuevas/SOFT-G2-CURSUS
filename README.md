@@ -144,6 +144,16 @@ SUPERADMIN_CORREO=superadmin@cursus.test SUPERADMIN_NOMBRE="Superadmin" SUPERADM
 
 El mismo comando completa **Ingeniería de Norte con 3 carreras, 15 cursos y 30 secciones** en su período activo (GES-20). Cada sección incluye dos bloques con sala, profesor, dos ayudantes y alumnos de demo. Los horarios no se superponen. Repetirlo conserva las asignaciones y los retiros posteriores; una sala o código demo ocupado por otros datos hace fallar la carga completa sin cambios parciales. Ver [datos, criterios y guía de revisión](docs/ges-20-seed-facultad.md).
 
+El comando también carga la **capa de demo**, para que la aplicación se vea como una universidad en funcionamiento:
+
+- Más personas por facultad.
+- Los períodos 2025-1, 2025-2 y 2026-1 cerrados, con notas y asistencia.
+- En el período activo: evaluaciones con notas en distintos estados, clases con asistencia, anuncios y actividades.
+
+Profesor, ayudante y alumno de Norte tienen secciones y un historial. Ver la [guía de la demo](docs/demo/guia-demo.md), que también explica el [CSV de alumnos](docs/demo/alumnos-seccion-nueva.csv) para mostrar la carga de una sección.
+
+Para empezar de cero, `SEED_RESET=true npm run seed --workspace=backend` vacía la base (salvo los superadmins) antes de cargarla.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
@@ -160,6 +170,63 @@ npm run format:check   # solo verifica
 ```
 
 `shared` se compila automáticamente después de `npm install`. Si cambias algo en `shared/src`, recompílalo con `npm run build --workspace=shared` para que frontend y backend vean los cambios.
+
+## Tests y cobertura
+
+Los tests usan [Vitest](https://vitest.dev) y la cobertura se mide con su librería oficial, [`@vitest/coverage-v8`](https://vitest.dev/guide/coverage), que usa el contador de cobertura del motor de Node (V8).
+
+### Correr los tests
+
+Desde la raíz del repo, con las dependencias instaladas (`npm install`):
+
+```bash
+npm run test                            # unitarios de backend y frontend (no necesitan Docker)
+npm run test:e2e --workspace=backend    # end-to-end de la API: cabeceras, validación y permisos
+npm run test:db --workspace=backend     # contra PostgreSQL: schema, RLS, triggers y servicios
+```
+
+`test:db` necesita la base local levantada (`docker compose up -d`, ver "Base de datos local"). Crea y borra sus propias bases de prueba, así que no toca tus datos de desarrollo.
+
+### Obtener la cobertura
+
+```bash
+docker compose up -d     # la cobertura del backend incluye los tests de base de datos
+npm run test:cov
+```
+
+`test:cov` corre la cobertura de cada workspace (`npm run test:cov --workspace=backend` o `--workspace=frontend` para uno solo) y deja:
+
+- **En la terminal:** una tabla por archivo y un resumen. El dato a reportar es la fila **All files**.
+- **Un reporte HTML navegable** en `backend/coverage/index.html` y `frontend/coverage/index.html`, que marca en verde y rojo las líneas que se ejecutaron y las que no. La carpeta `coverage/` está en `.gitignore`.
+
+Cada workspace exige un mínimo de **95 % de líneas, instrucciones y funciones** (`thresholds` en [backend/vitest.config.cov.ts](backend/vitest.config.cov.ts) y [frontend/vite.config.ts](frontend/vite.config.ts)): si la cobertura baja de eso, `test:cov` termina con error.
+
+**En el CI.** El job `test` de [ci.yml](.github/workflows/ci.yml) corre `npm run test:cov` en cada PR, con el mismo PostgreSQL de los tests: así corre todos los tests una sola vez (unitarios, end-to-end y de base de datos) y el PR queda en rojo si la cobertura baja del mínimo. El resumen de las cuatro métricas de cada workspace aparece en la página del workflow en GitHub Actions (pestaña **Summary**).
+
+**Qué mide cada número.** La tabla muestra cuatro métricas:
+
+| Métrica    | Qué cuenta                                                                 |
+| ---------- | -------------------------------------------------------------------------- |
+| Lines      | Líneas de código que se ejecutaron durante los tests                       |
+| Statements | Instrucciones ejecutadas (una línea puede tener varias)                    |
+| Functions  | Funciones que se llamaron al menos una vez                                 |
+| Branches   | Caminos de cada condición (`if`, `? :`, `&&`) que se probaron, uno por uno |
+
+La cobertura del proyecto se reporta como **líneas, instrucciones y funciones**. Branches es la métrica más exigente: una línea con un `if` cuenta como cubierta aunque solo se haya probado uno de sus caminos.
+
+**Qué se mide.**
+
+- **Backend:** todos sus tests juntos (unitarios, end-to-end y de base de datos), porque gran parte de la lógica se prueba contra PostgreSQL. Se excluyen `src/main.ts` y `src/database/ejecutar-*.ts`, los puntos de entrada que corren como procesos aparte (la API y los comandos `seed` y `superadmin`): la cobertura no puede verlos, y su lógica está en módulos que sí se miden.
+- **Frontend:** todo `src/`, salvo los tests, `src/test/` (utilidades de los tests), `src/components/ui/` (componentes generados por shadcn, código de la librería copiado al repo) y `src/main.tsx` (solo monta la aplicación).
+
+**Resultado actual:**
+
+| Workspace | Lines  | Statements | Functions | Branches |
+| --------- | ------ | ---------- | --------- | -------- |
+| backend   | 97,0 % | 95,9 %     | 99,1 %    | 85,9 %   |
+| frontend  | 96,7 % | 95,2 %     | 95,1 %    | 91,5 %   |
+
+En Windows, algunos tests del frontend pueden superar el tiempo límite por la lentitud del sistema de archivos. Si pasa, córrelos en WSL con el repo clonado dentro de Linux (no en `/mnt/c`).
 
 ## Entornos en AWS
 
@@ -252,13 +319,15 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 
 ### Datos simulados en staging
 
-Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol, usuarios de demo por facultad y la facultad completa de Ingeniería de Norte de GES-20) en la base de staging:
+Con staging encendido, carga los datos simulados del seed en la base de staging: dos universidades con un usuario por rol, usuarios de demo por facultad, la facultad completa de Ingeniería de Norte de GES-20 y la capa de demo (ver la [guía de la demo](docs/demo/guia-demo.md)).
 
 ```bash
-bash infra/aws/seed.sh staging
+bash infra/aws/seed.sh staging            # carga o completa los datos
+bash infra/aws/seed.sh staging --reset    # vacía la base, salvo los superadmins, y carga todo
 ```
 
 - Se puede repetir: actualiza los datos existentes en vez de duplicarlos.
+- `--reset` borra todo lo creado a mano (cursos, cuentas, notas y sesiones) y conserva solo a los superadmins y su MFA. Corre en una sola transacción: si la carga falla, la base queda como estaba.
 - Solo funciona en staging: con `production` el script se niega, y producción no tiene la contraseña del seed.
 - Los correos de los usuarios son los del seed local (ver "Datos simulados (seed)"), pero la contraseña **no** es la del README: es un secreto propio de staging. Para obtenerla, en CloudShell:
 

@@ -7,12 +7,12 @@ export function ComentarioDevolucion({
 }) {
   return (
     <div
-      className="notas__devolucion"
+      className="max-w-lg rounded-lg border-l-4 border-primary bg-muted/60 p-3"
       role="note"
       aria-label="Comentario del profesor"
     >
-      <p className="notas__devolucion-titulo">Comentario del profesor</p>
-      <p className="notas__devolucion-texto">
+      <p className="m-0 mb-1 text-sm font-semibold">Comentario del profesor</p>
+      <p className="m-0 text-sm break-words whitespace-pre-wrap">
         {comentario || 'No hay comentario disponible.'}
       </p>
     </div>

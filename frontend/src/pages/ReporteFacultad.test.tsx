@@ -1,6 +1,6 @@
 import type { ReporteFacultad as DatosReporte } from '@cursus/shared'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { expect, test } from 'vitest'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
 const RUTA = '/api/metricas/facultad'
@@ -119,7 +119,120 @@ test.each(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'] as const)(
   '%s no ve el reporte en la navegación',
   async (rol) => {
     await renderConSesion(rol, '/reporte-facultad')
+    // Sin permiso la ruta vuelve a su Dashboard. El del Director también tiene
+    // una tabla (sus universidades), así que se busca la del reporte por nombre.
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: rol === 'DIRECTOR' ? 'Visión del Directorio' : /^Bienvenido\/a/,
+      }),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Reporte académico' })).toBeNull()
-    expect(screen.queryByRole('table')).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: /^Reporte académico/ }),
+    ).toBeNull()
   },
 )
+
+// UI/UX-08: la tabla agrupa cada carrera con sus cursos en un Fragment con key.
+// Sin ella, React avisaba «Each child in a list should have a unique "key"».
+test('TablaReporte no avisa de keys faltantes ni repetidas', async () => {
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad', {
+    [RUTA]: () => ({
+      ...REPORTE,
+      carreras: [
+        REPORTE.carreras[0],
+        { ...REPORTE.carreras[0], id: 'c-2', nombre: 'Ingeniería Industrial' },
+      ],
+    }),
+    [PERIODOS]: () => periodos,
+  })
+  expect(await screen.findByText('Ingeniería Industrial')).toBeInTheDocument()
+  const avisos = error.mock.calls.filter((llamada) =>
+    String(llamada[0]).includes('unique "key"'),
+  )
+  expect(avisos).toEqual([])
+  error.mockRestore()
+})
+
+test('cada carrera encabeza sus cursos y la tabla se anuncia con su nombre', async () => {
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad', {
+    [RUTA]: () => REPORTE,
+    [PERIODOS]: () => periodos,
+  })
+  const tabla = await screen.findByRole('table', {
+    name: 'Carreras y cursos de la facultad',
+  })
+  expect(
+    within(tabla)
+      .getAllByRole('columnheader')
+      .map((c) => c.textContent),
+  ).toEqual(['Carrera / curso', 'Aprobación', 'Promedio', 'Asistencia'])
+  const filas = within(tabla).getAllByRole('row').slice(1)
+  expect(filas).toHaveLength(2)
+  expect(within(filas[0]).getByRole('rowheader')).toHaveTextContent(
+    'Ingeniería Civil',
+  )
+  expect(
+    within(filas[0])
+      .getAllByRole('cell')
+      .map((c) => c.textContent),
+  ).toEqual(['50,0 %', '4,50', '66,67 %'])
+  expect(within(filas[1]).getByRole('rowheader')).toHaveTextContent(
+    'ICC101 · Introducción',
+  )
+})
+
+test('mientras carga muestra esqueletos y lo anuncia', async () => {
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad', {
+    [RUTA]: () => new Promise(() => {}),
+    [PERIODOS]: () => periodos,
+  })
+  expect(
+    await screen.findByText('Cargando reporte académico…'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('status')).toBeInTheDocument()
+  expect(screen.queryByRole('table')).toBeNull()
+})
+
+test('un período con formato inválido no consulta y ofrece volver al activo', async () => {
+  const pedida = vi.fn(() => REPORTE)
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad?periodo=activo', {
+    [RUTA]: pedida,
+    [PERIODOS]: () => periodos,
+  })
+  expect(
+    await screen.findByText(/El período «activo» no es válido/),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toBeInTheDocument()
+  expect(pedida).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Ver el período activo' }))
+  expect(await screen.findByText('Ingeniería Civil')).toBeInTheDocument()
+})
+
+test('si los períodos fallan, avisa y deja reintentar sin esconder el reporte', async () => {
+  let intentos = 0
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad', {
+    [RUTA]: () => REPORTE,
+    [PERIODOS]: () => (intentos++ === 0 ? json({}, 500) : periodos),
+  })
+  expect(
+    await screen.findByText('No pudimos cargar los períodos.'),
+  ).toBeInTheDocument()
+  expect(await screen.findByText('Ingeniería Civil')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+  const selector = await screen.findByRole('combobox', { name: 'Período' })
+  expect(selector.tagName).toBe('SELECT')
+  expect(selector).toHaveValue('2026-2')
+})
+
+test('un 400 del reporte dice que el período no es válido', async () => {
+  await renderConSesion('ADMINISTRATIVO', '/reporte-facultad?periodo=2026-1', {
+    [RUTA]: () => json({}, 400),
+    [PERIODOS]: () => periodos,
+  })
+  expect(
+    await screen.findByText('El período no es válido.'),
+  ).toBeInTheDocument()
+})

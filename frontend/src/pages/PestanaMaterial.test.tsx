@@ -52,55 +52,152 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
             ]
           : [],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
-  const panel = within(
-    await screen.findByRole('region', { name: 'Versiones del sílabo' }),
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+  const tarjeta = within(
+    await screen.findByRole('region', { name: 'Sílabo del curso' }),
+  )
+  // Una sola tarjeta: sin versión publicada, ofrece subir el sílabo.
+  expect(
+    await tarjeta.findByText(/Aún no hay un sílabo publicado/),
+  ).toBeInTheDocument()
+  fireEvent.click(tarjeta.getByRole('button', { name: 'Subir sílabo' }))
+  const dialogo = within(
+    await screen.findByRole('dialog', { name: 'Subir sílabo' }),
   )
   const pdf = new File(['%PDF-'], 'programa.pdf', { type: 'application/pdf' })
-  fireEvent.change(panel.getByLabelText('Sílabo (PDF, hasta 10 MiB)'), {
+  fireEvent.change(dialogo.getByLabelText('Sílabo (PDF, hasta 10 MiB)'), {
     target: { files: [pdf] },
   })
-  fireEvent.click(panel.getByRole('button', { name: 'Publicar sílabo' }))
+  fireEvent.click(dialogo.getByRole('button', { name: 'Publicar sílabo' }))
   await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
   expect(publicar).not.toHaveBeenCalled()
   XhrFalso.enviadas[0].terminar(204)
-  expect(await panel.findByText('Sílabo publicado.')).toBeInTheDocument()
-  expect(
-    await panel.findByRole('list', { name: 'Historial del sílabo' }),
-  ).toHaveTextContent('Versión 1 · Camila Rojas')
+  // Confirma con un aviso breve, no con texto suelto, y cierra el diálogo.
+  expect(await screen.findByText('Sílabo publicado.')).toBeInTheDocument()
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(publicar).toHaveBeenCalledTimes(1)
-  const destacado = within(
-    screen.getByRole('region', { name: 'Sílabo del curso' }),
+  expect(
+    await tarjeta.findByText(/Versión 1 vigente · publicada el/),
+  ).toHaveTextContent(
+    'Versión 1 vigente · publicada el 10-11-2026 por Camila Rojas',
   )
   expect(
-    await destacado.findByText('Versión vigente 1 · PDF'),
-  ).toBeInTheDocument()
+    tarjeta.getByRole('button', { name: 'Descargar versión 1' }),
+  ).toBeEnabled()
+  expect(
+    tarjeta.getByRole('button', { name: 'Subir nueva versión' }),
+  ).toBeEnabled()
+  // Sin la tarjeta duplicada «Versiones del sílabo».
+  expect(
+    screen.queryByRole('region', { name: 'Versiones del sílabo' }),
+  ).toBeNull()
 })
 
-// MAT-06 abre la pestaña al ayudante y al alumno: ven el historial del sílabo
-// y lo descargan, pero solo el profesor publica.
-test.each<Rol>(['AYUDANTE', 'ALUMNO'])(
-  '%s ve el historial del sílabo sin el formulario para publicar',
-  async (rol) => {
-    await renderConSesion(rol, VISTA, {
-      [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
-      [MATERIALES]: () => [],
-      [`${BASE}/silabo`]: () => [
-        { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
-      ],
-    })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
-    const panel = within(
-      await screen.findByRole('region', { name: 'Versiones del sílabo' }),
-    )
+test('el historial del sílabo queda plegado bajo la versión vigente', async () => {
+  await renderConSesion('PROFESOR', VISTA, {
+    [RESUMEN_RUTA]: () => RESUMEN,
+    [MATERIALES]: () => [],
+    [`${BASE}/silabo`]: () => [
+      {
+        version: 2,
+        responsable: 'Camila Rojas',
+        subidoEn: '2026-11-12T12:00:00Z',
+      },
+      {
+        version: 1,
+        responsable: 'Diego Soto',
+        subidoEn: '2026-09-01T12:00:00Z',
+      },
+    ],
+  })
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+  const tarjeta = within(
+    await screen.findByRole('region', { name: 'Sílabo del curso' }),
+  )
+  expect(await tarjeta.findByText(/Versión 2 vigente/)).toBeInTheDocument()
+  const plegable = tarjeta.getByRole('button', {
+    name: 'Historial de versiones (1 anterior)',
+  })
+  expect(plegable).toHaveAttribute('aria-expanded', 'false')
+  expect(
+    tarjeta.queryByRole('list', { name: 'Historial del sílabo' }),
+  ).toBeNull()
+  fireEvent.click(plegable)
+  const historial = await tarjeta.findByRole('list', {
+    name: 'Historial del sílabo',
+  })
+  expect(historial).toHaveTextContent('Versión 1 · Diego Soto · 01-09-2026')
+  expect(
+    within(historial).getByRole('button', { name: 'Descargar versión 1' }),
+  ).toBeEnabled()
+})
 
-    expect(
-      await panel.findByRole('button', { name: 'Descargar versión 1' }),
-    ).toBeEnabled()
-    expect(panel.queryByRole('form', { name: 'Cargar sílabo' })).toBeNull()
-    expect(panel.queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
-  },
-)
+test('un archivo que no es PDF se rechaza junto al campo, sin subir nada', async () => {
+  await renderConSesion('PROFESOR', VISTA, {
+    [RESUMEN_RUTA]: () => RESUMEN,
+    [MATERIALES]: () => [],
+    [`${BASE}/silabo`]: () => [],
+  })
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Subir sílabo' }))
+  const dialogo = within(
+    await screen.findByRole('dialog', { name: 'Subir sílabo' }),
+  )
+  const campo = dialogo.getByLabelText('Sílabo (PDF, hasta 10 MiB)')
+  fireEvent.change(campo, {
+    target: {
+      files: [new File(['x'], 'programa.docx', { type: 'application/msword' })],
+    },
+  })
+  expect(dialogo.getByRole('alert')).toHaveTextContent(
+    'Selecciona un PDF válido de hasta 10 MiB.',
+  )
+  expect(campo).toHaveAttribute('aria-invalid', 'true')
+  expect(
+    dialogo.getByRole('button', { name: 'Publicar sílabo' }),
+  ).toBeDisabled()
+  expect(XhrFalso.enviadas).toHaveLength(0)
+})
+
+// MAT-06 abre la pestaña al ayudante y al alumno: ven el sílabo y lo
+// descargan, pero solo el profesor publica.
+test('AYUDANTE ve el sílabo vigente sin el botón para publicar', async () => {
+  await renderConSesion('AYUDANTE', VISTA, {
+    [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'AYUDANTE' }),
+    [MATERIALES]: () => [],
+    [`${BASE}/silabo`]: () => [
+      { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
+    ],
+  })
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+  const tarjeta = within(
+    await screen.findByRole('region', { name: 'Sílabo del curso' }),
+  )
+  expect(
+    await tarjeta.findByRole('button', { name: 'Descargar versión 1' }),
+  ).toBeEnabled()
+  expect(tarjeta.queryByRole('button', { name: /Subir/ })).toBeNull()
+  expect(screen.queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
+})
+
+test('ALUMNO ve el historial del sílabo sin el formulario para publicar', async () => {
+  await renderConSesion('ALUMNO', VISTA, {
+    [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol: 'ALUMNO' }),
+    [MATERIALES]: () => [],
+    [`${BASE}/silabo`]: () => [
+      { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
+    ],
+  })
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+  const panel = within(
+    await screen.findByRole('region', { name: 'Versiones del sílabo' }),
+  )
+  expect(
+    await panel.findByRole('button', { name: 'Descargar versión 1' }),
+  ).toBeEnabled()
+  expect(panel.queryByRole('form', { name: 'Cargar sílabo' })).toBeNull()
+  expect(panel.queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
+})
 
 const RESUMEN: SeccionResumen = {
   id: 'seccion-1',
@@ -232,12 +329,25 @@ async function abrirMaterial({
       init?.method === 'POST' ? registrar(init) : listar(),
     ),
   })
-  const pestana = await screen.findByRole('tab', { name: 'Material' })
+  const pestana = await screen.findByRole('link', { name: 'Material' })
   if (!(pestana as HTMLButtonElement).disabled) fireEvent.click(pestana)
   return { llamadas, bodies }
 }
 
-const panel = () => within(screen.getByRole('tabpanel', { name: 'Material' }))
+// Con un diálogo abierto (subir material o una versión), las consultas van a
+// él; si no, a la pestaña.
+const panel = () =>
+  within(
+    screen.queryByRole('dialog') ??
+      screen.getByRole('region', { name: 'Material' }),
+  )
+
+// Abre el diálogo «Subir material» si no está abierto.
+function abrirFormulario() {
+  if (screen.queryByRole('dialog')) return
+  const pestana = within(screen.getByRole('region', { name: 'Material' }))
+  fireEvent.click(pestana.getAllByRole('button', { name: 'Subir material' })[0])
+}
 
 const archivoDe = (nombre = 'guia.pdf', contenido = 'hola!') =>
   new File([contenido], nombre, { type: 'application/pdf' })
@@ -256,6 +366,7 @@ function completar(
     categoria = 'GUIA',
     titulo = 'Guía 1',
   } = campos
+  abrirFormulario()
   const p = panel()
   fireEvent.change(p.getByLabelText('Archivo'), {
     target: { files: [archivo] },
@@ -283,9 +394,16 @@ const subidaEnCurso = async () => {
 describe('pestaña Material (MAT-04)', () => {
   test('el profesor ve el formulario con archivo, categoría, título y descripción', async () => {
     await abrirMaterial()
+    abrirFormulario()
 
-    const p = panel()
-    expect(p.getByLabelText('Archivo')).toBeInTheDocument()
+    const p = within(
+      await screen.findByRole('dialog', { name: 'Subir material' }),
+    )
+    expect(p.getByLabelText('Archivo')).toHaveAttribute('type', 'file')
+    expect(
+      p.getByText('Arrastra un archivo aquí o haz clic para seleccionar'),
+    ).toBeInTheDocument()
+    expect(p.queryByText(/Choose File|No file chosen/)).toBeNull()
     expect(p.getByLabelText('Descripción (opcional)')).toBeInTheDocument()
     const categorias = within(p.getByLabelText('Categoría'))
       .getAllByRole('option')
@@ -308,11 +426,18 @@ describe('pestaña Material (MAT-04)', () => {
     async (rol) => {
       await abrirMaterial({ rol, materiales: [EXISTENTE] })
 
-      expect(screen.getByRole('tab', { name: 'Material' })).toBeEnabled()
+      expect(screen.getByRole('link', { name: 'Material' })).toBeEnabled()
       expect(
-        await panel().findByRole('article', { name: 'Solemne 2025' }),
+        await panel().findByRole(rol === 'ALUMNO' ? 'article' : 'row', {
+          name: 'Solemne 2025',
+        }),
       ).toBeInTheDocument()
       expect(panel().queryByLabelText('Archivo')).toBeNull()
+      expect(panel().queryByLabelText('Sílabo (PDF, hasta 10 MiB)')).toBeNull()
+      expect(panel().queryByText('Subir nueva versión')).toBeNull()
+      if (rol === 'AYUDANTE') {
+        expect(panel().getByText('Material en solo lectura')).toBeVisible()
+      }
       expect(
         panel().queryByRole('button', { name: 'Subir material' }),
       ).toBeNull()
@@ -325,10 +450,13 @@ describe('pestaña Material (MAT-04)', () => {
   test('muestra los materiales del curso, o que no hay', async () => {
     await abrirMaterial({ materiales: [EXISTENTE] })
 
-    const lista = await panel().findByRole('list', { name: 'Prueba anterior' })
-    const item = within(lista).getByRole('article', { name: 'Solemne 2025' })
-    expect(item).toHaveTextContent('Con pauta.')
-    expect(item).toHaveTextContent('solemne.pdf · 2 KB')
+    const tabla = await panel().findByRole('table', { name: 'Prueba anterior' })
+    const fila = within(tabla).getByRole('row', { name: 'Solemne 2025' })
+    expect(fila).toHaveTextContent('Con pauta.')
+    expect(fila).toHaveTextContent('solemne.pdf · PDF')
+    expect(fila).toHaveTextContent('2 KB')
+    expect(fila).toHaveTextContent('Prueba anterior')
+    expect(fila).toHaveTextContent('01-09-2026')
   })
 
   test('el alumno ve categorías con archivos y cada grupo ordenado por fecha de subida', async () => {
@@ -391,12 +519,15 @@ describe('pestaña Material (MAT-04)', () => {
       [RESUMEN_RUTA]: () => RESUMEN,
       [MATERIALES]: () => json({}, 500),
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
 
     expect(
       await panel().findByText('No pudimos cargar los materiales.'),
     ).toBeInTheDocument()
-    expect(panel().getByLabelText('Archivo')).toBeInTheDocument()
+    // Aunque el listado falle, se puede subir.
+    expect(
+      panel().getByRole('button', { name: 'Subir material' }),
+    ).toBeEnabled()
   })
 
   describe('descargar un material (MAT-06)', () => {
@@ -428,7 +559,7 @@ describe('pestaña Material (MAT-04)', () => {
           return descarga()
         },
       })
-      fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+      fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
       const boton = await panel().findByRole('button', {
         name: 'Descargar Solemne 2025',
       })
@@ -538,8 +669,10 @@ describe('pestaña Material (MAT-04)', () => {
 
       // Confirma y registra.
       await waitFor(() =>
-        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+        expect(screen.getByText('Material subido')).toBeInTheDocument(),
       )
+      // Éxito: el diálogo se cierra y el listado se vuelve a pedir.
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(llamadas.filter((l) => !l.startsWith('GET'))).toEqual([
         `POST ${ARCHIVOS}`,
         `POST ${CONFIRMAR}`,
@@ -552,11 +685,8 @@ describe('pestaña Material (MAT-04)', () => {
         descripcion: 'Funciones y listas.',
       })
 
-      // Éxito: el formulario queda listo para otro material y el listado se
-      // vuelve a pedir.
-      expect(
-        panel().getByRole('button', { name: 'Subir material' }),
-      ).toBeEnabled()
+      // Al volver a abrirlo, empieza vacío.
+      abrirFormulario()
       expect(panel().getByLabelText('Título')).toHaveValue('')
       expect(panel().getByLabelText('Categoría')).toHaveValue('')
       await waitFor(() => {
@@ -595,7 +725,7 @@ describe('pestaña Material (MAT-04)', () => {
           return registrado ? [EXISTENTE] : []
         },
       })
-      fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+      fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
       await panel().findByText('Aún no hay materiales del curso')
       completar()
 
@@ -603,7 +733,7 @@ describe('pestaña Material (MAT-04)', () => {
       ;(await subidaEnCurso()).terminar(204)
 
       expect(
-        await panel().findByRole('article', { name: 'Solemne 2025' }),
+        await screen.findByRole('row', { name: 'Solemne 2025' }),
       ).toBeInTheDocument()
     })
   })
@@ -716,7 +846,7 @@ describe('pestaña Material (MAT-04)', () => {
       enviar()
 
       await waitFor(() =>
-        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+        expect(screen.getByText('Material subido')).toBeInTheDocument(),
       )
       expect(panel().queryByRole('alert')).toBeNull()
       expect(XhrFalso.enviadas).toHaveLength(1)
@@ -765,7 +895,7 @@ describe('pestaña Material (MAT-04)', () => {
       enviar()
 
       await waitFor(() =>
-        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+        expect(screen.getByText('Material subido')).toBeInTheDocument(),
       )
       expect(panel().queryByRole('alert')).toBeNull()
       expect(await panel().findByText('Guía 1')).toBeInTheDocument()
@@ -825,7 +955,7 @@ describe('pestaña Material (MAT-04)', () => {
 
       enviar()
       await waitFor(() =>
-        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+        expect(screen.getByText('Material subido')).toBeInTheDocument(),
       )
       expect(await panel().findByText('Guía 1')).toBeInTheDocument()
       // Una sola subida a S3 y un solo archivo pedido en los tres intentos.
@@ -912,7 +1042,7 @@ describe('pestaña Material (MAT-04)', () => {
       ;(await subidaEnCurso()).terminar(204)
 
       await waitFor(() =>
-        expect(panel().getByText('Material subido')).toBeInTheDocument(),
+        expect(screen.getByText('Material subido')).toBeInTheDocument(),
       )
       expect(panel().queryByRole('alert')).toBeNull()
     })
@@ -926,6 +1056,7 @@ describe('pestaña Material (MAT-04)', () => {
 
     test('sin archivo', async () => {
       const { llamadas } = await abrirMaterial()
+      abrirFormulario()
       const p = panel()
       fireEvent.change(p.getByLabelText('Categoría'), {
         target: { value: 'GUIA' },
@@ -1006,6 +1137,7 @@ describe('pestaña Material (MAT-04)', () => {
 
     test('el título y la descripción tienen largo máximo', async () => {
       await abrirMaterial()
+      abrirFormulario()
 
       expect(panel().getByLabelText('Título')).toHaveAttribute(
         'maxlength',
@@ -1019,6 +1151,7 @@ describe('pestaña Material (MAT-04)', () => {
 
     test('el input solo ofrece los tipos permitidos', async () => {
       await abrirMaterial()
+      abrirFormulario()
 
       expect(panel().getByLabelText('Archivo')).toHaveAttribute(
         'accept',
@@ -1054,18 +1187,35 @@ describe('versiones de un material (MAT-07)', () => {
       [`${BASE}/silabo`]: () => [],
       ...rutas,
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
-    return within(await screen.findByRole('article', { name: 'Solemne 2025' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
+    // El profesor y el ayudante ven una tabla; el alumno, fichas.
+    return within(
+      await screen.findByRole(rol === 'ALUMNO' ? 'article' : 'row', {
+        name: 'Solemne 2025',
+      }),
+    )
   }
 
-  function elegir(material: ReturnType<typeof within>) {
+  // Abre una acción del menú de la fila y devuelve su diálogo.
+  async function accion(material: ReturnType<typeof within>, nombre: string) {
+    fireEvent.keyDown(
+      material.getByRole('button', { name: 'Más acciones de Solemne 2025' }),
+      { key: 'Enter' },
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: nombre }))
+    return within(await screen.findByRole('dialog', { name: nombre }))
+  }
+
+  async function elegir(material: ReturnType<typeof within>) {
+    const dialogo = await accion(material, 'Subir nueva versión')
     const pdf = new File(['%PDF-'], 'guia.pdf', { type: 'application/pdf' })
-    fireEvent.change(material.getByLabelText('Nueva versión'), {
+    fireEvent.change(dialogo.getByLabelText('Nueva versión'), {
       target: { files: [pdf] },
     })
     fireEvent.click(
-      material.getByRole('button', { name: 'Subir nueva versión' }),
+      dialogo.getByRole('button', { name: 'Subir nueva versión' }),
     )
+    return dialogo
   }
 
   test('el profesor sube una versión nueva y el listado muestra la vigente', async () => {
@@ -1084,21 +1234,20 @@ describe('versiones de un material (MAT-07)', () => {
     })
     expect(material.getByText(/Versión 1, del 01-09-2026/)).toBeInTheDocument()
 
-    elegir(material)
+    const dialogo = await elegir(material)
     await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
     expect(
-      material.getByRole('button', { name: 'Subir nueva versión' }),
+      dialogo.getByRole('button', { name: 'Subir nueva versión' }),
     ).toBeDisabled()
     XhrFalso.enviadas[0].terminar(204)
 
-    expect(await material.findByText('Versión 2 subida')).toBeInTheDocument()
+    // Confirma con un aviso breve y cierra el diálogo.
+    expect(await screen.findByText('Versión 2 subida')).toBeInTheDocument()
     expect(registrar).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(
-      await material.findByText(/Versión 2, del 10-11-2026/),
+      await screen.findByText(/Versión 2, del 10-11-2026/),
     ).toBeInTheDocument()
-    expect(
-      material.getByRole('button', { name: 'Subir nueva versión' }),
-    ).toBeEnabled()
   })
 
   test('el historial muestra fecha y responsable, y descarga una versión anterior', async () => {
@@ -1114,11 +1263,11 @@ describe('versiones de un material (MAT-07)', () => {
       [VERSIONES]: () => [V2, V1],
       [`${VERSIONES}/1/descarga`]: descarga,
     })
-    fireEvent.click(material.getByText('Historial de versiones'))
-    const historial = await material.findByRole('list', { name: 'Versiones' })
-    expect(historial).toHaveTextContent('Versión 2 · 10-11-2026')
+    const dialogo = await accion(material, 'Historial de versiones')
+    const historial = await dialogo.findByRole('list', { name: 'Versiones' })
+    expect(historial).toHaveTextContent(/Versión 2\s*10-11-2026/)
     expect(historial).toHaveTextContent('Diego Soto')
-    expect(historial).toHaveTextContent('Versión 1 · 01-09-2026')
+    expect(historial).toHaveTextContent(/Versión 1\s*01-09-2026/)
     expect(historial).toHaveTextContent('Camila Rojas')
 
     fireEvent.click(
@@ -1132,6 +1281,49 @@ describe('versiones de un material (MAT-07)', () => {
     click.mockRestore()
   })
 
+  test('valida el archivo antes de subir la versión y se cierra con Escape', async () => {
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [EXISTENTE],
+      [VERSIONES]: () => [V1],
+    })
+    const dialogo = await accion(material, 'Subir nueva versión')
+    const formulario = dialogo
+      .getByRole('button', { name: 'Subir nueva versión' })
+      .closest('form') as HTMLFormElement
+    fireEvent.submit(formulario)
+    expect(await dialogo.findByText('Elige un archivo')).toBeInTheDocument()
+
+    fireEvent.change(dialogo.getByLabelText('Nueva versión'), {
+      target: {
+        files: [new File([''], 'vacio.pdf', { type: 'application/pdf' })],
+      },
+    })
+    fireEvent.submit(formulario)
+    expect(
+      (await dialogo.findAllByText('El archivo está vacío')).length,
+    ).toBeGreaterThan(0)
+    expect(XhrFalso.enviadas).toHaveLength(0)
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  test('si la descarga de una versión falla, lo avisa en el historial', async () => {
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [{ ...EXISTENTE, version: 2 }],
+      [VERSIONES]: () => [V2, V1],
+      [`${VERSIONES}/1/descarga`]: () => json({}, 500),
+    })
+    const dialogo = await accion(material, 'Historial de versiones')
+    const historial = await dialogo.findByRole('list', { name: 'Versiones' })
+    fireEvent.click(
+      within(historial).getByRole('button', { name: 'Descargar versión 1' }),
+    )
+    expect(
+      await dialogo.findByText('No pudimos descargar la versión 1.'),
+    ).toBeInTheDocument()
+  })
+
   test('si la subida a S3 falla a mitad del flujo, avisa, no registra y desbloquea', async () => {
     const registrar = vi.fn(() => json(V2, 201))
     const material = await abrir('PROFESOR', {
@@ -1140,16 +1332,16 @@ describe('versiones de un material (MAT-07)', () => {
       [CONFIRMAR]: () => SUBIDA.archivo,
       [VERSIONES]: (init) => (init?.method === 'POST' ? registrar() : [V1]),
     })
-    elegir(material)
+    const dialogo = await elegir(material)
     await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
     XhrFalso.enviadas[0].fallar()
 
-    expect(await material.findByRole('alert')).toHaveTextContent(
+    expect(await dialogo.findByRole('alert')).toHaveTextContent(
       'No pudimos subir el archivo',
     )
     expect(registrar).not.toHaveBeenCalled()
     expect(
-      material.getByRole('button', { name: 'Subir nueva versión' }),
+      dialogo.getByRole('button', { name: 'Subir nueva versión' }),
     ).toBeEnabled()
   })
 
@@ -1161,14 +1353,14 @@ describe('versiones de un material (MAT-07)', () => {
       [VERSIONES]: (init) =>
         init?.method === 'POST' ? json({ message: 'x' }, 409) : [V1],
     })
-    elegir(material)
+    const dialogo = await elegir(material)
     await waitFor(() => expect(XhrFalso.enviadas).toHaveLength(1))
     XhrFalso.enviadas[0].terminar(204)
-    expect(await material.findByRole('alert')).toHaveTextContent(
+    expect(await dialogo.findByRole('alert')).toHaveTextContent(
       'Ese archivo ya está registrado como material.',
     )
     expect(
-      material.getByRole('button', { name: 'Subir nueva versión' }),
+      dialogo.getByRole('button', { name: 'Subir nueva versión' }),
     ).toBeEnabled()
   })
 
@@ -1180,7 +1372,9 @@ describe('versiones de un material (MAT-07)', () => {
       })
       expect(material.getByText(/Versión 3, del/)).toBeInTheDocument()
       expect(material.queryByLabelText('Nueva versión')).toBeNull()
-      expect(material.queryByText('Historial de versiones')).toBeNull()
+      expect(
+        material.queryByRole('button', { name: /Más acciones/ }),
+      ).toBeNull()
     },
   )
 })

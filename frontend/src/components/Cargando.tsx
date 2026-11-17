@@ -1,3 +1,4 @@
+import { CursusLogo } from '@/components/brand/CursusLogo'
 import './estados.css'
 
 interface Props {
@@ -15,7 +16,10 @@ export function Cargando({ texto = 'Cargando…', pantallaCompleta }: Props) {
     </div>
   )
   return pantallaCompleta ? (
-    <div className="estado-pagina">{indicador}</div>
+    <div className="estado-pagina flex-col gap-6">
+      <CursusLogo size={56} className="text-primary" />
+      {indicador}
+    </div>
   ) : (
     indicador
   )

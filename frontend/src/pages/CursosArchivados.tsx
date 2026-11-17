@@ -9,7 +9,8 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
+import { useMigas } from '../layout/migas-contexto'
 
 const API = '/api/cursos-archivados'
 const RUTA = '/cursos/archivados'
@@ -112,6 +113,17 @@ function ListadoArchivados() {
 
 function DetalleArchivado({ id }: { id: string }) {
   const [curso, recargar, estado] = useDatos<CursoArchivado>(`${API}/${id}`)
+  useMigas(
+    curso === undefined
+      ? null
+      : [
+          {
+            etiqueta: curso
+              ? `${curso.codigo} · ${curso.nombre}`
+              : 'Curso archivado',
+          },
+        ],
+  )
   const [filtros] = useSearchParams()
   const consulta = filtros.toString()
   return (

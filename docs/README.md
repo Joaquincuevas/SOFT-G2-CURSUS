@@ -2,6 +2,7 @@
 
 Documentación del proyecto:
 
+- [Datos de demo y guía para presentar CURSUS](demo/guia-demo.md)
 - [OBS-02 · Alertas de salud y errores 5xx en producción](obs-02-alertas-produccion.md)
 - [EXP-02 · Descargar entregas de una actividad en ZIP](exp-02-entregas-zip.md)
 - [SEG-03 · Recuperación de contraseña por correo institucional](seg-03-recuperacion-password.md)
@@ -37,6 +38,18 @@ Documentación del proyecto:
 - [NOT-03: edición de evaluaciones sin notas, auditoría y guía de revisión](not-03-editar-evaluacion.md)
 - [NOT-09: estados de los envíos del ayudante y comentarios de devolución](not-09-estado-envios.md)
 - [UI-04: tema institucional, contraste y guía de revisión](ui-04-tema-universidad.md)
+- [UIX-01: Tailwind v4, shadcn y tokens (fundación de UI)](uix-01-tailwind-shadcn-base.md)
+- [UIX-04: AppShell y layout de curso](uix-04-appshell-layout-curso.md)
+- [UI/UX-03: primitivas compartidas de UI](ui-03-primitivas-compartidas.md)
+- [UI/UX-L: login y pantallas de acceso con shadcn](ui-l-login-landing.md)
+- [UI/UX-08: experiencia del Director con shadcn](ui-08-director.md)
+- [UI/UX-09: experiencia del Superadmin con shadcn](ui-09-superadmin.md)
+- [Entorno de curso del profesor: pulido estilo Canvas](ui-curso-profesor.md)
+- [Vistas del Director: búsqueda y filtros](ui-director-filtros.md)
+- [Breadcrumb completo del encabezado](ui-breadcrumbs.md)
+- [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
+- [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
+- [UI/UX-07: experiencia del Administrativo](uix-07-administrativo.md)
 - [NOT-02: aviso de ponderaciones y validación para la nota final](not-02-aviso-ponderaciones.md)
 - [ASI-06: asistencia propia por curso y guía de revisión](asi-06-asistencia-alumno.md)
 - [ASI-05: porcentajes de asistencia por alumno y guía de revisión](asi-05-porcentaje-asistencia.md)

@@ -5,11 +5,12 @@ import { SessionContext } from '../session/session'
 import { RUTA_HISTORIAL } from '../pages/HistorialAlumno'
 import { RUTA_CAMBIO_OBLIGATORIO, useAuth } from './auth'
 
-// Ruta de layout: sin sesión redirige a /login y recuerda a dónde se quería ir.
+// Ruta de layout: sin sesión redirige a /login y recuerda a dónde se quería ir
+// (salvo tras cerrar sesión).
 // Mientras se restaura la sesión con la cookie, o con token mientras llega el
 // usuario de /api/auth/yo, muestra "Cargando…".
 export function RequireAuth() {
-  const { token, restaurando } = useAuth()
+  const { token, restaurando, cierreVoluntario } = useAuth()
   const sesion = useContext(SessionContext)
   const { pathname } = useLocation()
 
@@ -17,7 +18,15 @@ export function RequireAuth() {
     return <Cargando pantallaCompleta />
   }
   if (!token) {
-    return <Navigate to="/login" replace state={{ from: pathname }} />
+    // Tras «Cerrar sesión» no se recuerda la ruta: el próximo login va al
+    // Dashboard. Sin sesión por un acceso directo o por expirar, sí.
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={cierreVoluntario ? null : { from: pathname }}
+      />
+    )
   }
   if (!sesion) {
     return <Cargando pantallaCompleta />

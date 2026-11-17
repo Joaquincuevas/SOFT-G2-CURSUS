@@ -1,5 +1,5 @@
 import type { Rol, UsuarioSesion } from '@cursus/shared'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 import App from '../App'
@@ -96,6 +96,16 @@ const LISTAS_VACIAS: Record<string, RutaSimulada> = {
     { anio: 2026, semestre: 2, activo: true },
     { anio: 2026, semestre: 1, activo: false },
   ],
+  // Dashboard del Director (UI/UX-08): el consolidado sin datos y sin universidades.
+  '/api/metricas/consolidado': () => ({
+    periodos: [],
+    aprobacion: { valor: null, aprobados: 0, evaluados: 0 },
+    promedio: { valor: null, alumnos: 0 },
+    asistencia: { valor: null, presentes: 0, registros: 0 },
+    alumnos: 0,
+    cursos: 0,
+  }),
+  '/api/metricas/universidades': () => [],
   '/api/cursos': () => [],
   '/api/dashboard/mis-secciones': () => [],
   '/api/dashboard/secciones-ayudante': () => [],
@@ -250,4 +260,22 @@ export async function renderConSesion(
   simularBackend(rol, rutas)
   renderApp(path, 'jwt-de-prueba')
   return screen.findByRole('navigation', { name: 'Navegación principal' })
+}
+
+// Abre el menú de la cuenta, en el encabezado. Radix lo abre con el teclado en
+// jsdom (con el puntero espera eventos que jsdom no genera).
+export async function abrirMenuUsuario() {
+  const encabezado = await screen.findByRole('banner')
+  const disparador = within(encabezado)
+    .getAllByRole('button')
+    .find((boton) => boton.getAttribute('aria-haspopup') === 'menu')
+  if (!disparador)
+    throw new Error('El encabezado no tiene el menú de la cuenta')
+  fireEvent.keyDown(disparador, { key: 'Enter' })
+  return screen.findByRole('menu')
+}
+
+export async function cerrarSesionDesdeElMenu() {
+  await abrirMenuUsuario()
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
 }

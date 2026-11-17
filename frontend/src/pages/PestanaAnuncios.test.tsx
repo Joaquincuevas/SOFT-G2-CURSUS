@@ -59,13 +59,27 @@ async function abrirAnuncios(
     [`${ANUNCIOS}/lecturas`]: lecturas,
     ...extras,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
-  expect(screen.getByRole('tab', { name: 'Anuncios' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  fireEvent.click(await screen.findByRole('link', { name: 'Anuncios' }))
+  expect(screen.getByRole('link', { name: 'Anuncios' })).toHaveAttribute(
+    'aria-current',
+    'page',
   )
-  return { panel: within(screen.getByRole('tabpanel', { name: 'Anuncios' })) }
+  // Con un diálogo abierto (nuevo anuncio, edición o historial) las consultas
+  // van a él; si no, a la pestaña.
+  const zona = () =>
+    within(
+      screen.queryByRole('dialog') ??
+        screen.getByRole('region', { name: 'Anuncios' }),
+    )
+  const panel = new Proxy({} as ReturnType<typeof within>, {
+    get: (_, clave) => Reflect.get(zona(), clave),
+  })
+  return { panel }
 }
+
+// Abre el diálogo «Nuevo anuncio» del profesor.
+const nuevoAnuncio = () =>
+  fireEvent.click(screen.getByRole('button', { name: 'Nuevo anuncio' }))
 
 const tarjetas = (panel: ReturnType<typeof within>) =>
   panel.getAllByRole('article').map((tarjeta: HTMLElement) => ({
@@ -124,13 +138,17 @@ describe('ANU-05: edición y versiones', () => {
       target: { value: corregido.cuerpo },
     })
     fireEvent.click(panel.getByRole('button', { name: 'Guardar cambios' }))
-    await panel.findByText('Error de validación')
+    expect(await panel.findByRole('alert')).toHaveTextContent(
+      'Error de validación',
+    )
     expect(panel.getByLabelText('Cuerpo del anuncio')).toHaveValue(
       corregido.cuerpo,
     )
     fallo = false
     fireEvent.click(panel.getByRole('button', { name: 'Guardar cambios' }))
-    await panel.findByText('Anuncio guardado')
+    // Confirma con un aviso breve y cierra el diálogo.
+    expect(await screen.findByText('Anuncio guardado')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await panel.findByRole('heading', { name: corregido.titulo })
     expect(panel.getByText(/^Editado el/)).toHaveTextContent(
       fechaAnuncio(corregido.editadoEn),
@@ -208,8 +226,11 @@ describe('ANU-05: edición y versiones', () => {
       '<b>Texto original</b>\nSegunda línea.',
       { normalizeWhitespace: false },
     )
-    fireEvent.click(panel.getByRole('button', { name: 'Ocultar historial' }))
-    expect(panel.queryByText('Versión original')).toBeNull()
+    // Escape cierra el historial.
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() =>
+      expect(screen.queryByText('Versión original')).toBeNull(),
+    )
   })
 
   test.each<Rol>(['ALUMNO', 'AYUDANTE'])(
@@ -440,6 +461,7 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
       })
     })
     await panel.findByText('Cambio de sala')
+    nuevoAnuncio()
     fireEvent.change(panel.getByLabelText('Dirigido a'), {
       target: { value: 'seccion-1' },
     })
@@ -483,6 +505,7 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
       return publicado ? [nuevo, ...LISTA] : LISTA
     })
     await panel.findByText('Cambio de sala')
+    nuevoAnuncio()
     expect(panel.getByLabelText('Dirigido a')).toHaveValue('')
     fireEvent.change(panel.getByLabelText('Dirigido a'), {
       target: { value: 'seccion-1' },
@@ -497,9 +520,10 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
       target: { value: 'Cambio de horario' },
     })
     fireEvent.click(panel.getByRole('button', { name: 'Publicar anuncio' }))
-    expect(await panel.findByRole('status')).toHaveTextContent(
-      'Anuncio publicado para la sección 1',
-    )
+    expect(
+      await screen.findByText('Anuncio publicado para la sección 1'),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(enviados).toEqual([
       {
         titulo: 'Solo sección 1',
@@ -511,6 +535,8 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
     const [tarjeta] = tarjetas(panel)
     expect(tarjeta.texto).toContain('Sección 1')
     expect(tarjetas(panel)[1].texto).toContain('Todo el curso')
+    // Al volver a abrirlo, vuelve a todo el curso.
+    nuevoAnuncio()
     expect(panel.getByLabelText('Dirigido a')).toHaveValue('')
   })
 
@@ -568,6 +594,7 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
       return publicado ? [nuevo, ...LISTA] : LISTA
     })
     await panel.findByText('Cambio de sala')
+    nuevoAnuncio()
 
     // Título y mensaje son obligatorios en el formulario.
     expect(panel.getByLabelText('Título')).toBeRequired()
@@ -581,25 +608,20 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Publicar anuncio' }))
 
     expect(
-      await panel.findByText(
+      await screen.findByText(
         'Anuncio publicado para todas las secciones del curso',
       ),
     ).toBeInTheDocument()
     expect(enviados).toEqual([
       { titulo: 'Bienvenidos', cuerpo: 'Revisen el programa.' },
     ])
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(await panel.findByText('Bienvenidos')).toBeInTheDocument()
     expect(tarjetas(panel)[0].titulo).toBe('Bienvenidos')
+    // El siguiente anuncio empieza vacío.
+    nuevoAnuncio()
     expect(panel.getByLabelText('Título')).toHaveValue('')
     expect(panel.getByLabelText('Mensaje')).toHaveValue('')
-
-    // Al empezar el siguiente anuncio se borra el aviso.
-    fireEvent.change(panel.getByLabelText('Título'), {
-      target: { value: 'Otro' },
-    })
-    expect(
-      panel.queryByText('Anuncio publicado para todas las secciones del curso'),
-    ).toBeNull()
   })
 
   test('muestra el primer mensaje del 400 y conserva lo escrito', async () => {
@@ -615,6 +637,7 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
         : LISTA,
     )
     await panel.findByText('Cambio de sala')
+    nuevoAnuncio()
 
     fireEvent.change(panel.getByLabelText('Título'), {
       target: { value: 'Solo título' },
@@ -637,6 +660,7 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
         : LISTA,
     )
     await panel.findByText('Cambio de sala')
+    nuevoAnuncio()
 
     fireEvent.change(panel.getByLabelText('Título'), {
       target: { value: 'T' },
@@ -663,5 +687,81 @@ describe('pestaña Anuncios (ANU-01/02)', () => {
     fallar = false
     fireEvent.click(panel.getByRole('button', { name: 'Reintentar' }))
     expect(await panel.findByText('Cambio de sala')).toBeInTheDocument()
+  })
+})
+
+describe('anuncios con tarjetas y diálogo (fix del entorno del profesor)', () => {
+  test('el profesor abre «Nuevo anuncio» en un diálogo; Cancelar lo cierra sin enviar', async () => {
+    let publicados = 0
+    const { panel } = await abrirAnuncios('PROFESOR', (init) => {
+      if (init?.method === 'POST') publicados++
+      return LISTA
+    })
+    await panel.findByText('Cambio de sala')
+    // No hay formulario fijo en la página.
+    expect(screen.queryByRole('form', { name: 'Nuevo anuncio' })).toBeNull()
+    nuevoAnuncio()
+    const dialogo = await screen.findByRole('dialog', { name: 'Nuevo anuncio' })
+    expect(
+      within(dialogo).getByRole('form', { name: 'Nuevo anuncio' }),
+    ).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText('Dirigido a').tagName).toBe('SELECT')
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(publicados).toBe(0)
+  })
+
+  test.each<Rol>(['ALUMNO', 'AYUDANTE'])(
+    '%s no ve el botón «Nuevo anuncio»',
+    async (rol) => {
+      const { panel } = await abrirAnuncios(rol)
+      await panel.findByText('Cambio de sala')
+      expect(screen.queryByRole('button', { name: 'Nuevo anuncio' })).toBeNull()
+    },
+  )
+
+  test('cada tarjeta lleva el avatar con las iniciales del autor y la audiencia como insignia', async () => {
+    const { panel } = await abrirAnuncios('ALUMNO')
+    await panel.findByText('Prueba 1')
+    const [primera] = panel.getAllByRole('article')
+    expect(within(primera).getByText('MM')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
+    expect(within(primera).getByText('Todo el curso')).toHaveAttribute(
+      'data-slot',
+      'badge',
+    )
+  })
+
+  test('un mensaje largo se recorta a tres líneas y «Ver más» lo despliega', async () => {
+    const largo: Anuncio = {
+      ...LISTA[0],
+      cuerpo: 'Línea 1\nLínea 2\nLínea 3\nLínea 4\nLínea 5',
+    }
+    const { panel } = await abrirAnuncios('ALUMNO', () => [largo, LISTA[1]])
+    const cuerpo = await panel.findByText(/Línea 1/)
+    expect(cuerpo).toHaveClass('line-clamp-3', 'break-words')
+    const verMas = panel.getByRole('button', { name: 'Ver más' })
+    expect(verMas).toHaveAttribute('aria-expanded', 'false')
+    expect(verMas).toHaveAttribute('aria-controls', cuerpo.id)
+    fireEvent.click(verMas)
+    expect(cuerpo).not.toHaveClass('line-clamp-3')
+    expect(panel.getByRole('button', { name: 'Ver menos' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    // Un mensaje corto no ofrece «Ver más».
+    expect(panel.getAllByRole('button', { name: /Ver m/ })).toHaveLength(1)
+  })
+
+  test('las tarjetas no se salen del ancho: la lista y el contenido pueden encogerse', async () => {
+    const { panel } = await abrirAnuncios('ALUMNO')
+    const lista = await panel.findByRole('list', {
+      name: 'Anuncios publicados',
+    })
+    expect(lista).toHaveClass('min-w-0')
+    for (const item of within(lista).getAllByRole('listitem'))
+      expect(item).toHaveClass('min-w-0')
   })
 })

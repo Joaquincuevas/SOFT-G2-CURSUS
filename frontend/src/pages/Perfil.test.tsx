@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { json, renderConSesion } from '../test/sesion'
+import { abrirMenuUsuario, json, renderConSesion } from '../test/sesion'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -11,17 +11,14 @@ const campo = (nombre: string) =>
 const guardar = () => screen.getByRole('button', { name: 'Guardar cambios' })
 
 describe('perfil (PER-01)', () => {
-  test('se llega desde el nombre del encabezado y no aparece en el menú', async () => {
+  test('se llega desde el menú de la cuenta y no aparece en el menú lateral', async () => {
     const menu = await renderConSesion('ALUMNO')
 
     expect(
       within(menu).queryByRole('link', { name: 'Mi perfil' }),
     ).not.toBeInTheDocument()
-    fireEvent.click(
-      within(screen.getByRole('banner')).getByRole('link', {
-        name: /Mi perfil/,
-      }),
-    )
+    await abrirMenuUsuario()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mi perfil' }))
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Mi perfil' }),
     ).toBeInTheDocument()

@@ -244,6 +244,7 @@ describe('GES-20: facultad completa', () => {
     )
   })
 
+  // El comando también carga la capa de demo (seed-demo.ts), que tarda más.
   it('el comando real carga la facultad y no duplica filas al repetirse', async () => {
     await bd.query('TRUNCATE universidad CASCADE')
     const comando = () =>
@@ -265,7 +266,7 @@ describe('GES-20: facultad completa', () => {
     const antes = await estado()
     await comando()
     expect(await estado()).toEqual(antes)
-  })
+  }, 240_000)
 
   it('conserva las ediciones, los horarios quitados y las asignaciones archivadas', async () => {
     const { curso, seccion } = await ids()

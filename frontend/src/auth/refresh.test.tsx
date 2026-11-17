@@ -2,7 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect } from 'react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, test, vi } from 'vitest'
-import { renderApp, usuarioDePrueba } from '../test/sesion'
+import {
+  cerrarSesionDesdeElMenu,
+  renderApp,
+  usuarioDePrueba,
+} from '../test/sesion'
 import { AVISO_SESION_EXPIRADA, renovarToken, useAuth } from './auth'
 import { AuthProvider } from './AuthProvider'
 
@@ -50,7 +54,10 @@ describe('restaurar la sesión al recargar', () => {
     renderApp('/mis-cursos')
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido/a, Profesor Norte',
+      }),
     ).toBeInTheDocument()
     expect(llamadasA(fetch, '/api/auth/refresh')).toHaveLength(1)
   })
@@ -73,7 +80,10 @@ describe('JWT expirado', () => {
     renderApp('/mis-cursos', 'jwt-vencido')
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido/a, Profesor Norte',
+      }),
     ).toBeInTheDocument()
     expect(llamadasA(fetch, '/api/auth/refresh')).toHaveLength(1)
     const [, init] = llamadasA(fetch, '/api/auth/yo').at(-1)!
@@ -165,7 +175,8 @@ describe('renovarToken', () => {
 test('Cerrar Sesión revoca el refresh token en el backend', async () => {
   const fetch = simular({ refresh: () => status(401), valido: 'jwt' })
   renderApp('/', 'jwt')
-  fireEvent.click(await screen.findByRole('button', { name: 'Cerrar Sesión' }))
+  await screen.findByRole('navigation', { name: 'Navegación principal' })
+  await cerrarSesionDesdeElMenu()
 
   await pantallaLogin()
   await waitFor(() =>

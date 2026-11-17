@@ -179,7 +179,9 @@ describe('AUTH-02: credenciales inválidas', () => {
           JSON.stringify(
             ruta === '/api/auth/login'
               ? { accessToken: 'jwt-de-prueba' }
-              : usuarioDePrueba('PROFESOR'),
+              : ruta === '/api/dashboard/mis-secciones'
+                ? []
+                : usuarioDePrueba('PROFESOR'),
           ),
         ),
       ),
@@ -190,7 +192,10 @@ describe('AUTH-02: credenciales inválidas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
 
     expect(
-      await screen.findByRole('heading', { name: 'Mis Cursos', level: 1 }),
+      await screen.findByRole('heading', {
+        name: 'Bienvenido/a, Profesor Norte',
+        level: 1,
+      }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith('/api/auth/login', {

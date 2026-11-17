@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage",
+    "test:cov": "vitest run --config ./vitest.config.cov.ts --coverage",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "test:db": "vitest run --config ./vitest.config.db.ts",
     "typeorm": "tsx ../node_modules/typeorm/cli.js -d src/database/data-source.ts",

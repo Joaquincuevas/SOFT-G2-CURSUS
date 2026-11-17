@@ -48,4 +48,10 @@ export default defineConfig([
       ],
     },
   },
+  {
+    // Los componentes de shadcn exportan junto al componente su función de
+    // variantes (buttonVariants, badgeVariants…), como en el original.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

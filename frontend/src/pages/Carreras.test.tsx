@@ -1,5 +1,5 @@
 import type { Carrera, Rol } from '@cursus/shared'
-import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { renderApp, usuarioDePrueba } from '../test/sesion'
 
@@ -23,7 +23,23 @@ function preparar(
   return fetch
 }
 
-test('muestra carga y luego estado vacío sin habilitar una creación prematura', async () => {
+const abrirNueva = async () => {
+  const boton = await screen.findByRole('button', { name: 'Nueva carrera' })
+  // Deshabilitado hasta que llega el listado: un clic antes no abre nada.
+  await waitFor(() => expect(boton).toBeEnabled())
+  fireEvent.click(boton)
+  return within(await screen.findByRole('dialog', { name: 'Nueva carrera' }))
+}
+const abrirEditar = async () => {
+  fireEvent.click(
+    await screen.findByRole('button', { name: `Editar ${INICIAL.nombre}` }),
+  )
+  return within(await screen.findByRole('dialog', { name: 'Editar carrera' }))
+}
+const sinDialogo = () =>
+  waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+test('muestra carga y luego estado vacío; «Nueva carrera» espera al listado', async () => {
   let terminar!: (res: Response) => void
   preparar(
     () =>
@@ -32,33 +48,51 @@ test('muestra carga y luego estado vacío sin habilitar una creación prematura'
       }),
   )
   expect(await screen.findByText('Cargando carreras…')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Crear carrera' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Nueva carrera' })).toBeDisabled()
   await waitFor(() => expect(terminar).toBeDefined())
   await act(async () => terminar(json([])))
   expect(
-    await screen.findByText(
-      'Aún no hay carreras en tu facultad. Crea la primera.',
-    ),
+    await screen.findByText('Aún no hay carreras en tu facultad.'),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Crear carrera' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Nueva carrera' })).toBeEnabled()
 })
 
-test('lista y crea enviando únicamente el nombre normalizado y el token de sesión', async () => {
-  const fetch = preparar((_ruta, init) =>
-    Promise.resolve(
-      init?.method === 'POST'
-        ? json({ id: 'nueva', nombre: 'Nueva Carrera' }, 201)
-        : json([INICIAL]),
-    ),
-  )
+test('el formulario no está en la página: la tabla ocupa todo el ancho y no hay «Actualizar listado»', async () => {
+  preparar(() => Promise.resolve(json([INICIAL])))
   expect(await screen.findByText(INICIAL.nombre)).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Nombre de la carrera')).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Actualizar listado' }),
+  ).toBeNull()
+})
+
+test('crea en un diálogo con el foco en el nombre, lo cierra, refresca el listado y avisa', async () => {
+  let creada = false
+  const fetch = preparar((_ruta, init) => {
+    if (init?.method === 'POST') {
+      creada = true
+      return Promise.resolve(
+        json({ id: 'nueva', nombre: 'Nueva Carrera' }, 201),
+      )
+    }
+    return Promise.resolve(
+      json(
+        creada
+          ? [INICIAL, { id: 'nueva', nombre: 'Nueva Carrera' }]
+          : [INICIAL],
+      ),
+    )
+  })
+  const dialogo = await abrirNueva()
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveFocus()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
     target: { value: '  Nueva   Carrera  ' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Crear carrera' }))
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear carrera' }))
   expect(await screen.findByText('Carrera creada')).toBeInTheDocument()
-  expect(screen.getByText('Nueva Carrera')).toBeInTheDocument()
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveValue('')
+  await sinDialogo()
+  expect(await screen.findByText('Nueva Carrera')).toBeInTheDocument()
   expect(fetch).toHaveBeenCalledWith(
     '/api/carreras',
     expect.objectContaining({
@@ -74,28 +108,34 @@ test('lista y crea enviando únicamente el nombre normalizado y el token de sesi
   expect(headers.get('Authorization')).toBe('Bearer jwt-de-prueba')
 })
 
-test('edita la carrera seleccionada y actualiza el listado', async () => {
-  const fetch = preparar((_ruta, init) =>
-    Promise.resolve(
-      init?.method === 'PATCH'
-        ? json({ ...INICIAL, nombre: 'Ingeniería Actualizada' })
-        : json([INICIAL]),
-    ),
-  )
-  fireEvent.click(
-    await screen.findByRole('button', { name: `Editar ${INICIAL.nombre}` }),
-  )
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveValue(
+test('edita con los datos precargados y actualiza el listado', async () => {
+  let editada = false
+  const fetch = preparar((_ruta, init) => {
+    if (init?.method === 'PATCH') {
+      editada = true
+      return Promise.resolve(
+        json({ ...INICIAL, nombre: 'Ingeniería Actualizada' }),
+      )
+    }
+    return Promise.resolve(
+      json([
+        editada ? { ...INICIAL, nombre: 'Ingeniería Actualizada' } : INICIAL,
+      ]),
+    )
+  })
+  const dialogo = await abrirEditar()
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveValue(
     INICIAL.nombre,
   )
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveFocus()
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveFocus()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
     target: { value: 'Ingeniería Actualizada' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+  fireEvent.click(dialogo.getByRole('button', { name: 'Guardar cambios' }))
   expect(await screen.findByText('Cambios guardados')).toBeInTheDocument()
+  await sinDialogo()
+  expect(await screen.findByText('Ingeniería Actualizada')).toBeInTheDocument()
   expect(screen.queryByText(INICIAL.nombre)).not.toBeInTheDocument()
-  expect(screen.getByText('Ingeniería Actualizada')).toBeInTheDocument()
   expect(fetch).toHaveBeenCalledWith(
     `/api/carreras/${INICIAL.id}`,
     expect.objectContaining({
@@ -105,28 +145,42 @@ test('edita la carrera seleccionada y actualiza el listado', async () => {
   )
 })
 
-test('un duplicado no borra el nombre escrito ni modifica el listado', async () => {
+test('un duplicado se avisa dentro del diálogo, que sigue abierto con lo escrito', async () => {
   preparar((_ruta, init) =>
     Promise.resolve(init?.method === 'POST' ? json({}, 409) : json([INICIAL])),
   )
-  await screen.findByText(INICIAL.nombre)
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
+  const dialogo = await abrirNueva()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
     target: { value: INICIAL.nombre },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Crear carrera' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear carrera' }))
+  expect(await dialogo.findByRole('alert')).toHaveTextContent(
     'Ya existe una carrera con ese nombre en tu facultad',
   )
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveValue(
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveValue(
     INICIAL.nombre,
   )
-  expect(
-    screen.getByLabelText('Nombre de la carrera'),
-  ).toHaveAccessibleDescription(
-    'Ya existe una carrera con ese nombre en tu facultad',
-  )
-  expect(screen.getAllByRole('row')).toHaveLength(2)
   expect(screen.queryByText('Carrera creada')).not.toBeInTheDocument()
+})
+
+test('un fallo de conexión al guardar no informa éxito ni cierra el diálogo', async () => {
+  preparar((_ruta, init) =>
+    init?.method === 'POST'
+      ? Promise.reject(new TypeError('offline'))
+      : Promise.resolve(json([])),
+  )
+  const dialogo = await abrirNueva()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
+    target: { value: 'Nueva sin conexión' },
+  })
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear carrera' }))
+  expect(await dialogo.findByRole('alert')).toHaveTextContent(
+    'Comprueba tu conexión',
+  )
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveValue(
+    'Nueva sin conexión',
+  )
+  expect(dialogo.getByRole('button', { name: 'Crear carrera' })).toBeEnabled()
 })
 
 test('puede reintentar una carga que falla por conexión', async () => {
@@ -136,63 +190,65 @@ test('puede reintentar una carga que falla por conexión', async () => {
       ? Promise.reject(new TypeError('offline'))
       : Promise.resolve(json([INICIAL])),
   )
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'No pudimos cargar las carreras',
-  )
+  expect(
+    await screen.findByText('No pudimos cargar las carreras.'),
+  ).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
   expect(await screen.findByText(INICIAL.nombre)).toBeInTheDocument()
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-test('no informa éxito ni pierde el formulario al fallar el guardado por conexión', async () => {
-  preparar((_ruta, init) =>
-    init?.method === 'POST'
-      ? Promise.reject(new TypeError('offline'))
-      : Promise.resolve(json([])),
-  )
-  await screen.findByText(
-    'Aún no hay carreras en tu facultad. Crea la primera.',
-  )
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
-    target: { value: 'Nueva sin conexión' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Crear carrera' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Comprueba tu conexión',
-  )
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveValue(
-    'Nueva sin conexión',
-  )
-  expect(screen.getByRole('button', { name: 'Crear carrera' })).toBeEnabled()
-})
-
-test('cancelar edición vuelve al formulario de creación sin enviar cambios', async () => {
+test('cancelar, Escape y la X cierran sin enviar nada cuando no hay cambios', async () => {
   const fetch = preparar(() => Promise.resolve(json([INICIAL])))
-  fireEvent.click(
-    await screen.findByRole('button', { name: `Editar ${INICIAL.nombre}` }),
-  )
-  fireEvent.click(screen.getByRole('button', { name: 'Cancelar edición' }))
-  expect(
-    screen.getByRole('form', { name: 'Nueva carrera' }),
-  ).toBeInTheDocument()
-  expect(screen.getByLabelText('Nombre de la carrera')).toHaveValue('')
+  let dialogo = await abrirEditar()
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cancelar' }))
+  await sinDialogo()
+  dialogo = await abrirEditar()
+  fireEvent.keyDown(dialogo.getByLabelText(/Nombre de la carrera/), {
+    key: 'Escape',
+  })
+  await sinDialogo()
+  dialogo = await abrirEditar()
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cerrar' }))
+  await sinDialogo()
   expect(fetch.mock.calls.some(([, init]) => init?.method === 'PATCH')).toBe(
     false,
   )
 })
 
+test('con cambios sin guardar pide confirmar antes de cerrar', async () => {
+  preparar(() => Promise.resolve(json([INICIAL])))
+  const dialogo = await abrirEditar()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
+    target: { value: 'Otro nombre' },
+  })
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cancelar' }))
+  const confirmacion = within(await screen.findByRole('alertdialog'))
+  fireEvent.click(confirmacion.getByRole('button', { name: 'Seguir editando' }))
+  expect(
+    screen.getByRole('dialog', { name: 'Editar carrera' }),
+  ).toBeInTheDocument()
+  expect(dialogo.getByLabelText(/Nombre de la carrera/)).toHaveValue(
+    'Otro nombre',
+  )
+  fireEvent.click(dialogo.getByRole('button', { name: 'Cancelar' }))
+  fireEvent.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: 'Descartar',
+    }),
+  )
+  await sinDialogo()
+})
+
 test('rechaza espacios vacíos antes de enviar una creación', async () => {
   const fetch = preparar(() => Promise.resolve(json([])))
-  await screen.findByText(
-    'Aún no hay carreras en tu facultad. Crea la primera.',
-  )
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
+  const dialogo = await abrirNueva()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
     target: { value: '   ' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Crear carrera' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Ingresa el nombre',
-  )
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear carrera' }))
+  expect(
+    (await dialogo.findAllByText(/Ingresa el nombre/)).length,
+  ).toBeGreaterThan(0)
   expect(fetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(
     false,
   )
@@ -214,7 +270,7 @@ test.each<Rol>(['DIRECTOR', 'PROFESOR', 'AYUDANTE', 'ALUMNO'])(
   },
 )
 
-test('deshabilita el guardado mientras una creación está pendiente', async () => {
+test('mientras guarda deshabilita el botón, muestra el progreso y no deja cerrar', async () => {
   let terminar!: (res: Response) => void
   preparar((_ruta, init) =>
     init?.method === 'POST'
@@ -223,15 +279,18 @@ test('deshabilita el guardado mientras una creación está pendiente', async () 
         })
       : Promise.resolve(json([])),
   )
-  await screen.findByText(
-    'Aún no hay carreras en tu facultad. Crea la primera.',
-  )
-  fireEvent.change(screen.getByLabelText('Nombre de la carrera'), {
+  const dialogo = await abrirNueva()
+  fireEvent.change(dialogo.getByLabelText(/Nombre de la carrera/), {
     target: { value: 'Pendiente' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Crear carrera' }))
+  fireEvent.click(dialogo.getByRole('button', { name: 'Crear carrera' }))
   await waitFor(() => expect(terminar).toBeDefined())
-  expect(screen.getByRole('button', { name: 'Guardando…' })).toBeDisabled()
+  expect(dialogo.getByRole('button', { name: 'Guardando…' })).toBeDisabled()
+  expect(dialogo.getByRole('button', { name: 'Cancelar' })).toBeDisabled()
+  fireEvent.keyDown(dialogo.getByLabelText(/Nombre de la carrera/), {
+    key: 'Escape',
+  })
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
   await act(async () =>
     terminar(
       json({ id: 'pendiente', nombre: 'Pendiente' } satisfies Carrera, 201),

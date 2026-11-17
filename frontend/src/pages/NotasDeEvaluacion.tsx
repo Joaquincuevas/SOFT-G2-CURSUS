@@ -1,3 +1,18 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { usePuede } from '../session/session'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableCell,
+  TableHead,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { EmptyState, ErrorState } from '@/components/shared'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   type ErrorEstadoRevision,
   type ErrorNotasFaltantes,
@@ -20,8 +35,6 @@ import {
   type FormEvent,
 } from 'react'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 import { ComentarioDevolucion } from './ComentarioDevolucion'
 import { ESTADO_REVISION } from './estados-notas'
@@ -59,6 +72,8 @@ export function NotasDeEvaluacion({
   alRevisar,
 }: Props) {
   const ruta = `/api/espacio/secciones/${seccionId}/evaluaciones/${evaluacionId}/notas`
+  const puedeEditar = usePuede('update', 'Nota')
+  const puedeRevisar = usePuede('update', 'RevisionNotas')
   const [datos, recargar, , fijar] = useDatos<NotasEvaluacion>(ruta)
   const [aviso, setAviso] = useState<string | null>(null)
   const notificarLectura = useEffectEvent((notas: NotasEvaluacion) =>
@@ -69,45 +84,66 @@ export function NotasDeEvaluacion({
   }, [datos])
 
   if (datos === undefined) {
-    return <Cargando texto="Cargando notas…" />
+    return (
+      <div role="status">
+        <span className="sr-only">Cargando notas…</span>
+        <Skeleton className="h-32 rounded-xl" />
+      </div>
+    )
   }
   if (datos === null) {
     return (
-      <ErrorEstado
+      <ErrorState
         mensaje="No pudimos cargar las notas de la evaluación."
         onReintentar={recargar}
       />
     )
   }
   const cerrado = cursoCerrado || datos.cursoCerrado
+  const ingresoEditable =
+    !cerrado &&
+    puedeEditar &&
+    rol === 'AYUDANTE' &&
+    EDITABLE.includes(datos.estado)
   return (
     <section
-      className="notas__evaluacion"
+      className="grid min-w-0 gap-4 rounded-xl border bg-card p-4"
       aria-label={`Notas de ${datos.evaluacion.nombre}`}
     >
-      <h4 className="vista-seccion__subtitulo">
+      <h4 className="m-0 text-base font-semibold">
         Notas de {datos.evaluacion.nombre}
       </h4>
-      <p className="dashboard__texto">
+      <p className="m-0 text-sm text-muted-foreground">
         Estado: {ESTADO_REVISION[datos.estado]}
       </p>
       {datos.cursoCerrado && !cursoCerrado && (
-        <p className="dashboard__texto" role="status">
+        <p className="m-0 text-sm text-muted-foreground" role="status">
           Curso cerrado
         </p>
+      )}
+      {rol === 'AYUDANTE' && !ingresoEditable && (
+        <Alert variant="info" role="region" aria-label="Notas en solo lectura">
+          <AlertTitle>Notas en solo lectura</AlertTitle>
+          <AlertDescription>
+            {cerrado
+              ? 'El curso está cerrado.'
+              : 'La edición está disponible mientras las notas estén en borrador o devueltas.'}
+          </AlertDescription>
+        </Alert>
       )}
       {datos.estado === 'DEVUELTA' && (
         <ComentarioDevolucion comentario={datos.comentarioDevolucion} />
       )}
       {datos.alumnos.length === 0 ? (
-        <p className="dashboard__texto">
-          La sección no tiene alumnos inscritos
-        </p>
+        <EmptyState
+          titulo="La sección no tiene alumnos inscritos"
+          mensaje="El ingreso de notas estará disponible cuando haya alumnos inscritos."
+        />
       ) : rol === 'PROFESOR' && datos.estado === 'APROBADA' ? (
         <RecorreccionesNotas
           ruta={ruta}
           alumnos={datos.alumnos}
-          editable={!cerrado}
+          editable={!cerrado && puedeEditar}
           alGuardar={fijar}
           alRecargar={recargar}
         />
@@ -118,9 +154,7 @@ export function NotasDeEvaluacion({
           key={datos.estado}
           ruta={ruta}
           inicial={datos.alumnos}
-          editable={
-            !cerrado && rol === 'AYUDANTE' && EDITABLE.includes(datos.estado)
-          }
+          editable={ingresoEditable}
           alGuardar={() => setAviso('Borrador guardado.')}
           // El POST devuelve la evaluación ya en revisión: se aplica sin
           // esperar otra recarga, en la que los campos volverían a editarse.
@@ -141,13 +175,14 @@ export function NotasDeEvaluacion({
         />
       )}
       {!cerrado &&
+        puedeRevisar &&
         alRevisar &&
         datos.estado === 'EN_REVISION' &&
         datos.alumnos.length > 0 && (
           <RevisarNotas ruta={ruta} alTerminar={alRevisar} />
         )}
       {aviso && (
-        <p className="notas__aviso" role="status">
+        <p className="m-0 text-sm text-(color:--color-success)" role="status">
           {aviso}
         </p>
       )}
@@ -241,63 +276,55 @@ function RevisarNotas({
 
   return (
     <>
-      <div className="notas__acciones">
-        <button
-          className="notas__boton"
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
           type="button"
           disabled={accion !== null}
           onClick={() => setAccion('aprobar')}
         >
           Aprobar y publicar
-        </button>
-        <button
-          className="notas__boton"
+        </Button>
+        <Button
           type="button"
           disabled={accion !== null}
           onClick={() => setAccion('devolver')}
         >
           Devolver
-        </button>
+        </Button>
       </div>
       {accion === 'aprobar' && (
         <section
-          className="notas__confirmacion"
+          className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-3 [&>p]:m-0 [&>p]:basis-full [&>p]:text-sm"
           aria-label="Confirmar aprobación"
         >
           <p>
             ¿Aprobar y publicar las notas? Los alumnos podrán verlas y ya no se
             podrán editar.
           </p>
-          <button
-            className="notas__boton"
+          <Button
             type="button"
             disabled={enviando}
             onClick={() => void aprobar()}
           >
             {enviando ? 'Publicando…' : 'Publicar'}
-          </button>
-          <button
-            className="notas__boton"
-            type="button"
-            disabled={enviando}
-            onClick={cancelar}
-          >
+          </Button>
+          <Button type="button" disabled={enviando} onClick={cancelar}>
             Cancelar
-          </button>
+          </Button>
         </section>
       )}
       {accion === 'devolver' && (
         <section
-          className="notas__confirmacion"
+          className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-3 [&>p]:m-0 [&>p]:basis-full [&>p]:text-sm"
           aria-label="Devolver al ayudante"
         >
           <p>
             Las notas vuelven al ayudante para que las corrija y las envíe de
             nuevo. No se publica nada.
           </p>
-          <label className="notas__campo">
+          <label className="grid min-w-0 gap-1.5 text-sm font-medium">
             Comentario para el ayudante (obligatorio)
-            <textarea
+            <Textarea
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
               required
@@ -308,35 +335,29 @@ function RevisarNotas({
               disabled={enviando}
             />
           </label>
-          <p id={idContador} className="notas__contador">
+          <p id={idContador} className="m-0 text-xs text-muted-foreground">
             {largo}/{LARGO_COMENTARIO_DEVOLUCION} caracteres
           </p>
           {excedido && (
-            <p id={idExceso} className="notas__error">
+            <p id={idExceso} className="m-0 text-sm text-destructive">
               El comentario puede tener hasta {LARGO_COMENTARIO_DEVOLUCION}{' '}
               caracteres.
             </p>
           )}
-          <button
-            className="notas__boton"
+          <Button
             type="button"
             disabled={enviando || !comentario.trim() || excedido}
             onClick={() => void devolver()}
           >
             {enviando ? 'Devolviendo…' : 'Confirmar devolución'}
-          </button>
-          <button
-            className="notas__boton"
-            type="button"
-            disabled={enviando}
-            onClick={cancelar}
-          >
+          </Button>
+          <Button type="button" disabled={enviando} onClick={cancelar}>
             Cancelar
-          </button>
+          </Button>
         </section>
       )}
       {error && (
-        <p className="notas__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
@@ -578,32 +599,28 @@ function FormularioNotas({
 
   return (
     <form
-      className="notas__ingreso"
+      className="grid min-w-0 gap-3"
       aria-label="Ingresar notas"
       onSubmit={(event) => void guardar(event)}
     >
-      <table className="notas__tabla">
-        <thead>
-          <tr>
-            <th scope="col">Alumno</th>
-            <th scope="col">Nota</th>
-            <th scope="col">Estado</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table className="[&_td]:whitespace-normal [&_th]:whitespace-normal">
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">Alumno</TableHead>
+            <TableHead scope="col">Nota</TableHead>
+            <TableHead scope="col">Estado</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {alumnos.map((alumno) => {
             const motivo = motivos[alumno.id]
             return (
-              <tr key={alumno.id}>
-                <td>{alumno.nombre}</td>
-                <td>
+              <TableRow key={alumno.id}>
+                <TableCell>{alumno.nombre}</TableCell>
+                <TableCell>
                   {/* Texto y no number: el navegador descartaría "5,5". */}
-                  <input
-                    className={
-                      motivo
-                        ? 'notas__nota notas__nota--invalida'
-                        : 'notas__nota'
-                    }
+                  <Input
+                    className="w-20 tabular-nums"
                     type="text"
                     inputMode="decimal"
                     aria-label={`Nota de ${alumno.nombre}`}
@@ -639,24 +656,23 @@ function FormularioNotas({
                       cuando aparece (aria-live), mientras se escribe. */}
                   <span
                     id={`${idMotivo}-${alumno.id}`}
-                    className="notas__motivo"
+                    className="mt-1 block max-w-36 text-xs text-destructive empty:mt-0"
                     aria-live="polite"
                   >
                     {motivo}
                   </span>
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   {alumno.estado === null ? 'Sin nota' : ESTADO[alumno.estado]}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {editable && (
-        <div className="notas__acciones">
-          <button
-            className="notas__boton"
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="submit"
             // NOT-06: mientras haya una nota inválida no se guarda ninguna.
             disabled={
@@ -668,49 +684,49 @@ function FormularioNotas({
             }
           >
             Guardar borrador
-          </button>
-          <button
-            className="notas__boton"
+          </Button>
+          <Button
             type="button"
             disabled={!puedeEnviar || enviando || confirmando}
             onClick={() => setConfirmando(true)}
           >
             Enviar a revisión
-          </button>
+          </Button>
         </div>
       )}
       {editable && faltanNotas && (
-        <p className="dashboard__texto">
+        <p className="m-0 text-sm text-muted-foreground">
           Para enviar a revisión, todos los alumnos deben tener una nota
           guardada.
         </p>
       )}
       {confirmando && (
-        <section className="notas__confirmacion" aria-label="Confirmar envío">
+        <section
+          className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-3 [&>p]:m-0 [&>p]:basis-full [&>p]:text-sm"
+          aria-label="Confirmar envío"
+        >
           <p>
             ¿Enviar las notas a revisión? No podrás editarlas hasta que el
             profesor responda.
           </p>
-          <button
-            className="notas__boton"
+          <Button
             type="button"
             disabled={enviando || !puedeEnviar}
             onClick={() => void enviar()}
           >
             {enviando ? 'Enviando…' : 'Enviar'}
-          </button>
-          <button
-            className="notas__boton"
+          </Button>
+          <Button
             type="button"
             disabled={enviando}
             onClick={() => setConfirmando(false)}
           >
             Cancelar
-          </button>
+          </Button>
         </section>
       )}
       {error && (
-        <p className="notas__error" role="alert">
+        <p className="m-0 text-sm text-destructive" role="alert">
           {error}
         </p>
       )}

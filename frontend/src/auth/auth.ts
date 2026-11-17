@@ -10,6 +10,21 @@ export const RUTA_CAMBIO_OBLIGATORIO = '/cambiar-password'
 // Solo una marca de cierre; nunca se guardan credenciales en localStorage.
 export const SESION_CERRADA = 'cursus-sesion-cerrada'
 
+// Id del usuario (claim `sub`) de un JWT de acceso, o null si no se puede leer.
+// Solo sirve para comparar cuentas; la verificación es del backend.
+export function usuarioDelToken(token: string | null): string | null {
+  try {
+    const cuerpo = token?.split('.')[1]
+    if (!cuerpo) return null
+    const { sub } = JSON.parse(
+      atob(cuerpo.replace(/-/g, '+').replace(/_/g, '/')),
+    ) as { sub?: unknown }
+    return typeof sub === 'string' ? sub : null
+  } catch {
+    return null
+  }
+}
+
 export class LoginLimitado extends Error {
   constructor(segundos: number) {
     const minutos = Math.max(1, Math.ceil(segundos / 60))
@@ -29,6 +44,12 @@ export interface AuthValue {
   restaurando: boolean
   // Aviso para la pantalla de login, por ejemplo cuando la sesión expiró.
   aviso: string | null
+  // true tras «Cerrar sesión» (o el cierre desde otra pestaña): no hay ruta a
+  // la que volver. Una sesión expirada o un acceso sin sesión sí la conservan.
+  cierreVoluntario: boolean
+  // false si la sesión que empezó es de otra cuenta que la anterior: la ruta
+  // de retorno de la cuenta anterior no se le aplica.
+  mismoUsuario: boolean
   // Devuelve true si el backend aceptó las credenciales; { desafio } si son
   // correctas pero la cuenta tiene MFA activo (SEG-02): falta el código.
   iniciarSesion: (

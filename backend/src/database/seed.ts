@@ -1,10 +1,17 @@
 import { hash } from 'argon2'
 import type { DataSource, EntityManager } from 'typeorm'
 import {
+  correosExtraDeIngenieria,
+  sembrarDemo,
+  usuariosExtraDeDemo,
+} from './seed-demo.js'
+import {
   DOMINIO_DEMO,
   FACULTAD_DEMO,
+  type ResumenFacultad,
   sembrarFacultadCompleta,
 } from './seed-facultad.js'
+import { reiniciarBase, verificarReinicio } from './seed-reinicio.js'
 
 // Datos simulados para desarrollo y la primera validación con el cliente. Imitan
 // su escenario: una universidad grande con varias facultades y otra pequeña de
@@ -405,17 +412,26 @@ async function sembrarUniversidad(
   }
 }
 
+export interface OpcionesSeed {
+  // El CLI carga la facultad completa. Las fixtures de otras historias
+  // conservan su escenario base para verificar secciones aún sin asignar.
+  facultadCompleta?: boolean
+  // Capa de demo (seed-demo.ts), con la fecha de hoy (YYYY-MM-DD).
+  demo?: { hoy: string }
+  // Vacía la base antes de cargar, salvo los superadmins (seed-reinicio.ts).
+  reiniciar?: boolean
+}
+
 // Todos los usuarios de prueba comparten la contraseña, que viene de la
 // variable SEED_PASSWORD y nunca del código. Se hashea con argon2id.
 export async function ejecutarSeed(
   bd: DataSource,
   password: string,
   env: NodeJS.ProcessEnv = process.env,
-  // El CLI carga la facultad completa. Las fixtures de otras historias
-  // conservan su escenario base para verificar secciones aún sin asignar.
-  opciones: { facultadCompleta?: boolean } = {},
+  opciones: OpcionesSeed = {},
 ) {
   verificarEntorno(env)
+  if (opciones.reiniciar) verificarReinicio(env)
 
   if (await bd.showMigrations()) {
     throw new Error(
@@ -430,21 +446,28 @@ export async function ejecutarSeed(
     // concurrentes pueden chocar con otra clave única antes del upsert.
     // El bloqueo se libera automáticamente al confirmar o revertir.
     await m.query(`SELECT pg_advisory_xact_lock(hashtext('cursus:seed'))`)
+    if (opciones.reiniciar) await reiniciarBase(m, env)
     for (const [indice, universidad] of UNIVERSIDADES.entries()) {
       await sembrarUniversidad(
         m,
         universidad,
-        usuariosDeDemo(indice),
+        [
+          ...usuariosDeDemo(indice),
+          ...(opciones.demo ? usuariosExtraDeDemo(universidad.dominio) : []),
+        ],
         passwordHash,
       )
     }
+    let facultad: ResumenFacultad | undefined
     if (opciones.facultadCompleta) {
-      return sembrarFacultadCompleta(
-        m,
-        usuariosDeDemo(0)
+      facultad = await sembrarFacultadCompleta(m, [
+        ...usuariosDeDemo(0)
           .filter((u) => u.facultad === FACULTAD_DEMO)
           .map((u) => `${u.usuario}@${DOMINIO_DEMO}`),
-      )
+        ...(opciones.demo ? correosExtraDeIngenieria() : []),
+      ])
     }
+    if (opciones.demo) await sembrarDemo(m, opciones.demo.hoy)
+    return facultad
   })
 }

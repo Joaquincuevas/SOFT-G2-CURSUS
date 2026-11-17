@@ -1,4 +1,5 @@
 import {
+  definirAbilityPara,
   type ErrorNotasFaltantes,
   type ErrorNotasInvalidas,
   type EvaluacionesSeccion,
@@ -18,7 +19,13 @@ import {
 import { MemoryRouter } from 'react-router'
 import { describe, expect, test } from 'vitest'
 import { AuthProvider } from '../auth/AuthProvider'
-import { json, renderConSesion, simularBackend } from '../test/sesion'
+import { SessionContext } from '../session/session'
+import {
+  json,
+  renderConSesion,
+  simularBackend,
+  usuarioDePrueba,
+} from '../test/sesion'
 import { PestanaNotas } from './PestanaNotas'
 
 const VISTA = '/mis-cursos/secciones/seccion-1'
@@ -89,8 +96,8 @@ async function abrirNotas(
     [NOTAS]: notas,
     ...(envio && { [`${NOTAS}/envio`]: envio }),
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
-  const panel = within(screen.getByRole('tabpanel', { name: 'Notas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
+  const panel = within(screen.getByRole('region', { name: 'Notas' }))
   await panel.findByRole('table')
   return panel
 }
@@ -338,7 +345,7 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
       escribir(panel, 'Ana Ávila', texto)
       const ana = panel.getByLabelText('Nota de Ana Ávila')
       expect(ana).toHaveAttribute('aria-invalid', 'true')
-      expect(ana).toHaveClass('notas__nota--invalida')
+      expect(ana).toHaveAttribute('data-slot', 'input')
       expect(ana).toHaveAccessibleDescription(motivo)
       // Un lector de pantalla lo anuncia mientras se escribe.
       expect(panel.getByText(motivo)).toHaveAttribute('aria-live', 'polite')
@@ -517,10 +524,22 @@ describe('ingreso de notas del ayudante (NOT-05)', () => {
   // así que se renderiza la pestaña directamente.
   test('DIRECTOR no ve el botón ni campos de nota', async () => {
     simularBackend('DIRECTOR', { [EVALUACIONES]: () => LISTA })
+    const user = usuarioDePrueba('DIRECTOR')
     render(
       <MemoryRouter>
         <AuthProvider initialToken="jwt-de-prueba">
-          <PestanaNotas seccionId="seccion-1" rol="DIRECTOR" />
+          <SessionContext
+            value={{
+              user,
+              ability: definirAbilityPara(user),
+              actualizarPeriodoActivo: () => undefined,
+              actualizarNombre: () => undefined,
+              marcarPasswordCambiada: () => undefined,
+              reemplazarUsuario: () => undefined,
+            }}
+          >
+            <PestanaNotas seccionId="seccion-1" rol="DIRECTOR" />
+          </SessionContext>
         </AuthProvider>
       </MemoryRouter>,
     )

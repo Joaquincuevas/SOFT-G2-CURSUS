@@ -5,7 +5,7 @@ import type {
   SeccionResumen,
   SubidaArchivo,
 } from '@cursus/shared'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion, type RutaSimulada } from '../test/sesion'
 
@@ -75,9 +75,12 @@ async function abrir(
     [S3]: () => new Response(null, { status: 204 }),
     ...rutas,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Entregas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Entregas' }))
   const panel = within(
-    await screen.findByRole('article', { name: 'Informe 1' }),
+    // El alumno ve una ficha por actividad; el equipo docente, una tabla.
+    await screen.findByRole(rol === 'ALUMNO' ? 'article' : 'row', {
+      name: 'Informe 1',
+    }),
   )
   if (rol === 'ALUMNO')
     await waitFor(() =>
@@ -124,7 +127,7 @@ describe('MAT-09: entrega del alumno', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
     expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
     expect(panel.getByText(/Informe entregado/)).toBeInTheDocument()
-    expect(panel.getByText('11-11-2026, 12:01:42')).toHaveAttribute(
+    expect(panel.getByText('11-11-2026 12:01')).toHaveAttribute(
       'datetime',
       CONFIRMADA.entrega!.entregadaEn,
     )
@@ -218,7 +221,7 @@ describe('MAT-09: entrega del alumno', () => {
       'La actividad está cerrada',
     )
     expect(panel.queryByText('Entrega confirmada.')).not.toBeInTheDocument()
-    expect(panel.getByText('11-11-2026, 12:01:42')).toBeInTheDocument()
+    expect(panel.getByText('11-11-2026 12:01')).toBeInTheDocument()
     expect(panel.queryByRole('form')).not.toBeInTheDocument()
   })
   test('reintenta una confirmación fallida sin volver a subir a S3', async () => {
@@ -308,4 +311,222 @@ describe('MAT-09: entrega del alumno', () => {
       expect(peticiones().filter(([url]) => url === ENTREGA)).toHaveLength(0)
     },
   )
+})
+
+describe('ficha de la actividad (UI)', () => {
+  const dentroDe = (ms: number) => new Date(Date.now() + ms).toISOString()
+  const HORA = 3_600_000
+
+  test('abierta sin entrega: badge «Abierta», plazo con cuenta regresiva y zona para soltar el archivo', async () => {
+    const panel = await abrir(
+      {},
+      { ...ACTIVIDAD, plazo: dentroDe(6 * 24 * HORA + HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Abierta')).toBeInTheDocument()
+    expect(ficha.getByText('Vence en 6 días')).not.toHaveClass(
+      'text-destructive',
+    )
+    expect(panel.getByText('Aún no has entregado tu informe.')).toBeVisible()
+    expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+    expect(panel.getByText(/PDF.*· hasta 20 MB/)).toBeVisible()
+    // Sin archivo, no se puede entregar.
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeDisabled()
+  })
+
+  test('si faltan menos de 24 horas, el plazo se marca en rojo', async () => {
+    await abrir({}, { ...ACTIVIDAD, plazo: dentroDe(5 * HORA + 60_000) })
+    expect(screen.getByText('Vence en 5 horas')).toHaveClass('text-destructive')
+  })
+
+  test('con un archivo válido muestra su nombre y tamaño, habilita la entrega y se puede quitar', async () => {
+    const panel = await abrir()
+    elegir(panel)
+    expect(panel.getByText('Informe.pdf')).toBeVisible()
+    expect(panel.getByText('7 B')).toBeVisible()
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeEnabled()
+    fireEvent.click(panel.getByRole('button', { name: 'Quitar Informe.pdf' }))
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeDisabled()
+    expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+  })
+
+  test.each([
+    ['un tipo no permitido', new File(['x'], 'programa.exe')],
+    [
+      'un archivo vacío',
+      new File([], 'Vacio.pdf', { type: 'application/pdf' }),
+    ],
+    [
+      'un archivo de más de 20 MB',
+      Object.defineProperty(new File(['x'], 'Grande.pdf'), 'size', {
+        value: 21 * 1024 * 1024,
+      }),
+    ],
+  ])(
+    'rechaza %s con el motivo junto al campo y sin habilitar la entrega',
+    async (_caso, archivo) => {
+      const panel = await abrir()
+      elegir(panel, archivo)
+      expect(await panel.findByRole('alert')).toHaveTextContent(
+        'Elige un archivo de un tipo permitido, de hasta 20 MB y que no esté vacío.',
+      )
+      expect(
+        panel.getByRole('button', { name: 'Entregar informe' }),
+      ).toBeDisabled()
+      expect(
+        vi.mocked(fetch).mock.calls.some(([url]) => url === ARCHIVOS),
+      ).toBe(false)
+    },
+  )
+
+  test('mientras entrega muestra «Paso N de 4» y bloquea el botón y el campo', async () => {
+    let terminar!: (r: Response) => void
+    const panel = await abrir({
+      [S3]: () =>
+        new Promise<Response>((resolve) => {
+          terminar = resolve
+        }),
+    })
+    elegir(panel)
+    fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
+    expect(
+      await panel.findByRole('button', { name: 'Subiendo archivo…' }),
+    ).toBeDisabled()
+    expect(panel.getByText('Paso 2 de 4: Subiendo archivo…')).toBeVisible()
+    expect(panel.getByLabelText('Archivo del informe')).toBeDisabled()
+    terminar(new Response(null, { status: 204 }))
+    expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
+  })
+
+  test('entregada y abierta: badge «Entregada», fecha, aviso de que reemplaza la versión anterior', async () => {
+    const panel = await abrir({ [ENTREGA]: () => CONFIRMADA })
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Entregada')).toBeInTheDocument()
+    expect(panel.getByText(/Informe.pdf/)).toBeVisible()
+    expect(panel.getByText(/Reemplaza la versión anterior/)).toBeVisible()
+    expect(
+      panel.getByRole('button', { name: 'Reemplazar entrega' }),
+    ).toBeDisabled()
+  })
+
+  test('vencida sin entrega: aviso en rojo y sin zona para subir', async () => {
+    const panel = await abrir(
+      { [ENTREGA]: () => ({ entrega: null, cerrada: true }) },
+      { ...ACTIVIDAD, cerrada: true, plazo: dentroDe(-2 * 24 * HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Cerrada')).toBeInTheDocument()
+    expect(ficha.getByText('Venció hace 2 días')).toHaveClass(
+      'text-destructive',
+    )
+    expect(panel.getByText(/No entregaste tu informe/)).toBeVisible()
+    expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+    expect(
+      panel.queryByRole('button', { name: /Entregar|Reemplazar/ }),
+    ).toBeNull()
+  })
+
+  test('vencida con entrega: solo lectura, sin zona para subir', async () => {
+    const panel = await abrir(
+      { [ENTREGA]: () => ({ ...CONFIRMADA, cerrada: true }) },
+      { ...ACTIVIDAD, cerrada: true, plazo: dentroDe(-HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Entregada')).toBeInTheDocument()
+    expect(
+      panel.getByText(/No se aceptan nuevas entregas ni reemplazos/),
+    ).toBeVisible()
+    expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+  })
+
+  test('al llegar el plazo, con la página abierta, la cuenta regresiva avanza y el servidor decide el cierre', async () => {
+    // El reloj avanza solo, para que las esperas de la prueba sigan andando, y
+    // se adelanta a mano al pasar el plazo.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let cerradaEnServidor = false
+      const entregas = vi.fn((init?: RequestInit) =>
+        init?.method === 'PUT'
+          ? CONFIRMADA
+          : { entrega: null, cerrada: cerradaEnServidor },
+      )
+      const panel = await abrir(
+        { [ENTREGA]: entregas },
+        { ...ACTIVIDAD, plazo: dentroDe(150_000) },
+      )
+      const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+      expect(ficha.getByText('Abierta')).toBeInTheDocument()
+      expect(ficha.getByText('Vence en 2 minutos')).toBeInTheDocument()
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+      const pedidasAntes = entregas.mock.calls.length
+
+      // Pasa un minuto: la cuenta regresiva se actualiza sola.
+      await act(async () => {
+        vi.advanceTimersByTime(60_000)
+      })
+      expect(ficha.getByText('Vence en 1 minuto').className).toContain(
+        'text-destructive',
+      )
+      // Llega el plazo: vuelve a pedir el estado al servidor, que ya cerró, y
+      // sin recargar el formulario desaparece.
+      cerradaEnServidor = true
+      await act(async () => {
+        vi.advanceTimersByTime(91_000)
+      })
+      await waitFor(() =>
+        expect(entregas.mock.calls.length).toBeGreaterThan(pedidasAntes),
+      )
+      expect(await ficha.findByText('Cerrada')).toBeInTheDocument()
+      expect(ficha.getByText(/Venció hace/)).toHaveClass('text-destructive')
+      expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+      expect(
+        panel.queryByRole('button', { name: /Entregar|Reemplazar/ }),
+      ).toBeNull()
+      expect(panel.getByText(/No entregaste tu informe/)).toBeVisible()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('con el reloj del navegador adelantado, el alumno puede entregar mientras el servidor diga que sigue abierta', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      // Para el servidor faltan 60 s; el navegador va 10 minutos adelantado.
+      const plazo = dentroDe(60_000)
+      vi.setSystemTime(Date.now() + 10 * 60_000)
+      const panel = await abrir(
+        {
+          [ENTREGA]: (init) =>
+            init?.method === 'PUT'
+              ? CONFIRMADA
+              : { entrega: null, cerrada: false },
+        },
+        { ...ACTIVIDAD, plazo },
+      )
+      const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+      // Según el reloj local el plazo pasó, pero no se dice «venció» ni se
+      // cierra: manda el servidor.
+      expect(ficha.getByText('Abierta')).toBeInTheDocument()
+      expect(ficha.getByText('Vence ahora')).toBeInTheDocument()
+      expect(ficha.queryByText(/Venció hace/)).toBeNull()
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+
+      await act(async () => {
+        vi.advanceTimersByTime(35_000)
+      })
+      expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+
+      elegir(panel)
+      fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
+      expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

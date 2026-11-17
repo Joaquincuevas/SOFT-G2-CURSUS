@@ -1,285 +1,289 @@
 import type { CrearPeriodo, Periodo } from '@cursus/shared'
-import { useEffect, useState, type FormEvent } from 'react'
+import { CalendarRange, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  FormDialog,
+  FormField,
+  PageHeader,
+  type Columna,
+} from '@/components/shared'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/native-select'
 import { useAuth } from '../auth/auth'
 import { useSession } from '../session/session'
-import './Periodos.css'
+import { useDatos } from './useDatos'
 
-const ordenar = (filas: Periodo[]) =>
-  [...filas].sort(
-    (a, b) =>
-      Number(b.activo) - Number(a.activo) ||
-      b.anio - a.anio ||
-      b.semestre - a.semestre,
-  )
 const fecha = (valor: string) => valor.split('-').reverse().join('/')
+const nombrePeriodo = (p: Periodo) => `${p.anio}-${p.semestre}`
+// El activo primero, y luego el más reciente.
+const claveOrden = (p: Periodo) =>
+  p.anio * 10 + p.semestre + (p.activo ? 1e6 : 0)
 
+// «Nuevo período» abre un diálogo; «Activar» cambia el período activo desde la
+// fila. Tras guardar se vuelve a pedir el listado.
 export function Periodos() {
   const { fetchConSesion } = useAuth()
   const { actualizarPeriodoActivo } = useSession()
-  const [periodos, setPeriodos] = useState<Periodo[] | null>(null)
-  const [revision, setRevision] = useState(0)
-  const [errorCarga, setErrorCarga] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [aviso, setAviso] = useState<string | null>(null)
-  const [guardando, setGuardando] = useState(false)
-  const [anio, setAnio] = useState('')
-  const [semestre, setSemestre] = useState('1')
-  const [fechaInicio, setFechaInicio] = useState('')
-  const [fechaTermino, setFechaTermino] = useState('')
-  const [activo, setActivo] = useState(false)
+  const [periodos, recargar] = useDatos<Periodo[]>('/api/periodos')
+  const [creando, setCreando] = useState(false)
+  const [activando, setActivando] = useState<string | null>(null)
 
-  useEffect(() => {
-    let vigente = true
-    void fetchConSesion('/api/periodos')
-      .then(async (res) => {
-        if (!res.ok) throw new Error('carga')
-        const filas = (await res.json()) as Periodo[]
-        if (vigente) setPeriodos(ordenar(filas))
-      })
-      .catch(() => {
-        if (vigente) setErrorCarga(true)
-      })
-    return () => {
-      vigente = false
-    }
-  }, [fetchConSesion, revision])
-
-  function recargar() {
-    setErrorCarga(false)
-    setPeriodos(null)
-    setRevision((n) => n + 1)
-  }
-
-  async function guardar(datos?: CrearPeriodo, id?: string) {
-    setGuardando(true)
-    setError(null)
-    setAviso(null)
+  async function activar(p: Periodo) {
+    setActivando(p.id)
     try {
-      const res = await fetchConSesion(
-        id ? `/api/periodos/${id}/activar` : '/api/periodos',
-        {
-          method: id ? 'PATCH' : 'POST',
-          ...(datos
-            ? {
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(datos),
-              }
-            : {}),
-        },
-      )
+      const res = await fetchConSesion(`/api/periodos/${p.id}/activar`, {
+        method: 'PATCH',
+      })
       if (!res.ok) {
-        setError(
-          res.status === 409
-            ? 'Ya existe un período con ese año y semestre en tu universidad'
-            : res.status === 404
-              ? 'El período ya no está disponible. Actualiza el listado.'
-              : 'No pudimos guardar el período. Revisa los datos e inténtalo nuevamente.',
+        toast.error(
+          res.status === 404
+            ? 'El período ya no está disponible. Actualiza el listado.'
+            : 'No pudimos activar el período. Inténtalo nuevamente.',
         )
         return
       }
-      const periodo = (await res.json()) as Periodo
-      setPeriodos((anteriores) =>
-        ordenar([
-          ...(anteriores ?? [])
-            .filter((p) => p.id !== periodo.id)
-            .map((p) => (periodo.activo ? { ...p, activo: false } : p)),
-          periodo,
-        ]),
-      )
-      if (periodo.activo)
-        actualizarPeriodoActivo({
-          id: periodo.id,
-          anio: periodo.anio,
-          semestre: periodo.semestre,
-        })
-      setAviso(id ? 'Período activo actualizado' : 'Período creado')
-      if (!id) {
-        setAnio('')
-        setSemestre('1')
-        setFechaInicio('')
-        setFechaTermino('')
-        setActivo(false)
-      }
+      const activo = (await res.json()) as Periodo
+      actualizarPeriodoActivo({
+        id: activo.id,
+        anio: activo.anio,
+        semestre: activo.semestre,
+      })
+      toast.success('Período activo actualizado')
+      recargar()
     } catch {
-      setError(
-        'No pudimos guardar el período. Comprueba tu conexión e inténtalo nuevamente.',
-      )
+      toast.error('No pudimos activar el período. Comprueba tu conexión.')
     } finally {
-      setGuardando(false)
+      setActivando(null)
     }
   }
 
-  function crear(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!fechaInicio || !fechaTermino || fechaTermino <= fechaInicio) {
-      setError('La fecha de término debe ser posterior a la de inicio')
-      return
-    }
-    void guardar({
+  const columnas: Columna<Periodo>[] = [
+    {
+      clave: 'periodo',
+      encabezado: 'Período',
+      valor: claveOrden,
+      celda: (p) => <span className="font-medium">{nombrePeriodo(p)}</span>,
+    },
+    {
+      clave: 'inicio',
+      encabezado: 'Inicio',
+      valor: (p) => p.fechaInicio,
+      celda: (p) => (
+        <span className="tabular-nums">{fecha(p.fechaInicio)}</span>
+      ),
+    },
+    {
+      clave: 'termino',
+      encabezado: 'Término',
+      valor: (p) => p.fechaTermino,
+      celda: (p) => (
+        <span className="tabular-nums">{fecha(p.fechaTermino)}</span>
+      ),
+    },
+    {
+      clave: 'estado',
+      encabezado: 'Estado',
+      valor: (p) => Number(p.activo),
+      celda: (p) =>
+        p.activo ? (
+          <Badge>Activo</Badge>
+        ) : (
+          <Badge variant="secondary">Inactivo</Badge>
+        ),
+    },
+    {
+      clave: 'acciones',
+      encabezado: <span className="sr-only">Acciones</span>,
+      className: 'w-px text-right',
+      celda: (p) =>
+        p.activo ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={activando !== null}
+            aria-label={`Activar período ${nombrePeriodo(p)}`}
+            onClick={() => void activar(p)}
+          >
+            Activar
+          </Button>
+        ),
+    },
+  ]
+
+  return (
+    <section aria-label="Gestión de períodos" className="grid gap-4">
+      <PageHeader
+        titulo="Períodos académicos"
+        descripcion="Organiza los semestres y elige el período activo para toda la universidad."
+        acciones={
+          <Button
+            type="button"
+            // Mientras se activa otro, crear uno activo podría cruzar las respuestas.
+            disabled={!periodos || activando !== null}
+            onClick={() => setCreando(true)}
+          >
+            <Plus aria-hidden="true" />
+            Nuevo período
+          </Button>
+        }
+      />
+      {periodos === null ? (
+        <ErrorState
+          mensaje="No pudimos cargar los períodos."
+          onReintentar={recargar}
+        />
+      ) : (
+        <DataTable
+          etiqueta="Listado de períodos"
+          columnas={columnas}
+          filas={periodos ?? []}
+          claveFila={(p) => p.id}
+          cargando={periodos === undefined}
+          textoDeCarga="Cargando períodos…"
+          ordenInicial={{ clave: 'periodo', direccion: 'desc' }}
+          vacio={
+            <EmptyState
+              icono={CalendarRange}
+              titulo="Aún no hay períodos en tu universidad."
+              mensaje="Crea el primero con «Nuevo período»."
+            />
+          }
+        />
+      )}
+      {creando && (
+        <DialogoPeriodo
+          onCerrar={() => setCreando(false)}
+          onGuardado={(p) => {
+            if (p.activo)
+              actualizarPeriodoActivo({
+                id: p.id,
+                anio: p.anio,
+                semestre: p.semestre,
+              })
+            recargar()
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function DialogoPeriodo({
+  onCerrar,
+  onGuardado,
+}: {
+  onCerrar: () => void
+  onGuardado: (periodo: Periodo) => void
+}) {
+  const { fetchConSesion } = useAuth()
+  const [anio, setAnio] = useState('')
+  const [semestre, setSemestre] = useState('1')
+  const [inicio, setInicio] = useState('')
+  const [termino, setTermino] = useState('')
+  const [activo, setActivo] = useState(false)
+
+  async function guardar(): Promise<string | null> {
+    if (!anio || !inicio || !termino)
+      return 'Completa el año, el semestre y las fechas.'
+    if (termino <= inicio)
+      return 'La fecha de término debe ser posterior a la de inicio.'
+    const datos: CrearPeriodo = {
       anio: Number(anio),
       semestre: Number(semestre),
-      fechaInicio,
-      fechaTermino,
+      fechaInicio: inicio,
+      fechaTermino: termino,
       activo,
+    }
+    const res = await fetchConSesion('/api/periodos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos),
     })
+    if (!res.ok) {
+      return res.status === 409
+        ? 'Ya existe un período con ese año y semestre en tu universidad.'
+        : 'No pudimos guardar el período. Revisa los datos e inténtalo nuevamente.'
+    }
+    toast.success('Período creado')
+    onGuardado((await res.json()) as Periodo)
+    return null
   }
 
   return (
-    <section className="periodos" aria-label="Gestión de períodos">
-      <div className="periodos__intro">
-        <div>
-          <h2>Períodos de tu universidad</h2>
-          <p>
-            Organiza los semestres y elige el período activo para toda la
-            universidad.
-          </p>
-        </div>
-        <button
-          className="periodos__secundario"
-          type="button"
-          disabled={guardando}
-          onClick={recargar}
-        >
-          Actualizar listado
-        </button>
-      </div>
-      {aviso && (
-        <p className="periodos__aviso" role="status">
-          {aviso}
-        </p>
-      )}
-      {error && (
-        <p className="periodos__error" role="alert" id="periodo-error">
-          {error}
-        </p>
-      )}
-      <div className="periodos__columnas">
-        <div className="periodos__panel">
-          {errorCarga ? (
-            <>
-              <p role="alert" className="periodos__error">
-                No pudimos cargar los períodos.
-              </p>
-              <button className="periodos__secundario" onClick={recargar}>
-                Reintentar
-              </button>
-            </>
-          ) : periodos === null ? (
-            <p role="status">Cargando períodos…</p>
-          ) : periodos.length === 0 ? (
-            <p>Aún no hay períodos en tu universidad. Crea el primero.</p>
-          ) : (
-            <table className="periodos__tabla">
-              <caption>Listado de períodos</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Período</th>
-                  <th scope="col">Inicio</th>
-                  <th scope="col">Término</th>
-                  <th scope="col">Estado</th>
-                  <th scope="col">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {periodos.map((p) => (
-                  <tr key={p.id}>
-                    <th scope="row">
-                      {p.anio}-{p.semestre}
-                    </th>
-                    <td>{fecha(p.fechaInicio)}</td>
-                    <td>{fecha(p.fechaTermino)}</td>
-                    <td>{p.activo ? 'Activo' : 'Inactivo'}</td>
-                    <td>
-                      {p.activo ? (
-                        '—'
-                      ) : (
-                        <button
-                          className="periodos__secundario"
-                          type="button"
-                          disabled={guardando}
-                          aria-label={`Activar período ${p.anio}-${p.semestre}`}
-                          onClick={() => void guardar(undefined, p.id)}
-                        >
-                          Activar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        <form
-          className="periodos__panel periodos__formulario"
-          aria-label="Nuevo período"
-          onSubmit={crear}
-          aria-describedby={error ? 'periodo-error' : undefined}
-        >
-          <h2>Nuevo período</h2>
-          <p>
-            Solo puede haber un período activo. Al activar otro, el anterior
-            quedará inactivo.
-          </p>
-          <label htmlFor="periodo-anio">Año</label>
-          <input
-            id="periodo-anio"
+    <FormDialog
+      abierto
+      onAbiertoChange={(abierto) => !abierto && onCerrar()}
+      titulo="Nuevo período"
+      descripcion="Solo puede haber un período activo. Al activar otro, el anterior quedará inactivo."
+      textoGuardar="Crear período"
+      sucio={Boolean(anio || inicio || termino || activo || semestre !== '1')}
+      onGuardar={guardar}
+    >
+      <FormField etiqueta="Año" requerido>
+        {(c) => (
+          <Input
+            {...c}
             type="number"
             min="1"
             max="9999"
             step="1"
-            required
-            disabled={guardando}
             value={anio}
             onChange={(e) => setAnio(e.target.value)}
           />
-          <label htmlFor="periodo-semestre">Semestre</label>
-          <select
-            id="periodo-semestre"
-            required
-            disabled={guardando}
+        )}
+      </FormField>
+      <FormField etiqueta="Semestre" requerido>
+        {(c) => (
+          <NativeSelect
+            {...c}
+            className="w-full"
             value={semestre}
             onChange={(e) => setSemestre(e.target.value)}
           >
             <option value="1">1</option>
             <option value="2">2</option>
-          </select>
-          <label htmlFor="periodo-inicio">Fecha de inicio</label>
-          <input
-            id="periodo-inicio"
-            type="date"
-            required
-            disabled={guardando}
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-          />
-          <label htmlFor="periodo-termino">Fecha de término</label>
-          <input
-            id="periodo-termino"
-            type="date"
-            required
-            disabled={guardando}
-            value={fechaTermino}
-            onChange={(e) => setFechaTermino(e.target.value)}
-          />
-          <label className="periodos__checkbox">
-            <input
-              type="checkbox"
-              disabled={guardando}
-              checked={activo}
-              onChange={(e) => setActivo(e.target.checked)}
+          </NativeSelect>
+        )}
+      </FormField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField etiqueta="Fecha de inicio" requerido>
+          {(c) => (
+            <Input
+              {...c}
+              type="date"
+              value={inicio}
+              onChange={(e) => setInicio(e.target.value)}
             />
-            Marcar como activo
-          </label>
-          <button
-            className="periodos__primario"
-            type="submit"
-            disabled={guardando || periodos === null}
-          >
-            {guardando ? 'Guardando…' : 'Crear período'}
-          </button>
-        </form>
+          )}
+        </FormField>
+        <FormField etiqueta="Fecha de término" requerido>
+          {(c) => (
+            <Input
+              {...c}
+              type="date"
+              value={termino}
+              onChange={(e) => setTermino(e.target.value)}
+            />
+          )}
+        </FormField>
       </div>
-    </section>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="periodo-activo"
+          checked={activo}
+          onCheckedChange={(v) => setActivo(v === true)}
+        />
+        <Label htmlFor="periodo-activo">Marcar como activo</Label>
+      </div>
+    </FormDialog>
   )
 }

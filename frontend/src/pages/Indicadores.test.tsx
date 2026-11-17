@@ -153,6 +153,44 @@ const METRICAS: MetricasConsolidadas = {
   cursos: 4,
 }
 
+// Un paso del breadcrumb del encabezado: un enlace, o —si la ruta es larga y
+// quedó en el menú «…»— un ítem de ese menú.
+async function paso(nombre: string) {
+  // Hasta que llegan los nombres, el breadcrumb tiene un esqueleto.
+  await waitFor(() =>
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Breadcrumb', hidden: true }),
+      ).queryByRole('status', { hidden: true }),
+    ).toBeNull(),
+  )
+  // Con el menú «…» abierto el resto de la página queda oculto (hidden).
+  const abierto = screen.queryByRole('menu')
+  const enMenu = abierto
+    ? within(abierto).queryByRole('menuitem', { name: nombre })
+    : null
+  if (enMenu) return enMenu
+  const nav = screen.getByRole('navigation', {
+    name: 'Breadcrumb',
+    hidden: true,
+  })
+  const directo = within(nav).queryByRole('link', {
+    name: nombre,
+    hidden: true,
+  })
+  if (directo) return directo
+  fireEvent.keyDown(
+    within(nav).getByRole('button', {
+      name: 'Ver los pasos intermedios',
+      hidden: true,
+    }),
+    { key: 'Enter' },
+  )
+  return within(await screen.findByRole('menu')).getByRole('menuitem', {
+    name: nombre,
+  })
+}
+
 describe('Indicadores del Director (MET-01)', () => {
   test('muestra las tres tarjetas con valor, unidad y n', async () => {
     await renderConSesion('DIRECTOR', '/indicadores', {
@@ -264,15 +302,19 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await screen.findByRole('region', { name: 'Universidades' }),
     )
     // La región aparece mientras carga: se espera a que lleguen los datos.
+    const norte = within(
+      (
+        await lista.findByRole('link', { name: 'Universidad Demo Norte' })
+      ).closest('tr')!,
+    )
     expect(
-      await lista.findByText(
-        /Aprobación: 50,0 % · Promedio: 4,50 · Asistencia: 66,67 %/,
-      ),
-    ).toBeInTheDocument()
-    // Sur no tiene datos: se dice, no se muestra 0.
-    expect(
-      lista.getAllByText(/Aprobación: Sin datos suficientes/),
-    ).toHaveLength(1)
+      norte
+        .getAllByRole('cell')
+        .slice(1, 4)
+        .map((c) => c.textContent),
+    ).toEqual(['50,0 %', '4,50', '66,67 %'])
+    // Sur no tiene datos: un guion con el motivo, no un 0.
+    expect(lista.getAllByText('Sin datos suficientes')).toHaveLength(3)
     fireEvent.click(lista.getByRole('link', { name: 'Universidad Demo Norte' }))
 
     const facultades = within(
@@ -314,16 +356,11 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     expect(screen.getByText('Carrera sin datos')).toBeInTheDocument()
     expect(screen.getAllByText('Sin datos suficientes')).toHaveLength(3)
     expect(pedidas).toContain(`${CARRERAS_RUTA}?periodo=2026-1`)
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
-    expect(
-      migas.getByRole('link', { name: 'Universidad Demo Norte' }),
-    ).toHaveAttribute(
+    expect(await paso('Universidad Demo Norte')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte?periodo=2026-1',
     )
@@ -343,17 +380,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    const enlace = await migas.findByRole('link', {
-      name: 'Universidad Demo Sur',
-    })
+    const enlace = await waitFor(() => paso('Universidad Demo Sur'))
     expect(enlace).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
@@ -431,25 +463,16 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       within(tabla).getByRole('columnheader', { name: /Aprobación/ }),
     ).toHaveAttribute('aria-sort', 'ascending')
     expect(within(tabla).getAllByRole('row')[1]).toHaveTextContent('INF-101')
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Indicadores' }),
-    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Ingeniería' }),
-    ).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
+    expect(await paso('Ingeniería')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte/facultades/f-ing?periodo=2026-1',
     )
     // Y vuelve también a la universidad, conservando el período.
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Universidad Demo Norte' }),
-    ).toHaveAttribute(
+    expect(await paso('Universidad Demo Norte')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte?periodo=2026-1',
     )
@@ -469,17 +492,13 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    expect(await paso('Universidad Demo Sur')).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(
-      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
-    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
     // La URL trae f-ing, pero la carrera es de otra facultad: el enlace usa la
     // de la API y conserva el período.
-    expect(
-      migas.getByRole('link', { name: 'Facultad de Sur' }),
-    ).toHaveAttribute(
+    expect(await paso('Facultad de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-otra?periodo=2026-1',
     )
@@ -653,12 +672,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     })
     expect(histograma).toBeInTheDocument()
     expect(histograma).toHaveAccessibleName(/aprobación.*4,0/i)
-    // El histograma usa clases propias: las `indicadores__barra*` son de la
-    // comparación de MET-02 y su CSS no debe alcanzarlo (ni al revés).
+    // Una barra por rango de notas; las barras de la comparación (MET-02) son
+    // otro elemento.
     expect(
-      histograma.querySelectorAll('.indicadores__histograma-barra'),
+      histograma.querySelectorAll('[data-slot="histograma-barra"]'),
     ).toHaveLength(6)
-    expect(histograma.querySelector('[class*="indicadores__barra"]')).toBeNull()
+    expect(histograma.querySelector('[data-slot="barra-relleno"]')).toBeNull()
     // La línea de aprobación se rotula con la nota mínima de la API.
     expect(screen.getByText('Aprobación 4,0')).toBeInTheDocument()
     expect(
@@ -668,19 +687,47 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toBeInTheDocument()
     expect(screen.getAllByText('1,0–1,9').length).toBeGreaterThan(0)
     expect(screen.getByText(/7\s+alumnos evaluados/)).toBeInTheDocument()
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
-    expect(
-      migas.getByRole('link', { name: 'Ingeniería Civil' }),
-    ).toHaveAttribute(
+    expect(await paso('Ingeniería Civil')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
     )
+  })
+
+  test('una ruta larga colapsa los pasos intermedios en «…»: quedan Inicio, el penúltimo y el último', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1?periodo=2026-1',
+      { [DISTRIBUCION_RUTA]: () => DISTRIBUCION },
+    )
+    await screen.findByRole('img', { name: /Distribución de notas/ })
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    await waitFor(() => expect(within(nav).queryByRole('status')).toBeNull())
+    const visibles = within(nav)
+      .getAllByRole('listitem')
+      .map((li) => li.textContent)
+    // Inicio · … · Carrera · Curso (el último es el título).
+    expect(visibles[0]).toBe('Inicio')
+    expect(visibles.at(-2)).toBe('Ingeniería Civil')
+    expect(visibles).not.toContain('Indicadores')
+    expect(within(nav).getByRole('heading', { level: 1 })).toHaveAttribute(
+      'class',
+      expect.stringContaining('truncate'),
+    )
+    // El menú «…» trae los pasos de en medio, con sus enlaces.
+    fireEvent.keyDown(
+      within(nav).getByRole('button', { name: 'Ver los pasos intermedios' }),
+      { key: 'Enter' },
+    )
+    const menu = within(await screen.findByRole('menu'))
+    expect(menu.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Indicadores',
+      'Universidad Demo Norte',
+      'Ingeniería',
+    ])
   })
 
   // Un enlace directo puede combinar una facultad y una carrera que no son las
@@ -698,19 +745,15 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         }),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
+    expect(await paso('Universidad Demo Sur')).toHaveAttribute(
+      'href',
+      '/indicadores/universidades/u-sur?periodo=2026-1',
     )
-    expect(
-      await migas.findByRole('link', { name: 'Universidad Demo Sur' }),
-    ).toHaveAttribute('href', '/indicadores/universidades/u-sur?periodo=2026-1')
-    expect(
-      migas.getByRole('link', { name: 'Facultad de Sur' }),
-    ).toHaveAttribute(
+    expect(await paso('Facultad de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-sur?periodo=2026-1',
     )
-    expect(migas.getByRole('link', { name: 'Carrera de Sur' })).toHaveAttribute(
+    expect(await paso('Carrera de Sur')).toHaveAttribute(
       'href',
       '/indicadores/universidades/u-sur/facultades/f-sur/carreras/c-sur?periodo=2026-1',
     )
@@ -736,11 +779,10 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await screen.findByRole('img', { name: /Distribución de notas/ }),
     ).toBeInTheDocument()
     expect(pedidas).toEqual([DISTRIBUCION_RUTA])
-    expect(
-      within(
-        screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-      ).getByRole('link', { name: 'Indicadores' }),
-    ).toHaveAttribute('href', '/indicadores?periodo=2026-1')
+    expect(await paso('Indicadores')).toHaveAttribute(
+      'href',
+      '/indicadores?periodo=2026-1',
+    )
   })
 
   test('distribución: vacío, error con reintento y curso inexistente', async () => {
@@ -841,18 +883,16 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
         [FACULTADES]: registrar(FACULTADES, DETALLE),
       },
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
     await waitFor(() =>
-      expect(migas.getByText('Universidad Demo Norte')).toHaveAttribute(
-        'aria-current',
-        'page',
-      ),
+      expect(
+        within(
+          screen.getByRole('navigation', { name: 'Breadcrumb' }),
+        ).getByText('Universidad Demo Norte'),
+      ).toHaveAttribute('aria-current', 'page'),
     )
     // En el detalle todavía no se pidió el consolidado.
     expect(pedidas).not.toContain(`${RUTA}?periodo=2026-1`)
-    fireEvent.click(migas.getByRole('link', { name: 'Indicadores' }))
+    fireEvent.click(await paso('Indicadores'))
     expect(
       await screen.findByRole('list', { name: 'Indicadores' }),
     ).toBeInTheDocument()
@@ -877,15 +917,12 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     fireEvent.click(
       await screen.findByRole('link', { name: 'Universidad Demo Norte' }),
     )
-    const migas = within(
-      await screen.findByRole('navigation', { name: 'Ruta de navegación' }),
-    )
     await screen.findByRole('list', { name: 'Facultades' })
     expect(pedidas).toContain(`${RUTA}?periodo=2026-1`)
     expect(pedidas).toContain(`${UNIVERSIDADES}?periodo=2026-1`)
     expect(pedidas).toContain(`${FACULTADES}?periodo=2026-1`)
     // El enlace de vuelta conserva el período.
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
@@ -984,6 +1021,90 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
     ).toHaveAttribute('href', '/indicadores')
   })
 
+  // El esqueleto del breadcrumb es solo para la consulta pendiente: si falla o
+  // el período no vale, queda una etiqueta de respaldo y no «Cargando…».
+  const NIVELES = [
+    [
+      'universidad',
+      '/indicadores/universidades/u-norte',
+      ['Inicio', 'Indicadores', 'Universidad'],
+    ],
+    [
+      'facultad',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad'],
+    ],
+    [
+      'carrera',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad', 'Carrera'],
+    ],
+    [
+      'curso',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      ['Inicio', 'Indicadores', 'Universidad', 'Facultad', 'Carrera', 'Curso'],
+    ],
+  ] as const
+  // Pasos visibles y los del menú «…» si la ruta es larga.
+  const textoDelCamino = async () => {
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    const visibles = within(nav)
+      .getAllByRole('listitem')
+      // El «…» también es un ítem de la lista.
+      .filter((li) => !li.querySelector('button'))
+      .map((li) => li.textContent)
+    const ocultos = within(nav).queryByRole('button', {
+      name: 'Ver los pasos intermedios',
+    })
+    if (ocultos) {
+      fireEvent.keyDown(ocultos, { key: 'Enter' })
+      const menu = within(await screen.findByRole('menu'))
+      return [
+        visibles[0],
+        ...menu.getAllByRole('menuitem').map((m) => m.textContent),
+        ...visibles.slice(1),
+      ]
+    }
+    return visibles
+  }
+
+  test('mientras la consulta está pendiente el breadcrumb muestra un esqueleto', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores/universidades/u-norte', {
+      [FACULTADES]: () => new Promise(() => {}),
+    })
+    const nav = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(nav).getByRole('status')).toHaveTextContent('Cargando…')
+  })
+
+  test.each(NIVELES)(
+    'si la consulta falla (%s), el breadcrumb usa la etiqueta de respaldo',
+    async (_nivel, ruta, camino) => {
+      await renderConSesion('DIRECTOR', ruta, {
+        [FACULTADES]: () => json({}, 500),
+        '/api/metricas/facultades/f-ing/carreras': () => json({}, 500),
+        '/api/metricas/carreras/c-ing/cursos': () => json({}, 500),
+        [DISTRIBUCION_RUTA]: () => json({}, 500),
+      })
+      await screen.findByRole('button', { name: 'Reintentar' })
+      const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+      await waitFor(() => expect(within(nav).queryByRole('status')).toBeNull())
+      expect(await textoDelCamino()).toEqual(camino)
+    },
+  )
+
+  test.each(NIVELES)(
+    'con un período inválido (%s), el breadcrumb usa la etiqueta de respaldo',
+    async (_nivel, ruta, camino) => {
+      await renderConSesion('DIRECTOR', `${ruta}?periodo=activo`, {})
+      expect(
+        await screen.findByText(/El período «activo» no es válido/),
+      ).toBeInTheDocument()
+      const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+      expect(within(nav).queryByRole('status')).toBeNull()
+      expect(await textoDelCamino()).toEqual(camino)
+    },
+  )
+
   // Solo el Director: otro rol que escribe la URL no llega a la vista ni la
   // pide a la API.
   test.each<Rol>(['PROFESOR', 'ALUMNO', 'ADMINISTRATIVO'])(
@@ -993,9 +1114,13 @@ describe('drill-down de universidad a facultad (MET-04)', () => {
       await renderConSesion(rol, '/indicadores/universidades/u-norte', {
         [FACULTADES]: pedida,
       })
-      expect(
-        screen.queryByRole('navigation', { name: 'Ruta de navegación' }),
-      ).toBeNull()
+      // La ruta redirige al Dashboard, que no lleva camino: hasta entonces el
+      // encabezado todavía muestra el de la URL escrita.
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('navigation', { name: 'Breadcrumb' }),
+        ).toBeNull(),
+      )
       expect(screen.queryByRole('list', { name: 'Facultades' })).toBeNull()
       expect(pedida).not.toHaveBeenCalled()
     },
@@ -1082,13 +1207,14 @@ describe('comparación entre universidades (MET-02)', () => {
   const celdas = (nombre: string) =>
     within(screen.getByRole('row', { name: new RegExp(nombre) }))
       .getAllByRole('cell')
+      .slice(1) // la primera celda es el nombre de la universidad
       .map((c) => c.textContent)
 
   const relleno = (nombre: string) =>
     within(screen.getByRole('list', { name: /por universidad$/ }))
       .getByText(nombre)
       .closest('li')
-      ?.querySelector('.indicadores__barra-relleno')
+      ?.querySelector('[data-slot="barra-relleno"]')
 
   test('muestra los tres indicadores de cada universidad lado a lado en una tabla', async () => {
     await renderConSesion('DIRECTOR', COMPARAR, {
@@ -1138,6 +1264,7 @@ describe('comparación entre universidades (MET-02)', () => {
     await renderConSesion('DIRECTOR', COMPARAR, {
       [UNIVERSIDADES]: () => LISTA,
     })
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Gráfico' }))
     const selector = await screen.findByRole('combobox', {
       name: 'Indicador a graficar',
     })
@@ -1189,10 +1316,7 @@ describe('comparación entre universidades (MET-02)', () => {
     expect(screen.getByRole('combobox', { name: 'Período' })).toHaveValue(
       '2026-1',
     )
-    const migas = within(
-      screen.getByRole('navigation', { name: 'Ruta de navegación' }),
-    )
-    expect(migas.getByRole('link', { name: 'Indicadores' })).toHaveAttribute(
+    expect(await paso('Indicadores')).toHaveAttribute(
       'href',
       '/indicadores?periodo=2026-1',
     )
@@ -1267,4 +1391,268 @@ describe('comparación entre universidades (MET-02)', () => {
       expect(pedida).not.toHaveBeenCalled()
     },
   )
+})
+
+// UI/UX-08: estados y estructura de las pantallas migradas a shadcn.
+describe('estados de carga, vacío y error', () => {
+  const nunca = () => new Promise(() => {})
+
+  test('mientras carga, cada nivel muestra esqueletos y lo anuncia', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: nunca,
+      [UNIVERSIDADES]: nunca,
+    })
+    expect(await screen.findByText('Cargando indicadores…')).toBeInTheDocument()
+    expect(screen.getByText('Cargando universidades…')).toBeInTheDocument()
+    expect(screen.getAllByRole('status').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByRole('list', { name: 'Indicadores' })).toBeNull()
+  })
+
+  test.each([
+    ['la comparación', '/indicadores/comparar', 'Cargando universidades…'],
+    [
+      'las facultades',
+      '/indicadores/universidades/u-norte',
+      'Cargando facultades…',
+    ],
+    [
+      'las carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      'Cargando carreras…',
+    ],
+    [
+      'los cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      'Cargando cursos…',
+    ],
+    [
+      'la distribución',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      'Cargando distribución…',
+    ],
+  ])('%s anuncia la carga', async (_nivel, ruta, texto) => {
+    await renderConSesion('DIRECTOR', ruta, {
+      [UNIVERSIDADES]: nunca,
+      [FACULTADES]: nunca,
+      [CARRERAS_RUTA]: nunca,
+      [CURSOS_RUTA]: nunca,
+      [DISTRIBUCION_RUTA]: nunca,
+    })
+    expect(await screen.findByText(texto)).toBeInTheDocument()
+  })
+
+  test.each([
+    [
+      'la universidad sin facultades',
+      '/indicadores/universidades/u-norte',
+      FACULTADES,
+      { ...DETALLE, facultades: [] },
+      'Esta universidad no tiene facultades.',
+    ],
+    [
+      'la facultad sin carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      CARRERAS_RUTA,
+      { ...CARRERAS, carreras: [] },
+      'Esta facultad no tiene carreras.',
+    ],
+    [
+      'la carrera sin cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      CURSOS_RUTA,
+      { ...CURSOS, cursos: [] },
+      'Esta carrera no tiene cursos.',
+    ],
+    [
+      'el curso sin notas',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      DISTRIBUCION_RUTA,
+      { ...DISTRIBUCION, totalEvaluados: 0 },
+      'Sin notas finales para este curso',
+    ],
+  ])('%s dice qué falta', async (_caso, ruta, api, datos, mensaje) => {
+    await renderConSesion('DIRECTOR', ruta, { [api]: () => datos })
+    expect(await screen.findByText(mensaje)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  test.each([
+    ['las universidades', '/indicadores/comparar', UNIVERSIDADES, LISTA],
+    [
+      'las facultades',
+      '/indicadores/universidades/u-norte',
+      FACULTADES,
+      DETALLE,
+    ],
+    [
+      'las carreras',
+      '/indicadores/universidades/u-norte/facultades/f-ing',
+      CARRERAS_RUTA,
+      CARRERAS,
+    ],
+    [
+      'los cursos',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      CURSOS_RUTA,
+      CURSOS,
+    ],
+    [
+      'la distribución',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing/cursos/curso-1',
+      DISTRIBUCION_RUTA,
+      DISTRIBUCION,
+    ],
+  ])('si fallan %s, ofrece reintentar', async (_nivel, ruta, api, datos) => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', ruta, {
+      [api]: () => (intentos++ === 0 ? json({}, 500) : datos),
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Reintentar' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull(),
+    )
+    expect(intentos).toBe(2)
+  })
+
+  test('si los períodos fallan, el selector se cambia por un aviso con reintento', async () => {
+    let intentos = 0
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+      '/api/metricas/periodos': () =>
+        intentos++ === 0
+          ? json({}, 500)
+          : [{ anio: 2026, semestre: 2, activo: true }],
+    })
+    expect(
+      await screen.findByText('No pudimos cargar los períodos.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveAttribute('data-slot', 'alert')
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(
+      await screen.findByRole('combobox', { name: 'Período' }),
+    ).toBeInTheDocument()
+  })
+
+  test('el selector de período es un <select> con su etiqueta', async () => {
+    await renderConSesion('DIRECTOR', '/indicadores', {
+      [RUTA]: () => METRICAS,
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const selector = await screen.findByRole('combobox', { name: 'Período' })
+    expect(selector.tagName).toBe('SELECT')
+    expect(selector).toHaveAttribute('data-slot', 'native-select')
+    expect(selector).toHaveValue('')
+    expect(screen.getByLabelText('Período')).toBe(selector)
+  })
+})
+
+describe('pestañas de la comparación', () => {
+  const COMPARAR = '/indicadores/comparar'
+
+  test('abre en la tabla; el gráfico está en la otra pestaña', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('tab', { name: 'Tabla' })
+    const grafico = screen.getByRole('tab', { name: 'Gráfico' })
+    expect(tabla).toHaveAttribute('aria-selected', 'true')
+    expect(grafico).toHaveAttribute('aria-selected', 'false')
+    expect(
+      screen.getByRole('table', { name: 'Indicadores por universidad' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: 'Indicador a graficar' }),
+    ).toBeNull()
+
+    fireEvent.mouseDown(grafico)
+    expect(grafico).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByRole('combobox', { name: 'Indicador a graficar' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+
+    fireEvent.mouseDown(tabla)
+    expect(
+      screen.getByRole('table', { name: 'Indicadores por universidad' }),
+    ).toBeInTheDocument()
+  })
+
+  test('las flechas pasan de una pestaña a la otra', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('tab', { name: 'Tabla' })
+    tabla.focus()
+    fireEvent.keyDown(tabla, { key: 'ArrowRight' })
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Gráfico' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
+  })
+
+  test('la tabla ordena por una columna al pulsar su encabezado', async () => {
+    await renderConSesion('DIRECTOR', COMPARAR, {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    const tabla = await screen.findByRole('table', {
+      name: 'Indicadores por universidad',
+    })
+    const nombres = () =>
+      within(tabla)
+        .getAllByRole('row')
+        .slice(1)
+        .map((fila) => within(fila).getAllByRole('cell')[0].textContent)
+    expect(nombres()).toEqual([
+      'Universidad Demo Norte',
+      'Universidad Demo Sur',
+    ])
+    // Sur no tiene alumnos: con orden ascendente queda primero.
+    fireEvent.click(within(tabla).getByRole('button', { name: /Alumnos/ }))
+    expect(nombres()).toEqual([
+      'Universidad Demo Sur',
+      'Universidad Demo Norte',
+    ])
+  })
+})
+
+describe('tabla de cursos', () => {
+  test('los encabezados ordenables son botones y el orden queda en aria-sort', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing',
+      { [CURSOS_RUTA]: () => CURSOS },
+    )
+    const boton = await screen.findByRole('button', {
+      name: 'Ordenar por Promedio',
+    })
+    expect(boton).toHaveAttribute('data-slot', 'orden-columna')
+    const encabezado = boton.closest('th')!
+    expect(encabezado).toHaveAttribute('aria-sort', 'none')
+    fireEvent.click(boton)
+    expect(encabezado).toHaveAttribute('aria-sort', 'ascending')
+    fireEvent.click(boton)
+    expect(encabezado).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  test('cada curso es un enlace al detalle y la tabla se lleva su etiqueta', async () => {
+    await renderConSesion(
+      'DIRECTOR',
+      '/indicadores/universidades/u-norte/facultades/f-ing/carreras/c-ing?periodo=2026-1',
+      { [CURSOS_RUTA]: () => CURSOS },
+    )
+    const tabla = await screen.findByRole('table', {
+      name: 'Cursos de la carrera',
+    })
+    const enlaces = within(tabla).getAllByRole('link')
+    expect(enlaces.length).toBe(CURSOS.cursos.length)
+    expect(enlaces[0].getAttribute('href')).toMatch(
+      /\/cursos\/.+\?periodo=2026-1$/,
+    )
+  })
 })

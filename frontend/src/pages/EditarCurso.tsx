@@ -12,7 +12,8 @@ import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { usePuede } from '../session/session'
 import { useDatos } from './useDatos'
-import './Cursos.css'
+import './GestionAcademica.css'
+import { useMigas } from '../layout/migas-contexto'
 
 const CAMPOS = ['codigo', 'nombre', 'carreraId', 'periodoId'] as const
 const ETIQUETAS = {
@@ -46,6 +47,19 @@ function CargarEdicion({ id }: { id: string }) {
   const [carreras, recargarCarreras] = useDatos<Carrera[]>('/api/carreras')
   const [periodos, recargarPeriodos] =
     useDatos<OpcionPeriodo[]>('/api/periodos')
+  useMigas(
+    curso === undefined
+      ? null
+      : curso
+        ? [
+            {
+              etiqueta: `${curso.codigo} · ${curso.nombre}`,
+              to: `/cursos/${id}`,
+            },
+            { etiqueta: 'Editar' },
+          ]
+        : [{ etiqueta: 'Editar curso' }],
+  )
   if (curso === null && (status === 404 || status === 400))
     return (
       <section className="cursos">

@@ -4,7 +4,11 @@ import type {
 } from '@cursus/shared'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
-import { renderConSesion, usuarioDePrueba } from '../test/sesion'
+import {
+  abrirMenuUsuario,
+  renderConSesion,
+  usuarioDePrueba,
+} from '../test/sesion'
 
 const API = '/api/mis-cursos/historial'
 const HISTORIAL = '/mis-cursos/historial'
@@ -105,7 +109,12 @@ test.each(['/', '/perfil', '/mis-cursos/secciones/actual'])(
     expect(
       screen.queryByRole('link', { name: /Mi perfil|Dashboard/ }),
     ).toBeNull()
-    expect(screen.getByRole('button', { name: 'Cerrar Sesión' })).toBeVisible()
+    // La cuenta solo ofrece Cerrar sesión: el egresado no tiene perfil.
+    await abrirMenuUsuario()
+    expect(
+      screen.getByRole('menuitem', { name: 'Cerrar sesión' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('menuitem', { name: 'Mi perfil' })).toBeNull()
     expect(dashboard).not.toHaveBeenCalled()
     expect(perfil).not.toHaveBeenCalled()
   },
