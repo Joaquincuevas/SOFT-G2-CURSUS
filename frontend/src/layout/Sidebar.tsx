@@ -154,13 +154,16 @@ function ItemDelMenu({
   onNavigate?: () => void
 }) {
   const { user } = useSession()
+  const enSeccion = useMatch('/mis-cursos/secciones/:id/*') !== null
   const Icono = item.icon
   const etiqueta = user.egresado ? 'Historial de notas' : etiquetaDe(item, user)
 
   const enlace = (
     <NavLink
       to={user.egresado ? RUTA_HISTORIAL : item.to}
-      end={item.to === '/'}
+      // Dentro de una sección, el ítem activo es el del curso: «Mis Cursos»
+      // (su ruta padre) no se marca también.
+      end={item.to === '/' || (item.to === '/mis-cursos' && enSeccion)}
       onClick={onNavigate}
       className={claseItem(colapsado)}
     >
