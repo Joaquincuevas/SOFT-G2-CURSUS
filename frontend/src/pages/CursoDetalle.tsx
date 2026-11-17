@@ -14,6 +14,7 @@ import { GestionarCierreCurso } from './GestionarCierreCurso'
 import './GestionAcademica.css'
 import { nombresProfesores } from './misSecciones'
 import { useDatos } from './useDatos'
+import { useMigas } from '../layout/migas-contexto'
 
 const SIN_ASIGNAR = 'Sin asignar'
 
@@ -109,6 +110,11 @@ export function CursoDetalle() {
 function Detalle({ id }: { id: string }) {
   const { fetchConSesion } = useAuth()
   const [curso, recargar, status] = useDatos<DatosCurso>(`/api/cursos/${id}`)
+  useMigas(
+    curso === undefined
+      ? null
+      : [{ etiqueta: curso ? `${curso.codigo} · ${curso.nombre}` : 'Curso' }],
+  )
   const puedeEditar = usePuede('update', 'Curso')
   const puedeCrearSeccion = usePuede('create', 'Seccion')
   const puedeAsignar = usePuede('update', 'Seccion')

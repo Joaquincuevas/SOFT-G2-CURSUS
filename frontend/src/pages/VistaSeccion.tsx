@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/shared'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
-import { useEtiquetaDeMiga } from '../layout/migas-contexto'
+import { useMigas } from '../layout/migas-contexto'
 import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
@@ -144,9 +144,19 @@ export function VistaSeccion() {
       .querySelector('[data-slot=tabs-trigger][data-state=active]')
       ?.scrollIntoView({ inline: 'center', block: 'nearest' })
   }, [vistaPedida, seccion])
-  // El encabezado nombra la sección en su breadcrumb.
-  useEtiquetaDeMiga(
-    seccion ? `${seccion.curso.codigo} · Sección ${seccion.numero}` : null,
+  // El breadcrumb nombra la sección y, fuera del Home, la vista abierta.
+  const vistaAbierta = VISTAS.find((v) => v.id === vistaPedida)
+  const conVista = vistaAbierta && vistaAbierta.id !== 'home'
+  useMigas(
+    seccion
+      ? [
+          {
+            etiqueta: `${seccion.curso.codigo} · Sección ${seccion.numero}`,
+            to: conVista ? `/mis-cursos/secciones/${id}` : undefined,
+          },
+          ...(conVista ? [{ etiqueta: vistaAbierta.etiqueta }] : []),
+        ]
+      : null,
   )
 
   if (seccion === undefined) {

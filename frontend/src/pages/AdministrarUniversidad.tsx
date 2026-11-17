@@ -44,6 +44,7 @@ import {
   rutaCuentasUniversidad,
 } from './superadmin'
 import { useDatos } from './useDatos'
+import { useMigas } from '../layout/migas-contexto'
 
 // GES-23: el superadmin edita los datos de una universidad, la archiva y
 // administra sus facultades. Se llega desde el Dashboard ("Administrar") y
@@ -55,6 +56,16 @@ export function AdministrarUniversidad() {
   const { user, reemplazarUsuario } = useSession()
   const [universidades, recargar] =
     useDatos<UniversidadElegible[]>(RUTA_UNIVERSIDADES)
+  useMigas(
+    universidades === undefined
+      ? null
+      : [
+          {
+            etiqueta:
+              universidades?.find((u) => u.id === id)?.nombre ?? 'Universidad',
+          },
+        ],
+  )
   const [aviso, setAviso] = useState<string | null>(null)
 
   if (universidades === undefined)
