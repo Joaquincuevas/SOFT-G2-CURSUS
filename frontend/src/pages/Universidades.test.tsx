@@ -99,6 +99,25 @@ describe('Universidades del Directorio', () => {
     expect((await filas())[0]).toHaveTextContent('Universidad Demo Norte')
   })
 
+  // Sur no tiene indicadores: los valores vacíos quedan al final.
+  test.each([
+    ['Universidad', 'Universidad Demo Norte'],
+    ['Aprobación', 'Universidad Demo Norte'],
+    ['Promedio', 'Universidad Demo Norte'],
+    ['Asistencia', 'Universidad Demo Norte'],
+  ])('ordena por %s', async (columna, primera) => {
+    await renderConSesion('DIRECTOR', '/universidades', {
+      [UNIVERSIDADES]: () => LISTA,
+    })
+    await screen.findByRole('link', { name: 'Universidad Demo Norte' })
+    fireEvent.click(screen.getByRole('button', { name: columna }))
+    expect(screen.getByRole('columnheader', { name: columna })).toHaveAttribute(
+      'aria-sort',
+      'ascending',
+    )
+    expect((await filas())[0]).toHaveTextContent(primera)
+  })
+
   test('sin universidades muestra el estado vacío', async () => {
     await renderConSesion('DIRECTOR', '/universidades', {
       [UNIVERSIDADES]: () => [],
