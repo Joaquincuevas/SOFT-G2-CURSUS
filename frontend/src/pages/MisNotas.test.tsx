@@ -51,8 +51,8 @@ async function abrirNotas(
     [RESUMEN_RUTA]: () => ({ ...RESUMEN, rol }),
     ...rutas,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
-  return { panel: within(screen.getByRole('tabpanel', { name: 'Notas' })) }
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
+  return { panel: within(screen.getByRole('region', { name: 'Notas' })) }
 }
 
 describe('NOT-13: el alumno ve sus notas publicadas', () => {

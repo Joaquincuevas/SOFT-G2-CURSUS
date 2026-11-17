@@ -80,7 +80,7 @@ async function abrir({
       comentarioDevolucion: null,
     }),
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
   await screen.findByText('Control borrador')
   return within(screen.getByRole('table'))
 }

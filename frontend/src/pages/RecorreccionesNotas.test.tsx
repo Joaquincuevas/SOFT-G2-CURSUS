@@ -67,7 +67,7 @@ async function abrir(
     [NOTAS]: () => datos,
     ...rutas,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Notas' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Notas' }))
   fireEvent.click(
     await screen.findByRole('button', { name: 'Notas de Control 1' }),
   )

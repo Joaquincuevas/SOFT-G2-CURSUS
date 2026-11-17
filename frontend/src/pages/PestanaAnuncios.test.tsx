@@ -59,17 +59,17 @@ async function abrirAnuncios(
     [`${ANUNCIOS}/lecturas`]: lecturas,
     ...extras,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Anuncios' }))
-  expect(screen.getByRole('tab', { name: 'Anuncios' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  fireEvent.click(await screen.findByRole('link', { name: 'Anuncios' }))
+  expect(screen.getByRole('link', { name: 'Anuncios' })).toHaveAttribute(
+    'aria-current',
+    'page',
   )
   // Con un diálogo abierto (nuevo anuncio, edición o historial) las consultas
   // van a él; si no, a la pestaña.
   const zona = () =>
     within(
       screen.queryByRole('dialog') ??
-        screen.getByRole('tabpanel', { name: 'Anuncios' }),
+        screen.getByRole('region', { name: 'Anuncios' }),
     )
   const panel = new Proxy({} as ReturnType<typeof within>, {
     get: (_, clave) => Reflect.get(zona(), clave),

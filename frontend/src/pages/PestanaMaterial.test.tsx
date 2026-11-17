@@ -52,7 +52,7 @@ test('publica el PDF por MAT-01 y muestra el responsable en el historial del sí
             ]
           : [],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
   const tarjeta = within(
     await screen.findByRole('region', { name: 'Sílabo del curso' }),
   )
@@ -110,7 +110,7 @@ test('el historial del sílabo queda plegado bajo la versión vigente', async ()
       },
     ],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
   const tarjeta = within(
     await screen.findByRole('region', { name: 'Sílabo del curso' }),
   )
@@ -138,7 +138,7 @@ test('un archivo que no es PDF se rechaza junto al campo, sin subir nada', async
     [MATERIALES]: () => [],
     [`${BASE}/silabo`]: () => [],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Subir sílabo' }))
   const dialogo = within(
     await screen.findByRole('dialog', { name: 'Subir sílabo' }),
@@ -169,7 +169,7 @@ test('AYUDANTE ve el sílabo vigente sin el botón para publicar', async () => {
       { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
     ],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
   const tarjeta = within(
     await screen.findByRole('region', { name: 'Sílabo del curso' }),
   )
@@ -188,7 +188,7 @@ test('ALUMNO ve el historial del sílabo sin el formulario para publicar', async
       { version: 1, responsable: 'Camila Rojas', subidoEn: '2026-11-10' },
     ],
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+  fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
   const panel = within(
     await screen.findByRole('region', { name: 'Versiones del sílabo' }),
   )
@@ -329,7 +329,7 @@ async function abrirMaterial({
       init?.method === 'POST' ? registrar(init) : listar(),
     ),
   })
-  const pestana = await screen.findByRole('tab', { name: 'Material' })
+  const pestana = await screen.findByRole('link', { name: 'Material' })
   if (!(pestana as HTMLButtonElement).disabled) fireEvent.click(pestana)
   return { llamadas, bodies }
 }
@@ -339,13 +339,13 @@ async function abrirMaterial({
 const panel = () =>
   within(
     screen.queryByRole('dialog') ??
-      screen.getByRole('tabpanel', { name: 'Material' }),
+      screen.getByRole('region', { name: 'Material' }),
   )
 
 // Abre el diálogo «Subir material» si no está abierto.
 function abrirFormulario() {
   if (screen.queryByRole('dialog')) return
-  const pestana = within(screen.getByRole('tabpanel', { name: 'Material' }))
+  const pestana = within(screen.getByRole('region', { name: 'Material' }))
   fireEvent.click(pestana.getAllByRole('button', { name: 'Subir material' })[0])
 }
 
@@ -426,7 +426,7 @@ describe('pestaña Material (MAT-04)', () => {
     async (rol) => {
       await abrirMaterial({ rol, materiales: [EXISTENTE] })
 
-      expect(screen.getByRole('tab', { name: 'Material' })).toBeEnabled()
+      expect(screen.getByRole('link', { name: 'Material' })).toBeEnabled()
       expect(
         await panel().findByRole(rol === 'ALUMNO' ? 'article' : 'row', {
           name: 'Solemne 2025',
@@ -519,7 +519,7 @@ describe('pestaña Material (MAT-04)', () => {
       [RESUMEN_RUTA]: () => RESUMEN,
       [MATERIALES]: () => json({}, 500),
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
 
     expect(
       await panel().findByText('No pudimos cargar los materiales.'),
@@ -559,7 +559,7 @@ describe('pestaña Material (MAT-04)', () => {
           return descarga()
         },
       })
-      fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+      fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
       const boton = await panel().findByRole('button', {
         name: 'Descargar Solemne 2025',
       })
@@ -725,7 +725,7 @@ describe('pestaña Material (MAT-04)', () => {
           return registrado ? [EXISTENTE] : []
         },
       })
-      fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+      fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
       await panel().findByText('Aún no hay materiales del curso')
       completar()
 
@@ -1187,7 +1187,7 @@ describe('versiones de un material (MAT-07)', () => {
       [`${BASE}/silabo`]: () => [],
       ...rutas,
     })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Material' }))
+    fireEvent.click(await screen.findByRole('link', { name: 'Material' }))
     // El profesor y el ayudante ven una tabla; el alumno, fichas.
     return within(
       await screen.findByRole(rol === 'ALUMNO' ? 'article' : 'row', {

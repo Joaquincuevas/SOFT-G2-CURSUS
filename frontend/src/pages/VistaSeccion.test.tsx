@@ -1,5 +1,5 @@
 import type { AlumnosEspacio, Rol, SeccionResumen } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
@@ -161,28 +161,11 @@ describe('vista de la sección (ESP-04)', () => {
     },
   )
 
-  test('la navegación de la sección tiene Home y las demás secciones, todas habilitadas', async () => {
+  test('no hay un menú propio dentro del contenido: la navegación vive en el menú lateral', async () => {
     await renderConSesion('ALUMNO', VISTA, { [RUTA]: () => RESUMEN })
-
-    const pestanas = within(
-      (await vista()).getByRole('tablist', { name: 'Pestañas de la sección' }),
-    ).getAllByRole('tab')
-    expect(pestanas.map((p) => p.textContent)).toEqual([
-      'Home',
-      'Anuncios',
-      'Material',
-      'Entregas',
-      'Notas',
-      'Asistencia',
-      'Integrantes',
-    ])
-    for (const pestana of pestanas) {
-      expect(pestana).toBeEnabled()
-      expect(pestana).toHaveAttribute(
-        'aria-selected',
-        String(pestana.textContent === 'Home'),
-      )
-    }
+    await vista()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByRole('tab')).toBeNull()
     // Sin textos de trabajo pendiente en la UI.
     expect(document.body).not.toHaveTextContent(/TODO|pendiente|próximamente/i)
   })
@@ -333,6 +316,12 @@ describe('alumnos de la sección (ESP-05)', () => {
   )
 })
 
+// Bloque del curso en el menú lateral (el único listado con 'Home', 'Anuncios'…).
+const menuDelCurso = async () =>
+  within(
+    await screen.findByRole('navigation', { name: 'Navegación principal' }),
+  ).findByRole('listitem', { name: /Menú del curso/ })
+
 describe('layout de curso (UIX-04)', () => {
   const ANUNCIOS = '/api/espacio/secciones/seccion-1/anuncios'
   const ALUMNOS = '/api/espacio/secciones/seccion-1/alumnos'
@@ -341,8 +330,9 @@ describe('layout de curso (UIX-04)', () => {
     [ANUNCIOS]: () => [],
     [ALUMNOS]: () => ({ total: 0, alumnos: [] }),
   })
+  // Los ítems del curso están en el menú lateral.
   const pestana = async (nombre: string) =>
-    (await vista()).getByRole('tab', { name: nombre })
+    within(await menuDelCurso()).getByRole('link', { name: nombre })
 
   test('el Home es la vista por defecto: resumen con curso, período, rol, horario, equipo y accesos', async () => {
     await renderConSesion('PROFESOR', VISTA, rutas())
@@ -352,8 +342,8 @@ describe('layout de curso (UIX-04)', () => {
     expect(
       v.getByRole('heading', { name: 'Introducción a la Programación' }),
     ).toBeInTheDocument()
-    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'true')
-    expect(v.getByRole('tabpanel', { name: 'Home' })).toBeInTheDocument()
+    expect(await pestana('Home')).toHaveAttribute('aria-current', 'page')
+    expect(v.getByRole('region', { name: 'Home' })).toBeInTheDocument()
     expect(
       v.getByRole('heading', { name: 'Horario y sala' }),
     ).toBeInTheDocument()
@@ -374,10 +364,10 @@ describe('layout de curso (UIX-04)', () => {
     await renderConSesion('PROFESOR', VISTA, rutas())
 
     fireEvent.click(await pestana('Anuncios'))
-    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
-    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'false')
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
+    expect(await pestana('Home')).not.toHaveAttribute('aria-current')
     expect(
-      await screen.findByRole('tabpanel', { name: 'Anuncios' }),
+      await screen.findByRole('region', { name: 'Anuncios' }),
     ).toBeInTheDocument()
     // El resumen ya no está: cada sección se muestra sola.
     expect(screen.queryByRole('heading', { name: 'Horario y sala' })).toBeNull()
@@ -397,19 +387,19 @@ describe('layout de curso (UIX-04)', () => {
       }),
     )
     expect(
-      await screen.findByRole('tabpanel', { name: 'Anuncios' }),
+      await screen.findByRole('region', { name: 'Anuncios' }),
     ).toBeInTheDocument()
-    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
   })
 
   test('un enlace con ?vista= abre directo esa sección; un valor desconocido cae en el Home', async () => {
     await renderConSesion('PROFESOR', `${VISTA}?vista=anuncios`, rutas())
-    expect(await pestana('Anuncios')).toHaveAttribute('aria-selected', 'true')
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
   })
 
   test('un ?vista= desconocido muestra el Home', async () => {
     await renderConSesion('PROFESOR', `${VISTA}?vista=otra-cosa`, rutas())
-    expect(await pestana('Home')).toHaveAttribute('aria-selected', 'true')
+    expect(await pestana('Home')).toHaveAttribute('aria-current', 'page')
   })
 
   test('Integrantes muestra el equipo docente a todos y los alumnos solo al profesor', async () => {
@@ -419,7 +409,7 @@ describe('layout de curso (UIX-04)', () => {
       rutas('ALUMNO'),
     )
     const panel = within(
-      await screen.findByRole('tabpanel', { name: 'Integrantes' }),
+      await screen.findByRole('region', { name: 'Integrantes' }),
     )
     expect(panel.getByText('Diego Muñoz')).toBeInTheDocument()
     expect(panel.queryByRole('region', { name: /^Alumnos/ })).toBeNull()
@@ -432,7 +422,7 @@ describe('layout de curso (UIX-04)', () => {
       rutas('AYUDANTE'),
     )
     const panel = within(
-      await screen.findByRole('tabpanel', { name: 'Integrantes' }),
+      await screen.findByRole('region', { name: 'Integrantes' }),
     )
     expect(panel.getByText('Integrantes en solo lectura')).toBeVisible()
     expect(panel.getByText('Diego Muñoz')).toBeVisible()
@@ -446,7 +436,7 @@ describe('layout de curso (UIX-04)', () => {
       '/api/espacio/secciones/seccion-1/silabo': () => [],
     })
     const panel = within(
-      await screen.findByRole('tabpanel', { name: 'Material' }),
+      await screen.findByRole('region', { name: 'Material' }),
     )
     expect(
       await panel.findByRole('region', { name: 'Sílabo del curso' }),
@@ -469,13 +459,13 @@ describe('layout de curso (UIX-04)', () => {
   })
 
   test.each<Rol>(['PROFESOR', 'AYUDANTE', 'ALUMNO'])(
-    'la navegación de la sección es la misma para %s',
+    'el menú del curso tiene los mismos ítems para %s',
     async (rol) => {
       await renderConSesion(rol, VISTA, rutas(rol))
-      const nombres = (await vista())
-        .getAllByRole('tab')
-        .map((t) => t.textContent)
-      expect(nombres).toEqual([
+      const items = within(
+        within(await menuDelCurso()).getByRole('list'),
+      ).getAllByRole('link')
+      expect(items.map((t) => t.textContent)).toEqual([
         'Home',
         'Anuncios',
         'Material',
@@ -484,6 +474,95 @@ describe('layout de curso (UIX-04)', () => {
         'Asistencia',
         'Integrantes',
       ])
+      expect(items.map((t) => t.getAttribute('href'))).toEqual([
+        VISTA,
+        `${VISTA}?vista=anuncios`,
+        `${VISTA}?vista=material`,
+        `${VISTA}?vista=entregas`,
+        `${VISTA}?vista=notas`,
+        `${VISTA}?vista=asistencia`,
+        `${VISTA}?vista=integrantes`,
+      ])
     },
   )
+
+  test('el menú lleva el curso, la sección y un enlace de vuelta al Dashboard, bajo el ítem Dashboard', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+    const menu = await menuDelCurso()
+    const vuelta = within(menu).getByRole('link', {
+      name: /ICC101 · Introducción a la Programación/,
+    })
+    expect(vuelta).toHaveAttribute('href', '/')
+    expect(vuelta).toHaveTextContent('Sección 1')
+    // Está después del Dashboard dentro del mismo menú.
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    const orden = within(nav)
+      .getAllByRole('link')
+      .map((l) => l.textContent)
+    expect(orden[0]).toBe('Dashboard')
+    expect(orden[1]).toContain('ICC101')
+  })
+
+  test('fuera de una sección el menú queda como antes, sin el bloque del curso', async () => {
+    await renderConSesion('PROFESOR', '/', {
+      '/api/dashboard/mis-secciones': () => [],
+    })
+    await screen.findByRole('navigation', { name: 'Navegación principal' })
+    expect(
+      screen.queryByRole('listitem', { name: /Menú del curso/ }),
+    ).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Anuncios' })).toBeNull()
+  })
+
+  test('el bloque se quita al salir de la sección', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+    await menuDelCurso()
+    fireEvent.click(
+      within(
+        screen.getByRole('navigation', { name: 'Navegación principal' }),
+      ).getByRole('link', {
+        name: 'Dashboard',
+      }),
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('listitem', { name: /Menú del curso/ }),
+      ).toBeNull(),
+    )
+  })
+
+  test('la vista activa se marca según ?vista= y Home por defecto', async () => {
+    await renderConSesion('PROFESOR', `${VISTA}?vista=notas`, {
+      ...rutas(),
+      '/api/espacio/secciones/seccion-1/evaluaciones': () => ({
+        evaluaciones: [],
+        sumaPonderaciones: 0,
+      }),
+    })
+    expect(await pestana('Notas')).toHaveAttribute('aria-current', 'page')
+    expect(await pestana('Home')).not.toHaveAttribute('aria-current')
+  })
+
+  test('con el menú contraído quedan los íconos con su nombre accesible y un tooltip', async () => {
+    await renderConSesion('PROFESOR', VISTA, rutas())
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Contraer menú' }),
+    )
+    const menu = await menuDelCurso()
+    const items = within(within(menu).getByRole('list')).getAllByRole('link')
+    expect(items.map((i) => i.textContent)).toEqual([
+      'Home',
+      'Anuncios',
+      'Material',
+      'Entregas',
+      'Notas',
+      'Asistencia',
+      'Integrantes',
+    ])
+    for (const item of items) expect(item.querySelector('svg')).not.toBeNull()
+    // Sin el encabezado visible: el curso solo se anuncia a lectores de pantalla.
+    expect(within(menu).queryByText(/Volver al Dashboard/)).toBeNull()
+    fireEvent.focus(within(menu).getByRole('link', { name: 'Notas' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Notas')
+  })
 })

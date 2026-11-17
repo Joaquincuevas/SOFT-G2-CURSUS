@@ -75,16 +75,16 @@ async function abrirEntregas(
     '/api/periodos': () => [PERIODO_VIGENTE],
     ...otras,
   })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Entregas' }))
-  expect(screen.getByRole('tab', { name: 'Entregas' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  fireEvent.click(await screen.findByRole('link', { name: 'Entregas' }))
+  expect(screen.getByRole('link', { name: 'Entregas' })).toHaveAttribute(
+    'aria-current',
+    'page',
   )
   // Con un diálogo abierto las consultas van a él; si no, a la pestaña.
   const zona = () =>
     within(
       screen.queryByRole('dialog') ??
-        screen.getByRole('tabpanel', { name: 'Entregas' }),
+        screen.getByRole('region', { name: 'Entregas' }),
     )
   const panel = new Proxy({} as ReturnType<typeof within>, {
     get: (_, clave) => Reflect.get(zona(), clave),
@@ -94,7 +94,7 @@ async function abrirEntregas(
 
 // Abre «Crear actividad» del encabezado (o del estado vacío).
 async function abrirFormulario() {
-  const pestana = within(screen.getByRole('tabpanel', { name: 'Entregas' }))
+  const pestana = within(screen.getByRole('region', { name: 'Entregas' }))
   fireEvent.click(
     (await pestana.findAllByRole('button', { name: 'Crear actividad' }))[0],
   )
@@ -514,7 +514,7 @@ describe('ventana de fechas al crear una actividad', () => {
         },
       ],
     })
-    const pestana = within(screen.getByRole('tabpanel', { name: 'Entregas' }))
+    const pestana = within(screen.getByRole('region', { name: 'Entregas' }))
     const aviso = await pestana.findByText(
       'El período 2026-1 terminó el 30-06-2026. No se pueden crear actividades nuevas en este curso.',
     )
