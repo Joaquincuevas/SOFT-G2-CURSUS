@@ -5,7 +5,7 @@ import type {
   Rol,
   SeccionResumen,
 } from '@cursus/shared'
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, waitFor, screen, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
@@ -446,9 +446,12 @@ describe('NOT-03: edición de evaluaciones', () => {
     )
     expect(form.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
     fireEvent.click(form.getByRole('button', { name: 'Cancelar' }))
-    expect(
-      screen.queryByRole('button', { name: 'Editar Control 1' }),
-    ).not.toBeInTheDocument()
+    // La lista se vuelve a pedir tras el 409: espera a que llegue.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Editar Control 1' }),
+      ).not.toBeInTheDocument(),
+    )
   })
 })
 
