@@ -142,6 +142,14 @@ async function completar(campos: {
 }
 
 describe('pestaña Entregas (MAT-08)', () => {
+  test('al alumno le muestra primero las abiertas y al final las cerradas', async () => {
+    const { panel } = await abrirEntregas('ALUMNO')
+    await panel.findByRole('article', { name: 'Informe 1' })
+    expect(
+      panel.getAllByRole('article').map((a) => a.getAttribute('aria-label')),
+    ).toEqual(['Informe 2', 'Informe 1'])
+  })
+
   test('lista las actividades con su plazo en hora de Chile y su estado', async () => {
     const { panel } = await abrirEntregas('ALUMNO')
 
@@ -149,14 +157,14 @@ describe('pestaña Entregas (MAT-08)', () => {
       await panel.findByRole('article', { name: 'Informe 1' }),
     )
     expect(informe1.getByText('Cerrada')).toBeInTheDocument()
-    expect(informe1.getByText('Plazo: 30-09-2026, 23:59')).toBeInTheDocument()
+    expect(informe1.getByText('30-09-2026 23:59')).toBeInTheDocument()
     expect(
       informe1.getByText(/Entregar en PDF\.\s+Máximo 5 páginas\./),
     ).toBeInTheDocument()
 
     const informe2 = within(panel.getByRole('article', { name: 'Informe 2' }))
     expect(informe2.getByText('Abierta')).toBeInTheDocument()
-    expect(informe2.getByText('Plazo: 14-11-2026, 23:59')).toBeInTheDocument()
+    expect(informe2.getByText('14-11-2026 23:59')).toBeInTheDocument()
   })
 
   test('el profesor crea una actividad: envía los cuatro campos y vuelve a pedir la lista', async () => {
