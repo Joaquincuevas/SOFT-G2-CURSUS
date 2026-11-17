@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useContext, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
 import { AlertaAcceso } from '@/components/AlertaAcceso'
 import { AuthLayout } from '@/components/AuthLayout'
@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Cargando } from '../components/Cargando'
 import { AVISO_SESION_EXPIRADA, useAuth, type ResultadoMfa } from '../auth/auth'
+import { destinoTrasLogin } from '../auth/retorno'
+import { SessionContext } from '../session/session'
 
 const MENSAJE_EXPIRADO =
   'La verificación expiró. Vuelve a ingresar tu correo y contraseña.'
@@ -30,7 +33,8 @@ function TarjetaAcceso({ children }: { children: React.ReactNode }) {
 
 // Pantalla de login del Figma (nodo 66:2).
 export function Login() {
-  const { token, aviso, iniciarSesion, completarMfa } = useAuth()
+  const { token, aviso, mismoUsuario, iniciarSesion, completarMfa } = useAuth()
+  const sesion = useContext(SessionContext)
   const location = useLocation()
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,10 +48,17 @@ export function Login() {
   const correoRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
 
-  // Al iniciar sesión vuelve a la ruta que pidió RequireAuth, o al Dashboard.
+  // Con la sesión lista vuelve a la ruta que pidió RequireAuth si corresponde
+  // (ver destinoTrasLogin); si no, al Dashboard.
   if (token) {
-    const destino = (location.state as { from?: string } | null)?.from ?? '/'
-    return <Navigate to={destino} replace />
+    if (!sesion) return <Cargando pantallaCompleta />
+    const { from } = (location.state as { from?: unknown } | null) ?? {}
+    return (
+      <Navigate
+        to={destinoTrasLogin(from, mismoUsuario, sesion.ability)}
+        replace
+      />
+    )
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
