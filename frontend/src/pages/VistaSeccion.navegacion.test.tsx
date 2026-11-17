@@ -67,7 +67,8 @@ describe('el menú del curso al pasar de una sección a otra', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ir a B' }))
     // Estado intermedio: B todavía no llega. Nada del curso A en el menú, ni
     // enlaces del curso con el id de B.
-    expect(await screen.findByText('Cargando…')).toBeInTheDocument()
+    // Cargando en la página y en el esqueleto del breadcrumb.
+    expect((await screen.findAllByText('Cargando…')).length).toBeGreaterThan(0)
     expect(menu()).toBeNull()
     expect(screen.queryByRole('region', { name: 'Vista del curso' })).toBeNull()
     expect(

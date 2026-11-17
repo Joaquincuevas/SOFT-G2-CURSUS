@@ -46,6 +46,7 @@ Documentación del proyecto:
 - [UI/UX-09: experiencia del Superadmin con shadcn](ui-09-superadmin.md)
 - [Entorno de curso del profesor: pulido estilo Canvas](ui-curso-profesor.md)
 - [Vistas del Director: búsqueda y filtros](ui-director-filtros.md)
+- [Breadcrumb completo del encabezado](ui-breadcrumbs.md)
 - [UI/UX-05: experiencia del alumno](uix-05-alumno.md)
 - [UI/UX-06: experiencia del profesor y el ayudante](uix-06-docentes.md)
 - [UI/UX-07: experiencia del Administrativo](uix-07-administrativo.md)

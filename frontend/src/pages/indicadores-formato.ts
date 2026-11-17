@@ -36,3 +36,16 @@ export function usePeriodoDeLaUrl() {
 // pasar el mouse) y foco visible con el teclado.
 export const ENLACE =
   'rounded-sm font-medium text-primary no-underline underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
+
+// Nombre de un paso del breadcrumb que sale de una consulta: null mientras está
+// pendiente (el encabezado dibuja un esqueleto); si falló o la URL no la
+// permite (un período inválido no la pide), una etiqueta de respaldo.
+export function nombrePaso<T>(
+  datos: T | null | undefined,
+  valido: boolean,
+  respaldo: string,
+  nombre: (datos: T) => string,
+): string | null {
+  if (!valido || datos === null) return respaldo
+  return datos === undefined ? null : nombre(datos)
+}

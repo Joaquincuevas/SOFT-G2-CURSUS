@@ -166,12 +166,20 @@ describe('Dashboard: nueva universidad (GES-23)', () => {
       }),
     )
 
+    // El título es el nombre de la universidad y «Administrar universidad» es
+    // el paso anterior del breadcrumb.
     expect(
       await screen.findByRole('heading', {
         level: 1,
-        name: 'Administrar universidad',
+        name: 'Universidad Demo Norte',
       }),
     ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole(
+        'link',
+        { name: 'Administrar universidad' },
+      ),
+    ).toHaveAttribute('href', '/superadmin')
   })
 })
 

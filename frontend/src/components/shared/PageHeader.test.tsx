@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, test } from 'vitest'
-import { MigasContext, useMigasDinamica } from '../../layout/migas-contexto'
+import { MigasContext, useMigasCola } from '../../layout/migas-contexto'
 import { MigasProvider } from '../../layout/MigasProvider'
 import { PageHeader } from './PageHeader'
 
@@ -16,8 +16,8 @@ function ConEncabezado({
   return (
     <MigasContext
       value={{
-        dinamica: null,
-        fijarDinamica: () => {},
+        cola: null,
+        fijarCola: () => {},
         actual,
         fijarActual: () => {},
       }}
@@ -90,7 +90,11 @@ describe('PageHeader', () => {
 
   test('miga registra el nombre de la página en el breadcrumb mientras está montada', () => {
     function Sonda() {
-      return <p data-testid="miga">{useMigasDinamica() ?? 'sin nombre'}</p>
+      return (
+        <p data-testid="miga">
+          {useMigasCola()?.[0]?.etiqueta ?? 'sin nombre'}
+        </p>
+      )
     }
     const { unmount } = render(
       <MigasProvider>
@@ -104,7 +108,11 @@ describe('PageHeader', () => {
 
   test('sin miga no pisa el nombre que puso otra parte de la página', () => {
     function Sonda() {
-      return <p data-testid="miga">{useMigasDinamica() ?? 'sin nombre'}</p>
+      return (
+        <p data-testid="miga">
+          {useMigasCola()?.[0]?.etiqueta ?? 'sin nombre'}
+        </p>
+      )
     }
     render(
       <MigasProvider>

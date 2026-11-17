@@ -25,6 +25,7 @@ import { usePuede } from '../session/session'
 import { AgregarAlumnoDialogo } from './AgregarAlumno'
 import { CargarAlumnosCsvDialogo } from './CargarAlumnosCsv'
 import { useDatos } from './useDatos'
+import { useMigas } from '../layout/migas-contexto'
 
 const TIPOS: { rol: RolIntegrante; nombre: string }[] = [
   { rol: 'PROFESOR', nombre: 'Profesores' },
@@ -44,6 +45,19 @@ export function IntegrantesSeccion() {
 function Integrantes({ id }: { id: string }) {
   const [datos, recargar, status, fijar] = useDatos<DatosIntegrantes>(
     `/api/secciones/${id}/integrantes`,
+  )
+  useMigas(
+    datos === undefined
+      ? null
+      : datos
+        ? [
+            {
+              etiqueta: `${datos.seccion.curso.codigo} · Sección ${datos.seccion.numero}`,
+              to: `/cursos/${datos.seccion.curso.id}`,
+            },
+            { etiqueta: 'Integrantes' },
+          ]
+        : [{ etiqueta: 'Integrantes' }],
   )
   const [parametros, cambiarParametros] = useSearchParams()
   const rol =
