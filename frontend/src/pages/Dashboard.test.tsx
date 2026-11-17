@@ -57,13 +57,14 @@ const resumen = (
   }),
 })
 
-// Enlace al curso de cada tarjeta (sin los accesos a sus pestañas).
+// Enlace al curso de cada tarjeta (sin el aviso de pendientes, que es otro
+// enlace).
 const tarjetas = async () =>
   (
     await within(
       await screen.findByRole('list', { name: 'Secciones del período activo' }),
     ).findAllByRole('link')
-  ).filter((enlace) => !enlace.getAttribute('href')?.includes('?'))
+  ).filter((enlace) => enlace.hasAttribute('data-tarjeta'))
 const tarjetaDe = (enlace: HTMLElement) => enlace.closest('li') as HTMLElement
 
 describe('dashboard del profesor (ESP-01)', () => {

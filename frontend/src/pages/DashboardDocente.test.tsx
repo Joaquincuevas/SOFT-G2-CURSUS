@@ -94,8 +94,10 @@ const bloque = async (nombre: string) =>
   within(await screen.findByRole('region', { name: nombre }))
 
 describe('dashboard docente: tarjetas de curso', () => {
-  test('alumnos, horario y accesos directos a las pestañas del curso', async () => {
-    await abrir({})
+  test('la tarjeta es un enlace al Home del curso, con alumnos y horario y sin botones de ícono', async () => {
+    await abrir({
+      [RUTA]: () => [{ ...PROFESOR[0], pendientesRevision: 1 }, PROFESOR[1]],
+    })
     const lista = within(
       await screen.findByRole('list', { name: 'Secciones del período activo' }),
     )
@@ -103,26 +105,28 @@ describe('dashboard docente: tarjetas de curso', () => {
     expect(
       lista.getByRole('list', { name: 'Horario de ICC101' }),
     ).toHaveTextContent('Lunes 08:30–10:00 · Sala A-101')
-    const accesos = within(
-      lista.getByRole('group', { name: 'Accesos de ICC101' }),
+    // Sin la fila de accesos con íconos.
+    expect(lista.queryByRole('group', { name: /^Accesos de/ })).toBeNull()
+    expect(lista.queryByRole('link', { name: /de ICC101$/ })).toBeNull()
+    // El nombre del curso es el enlace de la tarjeta: se estira sobre toda ella
+    // y se usa con el teclado (foco visible en la tarjeta).
+    const enlace = lista.getByRole('link', {
+      name: 'Introducción a la Programación',
+    })
+    expect(enlace).toHaveAttribute('href', '/mis-cursos/secciones/s1')
+    expect(enlace.className).toContain('after:inset-0')
+    expect(enlace.closest('[data-slot=card]')?.className).toContain(
+      'has-[a[data-tarjeta]:focus-visible]:ring-2',
     )
-    expect(
-      accesos
-        .getAllByRole('link')
-        .map((a) => [a.getAttribute('aria-label'), a.getAttribute('href')]),
-    ).toEqual(
-      [
-        'anuncios',
-        'material',
-        'entregas',
-        'notas',
-        'asistencia',
-        'integrantes',
-      ].map((v) => [
-        `${v[0].toUpperCase()}${v.slice(1)} de ICC101`,
-        `/mis-cursos/secciones/s1?vista=${v}`,
-      ]),
+    // El aviso de pendientes es su propio enlace, por encima de la tarjeta.
+    const pendientes = lista.getByRole('link', {
+      name: '1 evaluación pendiente de revisión',
+    })
+    expect(pendientes).toHaveAttribute(
+      'href',
+      '/mis-cursos/pendientes-revision',
     )
+    expect(pendientes.className).toContain('z-10')
   })
 
   test('«Por revisar» se conserva para el profesor', async () => {

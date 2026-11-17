@@ -72,10 +72,8 @@ describe('ESP-03: dashboard del alumno', () => {
     expect((await tarjetas())[0]).toHaveTextContent('1 anuncio nuevo')
     leido = true
     registrar(new Response(null, { status: 204 }))
-    await waitFor(() =>
-      expect(screen.getByRole('link', { name: /ICC101/ })).toHaveTextContent(
-        '0 anuncios nuevos',
-      ),
+    await waitFor(async () =>
+      expect((await tarjetas())[0]).toHaveTextContent('0 anuncios nuevos'),
     )
   })
 

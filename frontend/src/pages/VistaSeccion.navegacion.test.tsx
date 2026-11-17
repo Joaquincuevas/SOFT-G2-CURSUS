@@ -36,7 +36,7 @@ function IrAB() {
 const menu = () =>
   within(
     screen.getByRole('navigation', { name: 'Navegación principal' }),
-  ).queryByRole('listitem', { name: /Menú del curso/ })
+  ).queryByRole('list', { name: /^Vistas de / })
 
 describe('el menú del curso al pasar de una sección a otra', () => {
   test('mientras llega el resumen de B no muestra el nombre de A con los enlaces de B', async () => {
@@ -61,7 +61,7 @@ describe('el menú del curso al pasar de una sección a otra', () => {
     expect(
       await within(
         await screen.findByRole('navigation', { name: 'Navegación principal' }),
-      ).findByRole('listitem', { name: /Menú del curso AAA101/ }),
+      ).findByRole('list', { name: 'Vistas de AAA101' }),
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Ir a B' }))
@@ -79,12 +79,16 @@ describe('el menú del curso al pasar de una sección a otra', () => {
     const bloque = within(
       await within(
         screen.getByRole('navigation', { name: 'Navegación principal' }),
-      ).findByRole('listitem', { name: /Menú del curso BBB202/ }),
+      ).findByRole('list', { name: 'Vistas de BBB202' }),
     )
     expect(bloque.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
       '/mis-cursos/secciones/seccion-b',
     )
-    expect(bloque.getByText(/Sección 2/)).toBeInTheDocument()
+    expect(
+      within(
+        screen.getByRole('navigation', { name: 'Navegación principal' }),
+      ).getByRole('link', { name: /^BBB202 · Curso BBB202/ }),
+    ).toHaveTextContent('Sección 2')
   })
 })
