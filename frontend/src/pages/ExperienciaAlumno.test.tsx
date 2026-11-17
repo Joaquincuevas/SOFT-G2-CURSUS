@@ -67,24 +67,33 @@ describe('UI/UX-05 · pantallas del alumno', () => {
     expect(docente).not.toHaveBeenCalled()
   })
 
-  test('Integrantes lista solo el equipo docente y no consulta la nómina', async () => {
+  test('Académicos lista solo el equipo docente y no consulta la nómina', async () => {
     const alumnos = vi.fn(() => ({ total: 0, alumnos: [] }))
     await renderConSesion('ALUMNO', VISTA + '?vista=integrantes', {
       [API + '/resumen']: () => SECCION,
       [API + '/alumnos']: alumnos,
     })
     const equipo = within(
-      await screen.findByRole('region', { name: 'Equipo docente' }),
+      await screen.findByRole('region', { name: 'Académicos' }),
     )
     expect(equipo.getByRole('heading', { name: 'Profesores' })).toBeVisible()
-    expect(
-      equipo.getAllByRole('listitem').map((persona) => persona.textContent),
-    ).toEqual(['Matías Muñoz', 'Camila Rojas', 'Vicente Silva'])
+    // Cada persona con su rol, y un solo título: «Académicos».
+    const personas = equipo.getAllByRole('listitem')
+    expect(personas).toHaveLength(3)
+    expect(personas.map((p) => p.textContent)).toEqual([
+      expect.stringContaining('Matías Muñoz'),
+      expect.stringContaining('Camila Rojas'),
+      expect.stringContaining('Vicente Silva'),
+    ])
+    expect(within(personas[0]).getByText('Profesor')).toBeVisible()
+    expect(within(personas[2]).getByText('Ayudante')).toBeVisible()
+    expect(equipo.getByText('MM')).toBeInTheDocument()
+    expect(equipo.queryByRole('heading', { name: 'Equipo docente' })).toBeNull()
     expect(screen.queryByRole('list', { name: 'Alumnos inscritos' })).toBeNull()
     expect(alumnos).not.toHaveBeenCalled()
   })
 
-  test('Integrantes explica cuando aún no hay docentes asignados', async () => {
+  test('Académicos explica cuando aún no hay docentes asignados', async () => {
     await renderConSesion('ALUMNO', VISTA + '?vista=integrantes', {
       [API + '/resumen']: () => ({
         ...SECCION,
@@ -94,7 +103,7 @@ describe('UI/UX-05 · pantallas del alumno', () => {
       }),
     })
     const equipo = within(
-      await screen.findByRole('region', { name: 'Equipo docente' }),
+      await screen.findByRole('region', { name: 'Académicos' }),
     )
     expect(equipo.getByText('Sin profesor asignado')).toBeVisible()
     expect(equipo.getByText('Sin ayudantes asignados')).toBeVisible()
