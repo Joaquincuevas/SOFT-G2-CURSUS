@@ -15,10 +15,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useSession } from '../session/session'
 import { RUTA_HISTORIAL } from './HistorialAlumno'
-import { RUTA_SECCIONES_ALUMNO } from './SeccionesAlumno'
 import { ENLACE } from './indicadores-formato'
 import { nombresProfesores, rutaSeccion, textoBloque } from './misSecciones'
-import { useDatos } from './useDatos'
+import { useMisSecciones } from '../layout/secciones-contexto'
 
 // Una fila por inscripción activa del alumno en el período activo.
 const normalizar = (texto: string) =>
@@ -52,7 +51,7 @@ const aFila = (s: SeccionAlumno): Fila => ({
 export function ListaMisCursos() {
   const { user } = useSession()
   const navegar = useNavigate()
-  const [respuesta, recargar] = useDatos<SeccionAlumno[]>(RUTA_SECCIONES_ALUMNO)
+  const [respuesta, recargar] = useMisSecciones<SeccionAlumno>(true)
   const [busqueda, setBusqueda] = useState('')
 
   const todas = useMemo(() => respuesta?.map(aFila), [respuesta])

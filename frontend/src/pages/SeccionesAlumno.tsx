@@ -1,5 +1,4 @@
 import type { SeccionAlumno } from '@cursus/shared'
-import { useEffect } from 'react'
 import { Link } from 'react-router'
 import {
   ArrowUpRight,
@@ -17,18 +16,15 @@ import {
   textoBloque,
   textoProfesores,
 } from './misSecciones'
+import { useMisSecciones } from '../layout/secciones-contexto'
 import { RUTA_HISTORIAL } from './HistorialAlumno'
-import { useDatos } from './useDatos'
-import { EVENTO_LECTURA_ANUNCIOS } from './anuncios'
 
 export const RUTA_SECCIONES_ALUMNO = '/api/dashboard/secciones-alumno'
 
 export function SeccionesAlumno() {
-  const [secciones, recargar] = useDatos<SeccionAlumno[]>(RUTA_SECCIONES_ALUMNO)
-  useEffect(() => {
-    window.addEventListener(EVENTO_LECTURA_ANUNCIOS, recargar)
-    return () => window.removeEventListener(EVENTO_LECTURA_ANUNCIOS, recargar)
-  }, [recargar])
+  // Las mismas secciones del menú lateral; se vuelven a pedir al volver al
+  // Dashboard (y al leer anuncios) para actualizar «anuncios nuevos».
+  const [secciones, recargar] = useMisSecciones<SeccionAlumno>(true)
   return (
     <section
       className="grid min-w-0 gap-5"
