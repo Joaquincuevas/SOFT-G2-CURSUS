@@ -150,6 +150,18 @@ Fix de UI, sin tarjeta. En `/mis-cursos/secciones/:id` había dos menús: el lat
 
 Capturas en [`evidencias/`](evidencias/): `ui-menu-curso-<antes|despues>-<profesor|ayudante|alumno>-<1280|1280-colapsado|375|375-menu>.png`.
 
+## Ajustes del Alumno
+
+Fix de UI, sin tarjeta.
+
+- **Menú del curso:** el bloque del curso en el menú lateral (fix/ui-menu-curso-sidebar) suma un **selector para cambiar de curso**, con las secciones del período del usuario (las mismas del Dashboard), que abre la misma vista en la elegida. Dentro de una sección, «Mis Cursos» ya no se marca junto al ítem activo del curso.
+- **Académicos:** el profesor tiene «Integrantes» (equipo docente y nómina de alumnos). El alumno y el ayudante ven solo al equipo docente, así que para ellos la vista se llama «Académicos» (`etiquetaDeVista`). Un solo título (el resto es un subtítulo), con avatar de iniciales y rol por persona. El resumen de la sección solo trae nombres: no hay correo que mostrar.
+- **Entregas:** cada actividad es una ficha (`TarjetaActividad`) con título, estado (Abierta, Cerrada, Entregada), plazo `dd-mm-aaaa hh:mm` con cuenta regresiva («Vence en 6 días»; en rojo con menos de 24 horas o vencida) y la zona para soltar el archivo (`Dropzone` compartido). Acepta lo que valida el backend (sus extensiones y 20 MB). Estados: sin entrega, entregada (con «Reemplazar entrega» mientras esté abierta), vencida sin entrega (aviso, sin zona) y vencida con entrega (solo lectura). La entrega muestra su avance en cuatro pasos. Abiertas primero, por plazo; cerradas al final. No hay descarga de la entrega propia: el endpoint de descarga es del equipo docente.
+- **Estados vacíos:** Mi asistencia e Historial de notas usan `EmptyState`.
+- **Dashboard:** las tarjetas de curso ya eran un solo enlace al curso, sin íconos de acceso rápido.
+
+Capturas en [`evidencias/`](evidencias/): `ui-alumno-<antes|despues>-<pantalla>-<1280|375>.png` (dashboard, mis-cursos, home, anuncios, material, entregas, notas, asistencia, integrantes, historial) y `entregas-estados` (con datos simulados para mostrar los cinco estados).
+
 ## Evidencias
 
 Capturas antes y después en 1280, 1920 y 375 px de cada pestaña, y de los diálogos (subir material, sílabo, nuevo anuncio, crear actividad, calendario y período terminado), en [`evidencias/`](evidencias/) como `ui-curso-profesor-<antes|despues>-<estado>-<ancho>.png`. Los anuncios, materiales, versiones del sílabo y la actividad se crearon por la aplicación en la base local.

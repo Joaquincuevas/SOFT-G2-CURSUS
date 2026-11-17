@@ -8,32 +8,69 @@ import {
   type MiEntregaActividad,
   type SubidaArchivo,
 } from '@cursus/shared'
-import { useState, type FormEvent } from 'react'
+import {
+  CheckCircle2,
+  CircleAlert,
+  FileText,
+  Loader2,
+  Lock,
+} from 'lucide-react'
+import { useEffect, useEffectEvent, useState, type FormEvent } from 'react'
+import { Dropzone, ErrorState } from '@/components/shared'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
+import { tiempoRestante } from '../lib/fechas'
 import { useAuth } from '../auth/auth'
-import { Cargando } from '../components/Cargando'
-import { ErrorEstado } from '../components/ErrorEstado'
 import { useDatos } from './useDatos'
 
+// Fecha y hora en la zona de la universidad, de 0 a 23 (14-11-2026 23:59).
 const fechaHora = (iso: string) =>
-  new Date(iso).toLocaleString('es-CL', {
-    timeZone: ZONA_HORARIA_UNIVERSIDAD,
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  })
+  new Date(iso)
+    .toLocaleString('es-CL', {
+      timeZone: ZONA_HORARIA_UNIVERSIDAD,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+    .replace(',', '')
 const ACEPTA = Object.keys(TIPOS_ARCHIVO)
   .map((extension) => `.${extension}`)
   .join(',')
+// Lo que acepta el backend, sin inventar reglas: sus extensiones y 20 MB.
+const DESCRIPCION = `${Object.keys(TIPOS_ARCHIVO)
+  .map((extension) => extension.toUpperCase())
+  .join(', ')} · hasta 20 MB`
+const MENSAJE_ARCHIVO =
+  'Elige un archivo de un tipo permitido, de hasta 20 MB y que no esté vacío.'
+const validarArchivo = (archivo: File) =>
+  tipoDeArchivo(archivo.name) &&
+  archivo.size >= 1 &&
+  archivo.size <= TAMANO_MAXIMO_ARCHIVO
+    ? null
+    : MENSAJE_ARCHIVO
 
 class ErrorEntrega extends Error {}
 
-// Cada paso confirmado se conserva para reintentar sin volver a subir el
-// archivo. Solo el PUT final acredita la entrega; subir a S3 no basta.
-export function MiEntrega({
+// Pasos de la entrega, para mostrar el avance mientras se sube.
+const PASOS = [
+  'Preparando archivo…',
+  'Subiendo archivo…',
+  'Confirmando archivo…',
+  'Registrando entrega…',
+]
+
+// Una actividad de entrega del alumno, como ficha: título, estado, plazo con
+// su cuenta regresiva, instrucciones y su entrega (MiEntrega). Cada paso
+// confirmado se conserva para reintentar sin volver a subir el archivo. Solo
+// el PUT final acredita la entrega; subir a S3 no basta.
+export function TarjetaActividad({
   ruta,
   actividad,
 }: {
@@ -52,10 +89,44 @@ export function MiEntrega({
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [cerradaPorServidor, setCerradaPorServidor] = useState(false)
-  const cerrada = actividad.cerrada || datos?.cerrada || cerradaPorServidor
+  // El reloj local solo sirve para la cuenta regresiva y para pedir el estado
+  // al servidor cuando llega el plazo: quien decide si se puede entregar es el
+  // servidor (`cerrada`), porque el reloj del alumno puede estar adelantado o
+  // atrasado.
+  const [ahora, setAhora] = useState(() => Date.now())
+  const revalidar = useEffectEvent(() => recargar())
+  useEffect(() => {
+    const plazo = new Date(actividad.plazo).getTime()
+    const cadaMedioMinuto = setInterval(() => setAhora(Date.now()), 30_000)
+    const falta = plazo - Date.now()
+    // setTimeout no admite esperas de más de ~24 días: antes, el intervalo
+    // de arriba basta para que llegue el momento.
+    const alVencer =
+      falta > 0 && falta < 2_147_483_647
+        ? setTimeout(() => {
+            setAhora(Math.max(Date.now(), plazo))
+            revalidar()
+          }, falta)
+        : undefined
+    return () => {
+      clearInterval(cadaMedioMinuto)
+      clearTimeout(alVencer)
+    }
+  }, [actividad.plazo])
+  const cerrada = Boolean(
+    actividad.cerrada || datos?.cerrada || cerradaPorServidor,
+  )
   const ocupado = paso !== null
   const rutaArchivos =
     ruta.slice(0, ruta.indexOf('/actividades/')) + '/archivos'
+  // Según el reloj del alumno el plazo ya pasó, pero el servidor aún acepta
+  // entregas: no se dice que «venció» mientras se puede entregar.
+  const plazoCumplido = ahora >= new Date(actividad.plazo).getTime()
+  const restante =
+    plazoCumplido && !cerrada
+      ? { texto: 'Vence ahora', urgente: true }
+      : tiempoRestante(actividad.plazo, ahora)
+  const entregada = Boolean(datos?.entrega)
 
   async function pedir<T>(url: string, init: RequestInit): Promise<T> {
     const res = await fetchConSesion(url, init)
@@ -88,18 +159,7 @@ export function MiEntrega({
 
   async function entregar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const formulario = event.currentTarget
     if (!archivo || ocupado || cerrada) return
-    if (
-      !tipoDeArchivo(archivo.name) ||
-      archivo.size < 1 ||
-      archivo.size > TAMANO_MAXIMO_ARCHIVO
-    ) {
-      setError(
-        'Elige un archivo de un tipo permitido, de hasta 20 MB y que no esté vacío.',
-      )
-      return
-    }
     setError(null)
     setAviso(null)
     try {
@@ -152,7 +212,6 @@ export function MiEntrega({
       setSubida(null)
       setSubido(false)
       setConfirmado(null)
-      formulario.reset()
     } catch (fallo) {
       setError(
         fallo instanceof ErrorEntrega
@@ -164,91 +223,195 @@ export function MiEntrega({
     }
   }
 
-  if (datos === undefined) return <Cargando texto="Cargando mi entrega…" />
-  if (datos === null)
-    return (
-      <ErrorEstado
-        mensaje="No pudimos cargar tu entrega."
-        onReintentar={recargar}
-      />
-    )
+  const estado = entregada ? 'Entregada' : cerrada ? 'Cerrada' : 'Abierta'
+  const avance = paso ? PASOS.indexOf(paso) + 1 : 0
+
   return (
-    <section
-      className="entregas__propia"
-      aria-label={`Mi entrega de ${actividad.titulo}`}
-    >
-      {datos.entrega ? (
-        <div className="entregas__confirmacion">
-          <p>
-            <strong>Informe entregado</strong>: {datos.entrega.archivo.nombre}
-          </p>
-          <p>
-            Fecha y hora de entrega:{' '}
-            <time dateTime={datos.entrega.entregadaEn}>
-              {fechaHora(datos.entrega.entregadaEn)}
-            </time>{' '}
-            (Chile continental)
-          </p>
-        </div>
-      ) : (
-        <p className="entregas__ayuda">Aún no has entregado tu informe.</p>
-      )}
-      {cerrada ? (
-        <p className="entregas__ayuda">
-          La actividad está cerrada. No se aceptan nuevas entregas ni
-          reemplazos.
-        </p>
-      ) : (
-        <form
-          aria-label={`Entregar informe de ${actividad.titulo}`}
-          className="entregas__informe"
-          onSubmit={(event) => void entregar(event)}
-        >
-          <label className="entregas__campo">
-            {datos.entrega ? 'Archivo de reemplazo' : 'Archivo del informe'}
-            <input
-              type="file"
-              accept={ACEPTA}
-              disabled={ocupado}
-              onChange={(event) => {
-                setArchivo(event.target.files?.[0] ?? null)
-                setSubida(null)
-                setSubido(false)
-                setConfirmado(null)
-                setError(null)
-                setAviso(null)
-              }}
-            />
-          </label>
-          <p className="entregas__ayuda">
-            Hasta 20 MB. Puedes reemplazar tu informe hasta el plazo. La entrega
-            se confirma al terminar la subida.
-          </p>
-          <button
-            type="submit"
-            className="entregas__boton"
-            disabled={!archivo || ocupado}
+    <Card className="gap-0 py-0">
+      <CardHeader className="gap-2 border-b px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h4 className="m-0 min-w-0 text-base font-semibold break-words text-foreground">
+            {actividad.titulo}
+          </h4>
+          <Badge
+            variant={entregada ? 'default' : 'secondary'}
+            className={cn(cerrada && !entregada && 'text-muted-foreground')}
           >
-            {paso ??
-              (datos.entrega ? 'Reemplazar entrega' : 'Entregar informe')}
-          </button>
-        </form>
-      )}
-      {aviso && (
-        <p className="entregas__aviso" role="status">
-          {aviso}
+            {estado}
+          </Badge>
+        </div>
+        <p className="m-0 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          <span>
+            Plazo:{' '}
+            <time dateTime={actividad.plazo} className="tabular-nums">
+              {fechaHora(actividad.plazo)}
+            </time>
+          </span>
+          {restante && (
+            <span
+              className={cn(
+                'font-medium',
+                restante.urgente ? 'text-destructive' : 'text-foreground',
+              )}
+            >
+              {restante.texto}
+            </span>
+          )}
         </p>
-      )}
-      {error && (
-        <p className="entregas__error" role="alert">
-          {error}
-        </p>
-      )}
-      {ocupado && (
-        <p className="entregas__ayuda" role="status">
-          {paso}
-        </p>
-      )}
-    </section>
+        {actividad.instrucciones && (
+          <p className="m-0 text-sm break-words whitespace-pre-line text-foreground">
+            {actividad.instrucciones}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent className="grid gap-4 px-5 py-4">
+        {datos === undefined ? (
+          <div role="status" className="grid gap-2">
+            <span className="sr-only">Cargando mi entrega…</span>
+            <Skeleton className="h-14 rounded-lg" />
+          </div>
+        ) : datos === null ? (
+          <ErrorState
+            mensaje="No pudimos cargar tu entrega."
+            onReintentar={recargar}
+          />
+        ) : (
+          <section
+            className="grid gap-4"
+            aria-label={`Mi entrega de ${actividad.titulo}`}
+          >
+            {datos.entrega ? (
+              <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+                <FileText
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-primary"
+                />
+                <div className="grid min-w-0 flex-1">
+                  <span className="text-sm font-medium break-all text-foreground">
+                    <strong>Informe entregado</strong>:{' '}
+                    {datos.entrega.archivo.nombre}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Entregado el{' '}
+                    <time dateTime={datos.entrega.entregadaEn}>
+                      {fechaHora(datos.entrega.entregadaEn)}
+                    </time>{' '}
+                    (Chile continental)
+                  </span>
+                </div>
+              </div>
+            ) : cerrada ? (
+              <Alert variant="danger">
+                <CircleAlert aria-hidden="true" />
+                <AlertDescription>
+                  No entregaste tu informe y la actividad está cerrada. No se
+                  aceptan nuevas entregas ni reemplazos.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">
+                Aún no has entregado tu informe.
+              </p>
+            )}
+            {cerrada && !ocupado ? (
+              datos.entrega && (
+                <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Lock aria-hidden="true" className="size-4" />
+                  La actividad está cerrada. No se aceptan nuevas entregas ni
+                  reemplazos.
+                </p>
+              )
+            ) : (
+              <form
+                aria-label={`Entregar informe de ${actividad.titulo}`}
+                className="grid gap-3"
+                onSubmit={(event) => void entregar(event)}
+              >
+                <div className="grid gap-1.5">
+                  <span className="text-sm font-medium text-foreground">
+                    {datos.entrega
+                      ? 'Archivo de reemplazo'
+                      : 'Archivo del informe'}
+                  </span>
+                  <Dropzone
+                    aria-label={
+                      datos.entrega
+                        ? 'Archivo de reemplazo'
+                        : 'Archivo del informe'
+                    }
+                    archivo={archivo}
+                    onArchivoChange={(nuevo) => {
+                      setArchivo(nuevo)
+                      setSubida(null)
+                      setSubido(false)
+                      setConfirmado(null)
+                      setError(null)
+                      setAviso(null)
+                    }}
+                    accept={ACEPTA}
+                    validar={validarArchivo}
+                    descripcion={DESCRIPCION}
+                    disabled={ocupado}
+                  />
+                  {datos.entrega && (
+                    <p className="m-0 text-xs text-muted-foreground">
+                      Reemplaza la versión anterior; vale la última que
+                      entregues antes del plazo.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Button type="submit" disabled={!archivo || ocupado}>
+                    {ocupado && (
+                      <Loader2
+                        aria-hidden="true"
+                        className="animate-spin motion-reduce:animate-none"
+                      />
+                    )}
+                    {paso ??
+                      (datos.entrega
+                        ? 'Reemplazar entrega'
+                        : 'Entregar informe')}
+                  </Button>
+                </div>
+                {ocupado && (
+                  <div
+                    role="status"
+                    className="grid gap-1.5 text-xs text-muted-foreground"
+                  >
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none"
+                        style={{ width: `${(avance / PASOS.length) * 100}%` }}
+                      />
+                    </div>
+                    <span>
+                      Paso {avance} de {PASOS.length}: {paso}
+                    </span>
+                  </div>
+                )}
+              </form>
+            )}
+            {aviso && (
+              <p
+                role="status"
+                className="m-0 flex items-center gap-2 text-sm font-medium text-foreground"
+              >
+                <CheckCircle2
+                  aria-hidden="true"
+                  className="size-4 text-primary"
+                />
+                {aviso}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </section>
+        )}
+      </CardContent>
+    </Card>
   )
 }

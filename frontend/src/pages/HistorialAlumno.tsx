@@ -3,6 +3,9 @@ import type {
   PeriodoHistorialAlumno,
 } from '@cursus/shared'
 import { Link, Navigate, useParams } from 'react-router'
+import { History } from 'lucide-react'
+import { EmptyState } from '@/components/shared'
+import { Card } from '@/components/ui/card'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
 import { useSession } from '../session/session'
@@ -39,10 +42,12 @@ function PeriodosAnteriores() {
           onReintentar={recargar}
         />
       ) : periodos.length === 0 ? (
-        <p className="dashboard__texto">
-          Aún no tienes notas publicadas de cursos cerrados de períodos
-          anteriores.
-        </p>
+        <Card className="py-0">
+          <EmptyState
+            icono={History}
+            mensaje="Aún no tienes notas publicadas de cursos cerrados de períodos anteriores."
+          />
+        </Card>
       ) : (
         periodos.map(({ periodo, cursos }) => (
           <section

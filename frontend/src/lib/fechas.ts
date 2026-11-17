@@ -42,3 +42,31 @@ export function formatearFechaHora(valor: Valor): string {
   const fecha = aFecha(valor)
   return fecha ? FECHA_Y_HORA.format(fecha).replace(',', '') : SIN_FECHA
 }
+
+const MINUTO = 60_000
+const HORA = 60 * MINUTO
+const DIA = 24 * HORA
+const plural = (n: number, singular: string, plural: string) =>
+  `${n} ${n === 1 ? singular : plural}`
+
+// Cuánto falta para un plazo: «Vence en 6 días», «Vence en 5 horas» o, si ya
+// pasó, «Venció hace 2 días». `urgente` es true si faltan menos de 24 horas o
+// ya venció. `ahora` se pasa para no leer el reloj en cada render.
+export function tiempoRestante(
+  plazo: Valor,
+  ahora: number,
+): { texto: string; urgente: boolean } | null {
+  const fecha = aFecha(plazo)
+  if (!fecha) return null
+  const diferencia = fecha.getTime() - ahora
+  const abs = Math.abs(diferencia)
+  const medida =
+    abs >= DIA
+      ? plural(Math.floor(abs / DIA), 'día', 'días')
+      : abs >= HORA
+        ? plural(Math.floor(abs / HORA), 'hora', 'horas')
+        : plural(Math.max(1, Math.floor(abs / MINUTO)), 'minuto', 'minutos')
+  return diferencia <= 0
+    ? { texto: `Venció hace ${medida}`, urgente: true }
+    : { texto: `Vence en ${medida}`, urgente: diferencia < DIA }
+}

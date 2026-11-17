@@ -402,29 +402,33 @@ describe('layout de curso (UIX-04)', () => {
     expect(await pestana('Home')).toHaveAttribute('aria-current', 'page')
   })
 
-  test('Integrantes muestra el equipo docente a todos y los alumnos solo al profesor', async () => {
+  test('el alumno ve «Académicos»: solo el equipo docente, sin la nómina', async () => {
     await renderConSesion(
       'ALUMNO',
       `${VISTA}?vista=integrantes`,
       rutas('ALUMNO'),
     )
     const panel = within(
-      await screen.findByRole('region', { name: 'Integrantes' }),
+      await screen.findByRole('region', { name: 'Académicos' }),
     )
     expect(panel.getByText('Diego Muñoz')).toBeInTheDocument()
+    // El breadcrumb también dice «Académicos» para el alumno.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Académicos' }),
+    ).toBeInTheDocument()
     expect(panel.queryByRole('region', { name: /^Alumnos/ })).toBeNull()
   })
 
-  test('el ayudante ve los integrantes en solo lectura y no recibe la nómina', async () => {
+  test('el ayudante ve «Académicos» en solo lectura y no recibe la nómina', async () => {
     await renderConSesion(
       'AYUDANTE',
       `${VISTA}?vista=integrantes`,
       rutas('AYUDANTE'),
     )
     const panel = within(
-      await screen.findByRole('region', { name: 'Integrantes' }),
+      await screen.findByRole('region', { name: 'Académicos' }),
     )
-    expect(panel.getByText('Integrantes en solo lectura')).toBeVisible()
+    expect(panel.getByText('Solo equipo docente')).toBeVisible()
     expect(panel.getByText('Diego Muñoz')).toBeVisible()
     expect(panel.queryByRole('table', { name: 'Alumnos inscritos' })).toBeNull()
   })
@@ -472,7 +476,9 @@ describe('layout de curso (UIX-04)', () => {
         'Entregas',
         'Notas',
         'Asistencia',
-        'Integrantes',
+        // El profesor también ve la nómina de alumnos; el ayudante y el
+        // alumno, solo el equipo docente.
+        rol === 'PROFESOR' ? 'Integrantes' : 'Académicos',
       ])
       expect(items.map((t) => t.getAttribute('href'))).toEqual([
         VISTA,
@@ -485,6 +491,88 @@ describe('layout de curso (UIX-04)', () => {
       ])
     },
   )
+
+  test('el selector cambia de curso conservando la vista abierta', async () => {
+    const otra: SeccionResumen = {
+      ...RESUMEN,
+      id: 'seccion-2',
+      numero: 2,
+      curso: {
+        id: 'curso-2',
+        codigo: 'ICC201',
+        nombre: 'Estructuras de Datos',
+      },
+      rol: 'ALUMNO',
+    }
+    await renderConSesion('ALUMNO', `${VISTA}?vista=anuncios`, {
+      ...rutas('ALUMNO'),
+      '/api/dashboard/secciones-alumno': () => [
+        {
+          id: 'seccion-1',
+          numero: 1,
+          curso: RESUMEN.curso,
+          horario: [],
+          profesor: null,
+          profesores: [],
+          anunciosNuevos: 0,
+        },
+        {
+          id: 'seccion-2',
+          numero: 2,
+          curso: otra.curso,
+          horario: [],
+          profesor: null,
+          profesores: [],
+          anunciosNuevos: 0,
+        },
+      ],
+      '/api/espacio/secciones/seccion-2/resumen': () => otra,
+      '/api/espacio/secciones/seccion-2/anuncios': () => [],
+    })
+    const selector = await within(await menuDelCurso()).findByRole('combobox', {
+      name: 'Cambiar de curso',
+    })
+    expect(
+      within(selector)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['ICC101 · Sección 1', 'ICC201 · Sección 2'])
+    expect(selector).toHaveValue('seccion-1')
+    fireEvent.change(selector, { target: { value: 'seccion-2' } })
+    // El breadcrumb termina en la vista abierta («Anuncios») y la sección
+    // nueva es el paso anterior; el menú pasa al curso nuevo.
+    expect(
+      await within(
+        screen.getByRole('navigation', { name: 'Breadcrumb' }),
+      ).findByRole('link', { name: 'ICC201 · Sección 2' }),
+    ).toHaveAttribute('href', '/mis-cursos/secciones/seccion-2')
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Anuncios' }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('listitem', { name: /Menú del curso ICC201/ }),
+    ).toBeInTheDocument()
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('dentro de una sección «Mis Cursos» no se marca junto al ítem activo del curso', async () => {
+    await renderConSesion('ALUMNO', `${VISTA}?vista=anuncios`, rutas('ALUMNO'))
+    await menuDelCurso()
+    const nav = screen.getByRole('navigation', { name: 'Navegación principal' })
+    expect(
+      within(nav).getByRole('link', { name: 'Mis Cursos' }),
+    ).not.toHaveAttribute('aria-current')
+    expect(await pestana('Anuncios')).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('con un solo curso no hay selector', async () => {
+    await renderConSesion('ALUMNO', VISTA, {
+      ...rutas('ALUMNO'),
+      '/api/dashboard/secciones-alumno': () => [],
+    })
+    const menu = await menuDelCurso()
+    expect(within(menu).queryByRole('combobox')).toBeNull()
+  })
 
   test('el menú lleva el curso, la sección y un enlace de vuelta al Dashboard, bajo el ítem Dashboard', async () => {
     await renderConSesion('PROFESOR', VISTA, rutas())

@@ -25,7 +25,7 @@ const RESUMEN: SeccionResumen = {
 }
 
 // Plazos en UTC: 2026-10-01T02:59Z es el 30-09-2026 a las 23:59 en Chile
-// (UTC-3); 2026-11-15T02:59Z, el 14-11-2026 a las 23:59.
+// (UTC-3); 2030-11-15T02:59Z, el 14-11-2030 a las 23:59.
 const LISTA: Actividad[] = [
   {
     id: 'a1',
@@ -38,7 +38,7 @@ const LISTA: Actividad[] = [
     id: 'a2',
     titulo: 'Informe 2',
     instrucciones: 'Incluir anexos.',
-    plazo: '2026-11-15T02:59:00.000Z',
+    plazo: '2030-11-15T02:59:00.000Z',
     cerrada: false,
   },
 ]
@@ -142,6 +142,16 @@ async function completar(campos: {
 }
 
 describe('pestaña Entregas (MAT-08)', () => {
+  test('al alumno le muestra primero las abiertas y al final las cerradas', async () => {
+    const { panel } = await abrirEntregas('ALUMNO')
+    await panel.findByRole('article', { name: 'Informe 1' })
+    expect(
+      panel
+        .getAllByRole('article')
+        .map((a: HTMLElement) => a.getAttribute('aria-label')),
+    ).toEqual(['Informe 2', 'Informe 1'])
+  })
+
   test('lista las actividades con su plazo en hora de Chile y su estado', async () => {
     const { panel } = await abrirEntregas('ALUMNO')
 
@@ -149,14 +159,14 @@ describe('pestaña Entregas (MAT-08)', () => {
       await panel.findByRole('article', { name: 'Informe 1' }),
     )
     expect(informe1.getByText('Cerrada')).toBeInTheDocument()
-    expect(informe1.getByText('Plazo: 30-09-2026, 23:59')).toBeInTheDocument()
+    expect(informe1.getByText('30-09-2026 23:59')).toBeInTheDocument()
     expect(
       informe1.getByText(/Entregar en PDF\.\s+Máximo 5 páginas\./),
     ).toBeInTheDocument()
 
     const informe2 = within(panel.getByRole('article', { name: 'Informe 2' }))
     expect(informe2.getByText('Abierta')).toBeInTheDocument()
-    expect(informe2.getByText('Plazo: 14-11-2026, 23:59')).toBeInTheDocument()
+    expect(informe2.getByText('14-11-2030 23:59')).toBeInTheDocument()
   })
 
   test('el profesor crea una actividad: envía los cuatro campos y vuelve a pedir la lista', async () => {
