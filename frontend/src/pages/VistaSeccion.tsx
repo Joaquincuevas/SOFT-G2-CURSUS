@@ -69,9 +69,13 @@ export function VistaSeccion() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const [publicaciones, setPublicaciones] = useState(0)
-  const [seccion, recargar, status] = useDatos<SeccionResumen>(
+  const [resumen, recargar, status] = useDatos<SeccionResumen>(
     `/api/espacio/secciones/${id}/resumen`,
   )
+  // Al pasar de una sección a otra, useDatos conserva el resumen de la anterior
+  // mientras llega el nuevo: hasta entonces la sección se trata como cargando,
+  // para no mezclar su nombre con el id de la que se abrió.
+  const seccion = resumen && resumen.id !== id ? undefined : resumen
   const vistaPedida = params.get('vista')
   // El encabezado nombra la sección en su breadcrumb.
   useEtiquetaDeMiga(
