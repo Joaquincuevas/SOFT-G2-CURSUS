@@ -120,6 +120,12 @@ describe('verificarReinicio', () => {
     )
   })
 
+  it('exige el nombre de la base que se reinicia', () => {
+    expect(() => verificarReinicio({ SEED_RESET: 'true' })).toThrow(
+      /POSTGRES_DB/,
+    )
+  })
+
   it('nunca corre sobre la base de producción', () => {
     expect(() =>
       verificarReinicio({

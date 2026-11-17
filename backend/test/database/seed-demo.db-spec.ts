@@ -285,6 +285,23 @@ describe('seed de demo', () => {
     expect(await conteos()).toEqual(antes)
   })
 
+  it('se detiene antes de modificar datos si la base conectada no es la configurada', async () => {
+    const antes = await conteos()
+    // El DataSource está conectado a BD_TEST, pero la configuración autoriza
+    // otra base.
+    await expect(
+      sembrar(
+        { reiniciar: true },
+        { NODE_ENV: 'test', SEED_RESET: 'true', POSTGRES_DB: 'cursus_staging' },
+      ),
+    ).rejects.toThrow(/no es la de POSTGRES_DB \(cursus_staging\)/)
+    // Sin una base configurada tampoco reinicia.
+    await expect(
+      sembrar({ reiniciar: true }, { NODE_ENV: 'test', SEED_RESET: 'true' }),
+    ).rejects.toThrow(/POSTGRES_DB/)
+    expect(await conteos()).toEqual(antes)
+  })
+
   it(
     'el reinicio conserva al superadmin y su MFA, y deja solo los datos del seed',
     async () => {
@@ -305,7 +322,7 @@ describe('seed de demo', () => {
 
       await sembrar(
         { reiniciar: true },
-        { NODE_ENV: 'test', SEED_RESET: 'true' },
+        { NODE_ENV: 'test', SEED_RESET: 'true', POSTGRES_DB: BD_TEST },
       )
 
       const superadmins = await bd.query<{ id: string }[]>(
