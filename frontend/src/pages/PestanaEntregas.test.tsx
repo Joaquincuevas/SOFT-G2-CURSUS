@@ -8,6 +8,13 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { json, renderConSesion } from '../test/sesion'
 
+// La descarga en ZIP arma el archivo en el navegador (zipEntregas.test.ts la
+// prueba); aquí solo importa qué archivos recibe.
+const { descargarZipEntregas } = vi.hoisted(() => ({
+  descargarZipEntregas: vi.fn(),
+}))
+vi.mock('./zipEntregas', () => ({ descargarZipEntregas }))
+
 const VISTA = '/mis-cursos/secciones/seccion-1'
 const RESUMEN_RUTA = '/api/espacio/secciones/seccion-1/resumen'
 const ACTIVIDADES = '/api/espacio/secciones/seccion-1/actividades'
@@ -391,6 +398,50 @@ describe('entregas de una actividad para el equipo docente (MAT-10)', () => {
       'https://s3.test/informe?firma',
     )
     clic.mockRestore()
+  })
+
+  test('descarga todas las entregas en un ZIP y se cierra con Escape', async () => {
+    descargarZipEntregas.mockResolvedValue(undefined)
+    const archivos = [
+      { nombre: 'Ana Pérez - Informe.pdf', url: 'https://s3.test/informe' },
+    ]
+    const { panel } = await abrirEntregas('PROFESOR', SOLO_A2, {
+      [ENTREGAS]: () => ENTREGADAS,
+      [`${ENTREGAS}/zip`]: () => archivos,
+    })
+    await verEntregas()
+    fireEvent.click(
+      await panel.findByRole('button', { name: 'Descargar entregas en ZIP' }),
+    )
+    await waitFor(() =>
+      expect(descargarZipEntregas).toHaveBeenCalledWith(archivos),
+    )
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  test('el ZIP avisa si no hay entregas disponibles y si la descarga falla', async () => {
+    descargarZipEntregas.mockClear()
+    let intento = 0
+    const { panel } = await abrirEntregas('PROFESOR', SOLO_A2, {
+      [ENTREGAS]: () => ENTREGADAS,
+      [`${ENTREGAS}/zip`]: () => (++intento === 1 ? [] : json({}, 500)),
+    })
+    await verEntregas()
+    const boton = await panel.findByRole('button', {
+      name: 'Descargar entregas en ZIP',
+    })
+    fireEvent.click(boton)
+    expect(
+      await panel.findByText('No hay entregas disponibles para descargar.'),
+    ).toBeInTheDocument()
+    fireEvent.click(boton)
+    expect(
+      await panel.findByText(
+        'No pudimos descargar todas las entregas. Inténtalo nuevamente.',
+      ),
+    ).toBeInTheDocument()
+    expect(descargarZipEntregas).not.toHaveBeenCalled()
   })
 
   test('si la descarga falla muestra el error y desbloquea el botón', async () => {

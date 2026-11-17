@@ -1281,6 +1281,49 @@ describe('versiones de un material (MAT-07)', () => {
     click.mockRestore()
   })
 
+  test('valida el archivo antes de subir la versión y se cierra con Escape', async () => {
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [EXISTENTE],
+      [VERSIONES]: () => [V1],
+    })
+    const dialogo = await accion(material, 'Subir nueva versión')
+    const formulario = dialogo
+      .getByRole('button', { name: 'Subir nueva versión' })
+      .closest('form') as HTMLFormElement
+    fireEvent.submit(formulario)
+    expect(await dialogo.findByText('Elige un archivo')).toBeInTheDocument()
+
+    fireEvent.change(dialogo.getByLabelText('Nueva versión'), {
+      target: {
+        files: [new File([''], 'vacio.pdf', { type: 'application/pdf' })],
+      },
+    })
+    fireEvent.submit(formulario)
+    expect(
+      (await dialogo.findAllByText('El archivo está vacío')).length,
+    ).toBeGreaterThan(0)
+    expect(XhrFalso.enviadas).toHaveLength(0)
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  test('si la descarga de una versión falla, lo avisa en el historial', async () => {
+    const material = await abrir('PROFESOR', {
+      [MATERIALES]: () => [{ ...EXISTENTE, version: 2 }],
+      [VERSIONES]: () => [V2, V1],
+      [`${VERSIONES}/1/descarga`]: () => json({}, 500),
+    })
+    const dialogo = await accion(material, 'Historial de versiones')
+    const historial = await dialogo.findByRole('list', { name: 'Versiones' })
+    fireEvent.click(
+      within(historial).getByRole('button', { name: 'Descargar versión 1' }),
+    )
+    expect(
+      await dialogo.findByText('No pudimos descargar la versión 1.'),
+    ).toBeInTheDocument()
+  })
+
   test('si la subida a S3 falla a mitad del flujo, avisa, no registra y desbloquea', async () => {
     const registrar = vi.fn(() => json(V2, 201))
     const material = await abrir('PROFESOR', {
