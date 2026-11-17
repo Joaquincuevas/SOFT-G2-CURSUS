@@ -89,9 +89,10 @@ export function TarjetaActividad({
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [cerradaPorServidor, setCerradaPorServidor] = useState(false)
-  // El reloj avanza mientras la vista está abierta: la cuenta regresiva se
-  // actualiza y, al llegar el plazo, la actividad pasa a cerrada sin recargar
-  // la página (y se vuelve a pedir el estado al servidor).
+  // El reloj local solo sirve para la cuenta regresiva y para pedir el estado
+  // al servidor cuando llega el plazo: quien decide si se puede entregar es el
+  // servidor (`cerrada`), porque el reloj del alumno puede estar adelantado o
+  // atrasado.
   const [ahora, setAhora] = useState(() => Date.now())
   const revalidar = useEffectEvent(() => recargar())
   useEffect(() => {
@@ -112,13 +113,19 @@ export function TarjetaActividad({
       clearTimeout(alVencer)
     }
   }, [actividad.plazo])
-  const vencida = ahora >= new Date(actividad.plazo).getTime()
-  const cerrada =
-    actividad.cerrada || datos?.cerrada || cerradaPorServidor || vencida
+  const cerrada = Boolean(
+    actividad.cerrada || datos?.cerrada || cerradaPorServidor,
+  )
   const ocupado = paso !== null
   const rutaArchivos =
     ruta.slice(0, ruta.indexOf('/actividades/')) + '/archivos'
-  const restante = tiempoRestante(actividad.plazo, ahora)
+  // Según el reloj del alumno el plazo ya pasó, pero el servidor aún acepta
+  // entregas: no se dice que «venció» mientras se puede entregar.
+  const plazoCumplido = ahora >= new Date(actividad.plazo).getTime()
+  const restante =
+    plazoCumplido && !cerrada
+      ? { texto: 'Vence ahora', urgente: true }
+      : tiempoRestante(actividad.plazo, ahora)
   const entregada = Boolean(datos?.entrega)
 
   async function pedir<T>(url: string, init: RequestInit): Promise<T> {
