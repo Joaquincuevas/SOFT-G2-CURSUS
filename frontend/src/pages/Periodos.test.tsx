@@ -63,7 +63,10 @@ function preparar(
 }
 
 const abrirNuevo = async () => {
-  fireEvent.click(await screen.findByRole('button', { name: 'Nuevo período' }))
+  const boton = await screen.findByRole('button', { name: 'Nuevo período' })
+  // Deshabilitado hasta que llega el listado: un clic antes no abre nada.
+  await waitFor(() => expect(boton).toBeEnabled())
+  fireEvent.click(boton)
   return within(await screen.findByRole('dialog', { name: 'Nuevo período' }))
 }
 const llenar = (d: ReturnType<typeof within>) => {
