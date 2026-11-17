@@ -127,7 +127,7 @@ describe('MAT-09: entrega del alumno', () => {
     fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
     expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
     expect(panel.getByText(/Informe entregado/)).toBeInTheDocument()
-    expect(panel.getByText('11-11-2026, 12:01:42')).toHaveAttribute(
+    expect(panel.getByText('11-11-2026 12:01')).toHaveAttribute(
       'datetime',
       CONFIRMADA.entrega!.entregadaEn,
     )
@@ -221,7 +221,7 @@ describe('MAT-09: entrega del alumno', () => {
       'La actividad está cerrada',
     )
     expect(panel.queryByText('Entrega confirmada.')).not.toBeInTheDocument()
-    expect(panel.getByText('11-11-2026, 12:01:42')).toBeInTheDocument()
+    expect(panel.getByText('11-11-2026 12:01')).toBeInTheDocument()
     expect(panel.queryByRole('form')).not.toBeInTheDocument()
   })
   test('reintenta una confirmación fallida sin volver a subir a S3', async () => {
@@ -311,4 +311,137 @@ describe('MAT-09: entrega del alumno', () => {
       expect(peticiones().filter(([url]) => url === ENTREGA)).toHaveLength(0)
     },
   )
+})
+
+describe('ficha de la actividad (UI)', () => {
+  const dentroDe = (ms: number) => new Date(Date.now() + ms).toISOString()
+  const HORA = 3_600_000
+
+  test('abierta sin entrega: badge «Abierta», plazo con cuenta regresiva y zona para soltar el archivo', async () => {
+    const panel = await abrir(
+      {},
+      { ...ACTIVIDAD, plazo: dentroDe(6 * 24 * HORA + HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Abierta')).toBeInTheDocument()
+    expect(ficha.getByText('Vence en 6 días')).not.toHaveClass(
+      'text-destructive',
+    )
+    expect(panel.getByText('Aún no has entregado tu informe.')).toBeVisible()
+    expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+    expect(panel.getByText(/PDF.*· hasta 20 MB/)).toBeVisible()
+    // Sin archivo, no se puede entregar.
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeDisabled()
+  })
+
+  test('si faltan menos de 24 horas, el plazo se marca en rojo', async () => {
+    await abrir({}, { ...ACTIVIDAD, plazo: dentroDe(5 * HORA + 60_000) })
+    expect(screen.getByText('Vence en 5 horas')).toHaveClass('text-destructive')
+  })
+
+  test('con un archivo válido muestra su nombre y tamaño, habilita la entrega y se puede quitar', async () => {
+    const panel = await abrir()
+    elegir(panel)
+    expect(panel.getByText('Informe.pdf')).toBeVisible()
+    expect(panel.getByText('7 B')).toBeVisible()
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeEnabled()
+    fireEvent.click(panel.getByRole('button', { name: 'Quitar Informe.pdf' }))
+    expect(
+      panel.getByRole('button', { name: 'Entregar informe' }),
+    ).toBeDisabled()
+    expect(panel.getByText(/Arrastra un archivo aquí/)).toBeVisible()
+  })
+
+  test.each([
+    ['un tipo no permitido', new File(['x'], 'programa.exe')],
+    [
+      'un archivo vacío',
+      new File([], 'Vacio.pdf', { type: 'application/pdf' }),
+    ],
+    [
+      'un archivo de más de 20 MB',
+      Object.defineProperty(new File(['x'], 'Grande.pdf'), 'size', {
+        value: 21 * 1024 * 1024,
+      }),
+    ],
+  ])(
+    'rechaza %s con el motivo junto al campo y sin habilitar la entrega',
+    async (_caso, archivo) => {
+      const panel = await abrir()
+      elegir(panel, archivo)
+      expect(await panel.findByRole('alert')).toHaveTextContent(
+        'Elige un archivo de un tipo permitido, de hasta 20 MB y que no esté vacío.',
+      )
+      expect(
+        panel.getByRole('button', { name: 'Entregar informe' }),
+      ).toBeDisabled()
+      expect(
+        vi.mocked(fetch).mock.calls.some(([url]) => url === ARCHIVOS),
+      ).toBe(false)
+    },
+  )
+
+  test('mientras entrega muestra «Paso N de 4» y bloquea el botón y el campo', async () => {
+    let terminar!: (r: Response) => void
+    const panel = await abrir({
+      [S3]: () =>
+        new Promise<Response>((resolve) => {
+          terminar = resolve
+        }),
+    })
+    elegir(panel)
+    fireEvent.click(panel.getByRole('button', { name: 'Entregar informe' }))
+    expect(
+      await panel.findByRole('button', { name: 'Subiendo archivo…' }),
+    ).toBeDisabled()
+    expect(panel.getByText('Paso 2 de 4: Subiendo archivo…')).toBeVisible()
+    expect(panel.getByLabelText('Archivo del informe')).toBeDisabled()
+    terminar(new Response(null, { status: 204 }))
+    expect(await panel.findByText('Entrega confirmada.')).toBeInTheDocument()
+  })
+
+  test('entregada y abierta: badge «Entregada», fecha, aviso de que reemplaza la versión anterior', async () => {
+    const panel = await abrir({ [ENTREGA]: () => CONFIRMADA })
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Entregada')).toBeInTheDocument()
+    expect(panel.getByText(/Informe.pdf/)).toBeVisible()
+    expect(panel.getByText(/Reemplaza la versión anterior/)).toBeVisible()
+    expect(
+      panel.getByRole('button', { name: 'Reemplazar entrega' }),
+    ).toBeDisabled()
+  })
+
+  test('vencida sin entrega: aviso en rojo y sin zona para subir', async () => {
+    const panel = await abrir(
+      { [ENTREGA]: () => ({ entrega: null, cerrada: true }) },
+      { ...ACTIVIDAD, cerrada: true, plazo: dentroDe(-2 * 24 * HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Cerrada')).toBeInTheDocument()
+    expect(ficha.getByText('Venció hace 2 días')).toHaveClass(
+      'text-destructive',
+    )
+    expect(panel.getByText(/No entregaste tu informe/)).toBeVisible()
+    expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+    expect(
+      panel.queryByRole('button', { name: /Entregar|Reemplazar/ }),
+    ).toBeNull()
+  })
+
+  test('vencida con entrega: solo lectura, sin zona para subir', async () => {
+    const panel = await abrir(
+      { [ENTREGA]: () => ({ ...CONFIRMADA, cerrada: true }) },
+      { ...ACTIVIDAD, cerrada: true, plazo: dentroDe(-HORA) },
+    )
+    const ficha = within(screen.getByRole('article', { name: 'Informe 1' }))
+    expect(ficha.getByText('Entregada')).toBeInTheDocument()
+    expect(
+      panel.getByText(/No se aceptan nuevas entregas ni reemplazos/),
+    ).toBeVisible()
+    expect(panel.queryByText(/Arrastra un archivo aquí/)).toBeNull()
+  })
 })

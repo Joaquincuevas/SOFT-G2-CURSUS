@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { formatearFecha, formatearFechaHora } from './fechas'
+import { formatearFecha, formatearFechaHora, tiempoRestante } from './fechas'
 
 describe('formatearFecha', () => {
   test('da día-mes-año con ceros, como se escribe en Chile', () => {
@@ -50,4 +50,28 @@ describe('formatearFechaHora', () => {
       expect(formatearFechaHora(valor as string)).toBe('—')
     },
   )
+})
+
+describe('tiempoRestante', () => {
+  const ahora = new Date('2026-11-16T12:00:00Z').getTime()
+  const en = (ms: number) => new Date(ahora + ms).toISOString()
+  const HORA = 3_600_000
+
+  test.each([
+    [6.5 * 24 * HORA, 'Vence en 6 días', false],
+    [24 * HORA, 'Vence en 1 día', false],
+    [23 * HORA, 'Vence en 23 horas', true],
+    [HORA, 'Vence en 1 hora', true],
+    [10 * 60_000, 'Vence en 10 minutos', true],
+    [-2 * 24 * HORA, 'Venció hace 2 días', true],
+    [-3 * HORA, 'Venció hace 3 horas', true],
+    [-1000, 'Venció hace 1 minuto', true],
+  ])('%i ms → %s', (ms, texto, urgente) => {
+    expect(tiempoRestante(en(ms), ahora)).toEqual({ texto, urgente })
+  })
+
+  test('sin fecha válida no hay texto', () => {
+    expect(tiempoRestante(null, ahora)).toBeNull()
+    expect(tiempoRestante('no es fecha', ahora)).toBeNull()
+  })
 })
