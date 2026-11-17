@@ -3,7 +3,8 @@
 # una tarea aparte de ECS con la imagen que usa el servicio. Se puede repetir: el
 # seed actualiza los datos existentes en vez de duplicarlos.
 #
-#   bash infra/aws/seed.sh staging
+#   bash infra/aws/seed.sh staging            # carga o completa los datos
+#   bash infra/aws/seed.sh staging --reset    # vacía la base (salvo los superadmins) y carga todo
 #
 # Requiere staging encendido (start.sh staging). La contraseña de los usuarios de
 # prueba está en Secrets Manager: cursus-staging/seed-password.
@@ -11,6 +12,11 @@ source "$(dirname "$0")/common.sh"
 use_environment "${1:-}"
 
 [ "$ENVIRONMENT" = staging ] || fail "El seed solo se carga en staging, nunca en $ENVIRONMENT."
+case "${2:-}" in
+  '') RESET=false ;;
+  --reset) RESET=true ;;
+  *) fail "Opción desconocida: $2. Uso: bash infra/aws/seed.sh staging [--reset]" ;;
+esac
 [ "$(environment_status)" = encendido ] ||
   fail "staging está apagado. Enciéndelo con: bash infra/aws/start.sh staging"
 
@@ -27,11 +33,17 @@ HAS_PASSWORD=$(aws ecs describe-task-definition --task-definition "$DEFINITION" 
 [ "$HAS_PASSWORD" = 1 ] ||
   fail "La tarea no tiene SEED_PASSWORD. Aplica la plantilla con: bash infra/aws/stack.sh staging"
 
-info "Cargando el seed en staging"
+VARIABLES='{"name":"SEED_ALLOW","value":"true"}'
+if [ "$RESET" = true ]; then
+  info "Reiniciando la base de staging (se conservan los superadmins) y cargando el seed"
+  VARIABLES="$VARIABLES"',{"name":"SEED_RESET","value":"true"}'
+else
+  info "Cargando el seed en staging"
+fi
 TASK=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$DEFINITION" \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[$(stack_output Subredes)],securityGroups=[$(stack_output GrupoTareas)],assignPublicIp=ENABLED}" \
-  --overrides '{"containerOverrides":[{"name":"backend","command":["npm","run","seed:prod"],"environment":[{"name":"SEED_ALLOW","value":"true"}]}]}' \
+  --overrides '{"containerOverrides":[{"name":"backend","command":["npm","run","seed:prod"],"environment":['"$VARIABLES"']}]}' \
   --query 'tasks[0].taskArn' --output text)
 aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK"
 aws logs get-log-events --log-group-name "$(stack_output GrupoLogs)" \

@@ -144,6 +144,16 @@ SUPERADMIN_CORREO=superadmin@cursus.test SUPERADMIN_NOMBRE="Superadmin" SUPERADM
 
 El mismo comando completa **Ingeniería de Norte con 3 carreras, 15 cursos y 30 secciones** en su período activo (GES-20). Cada sección incluye dos bloques con sala, profesor, dos ayudantes y alumnos de demo. Los horarios no se superponen. Repetirlo conserva las asignaciones y los retiros posteriores; una sala o código demo ocupado por otros datos hace fallar la carga completa sin cambios parciales. Ver [datos, criterios y guía de revisión](docs/ges-20-seed-facultad.md).
 
+El comando también carga la **capa de demo**, para que la aplicación se vea como una universidad en funcionamiento:
+
+- Más personas por facultad.
+- Los períodos 2025-1, 2025-2 y 2026-1 cerrados, con notas y asistencia.
+- En el período activo: evaluaciones con notas en distintos estados, clases con asistencia, anuncios y actividades.
+
+Profesor, ayudante y alumno de Norte tienen secciones y un historial. Ver la [guía de la demo](docs/demo/guia-demo.md), que también explica el [CSV de alumnos](docs/demo/alumnos-seccion-nueva.csv) para mostrar la carga de una sección.
+
+Para empezar de cero, `SEED_RESET=true npm run seed --workspace=backend` vacía la base (salvo los superadmins) antes de cargarla.
+
 Otros comandos (se ejecutan en todos los workspaces que definan el script):
 
 ```bash
@@ -252,13 +262,15 @@ bash infra/aws/stack.sh staging             # crea o actualiza el stack
 
 ### Datos simulados en staging
 
-Con staging encendido, carga los datos simulados del seed (dos universidades con un usuario por rol, usuarios de demo por facultad y la facultad completa de Ingeniería de Norte de GES-20) en la base de staging:
+Con staging encendido, carga los datos simulados del seed en la base de staging: dos universidades con un usuario por rol, usuarios de demo por facultad, la facultad completa de Ingeniería de Norte de GES-20 y la capa de demo (ver la [guía de la demo](docs/demo/guia-demo.md)).
 
 ```bash
-bash infra/aws/seed.sh staging
+bash infra/aws/seed.sh staging            # carga o completa los datos
+bash infra/aws/seed.sh staging --reset    # vacía la base, salvo los superadmins, y carga todo
 ```
 
 - Se puede repetir: actualiza los datos existentes en vez de duplicarlos.
+- `--reset` borra todo lo creado a mano (cursos, cuentas, notas y sesiones) y conserva solo a los superadmins y su MFA. Corre en una sola transacción: si la carga falla, la base queda como estaba.
 - Solo funciona en staging: con `production` el script se niega, y producción no tiene la contraseña del seed.
 - Los correos de los usuarios son los del seed local (ver "Datos simulados (seed)"), pero la contraseña **no** es la del README: es un secreto propio de staging. Para obtenerla, en CloudShell:
 
