@@ -45,18 +45,10 @@ describe('navegación por rol', () => {
     ],
     [
       'PROFESOR',
-      [
-        ['Dashboard', '/'],
-        ['Mis Cursos', '/mis-cursos'],
-      ],
+      // Tiene pocos cursos y los ve en el Dashboard: sin «Mis Cursos».
+      [['Dashboard', '/']],
     ],
-    [
-      'AYUDANTE',
-      [
-        ['Dashboard', '/'],
-        ['Mis Cursos', '/mis-cursos'],
-      ],
-    ],
+    ['AYUDANTE', [['Dashboard', '/']]],
     [
       'ALUMNO',
       [
@@ -99,7 +91,7 @@ describe('íconos del menú', () => {
     async (rol) => {
       const nav = await renderApp(rol)
       const enlaces = within(nav).getAllByRole('link')
-      expect(enlaces.length).toBeGreaterThan(1)
+      expect(enlaces.length).toBeGreaterThan(0)
       for (const enlace of enlaces) {
         const icono = enlace.querySelector('svg')
         expect(icono, enlace.textContent ?? '').not.toBeNull()
@@ -113,7 +105,7 @@ describe('isotipo de CURSUS', () => {
   const riel = () => document.querySelector('aside#sidebar') as HTMLElement
 
   test('el menú expandido lleva el isotipo en el color primario, junto al nombre y sin recuadro', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     const isotipo = riel().querySelector('svg[viewBox]') as SVGElement
     expect(isotipo).toHaveClass('text-primary')
     expect(isotipo).toHaveAttribute('width', '32')
@@ -124,7 +116,7 @@ describe('isotipo de CURSUS', () => {
   })
 
   test('contraído queda solo el isotipo, con el nombre accesible', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
     expect(within(riel()).getByRole('img', { name: 'CURSUS' })).toHaveClass(
       'text-primary',
@@ -145,7 +137,7 @@ describe('isotipo de CURSUS', () => {
 
 describe('color de la universidad en el menú', () => {
   test('el ítem activo va con fondo tenue y barra lateral, y los demás con hover suave', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     const activo = within(principal()).getByRole('link', { name: 'Dashboard' })
     expect(activo).toHaveAttribute('aria-current', 'page')
     expect(activo).toHaveClass(
@@ -194,7 +186,7 @@ describe('egresado (HIS-06)', () => {
 })
 
 test('el ítem activo cambia al navegar', async () => {
-  const nav = await renderApp('PROFESOR')
+  const nav = await renderApp('ALUMNO')
   const dashboard = within(nav).getByRole('link', { name: 'Dashboard' })
   const misCursos = within(nav).getByRole('link', { name: 'Mis Cursos' })
 
@@ -230,7 +222,7 @@ describe('menú contraíble', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Contraer menú' }))
 
   test('al contraer quedan los íconos con su nombre accesible y vuelve a expandirse', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     contraer()
 
     const boton = screen.getByRole('button', { name: 'Expandir menú' })
@@ -252,7 +244,7 @@ describe('menú contraíble', () => {
   })
 
   test('al contraer, el nombre aparece en un tooltip al enfocar el ícono', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     contraer()
 
     expect(screen.queryByRole('tooltip')).toBeNull()
@@ -263,7 +255,7 @@ describe('menú contraíble', () => {
   })
 
   test('sin contraer no hay tooltips', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     fireEvent.focus(
       within(principal()).getByRole('link', { name: 'Mis Cursos' }),
     )
@@ -272,7 +264,7 @@ describe('menú contraíble', () => {
 
   test('se recuerda en este navegador, y solo cuando se cambia', async () => {
     expect(localStorage.length).toBe(0)
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     expect(localStorage.length).toBe(0)
 
     contraer()
@@ -281,7 +273,7 @@ describe('menú contraíble', () => {
 
   test('arranca contraído si así quedó la última vez', async () => {
     localStorage.setItem('cursus-menu-colapsado', '1')
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     expect(
       screen.getByRole('button', { name: 'Expandir menú' }),
     ).toBeInTheDocument()

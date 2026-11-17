@@ -57,20 +57,21 @@ const resumen = (
   }),
 })
 
+// Enlace al curso de cada tarjeta (sin los accesos a sus pestañas).
 const tarjetas = async () =>
-  within(
-    await screen.findByRole('region', { name: 'Dashboard' }),
-  ).findAllByRole('link')
+  (
+    await within(
+      await screen.findByRole('list', { name: 'Secciones del período activo' }),
+    ).findAllByRole('link')
+  ).filter((enlace) => !enlace.getAttribute('href')?.includes('?'))
+const tarjetaDe = (enlace: HTMLElement) => enlace.closest('li') as HTMLElement
 
 describe('dashboard del profesor (ESP-01)', () => {
   test('destaca pendientes reales en el resumen y en la sección correspondiente', async () => {
     await renderConSesion('PROFESOR', '/', {
       [RUTA]: () => [{ ...SECCIONES[0], pendientesRevision: 2 }, SECCIONES[1]],
     })
-    const lista = within(
-      await screen.findByRole('list', { name: 'Secciones del período activo' }),
-    )
-    const [primera, segunda] = lista.getAllByRole('link')
+    const [primera, segunda] = (await tarjetas()).map(tarjetaDe)
     expect(
       within(primera).getByText('2 evaluaciones pendientes de revisión'),
     ).toHaveAttribute('data-slot', 'badge')
@@ -83,19 +84,18 @@ describe('dashboard del profesor (ESP-01)', () => {
   test('muestra una tarjeta por sección con curso, sección, horario y alumnos', async () => {
     await renderConSesion('PROFESOR', '/', { [RUTA]: () => SECCIONES })
 
-    const [icc101, icc201] = await tarjetas()
+    const [icc101, icc201] = (await tarjetas()).map(tarjetaDe)
     expect(
       screen.getByRole('heading', { name: 'Mis secciones del período' }),
     ).toBeInTheDocument()
 
     const primera = within(icc101)
-    expect(primera.getByText('ICC101')).toBeInTheDocument()
+    expect(primera.getByText('ICC101 · Sección 1')).toBeInTheDocument()
     expect(
       primera.getByRole('heading', { name: 'Introducción a la Programación' }),
     ).toBeInTheDocument()
-    expect(primera.getByText('Sección 1')).toBeInTheDocument()
     expect(
-      within(primera.getByRole('list', { name: 'Horario' }))
+      within(primera.getByRole('list', { name: 'Horario de ICC101' }))
         .getAllByRole('listitem')
         .map((li) => li.textContent),
     ).toEqual([
@@ -105,7 +105,7 @@ describe('dashboard del profesor (ESP-01)', () => {
     expect(primera.getByText('32 alumnos')).toBeInTheDocument()
 
     const segunda = within(icc201)
-    expect(segunda.getByText('Sección 2')).toBeInTheDocument()
+    expect(segunda.getByText('ICC201 · Sección 2')).toBeInTheDocument()
     expect(segunda.getByText('Sin horario asignado')).toBeInTheDocument()
     expect(segunda.getByText('1 alumno')).toBeInTheDocument()
   })
@@ -194,7 +194,7 @@ describe('dashboard del profesor (ESP-01)', () => {
     expect(await tarjetas()).toHaveLength(2)
   })
 
-  test.each<Rol>(['ADMINISTRATIVO', 'AYUDANTE', 'ALUMNO'])(
+  test.each<Rol>(['ADMINISTRATIVO', 'ALUMNO'])(
     '%s no ve tarjetas ni pide las secciones del profesor',
     async (rol) => {
       let pedidas = 0
@@ -249,23 +249,22 @@ describe('dashboard del ayudante (ESP-02)', () => {
       [RUTA_AYUDANTE]: () => SECCIONES_AYUDANTE,
     })
 
-    const [icc101, icc201] = await tarjetas()
+    const [icc101, icc201] = (await tarjetas()).map(tarjetaDe)
     expect(
       screen.getByRole('heading', { name: 'Mis secciones del período' }),
     ).toBeInTheDocument()
 
     const primera = within(icc101)
-    expect(primera.getByText('ICC101')).toBeInTheDocument()
+    expect(primera.getByText('ICC101 · Sección 1')).toBeInTheDocument()
     expect(
       primera.getByRole('heading', { name: 'Introducción a la Programación' }),
     ).toBeInTheDocument()
-    expect(primera.getByText('Sección 1')).toBeInTheDocument()
     expect(
       primera.getByText('Profesor a cargo: Camila Rojas'),
     ).toBeInTheDocument()
 
     const segunda = within(icc201)
-    expect(segunda.getByText('Sección 2')).toBeInTheDocument()
+    expect(segunda.getByText('ICC201 · Sección 2')).toBeInTheDocument()
     expect(segunda.getByText('Sin profesor asignado')).toBeInTheDocument()
   })
 

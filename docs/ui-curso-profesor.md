@@ -119,6 +119,24 @@ Fix sobre UI/UX-05 y UI/UX-06, sin tarjeta. La ruta index de `MisCursos` devolv�
 
 Capturas en [`evidencias/`](evidencias/): `ui-mis-cursos-<antes|despues>-<profesor|ayudante|alumno>-<1280|375>.png`.
 
+## Dashboard docente (Profesor y Ayudante)
+
+Fix sobre UI/UX-06, sin tarjeta. El Dashboard solo listaba tarjetas y «Mis cursos» repetía ese contenido. Profesor y Ayudante tienen pocos cursos, así que «Mis Cursos» sale de su menú lateral (filtro en `Sidebar.tsx`; `navigation.ts` y los permisos CASL no cambian) y `/mis-cursos` (ruta index) redirige al Dashboard con `replace`. Las rutas hijas (`secciones/:id`, `pendientes-revision`, `historial`) quedan intactas. El Alumno conserva «Mis Cursos» con su tabla.
+
+El Dashboard pasa a ser un panel de trabajo (`DashboardDocente.tsx`), a dos columnas desde 1024 px (principal a la izquierda; fechas y horario a la derecha) y una en móvil. Cada bloque carga y falla por separado, con esqueletos y reintento:
+
+- **Por revisar** (solo Profesor): igual que antes, con el conteo y el enlace a `pendientes-revision`.
+- **Mis secciones del período**: tarjetas con alumnos (Profesor) o profesor a cargo (Ayudante), horario y seis accesos con tooltip a las pestañas Anuncios, Material, Entregas, Notas, Asistencia e Integrantes (`?vista=`).
+- **Próximas fechas**: entregas con plazo en los próximos 14 días (sin cerradas), de todas sus secciones, con curso, título, fecha `dd-mm-aaaa` y enlace a la pestaña Entregas.
+- **Horario de la semana**: grilla de lunes a sábado (y el domingo, si tiene bloques) con los bloques de todas sus secciones y el día de hoy destacado.
+- **Actividad reciente**: los últimos 3 anuncios de sus cursos (los de curso se cuentan una vez).
+
+**Datos.** Sin endpoints nuevos: `mis-secciones` / `secciones-ayudante` y, por sección (`useDeSecciones`, en paralelo), `actividades` y `anuncios`; para el horario del Ayudante, el `resumen` de cada sección. No hay endpoints que junten las de todas las secciones, así que son 2 consultas por sección (3 para el Ayudante).
+
+**Fuera por falta de datos.** «Por revisar» del Ayudante: `pendientes-revision` es solo del Profesor y no hay equivalente de envíos devueltos. Número de alumnos en las tarjetas del Ayudante: su lista no lo trae.
+
+Capturas en [`evidencias/`](evidencias/): `ui-dashboard-docente-<antes|despues>-<profesor|ayudante>-<1280|375>.png`.
+
 ## Evidencias
 
 Capturas antes y después en 1280, 1920 y 375 px de cada pestaña, y de los diálogos (subir material, sílabo, nuevo anuncio, crear actividad, calendario y período terminado), en [`evidencias/`](evidencias/) como `ui-curso-profesor-<antes|despues>-<estado>-<ancho>.png`. Los anuncios, materiales, versiones del sílabo y la actividad se crearon por la aplicación en la base local.

@@ -54,7 +54,10 @@ describe('restaurar la sesión al recargar', () => {
     renderApp('/mis-cursos')
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido/a, Profesor Norte',
+      }),
     ).toBeInTheDocument()
     expect(llamadasA(fetch, '/api/auth/refresh')).toHaveLength(1)
   })
@@ -77,7 +80,10 @@ describe('JWT expirado', () => {
     renderApp('/mis-cursos', 'jwt-vencido')
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Mis Cursos' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Bienvenido/a, Profesor Norte',
+      }),
     ).toBeInTheDocument()
     expect(llamadasA(fetch, '/api/auth/refresh')).toHaveLength(1)
     const [, init] = llamadasA(fetch, '/api/auth/yo').at(-1)!

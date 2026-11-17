@@ -116,9 +116,9 @@ describe('breadcrumb', () => {
   })
 
   test('cambia al navegar: Inicio como enlace y la ruta actual como título', async () => {
-    await renderApp('PROFESOR')
+    await renderApp('ALUMNO')
     const titulo = () => screen.getByRole('heading', { level: 1 })
-    expect(titulo()).toHaveTextContent('Bienvenido/a, Profesor Norte')
+    expect(titulo()).toHaveTextContent('Bienvenido/a, Alumno Norte')
 
     fireEvent.click(
       within(
@@ -139,7 +139,7 @@ describe('breadcrumb', () => {
     )
 
     fireEvent.click(camino.getByRole('link', { name: 'Inicio' }))
-    expect(titulo()).toHaveTextContent('Bienvenido/a, Profesor Norte')
+    expect(titulo()).toHaveTextContent('Bienvenido/a, Alumno Norte')
     expect(screen.queryByRole('navigation', { name: 'Ubicación' })).toBeNull()
   })
 

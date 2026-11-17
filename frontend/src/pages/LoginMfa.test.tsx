@@ -90,7 +90,10 @@ describe('login con MFA (SEG-02)', () => {
     await paso1()
     verificar('123 456')
     expect(
-      await screen.findByRole('heading', { name: 'Mis Cursos', level: 1 }),
+      await screen.findByRole('heading', {
+        name: 'Bienvenido/a, Profesor Norte',
+        level: 1,
+      }),
     ).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith('/api/auth/login/mfa', {
       method: 'POST',
@@ -145,7 +148,10 @@ describe('login con MFA (SEG-02)', () => {
     expect(screen.getByRole('button', { name: 'Verificar' })).toBeEnabled()
     verificar('654321')
     expect(
-      await screen.findByRole('heading', { name: 'Mis Cursos', level: 1 }),
+      await screen.findByRole('heading', {
+        name: 'Bienvenido/a, Profesor Norte',
+        level: 1,
+      }),
     ).toBeInTheDocument()
   })
 
@@ -253,7 +259,10 @@ describe('login con MFA (SEG-02)', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Ingresar' }))
     expect(
-      await screen.findByRole('heading', { name: 'Mis Cursos', level: 1 }),
+      await screen.findByRole('heading', {
+        name: 'Bienvenido/a, Profesor Norte',
+        level: 1,
+      }),
     ).toBeInTheDocument()
     expect(llamadasMfa(fetch)).toHaveLength(0)
   })

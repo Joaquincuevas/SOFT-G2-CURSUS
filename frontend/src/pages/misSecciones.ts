@@ -3,7 +3,9 @@ import { DIAS_SEMANA, type BloqueHorario } from '@cursus/shared'
 // ESP-01: secciones del dashboard del profesor y la vista que abre cada una.
 export const RUTA_MIS_SECCIONES = '/api/dashboard/mis-secciones'
 
-export const rutaSeccion = (id: string) => `/mis-cursos/secciones/${id}`
+// `vista` abre una pestaña del curso (?vista=entregas).
+export const rutaSeccion = (id: string, vista?: string) =>
+  `/mis-cursos/secciones/${id}${vista ? `?vista=${vista}` : ''}`
 
 // NOT-10: evaluaciones en revisión del profesor y la página que las lista.
 export const RUTA_PENDIENTES_REVISION = '/api/dashboard/pendientes-revision'
