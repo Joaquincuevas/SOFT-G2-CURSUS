@@ -127,6 +127,42 @@ describe('«Mis cursos» en el menú lateral', () => {
     await waitFor(() => expect(vistasAbiertas()).toEqual(['Vistas de ICC301']))
   })
 
+  test('el nombre del curso actual lo vuelve a abrir aunque otro esté desplegado', async () => {
+    await renderConSesion(
+      'PROFESOR',
+      '/mis-cursos/secciones/s1?vista=anuncios',
+      {
+        [RUTA]: () => TRES,
+        '/api/espacio/secciones/s1/resumen': () => resumen(TRES[0]),
+        '/api/espacio/secciones/s1/anuncios': () => [],
+      },
+    )
+    await menu().findByRole('list', { name: 'Vistas de ICC101' })
+    // Desde «Anuncios» de A se despliega B con su chevron.
+    fireEvent.click(chevron('ICC201'))
+    expect(vistasAbiertas()).toEqual(['Vistas de ICC201'])
+    // El nombre de A lleva a su Home (misma sección) y lo vuelve a abrir.
+    fireEvent.click(
+      (await cursos()).getByRole('link', {
+        name: /^ICC101 · Introducción a la Programación/,
+      }),
+    )
+    await waitFor(() => expect(vistasAbiertas()).toEqual(['Vistas de ICC101']))
+    expect(chevron('ICC201')).toHaveAttribute('aria-expanded', 'false')
+    expect(
+      within(menu().getByRole('list', { name: 'Vistas de ICC101' })).getByRole(
+        'link',
+        { name: 'Home' },
+      ),
+    ).toHaveAttribute('aria-current', 'page')
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'ICC101 · Sección 1',
+      }),
+    ).toBeInTheDocument()
+  })
+
   test('con el teclado: el nombre es un enlace y el chevron un botón que controla su lista', async () => {
     await renderConSesion('PROFESOR', '/', { [RUTA]: () => TRES })
     const lista = await cursos()
