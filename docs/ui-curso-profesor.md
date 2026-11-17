@@ -103,6 +103,22 @@ En el seed del equipo el período 2026-1 terminó el 30-06-2026. Con la regla ac
 
 No se implementó ninguna. (En la base local de este recorrido el curso es del período 2026-2, vigente hasta el 18-12-2026; el caso del período terminado se capturó simulando la respuesta de `/api/periodos`.)
 
+## Mis cursos (`/mis-cursos`)
+
+Fix sobre UI/UX-05 y UI/UX-06, sin tarjeta. La ruta index de `MisCursos` devolvía `null` para Profesor y Ayudante (página en blanco) y solo el enlace «Historial de notas» para el Alumno. Ahora es la lista completa de cursos del usuario, como «Todos los cursos» de Canvas; el Dashboard queda como resumen en tarjetas.
+
+- Página `ListaMisCursos.tsx`: `PageHeader` («Mis cursos», con el período), buscador por código, nombre o sección (sin importar tildes, con botón para limpiar), contador «N cursos» (`aria-live`) y `DataTable`. Carga con esqueletos, vacío con `EmptyState` y error con `ErrorState` y reintento.
+- Columnas: Curso (código y nombre, enlace a `/mis-cursos/secciones/:id` con el estilo `ENLACE`), Sección, Período, Horario y sala (mismo formato del Dashboard), y según el rol: Alumnos (Profesor); Profesores e «Inscrito como» con insignia (Ayudante y Alumno). La fila entera es clicable (`alHacerClic` en `DataTable`; un clic en un enlace o botón no lo dispara) y se resalta con el foco del enlace.
+- Alumno: «Historial de notas» como botón secundario arriba a la derecha. Profesor: insignia con las evaluaciones pendientes de revisión (enlace a `pendientes-revision`) solo si hay.
+- Datos: los mismos endpoints del Dashboard (`/api/dashboard/mis-secciones`, `secciones-ayudante`, `secciones-alumno`). Sin cambios de backend ni de `@cursus/shared`.
+- Rutas hijas intactas: `historial`, `historial/:seccionId`, `secciones/:id` y `pendientes-revision`.
+
+**Límites de los datos.** Los tres endpoints entregan solo el período activo (`p.activo`), así que no hay «Períodos anteriores» que agrupar y la columna Período muestra el activo. La respuesta del Ayudante no trae horario ni alumnos: su tabla no tiene esas columnas y muestra los profesores. Agregarlos pide cambiar el endpoint.
+
+**Menú.** Ningún rol ve a la vez «Mis Cursos» (`/mis-cursos`) y el ítem de `/cursos`, que solo es «Mis Cursos» para Administrativo y Superadmin (para el Director es «Gestión académica»), así que no hay etiqueta repetida en un mismo menú y `navigation.ts` no cambia.
+
+Capturas en [`evidencias/`](evidencias/): `ui-mis-cursos-<antes|despues>-<profesor|ayudante|alumno>-<1280|375>.png`.
+
 ## Evidencias
 
 Capturas antes y después en 1280, 1920 y 375 px de cada pestaña, y de los diálogos (subir material, sílabo, nuevo anuncio, crear actividad, calendario y período terminado), en [`evidencias/`](evidencias/) como `ui-curso-profesor-<antes|despues>-<estado>-<ancho>.png`. Los anuncios, materiales, versiones del sílabo y la actividad se crearon por la aplicación en la base local.
