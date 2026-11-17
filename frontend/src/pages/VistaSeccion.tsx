@@ -1,16 +1,6 @@
 import type { AlumnosEspacio, SeccionResumen } from '@cursus/shared'
-import {
-  CalendarCheck,
-  FolderOpen,
-  House,
-  Inbox,
-  ClipboardList,
-  Lock,
-  Megaphone,
-  Users,
-  type LucideIcon,
-} from 'lucide-react'
-import { useEffect, useId, useState, type ComponentType } from 'react'
+import { Lock, Users } from 'lucide-react'
+import { useId, useState, type ComponentType } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -25,13 +15,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useMediaQuery } from '@/hooks/use-media-query'
-import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/shared'
 import { Cargando } from '../components/Cargando'
 import { ErrorEstado } from '../components/ErrorEstado'
+import { useRegistrarCurso } from '../layout/curso-contexto'
 import { useEtiquetaDeMiga } from '../layout/migas-contexto'
+import {
+  etiquetaDeVista as etiquetaDe,
+  vistaDe,
+  VISTAS_CURSO,
+  type VistaId,
+} from './vistasCurso'
 import { ROL_LABEL } from '../session/roles'
 import './Dashboard.css'
 import './VistaSeccion.css'
@@ -44,63 +38,6 @@ import { SilaboDelCurso } from './SilaboDelCurso'
 import { IntegrantesAlumno } from './IntegrantesAlumno'
 import { PestanaMaterial } from './PestanaMaterial'
 import { useDatos } from './useDatos'
-
-// Secciones del espacio de la sección. Home es el resumen; las demás llevan al
-// contenido que ya existía como pestaña (ESP-04 a MAT-08), que se monta tal cual.
-type VistaId =
-  | 'home'
-  | 'anuncios'
-  | 'material'
-  | 'entregas'
-  | 'notas'
-  | 'asistencia'
-  | 'integrantes'
-
-interface Vista {
-  id: VistaId
-  etiqueta: string
-  icono: LucideIcon
-  // Qué hay ahí, para los accesos del Home.
-  detalle?: string
-}
-
-const VISTAS: readonly Vista[] = [
-  { id: 'home', etiqueta: 'Home', icono: House },
-  {
-    id: 'anuncios',
-    etiqueta: 'Anuncios',
-    icono: Megaphone,
-    detalle: 'Avisos de la sección',
-  },
-  {
-    id: 'material',
-    etiqueta: 'Material',
-    icono: FolderOpen,
-    detalle: 'Archivos y documentos',
-  },
-  {
-    id: 'entregas',
-    etiqueta: 'Entregas',
-    icono: Inbox,
-    detalle: 'Trabajos e informes',
-  },
-  {
-    id: 'notas',
-    etiqueta: 'Notas',
-    icono: ClipboardList,
-    detalle: 'Evaluaciones y calificaciones',
-  },
-  {
-    id: 'asistencia',
-    etiqueta: 'Asistencia',
-    icono: CalendarCheck,
-    detalle: 'Clases y asistencia',
-  },
-  { id: 'integrantes', etiqueta: 'Integrantes', icono: Users },
-]
-
-const esVista = (valor: string | null): valor is VistaId =>
-  VISTAS.some((vista) => vista.id === valor)
 
 export interface PropsPestana {
   seccionId: string
@@ -130,23 +67,22 @@ const CONTENIDO: Partial<Record<VistaId, ComponentType<PropsPestana>>> = {
 export function VistaSeccion() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const [params, fijarParams] = useSearchParams()
+  const [params] = useSearchParams()
   const [publicaciones, setPublicaciones] = useState(0)
   const [seccion, recargar, status] = useDatos<SeccionResumen>(
     `/api/espacio/secciones/${id}/resumen`,
   )
-  const enEscritorio = useMediaQuery('(min-width: 1024px)')
   const vistaPedida = params.get('vista')
-  // En pantallas angostas las pestañas se desplazan: la elegida queda a la
-  // vista aunque se haya abierto con un enlace directo (?vista=).
-  useEffect(() => {
-    document
-      .querySelector('[data-slot=tabs-trigger][data-state=active]')
-      ?.scrollIntoView({ inline: 'center', block: 'nearest' })
-  }, [vistaPedida, seccion])
   // El encabezado nombra la sección en su breadcrumb.
   useEtiquetaDeMiga(
     seccion ? `${seccion.curso.codigo} · Sección ${seccion.numero}` : null,
+  )
+  // El menú lateral arma con ella los ítems del curso.
+  useRegistrarCurso(
+    id,
+    seccion?.curso.codigo,
+    seccion?.curso.nombre,
+    seccion?.numero,
   )
 
   if (seccion === undefined) {
@@ -178,14 +114,8 @@ export function VistaSeccion() {
   }
   const { curso, numero, rol, periodo } = seccion
   const veSilabo = ['ALUMNO', 'AYUDANTE', 'PROFESOR'].includes(rol)
-  const vista: VistaId = esVista(vistaPedida) ? vistaPedida : 'home'
-  const elegir = (nueva: string) =>
-    fijarParams((actual) => {
-      const siguiente = new URLSearchParams(actual)
-      if (nueva === 'home') siguiente.delete('vista')
-      else siguiente.set('vista', nueva)
-      return siguiente
-    })
+  const vista = vistaDe(vistaPedida)
+  const Contenido = CONTENIDO[vista]
 
   return (
     <section aria-label="Vista del curso" className="grid w-full min-w-0 gap-6">
@@ -215,83 +145,48 @@ export function VistaSeccion() {
         </Alert>
       )}
 
-      <Tabs
-        value={vista}
-        onValueChange={elegir}
-        orientation={enEscritorio ? 'vertical' : 'horizontal'}
-        className="grid gap-6 lg:grid-cols-[13.75rem_minmax(0,1fr)] lg:items-start xl:gap-10"
-      >
-        <TabsList
-          aria-label="Pestañas de la sección"
-          className={cn(
-            'h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent p-0',
-            // En pantallas angostas, una barra horizontal con una línea fina
-            // debajo; en escritorio, el riel fijo a la izquierda.
-            'border-b border-border lg:sticky lg:top-24 lg:flex-col lg:items-stretch lg:overflow-visible lg:border-b-0',
-          )}
-        >
-          {VISTAS.map(({ id: valor, etiqueta, icono: Icono }) => (
-            <TabsTrigger
-              key={valor}
-              value={valor}
-              // También al hacer clic (no solo al presionar): los lectores de
-              // pantalla y los atajos activan el control con un clic.
-              onClick={() => elegir(valor)}
-              className={cn(
-                'h-10 flex-none justify-start gap-2.5 rounded-md px-3 text-muted-foreground hover:bg-muted hover:text-foreground lg:w-full',
-                // Activo: texto y peso, y una barra del color de la
-                // universidad (debajo en la barra horizontal, a la izquierda
-                // en el riel). Sin fondo ni borde alrededor.
-                'data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-foreground',
-                'group-data-[variant=default]/tabs-list:data-[state=active]:shadow-none',
-                'after:bg-primary data-[state=active]:after:opacity-100',
-                'group-data-[orientation=horizontal]/tabs:rounded-b-none group-data-[orientation=horizontal]/tabs:after:bottom-[-1px] group-data-[orientation=horizontal]/tabs:after:inset-x-2',
-                'group-data-[orientation=vertical]/tabs:after:inset-y-2 group-data-[orientation=vertical]/tabs:after:right-auto group-data-[orientation=vertical]/tabs:after:left-0 group-data-[orientation=vertical]/tabs:after:w-[3px] group-data-[orientation=vertical]/tabs:after:rounded-full',
-                // Foco: un aro fino, sin el borde grueso del componente base.
-                'focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:outline-none',
-              )}
-            >
-              <Icono aria-hidden="true" />
-              {etiqueta}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        <div className="min-w-0">
-          <TabsContent value="home">
+      <div className="min-w-0">
+        {vista === 'home' && (
+          <div role="region" aria-label={etiquetaDe(vista)}>
             <HomeDeLaSeccion
               seccion={seccion}
               seccionId={id}
               claveSilabo={`silabo:${id}:${publicaciones}`}
             />
-          </TabsContent>
-          {VISTAS.map(({ id: valor }) => {
-            const Contenido = CONTENIDO[valor]
-            if (!Contenido) return null
-            return (
-              <TabsContent key={valor} value={valor} className="grid gap-6">
-                {/* Al alumno, el sílabo vigente también junto al material. El
-                    profesor y el ayudante lo ven en la tarjeta del sílabo de
-                    la pestaña. */}
-                {valor === 'material' && veSilabo && rol === 'ALUMNO' && (
-                  <SilaboDelCurso
-                    key={`silabo:${id}:${publicaciones}`}
-                    seccionId={id}
-                  />
-                )}
-                <Contenido
-                  key={id}
-                  seccionId={id}
-                  numeroSeccion={numero}
-                  periodo={periodo}
-                  rol={rol}
-                  cursoCerrado={seccion.cursoCerrado}
-                  alPublicarSilabo={() => setPublicaciones((n) => n + 1)}
-                />
-              </TabsContent>
-            )
-          })}
-          <TabsContent value="integrantes" className="grid gap-6">
+          </div>
+        )}
+        {Contenido && (
+          <div
+            role="region"
+            aria-label={etiquetaDe(vista)}
+            className="grid gap-6"
+          >
+            {/* Al alumno, el sílabo vigente también junto al material. El
+                profesor y el ayudante lo ven en la tarjeta del sílabo de la
+                pestaña. */}
+            {vista === 'material' && veSilabo && rol === 'ALUMNO' && (
+              <SilaboDelCurso
+                key={`silabo:${id}:${publicaciones}`}
+                seccionId={id}
+              />
+            )}
+            <Contenido
+              key={id}
+              seccionId={id}
+              numeroSeccion={numero}
+              periodo={periodo}
+              rol={rol}
+              cursoCerrado={seccion.cursoCerrado}
+              alPublicarSilabo={() => setPublicaciones((n) => n + 1)}
+            />
+          </div>
+        )}
+        {vista === 'integrantes' && (
+          <div
+            role="region"
+            aria-label={etiquetaDe(vista)}
+            className="grid gap-6"
+          >
             {rol === 'ALUMNO' ? (
               <IntegrantesAlumno seccion={seccion} />
             ) : (
@@ -314,9 +209,9 @@ export function VistaSeccion() {
             {rol === 'PROFESOR' && (
               <AlumnosDeLaSeccion key={id} seccionId={id} />
             )}
-          </TabsContent>
-        </div>
-      </Tabs>
+          </div>
+        )}
+      </div>
     </section>
   )
 }
@@ -380,7 +275,7 @@ function HomeDeLaSeccion({
       <section aria-label="Accesos" className="grid gap-3">
         <h3 className="m-0 text-sm font-semibold text-foreground">Accesos</h3>
         <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
-          {VISTAS.filter((vista) => vista.detalle).map(
+          {VISTAS_CURSO.filter((vista) => vista.detalle).map(
             ({ id, etiqueta, icono: Icono, detalle }) => (
               <li key={id}>
                 <Button

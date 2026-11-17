@@ -10,6 +10,7 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
+import { CursoProvider } from './CursoProvider'
 import { ContextoSuperadmin } from './ContextoSuperadmin'
 import { Header } from './Header'
 import { MigasProvider } from './MigasProvider'
@@ -63,44 +64,46 @@ export function AppShell() {
   return (
     <TooltipProvider>
       <MigasProvider>
-        <div className="min-h-svh bg-(color:--color-fondo-pagina) lg:flex">
-          <aside
-            id="sidebar"
-            className={cn(
-              'sticky top-0 hidden h-svh shrink-0 border-r border-border transition-[width] duration-200 motion-reduce:transition-none lg:block',
-              colapsado ? 'w-16' : 'w-[var(--sidebar-width)]',
-            )}
-          >
-            <Sidebar colapsado={colapsado} onAlternar={alternarColapsado} />
-          </aside>
-
-          <Sheet open={panelAbierto} onOpenChange={setMenuAbierto}>
-            <SheetContent
-              id="menu-movil"
-              side="left"
-              className="w-72 max-w-[85vw] gap-0 p-0 lg:hidden"
+        <CursoProvider>
+          <div className="min-h-svh bg-(color:--color-fondo-pagina) lg:flex">
+            <aside
+              id="sidebar"
+              className={cn(
+                'sticky top-0 hidden h-svh shrink-0 border-r border-border transition-[width] duration-200 motion-reduce:transition-none lg:block',
+                colapsado ? 'w-16' : 'w-[var(--sidebar-width)]',
+              )}
             >
-              <SheetHeader className="sr-only">
-                <SheetTitle>Menú</SheetTitle>
-                <SheetDescription>
-                  Navegación principal de CURSUS
-                </SheetDescription>
-              </SheetHeader>
-              <Sidebar onNavigate={() => setMenuAbierto(false)} />
-            </SheetContent>
-          </Sheet>
+              <Sidebar colapsado={colapsado} onAlternar={alternarColapsado} />
+            </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <Header
-              menuAbierto={panelAbierto}
-              onAbrirMenu={() => setMenuAbierto(true)}
-            />
-            <main className="flex-1 p-4 sm:p-6 lg:p-8">
-              <ContextoSuperadmin />
-              <Outlet />
-            </main>
+            <Sheet open={panelAbierto} onOpenChange={setMenuAbierto}>
+              <SheetContent
+                id="menu-movil"
+                side="left"
+                className="w-72 max-w-[85vw] gap-0 p-0 lg:hidden"
+              >
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Menú</SheetTitle>
+                  <SheetDescription>
+                    Navegación principal de CURSUS
+                  </SheetDescription>
+                </SheetHeader>
+                <Sidebar onNavigate={() => setMenuAbierto(false)} />
+              </SheetContent>
+            </Sheet>
+
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Header
+                menuAbierto={panelAbierto}
+                onAbrirMenu={() => setMenuAbierto(true)}
+              />
+              <main className="flex-1 p-4 sm:p-6 lg:p-8">
+                <ContextoSuperadmin />
+                <Outlet />
+              </main>
+            </div>
           </div>
-        </div>
+        </CursoProvider>
       </MigasProvider>
     </TooltipProvider>
   )
