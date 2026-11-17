@@ -15,7 +15,7 @@ import {
   Loader2,
   Lock,
 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useEffectEvent, useState, type FormEvent } from 'react'
 import { Dropzone, ErrorState } from '@/components/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -89,9 +89,32 @@ export function TarjetaActividad({
   const [error, setError] = useState<string | null>(null)
   const [aviso, setAviso] = useState<string | null>(null)
   const [cerradaPorServidor, setCerradaPorServidor] = useState(false)
-  // El reloj se lee una vez: el texto del plazo no cambia mientras se mira.
-  const [ahora] = useState(() => Date.now())
-  const cerrada = actividad.cerrada || datos?.cerrada || cerradaPorServidor
+  // El reloj avanza mientras la vista está abierta: la cuenta regresiva se
+  // actualiza y, al llegar el plazo, la actividad pasa a cerrada sin recargar
+  // la página (y se vuelve a pedir el estado al servidor).
+  const [ahora, setAhora] = useState(() => Date.now())
+  const revalidar = useEffectEvent(() => recargar())
+  useEffect(() => {
+    const plazo = new Date(actividad.plazo).getTime()
+    const cadaMedioMinuto = setInterval(() => setAhora(Date.now()), 30_000)
+    const falta = plazo - Date.now()
+    // setTimeout no admite esperas de más de ~24 días: antes, el intervalo
+    // de arriba basta para que llegue el momento.
+    const alVencer =
+      falta > 0 && falta < 2_147_483_647
+        ? setTimeout(() => {
+            setAhora(Math.max(Date.now(), plazo))
+            revalidar()
+          }, falta)
+        : undefined
+    return () => {
+      clearInterval(cadaMedioMinuto)
+      clearTimeout(alVencer)
+    }
+  }, [actividad.plazo])
+  const vencida = ahora >= new Date(actividad.plazo).getTime()
+  const cerrada =
+    actividad.cerrada || datos?.cerrada || cerradaPorServidor || vencida
   const ocupado = paso !== null
   const rutaArchivos =
     ruta.slice(0, ruta.indexOf('/actividades/')) + '/archivos'
@@ -283,7 +306,7 @@ export function TarjetaActividad({
                 Aún no has entregado tu informe.
               </p>
             )}
-            {cerrada ? (
+            {cerrada && !ocupado ? (
               datos.entrega && (
                 <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
                   <Lock aria-hidden="true" className="size-4" />
