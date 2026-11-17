@@ -90,7 +90,7 @@ export function VistaSeccion() {
                 : undefined,
           },
           ...(vistaAbierta !== 'home'
-            ? [{ etiqueta: etiquetaDe(vistaAbierta) }]
+            ? [{ etiqueta: etiquetaDe(vistaAbierta, seccion.rol) }]
             : []),
         ]
       : null,
